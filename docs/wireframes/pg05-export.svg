@@ -1,16 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1120" viewBox="0 0 1680 1120"><title>草稿、审核与导出</title><rect width="1680" height="1120" fill="#f4f6f8"/>
-<rect x="0" y="0" width="1680" height="76" rx="0" fill="#ffffff" stroke="#ffffff"/>
-<text x="26" y="50" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="26" font-weight="600" fill="#243042">FEP  RFQ 工作台</text>
-<text x="1120" y="48" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">内网系统  /  内部人员使用</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1042" viewBox="0 78 1680 1042"><title>导出文档</title><rect width="1680" height="1120" fill="#f4f6f8"/>
 <rect x="0" y="78" width="184" height="1042" rx="0" fill="#e9edf2" stroke="#e9edf2"/>
 <text x="28" y="143" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">项目列表</text>
 <text x="28" y="211" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">RFQ解析</text>
 <text x="28" y="279" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">RFQ细则确认</text>
-<text x="28" y="347" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">评审与偏离</text>
+<text x="28" y="347" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">偏离项管理</text>
 <rect x="14" y="382" width="156" height="50" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="28" y="415" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="600" fill="#254f87">草稿与导出</text>
+<text x="28" y="415" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="600" fill="#254f87">导出文档</text>
 <text x="28" y="483" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">知识与结果</text>
-<text x="220" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="30" font-weight="600" fill="#243042">PG-05  草稿、审核与导出</text>
+<text x="220" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="30" font-weight="600" fill="#243042">PG-05  导出文档</text>
 <text x="220" y="179" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">示例为仍有待处理条目的项目：可导出内部草稿，不能提交定稿审批或正式导出。</text>
 <text x="220" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#64748b">低保真页面示意 · 全部为模拟数据 · 用于明确布局与交互，非已实现系统</text>
 <rect x="220" y="210" width="850" height="810" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
