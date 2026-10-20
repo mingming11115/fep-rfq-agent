@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1120" viewBox="0 0 1680 1120">
+<title>PG-10  资料与证据管理</title>
+<rect x="0" y="0" width="1680" height="1120" rx="0" fill="#f4f6f8" stroke="#f4f6f8"/>
+<rect x="0" y="0" width="1680" height="76" rx="0" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="26" y="50" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="26" font-weight="600" fill="#243042">FEP  RFQ 工作台</text>
+<text x="1120" y="48" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">内网系统  /  内部人员使用</text>
+<rect x="0" y="78" width="200" height="1042" rx="0" fill="#e9edf2" stroke="#e9edf2"/>
+<text x="18" y="120" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="600" fill="#243042">个人工作台</text>
+<text x="18" y="180" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">项目列表</text>
+<text x="18" y="240" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="600" fill="#243042">项目内导航</text>
+<text x="18" y="300" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  RFQ解析</text>
+<text x="18" y="360" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  细则确认</text>
+<text x="18" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  评审与偏离</text>
+<text x="18" y="480" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  草稿与导出</text>
+<text x="18" y="540" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  版本记录</text>
+<text x="18" y="600" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  项目设置</text>
+<text x="18" y="660" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">知识与结果</text>
+<text x="18" y="720" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">资料与证据</text>
+<text x="18" y="780" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="600" fill="#243042">管理区</text>
+<text x="18" y="840" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  审计记录</text>
+<text x="18" y="900" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  系统配置</text>
+<text x="230" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="30" font-weight="600" fill="#243042">PG-10  资料与证据管理</text>
+<text x="230" y="181" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">内部依据与拟对外附件分开管理；上传成功不等于有效证据。</text>
+<rect x="230" y="210" width="1420" height="68" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<rect x="248" y="222" width="120" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="264" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">项目资料</text>
+<rect x="384" y="222" width="162" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="400" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">共享能力资料</text>
+<rect x="562" y="222" width="162" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="578" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">有效状态筛选</text>
+<rect x="740" y="222" width="120" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="756" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">引用关系</text>
+<rect x="230" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="254" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">资料列表  /  模拟数据</text>
+<rect x="248" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
+<text x="260" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">DOC-012 v2  /  能力测试报告  /  有效</text>
+<text x="260" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">适用范围：设备 A，标准配置</text>
+<rect x="248" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
+<text x="260" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">DOC-009 v1  /  配置清单  /  待核对</text>
+<text x="260" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">DOC-004 v1  /  历史报告  /  已撤销</text>
+<rect x="248" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
+<text x="260" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">支持按产品范围、用途与有效期筛选</text>
+<rect x="254" y="864" width="110" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="268" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">导入资料</text>
+<rect x="378" y="864" width="150" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="392" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">关联当前条目</text>
+<rect x="950" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="974" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">DOC-012 v2  /  资料详情</text>
+<rect x="968" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
+<text x="980" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">来源：内网测试记录  /  已专业核对</text>
+<text x="980" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">定位：报告第 8 页  /  指标表</text>
+<rect x="968" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
+<text x="980" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">条件：标准配置，指定测试工况</text>
+<text x="980" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">引用：REQ-021、K-018（按权限展示）</text>
+<rect x="968" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
+<text x="980" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">外发标记：内部证据，未列为外发附件</text>
+<rect x="974" y="864" width="110" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="988" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">定位预览</text>
+<rect x="1098" y="864" width="110" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="1112" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">更新版本</text>
+<rect x="1222" y="864" width="130" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="1236" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">停用／撤销</text>
+<rect x="230" y="975" width="1420" height="60" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="248" y="1013" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#243042">已引用资料保留版本；条件变化、过期或撤销后触发相关条目复核。</text>
+<text x="230" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#64748b">低保真页面示意 · 全部为模拟数据 · 用于明确布局与交互，非已实现系统</text>
+</svg>

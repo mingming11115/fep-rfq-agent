@@ -4,8 +4,8 @@
 <text x="1120" y="48" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">内网系统  /  内部人员使用</text>
 <rect x="0" y="78" width="184" height="1042" rx="0" fill="#e9edf2" stroke="#e9edf2"/>
 <text x="28" y="143" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">项目列表</text>
-<text x="28" y="211" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">资料与解析</text>
-<text x="28" y="279" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">逐条应答</text>
+<text x="28" y="211" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">RFQ解析</text>
+<text x="28" y="279" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">RFQ细则确认</text>
 <text x="28" y="347" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">评审与偏离</text>
 <rect x="14" y="382" width="156" height="50" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
 <text x="28" y="415" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="600" fill="#254f87">草稿与导出</text>
