@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1120" viewBox="0 0 1680 1120"><title>知识与结果维护</title><rect width="1680" height="1120" fill="#f4f6f8"/>
+<rect x="0" y="0" width="1680" height="76" rx="0" fill="#ffffff" stroke="#ffffff"/>
+<text x="26" y="50" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="26" font-weight="600" fill="#243042">FEP  RFQ 工作台</text>
+<text x="1120" y="48" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">内网系统  /  内部人员使用</text>
+<rect x="0" y="78" width="184" height="1042" rx="0" fill="#e9edf2" stroke="#e9edf2"/>
+<text x="28" y="143" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">项目列表</text>
+<text x="28" y="211" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">资料与解析</text>
+<text x="28" y="279" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">逐条应答</text>
+<text x="28" y="347" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">评审与偏离</text>
+<text x="28" y="415" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">草稿与导出</text>
+<rect x="14" y="450" width="156" height="50" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="28" y="483" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="600" fill="#254f87">知识与结果</text>
+<text x="220" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="30" font-weight="600" fill="#243042">PG-06  知识与结果维护</text>
+<text x="220" y="179" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">维护人员整理候选，知识批准人审核发布；已批准答复与实际验收结果分开记录。</text>
+<text x="220" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#64748b">低保真页面示意 · 全部为模拟数据 · 用于明确布局与交互，非已实现系统</text>
+<rect x="220" y="210" width="520" height="810" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="240" y="253" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">知识候选列表</text>
+<rect x="244" y="280" width="270" height="44" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="258" y="309" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#243042">批量导入历史条目</text>
+<rect x="242" y="357" width="476" height="146" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
+<text x="260" y="395" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">K-021 / 加工厚度要求</text>
+<text x="260" y="426" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">来源：RFQ-001 定稿条款 2.1</text>
+<text x="260" y="457" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">状态：候选，尚不可用于有效推荐</text>
+<text x="260" y="488" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">可见范围：FEP 授权项目</text>
+<text x="260" y="571" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">K-018 / 配置选项</text>
+<text x="260" y="610" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">状态：待审核</text>
+<text x="260" y="649" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042"></text>
+<text x="260" y="688" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">K-007 / 历史处理经验</text>
+<text x="260" y="727" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">状态：已发布，条件受限</text>
+<text x="245" y="951" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">已发布内容修改时创建新版本。</text>
+<rect x="760" y="210" width="890" height="810" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="780" y="253" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">知识候选 K-021 / 版本 1</text>
+<text x="784" y="299" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">要求 / 已批准答复</text>
+<rect x="784" y="310" width="840" height="46" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="796" y="343" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">加工 1.2 mm 硅晶圆 / Comply</text>
+<text x="784" y="403" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">适用条件</text>
+<rect x="784" y="414" width="840" height="46" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="796" y="447" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">型号 A / 配置 C / 对应材料及测试条件</text>
+<text x="784" y="507" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">依据 / 权限</text>
+<rect x="784" y="518" width="840" height="46" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="796" y="551" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">当前有效报告 T-01 / FEP 授权项目</text>
+<text x="784" y="611" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">结果与验证状态</text>
+<rect x="784" y="622" width="840" height="46" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="796" y="655" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">沟通反馈：未知；项目验收：未记录</text>
+<text x="784" y="736" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">批准答复不等于项目已验收。</text>
+<text x="784" y="773" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">结果未知时保留未知，后续由内部人员补充。</text>
+<text x="784" y="810" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">发布前由知识批准人检查适用范围及证据。</text>
+<rect x="784" y="897" width="170" height="44" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="798" y="926" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#243042">保存候选</text>
+<rect x="974" y="897" width="240" height="44" rx="5" fill="#254f87" stroke="#254f87"/>
+<text x="988" y="926" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#ffffff">提交知识审核</text>
+<rect x="1290" y="897" width="240" height="44" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="1304" y="926" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#243042">查看历史版本</text></svg>

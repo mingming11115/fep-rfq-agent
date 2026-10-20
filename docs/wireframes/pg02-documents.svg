@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1120" viewBox="0 0 1680 1120"><title>资料与解析确认</title><rect width="1680" height="1120" fill="#f4f6f8"/>
+<rect x="0" y="0" width="1680" height="76" rx="0" fill="#ffffff" stroke="#ffffff"/>
+<text x="26" y="50" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="26" font-weight="600" fill="#243042">FEP  RFQ 工作台</text>
+<text x="1120" y="48" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">内网系统  /  内部人员使用</text>
+<rect x="0" y="78" width="184" height="1042" rx="0" fill="#e9edf2" stroke="#e9edf2"/>
+<text x="28" y="143" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">项目列表</text>
+<rect x="14" y="178" width="156" height="50" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="28" y="211" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="600" fill="#254f87">资料与解析</text>
+<text x="28" y="279" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">逐条应答</text>
+<text x="28" y="347" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">评审与偏离</text>
+<text x="28" y="415" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">草稿与导出</text>
+<text x="28" y="483" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" font-weight="400" fill="#243042">知识与结果</text>
+<text x="220" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="30" font-weight="600" fill="#243042">PG-02  资料与解析确认</text>
+<text x="220" y="179" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#64748b">项目 RFQ-001  /  先核对解析结果，再将已确认条目送去历史匹配。</text>
+<text x="220" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#64748b">低保真页面示意 · 全部为模拟数据 · 用于明确布局与交互，非已实现系统</text>
+<rect x="220" y="210" width="1430" height="210" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="240" y="253" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">项目资料包</text>
+<rect x="1420" y="226" width="200" height="44" rx="5" fill="#254f87" stroke="#254f87"/>
+<text x="1434" y="255" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#ffffff">上传 RFQ</text>
+<text x="244" y="302" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">RFQ正文.pdf       要求来源     解析完成，待核对</text>
+<text x="244" y="342" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">技术附件扫描.pdf   补充要求     第 3 页待人工核对</text>
+<text x="244" y="382" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">应答模板.xlsx      应答模板     已上传，不生成要求条目</text>
+<rect x="220" y="444" width="680" height="565" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="240" y="487" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">原文预览：技术附件扫描.pdf / 第 3 页</text>
+<rect x="250" y="514" width="620" height="390" rx="8" fill="#fafafa" stroke="#cbd5e1"/>
+<text x="275" y="570" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042">2.1  加工能力</text>
+<text x="275" y="612" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042">设备须支持加工 1.2 mm 厚硅晶圆。</text>
+<text x="275" y="654" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042"></text>
+<text x="275" y="696" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042">2.2  指标定义</text>
+<text x="275" y="738" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042">切缝宽度及测量条件见表格。</text>
+<text x="275" y="780" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042"></text>
+<text x="275" y="822" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="400" fill="#243042">[此处为文档原页及表格预览区域]</text>
+<rect x="920" y="444" width="730" height="565" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="940" y="487" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">解析条目与人工核对</text>
+<text x="944" y="534" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">原条款编号</text>
+<rect x="944" y="545" width="680" height="46" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="956" y="578" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">2.1</text>
+<text x="944" y="632" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">要求原文</text>
+<rect x="944" y="643" width="680" height="46" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="956" y="676" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">设备须支持加工 1.2 mm 厚硅晶圆。</text>
+<text x="944" y="734" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">类型：技术   参数：厚度   值：1.2 mm</text>
+<text x="944" y="772" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">定位：技术附件扫描.pdf / 第 3 页</text>
+<text x="944" y="810" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">核对状态：待确认；可修正、拆分或补录</text>
+<rect x="944" y="860" width="170" height="44" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="958" y="889" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#243042">修正 / 拆分</text>
+<rect x="1130" y="860" width="170" height="44" rx="5" fill="#254f87" stroke="#254f87"/>
+<text x="1144" y="889" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#ffffff">确认本条</text>
+<rect x="1316" y="930" width="300" height="44" rx="5" fill="#254f87" stroke="#254f87"/>
+<text x="1330" y="959" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#ffffff">匹配已确认条目</text></svg>
