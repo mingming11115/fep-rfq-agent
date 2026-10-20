@@ -1,61 +1,85 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1042" viewBox="0 78 1680 1042">
-<title>PG-09  项目设置、成员与审批配置</title>
-<rect x="0" y="0" width="1680" height="1120" rx="0" fill="#f4f6f8" stroke="#f4f6f8"/>
-<rect x="0" y="78" width="200" height="1042" rx="0" fill="#e9edf2" stroke="#e9edf2"/>
-<text x="18" y="120" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="600" fill="#243042">个人工作台</text>
-<text x="18" y="180" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">项目列表</text>
-<text x="18" y="240" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="600" fill="#243042">项目内导航</text>
-<text x="18" y="300" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  RFQ解析</text>
-<text x="18" y="360" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  细则确认</text>
-<text x="18" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  偏离项管理</text>
-<text x="18" y="480" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  导出文档</text>
-<text x="18" y="540" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  版本记录</text>
-<text x="18" y="600" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  项目设置</text>
-<text x="18" y="660" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">知识与结果</text>
-<text x="18" y="720" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">资料与证据</text>
-<text x="18" y="780" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="600" fill="#243042">管理区</text>
-<text x="18" y="840" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  审计记录</text>
-<text x="18" y="900" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">  系统配置</text>
-<text x="230" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="30" font-weight="600" fill="#243042">PG-09  项目设置、成员与审批配置</text>
-<text x="230" y="181" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">项目：RFQ-001  /  工作版本 v3  /  仅在可分配权限范围内维护。</text>
-<rect x="230" y="210" width="1420" height="68" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
-<rect x="248" y="222" width="120" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="264" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">基本信息</text>
-<rect x="384" y="222" width="183" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="400" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">成员与数据范围</text>
-<rect x="583" y="222" width="120" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="599" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">确认责任</text>
-<rect x="719" y="222" width="120" height="44" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="735" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">审批配置</text>
-<rect x="230" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="254" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">项目与成员  /  模拟数据</text>
-<rect x="248" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
-<text x="260" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">设备范围：FEP 试点设备 A</text>
-<text x="260" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">负责人：销售 A     截止：2026-10-30</text>
-<rect x="248" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
-<text x="260" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">技术 A  /  技术确认  /  本项目</text>
-<text x="260" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">质量 A  /  质量确认  /  本项目</text>
-<rect x="248" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
-<text x="260" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">导出授权与专业确认权分别维护</text>
-<rect x="254" y="864" width="150" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="268" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">编辑基本信息</text>
-<rect x="418" y="864" width="150" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="432" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">调整成员职责</text>
-<rect x="950" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="974" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#243042">审批配置与缺项</text>
-<rect x="968" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
-<text x="980" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">技术专业批准人：技术负责人 B</text>
-<text x="980" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">质量专业批准人：质量负责人 B</text>
-<rect x="968" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
-<text x="980" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">商务确认人：待配置</text>
-<text x="980" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">最终批准人：审批负责人 B</text>
-<rect x="968" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc"/>
-<text x="980" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#243042">提示：缺少商务责任配置，阻止对应确认</text>
-<rect x="974" y="864" width="150" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="988" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">配置审批人员</text>
-<rect x="1138" y="864" width="150" height="48" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="1152" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#243042">查看变更影响</text>
-<rect x="230" y="975" width="1420" height="60" rx="8" fill="#eef4fb" stroke="#cbd5e1"/>
-<text x="248" y="1013" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#243042">同一版本须满足独立批准约束；改派保留原记录，权限收回后重新校验访问。</text>
-<text x="230" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#64748b">低保真页面示意 · 全部为模拟数据 · 用于明确布局与交互，非已实现系统</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1120" viewBox="0 0 1680 1120"><title>PG-09  项目设置、成员与审批配置</title><rect x="0" y="0" width="1680" height="1120" rx="0" fill="#f5f7fa" stroke="#f5f7fa"/><rect x="0" y="0" width="200" height="1120" rx="0" fill="#ffffff" stroke="#e5e7eb"/><rect x="0" y="0" width="200" height="76" rx="0" fill="#ffffff" stroke="#ffffff"/><rect x="20" y="22" width="32" height="32" rx="8" fill="#165dff" stroke="#165dff"/><text x="27" y="45" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="600" fill="#fff">F</text><text x="64" y="44" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#1d2129">FEP RFQ</text><rect x="200" y="0" width="1480" height="76" rx="0" fill="#ffffff" stroke="#e5e7eb"/><text x="228" y="45" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#86909c">销售协作  /  PG-09  项目设置、成员与审批配置</text><text x="1340" y="45" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#86909c">内网工作空间</text><rect x="1500" y="20" width="32" height="32" rx="16" fill="#e8f0ff" stroke="#e8f0ff"/><text x="1509" y="43" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#165dff">李</text><text x="1545" y="44" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#1d2129">李明  ▾</text><a href="pg08-workbench.svg"><rect x="27" y="119" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="133" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">个人工作台</text></a><a href="pg01-projects.svg"><rect x="27" y="181" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="195" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">项目列表</text></a><a href="pg14-model-capabilities.svg"><rect x="27" y="243" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="257" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">机型能力边界</text></a><a href="pg02-documents.svg"><rect x="27" y="305" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="319" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">RFQ 解析</text></a><a href="pg03-response-workbench.svg"><rect x="27" y="367" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="381" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">RFQ 细则确认</text></a><a href="pg04-reviews.svg"><rect x="27" y="429" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="443" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">评审与偏离</text></a><a href="pg05-export.svg"><rect x="27" y="491" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="505" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">草稿与导出</text></a><a href="pg11-versions.svg"><rect x="27" y="553" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="567" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">版本记录</text></a><a href="pg09-project-settings.svg"><rect x="12" y="600" width="176" height="44" rx="6" fill="#e8f0ff" stroke="#e8f0ff"/><rect x="12" y="610" width="3" height="24" rx="1" fill="#165dff" stroke="#165dff"/><rect x="27" y="615" width="12" height="12" rx="3" fill="#165dff" stroke="#165dff"/><text x="51" y="629" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="600" fill="#165dff">项目设置</text></a><a href="pg06-knowledge.svg"><rect x="27" y="677" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="691" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">知识与结果</text></a><a href="pg10-evidence.svg"><rect x="27" y="739" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="753" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">资料与证据</text></a><a href="pg12-audit.svg"><rect x="27" y="801" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="815" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">审计记录</text></a><a href="pg13-admin.svg"><rect x="27" y="863" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="877" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">系统配置</text></a><path d="M20 940h160" stroke="#edf0f3"/><text x="24" y="974" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#86909c">FEP 事业部</text><text x="24" y="1004" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="14" font-weight="400" fill="#a9b1bf">销售 RFQ 应答协作</text><text x="24" y="1090" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="400" fill="#a9b1bf">原型预览 · 模拟数据</text>
+<text xmlns="http://www.w3.org/2000/svg" x="230" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="28" font-weight="600" fill="#1d2129">PG-09  项目设置、成员与审批配置</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="230" y="181" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">项目：RFQ-001  /  工作版本 v3  /  仅在可分配权限范围内维护。</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="230" y="210" width="1420" height="68" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="222" width="120" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="264" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">基本信息</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="384" y="222" width="183" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="400" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">成员与数据范围</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="583" y="222" width="120" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="599" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">确认责任</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="719" y="222" width="120" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="735" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">审批配置</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="230" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="254" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#1d2129">项目与成员  /  模拟数据</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">设备范围：FEP 试点设备 A</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">负责人：销售 A     截止：2026-10-30</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">技术 A  /  技术确认  /  本项目</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">质量 A  /  质量确认  /  本项目</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">导出授权与专业确认权分别维护</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="254" y="864" width="150" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="268" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">编辑基本信息</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="418" y="864" width="150" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="432" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">调整成员职责</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="950" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="974" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#1d2129">审批配置与缺项</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="968" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">技术专业批准人：技术负责人 B</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">质量专业批准人：质量负责人 B</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="968" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">商务确认人：待配置</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">最终批准人：审批负责人 B</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="968" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">提示：缺少商务责任配置，阻止对应确认</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="974" y="864" width="150" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="988" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">配置审批人员</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="1138" y="864" width="150" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="1152" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">查看变更影响</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="230" y="975" width="1420" height="60" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="248" y="1013" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#1d2129">同一版本须满足独立批准约束；改派保留原记录，权限收回后重新校验访问。</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="230" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="15" font-weight="400" fill="#64748b">页面原型 · 模拟数据 · 用于布局与流程评审</text>
 </svg>
