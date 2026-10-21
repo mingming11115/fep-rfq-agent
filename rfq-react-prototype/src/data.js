@@ -4,7 +4,7 @@ export const NAV_ITEMS = [
   { key: 'projects', label: '项目列表', section: '全局' },
   { key: 'capabilities', label: '机型能力边界', section: '全局' },
   { key: 'documents', label: 'RFQ解析', section: '项目' },
-  { key: 'response', label: 'RFQ细则确认', section: '项目' },
+  { key: 'response', label: 'RFQ比对', section: '项目' },
   { key: 'reviews', label: '偏离项管理', section: '项目' },
   { key: 'export', label: '导出文档', section: '项目' },
   { key: 'versions', label: '项目版本、变更与快照记录', section: '项目' },
@@ -123,7 +123,7 @@ export function makeRequirements(projectId) {
 
 export function createDemoState() {
   const projects = [
-    { id: 'RFQ-001', name: '新能源精密切割产线', customer: '华东新能源客户（模拟）', equipment: 'DEMO-CUT 300 · V2.1 · 选配 X 待确认', owner: '林晓', deadline: '2026-10-25', stage: '细则确认' },
+    { id: 'RFQ-001', name: '新能源精密切割产线', customer: '华东新能源客户（模拟）', equipment: 'DEMO-CUT 300 · V2.1 · 选配 X 待确认', owner: '林晓', deadline: '2026-10-25', stage: 'RFQ比对' },
     { id: 'RFQ-002', name: '精密零件加工设备', customer: '苏州精密制造客户（模拟）', equipment: 'DEMO-CUT 200 · V1.4 · 标准配置', owner: '陈晨', deadline: '2026-10-29', stage: '资料解析' },
     { id: 'RFQ-003', name: '实验室样品验证设备', customer: '华南材料研究客户（模拟）', equipment: 'DEMO-LAB 100 · V1.0 · 研究配置', owner: '周宁', deadline: '2026-11-03', stage: '评审处理' },
   ];
