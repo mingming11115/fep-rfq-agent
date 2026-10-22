@@ -2,9 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Upload, FileText, Check, AlertCircle, ArrowRight, Download, Plus, Search, RefreshCw, X, ShieldCheck, ChevronRight, ListChecks } from 'lucide-react';
 import { Modal, Drawer } from '../components/ui';
 import { makeRequirements } from '../data';
+import { BHEL_ID } from '../bhelDemo';
 import { makeDocumentDemo } from '../documentMocks';
 import { getExportIssues, makeSnapshot, toCsv } from '../domain';
 import './workflow-pages.css';
+import ApprovalRoute from '../components/ApprovalRoute';
+import { getReviewRoute } from '../rfqWorkflow';
+import DocumentWorkbench from '../components/DocumentWorkbench';
 
 const uid = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const now = () => new Date().toLocaleString('zh-CN', { hour12: false });
@@ -27,13 +31,13 @@ function useUnsavedWarning(dirty) {
 const metadataStorage = (projectId) => `fep-rfq-documents:${projectId}`;
 function readDocumentState(projectId) { try { return JSON.parse(localStorage.getItem(metadataStorage(projectId)) || 'null'); } catch { return null; } }
 
-export function DocumentsPage({ project, requirements = [], onImport, toast, navigate, logEvent = () => {} }) {
-  const [files, setFiles] = useState(() => readDocumentState(project.id)?.files || makeDocumentDemo(project.id).files);
-  const [parsed, setParsed] = useState(() => readDocumentState(project.id)?.parsed || makeDocumentDemo(project.id, requirements.length ? requirements : makeRequirements(project.id)).parsed);
-  const [selected, setSelected] = useState([]);
-  const [activeId, setActiveId] = useState(null);
+export function DocumentsPage({ project, requirements = [], onImport, onCorrect, toast, navigate, focusedRequirementId, logEvent = () => {} }) {
+  const [files, setFiles] = useState(() => readDocumentState(project.id)?.files || (requirements.length ? makeDocumentDemo(project.id).files : []));
+  const [parsed, setParsed] = useState(() => readDocumentState(project.id)?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []));
+  const [activeId, setActiveId] = useState(focusedRequirementId || null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState([]);
+  const [dragging, setDragging] = useState(false);
   const [purpose, setPurpose] = useState('要求来源');
   const [replacementReason, setReplacementReason] = useState('');
   const [version, setVersion] = useState('V1.0');
@@ -41,27 +45,27 @@ export function DocumentsPage({ project, requirements = [], onImport, toast, nav
   const [fileTab, setFileTab] = useState('文件清单');
   const [fileDetail, setFileDetail] = useState(null);
   const [editor, setEditor] = useState(null);
-  const [editMode, setEditMode] = useState('edit');
   const [editReason, setEditReason] = useState('');
-  const [secondText, setSecondText] = useState('');
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('全部类别');
-  const [page, setPage] = useState(1);
   const inputRef = useRef(null);
   const timers = useRef([]);
+  const running = useRef(new Set());
+  const parsedRef = useRef(parsed);
+  parsedRef.current = parsed;
   const imported = new Set(requirements.map((r) => r.id));
-  const active = parsed.find((r) => r.id === activeId) || parsed[0];
-  const filtered = parsed.filter((r) => `${r.clause} ${r.title} ${r.original}`.toLowerCase().includes(search.toLowerCase()) && (category === '全部类别' || category === r.category));
-  const shown = filtered.slice((page - 1) * 6, page * 6);
-  const selectable = selected.filter((id) => parsed.some((r) => r.id === id) && !imported.has(id));
+  useEffect(() => {
+    const missing = parsed.filter((row) => !requirements.some((current) => current.id === row.id));
+    if (missing.length) onImport(missing);
+    setFiles((old) => {
+      const next = old.map((file) => file.status === '待核对' && parsed.some((row) => row.sourceFileId === file.id) ? { ...file, status: '完成' } : file);
+      return next.some((file, i) => file !== old[i]) ? next : old;
+    });
+  }, [parsed, requirements, onImport]);
   useEffect(() => { localStorage.setItem(metadataStorage(project.id), JSON.stringify({ files, parsed })); }, [files, parsed, project.id]);
   useEffect(() => {
     files.filter((file) => ['排队中', '处理中'].includes(file.status)).forEach(scheduleParse);
     return () => timers.current.forEach(clearTimeout);
   }, []);
-  useEffect(() => { setPage(1); }, [search, category]);
-  useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
   useUnsavedWarning(!!editor);
 
   function loadSample() {
@@ -74,21 +78,41 @@ export function DocumentsPage({ project, requirements = [], onImport, toast, nav
       });
       return [...linked, ...demo.parsed.filter((row) => !old.some((existing) => existing.id === row.id))];
     });
-    setActiveId(parsed[0]?.id || demo.parsed[0]?.id);
+    setActiveId(demo.parsed[0]?.id || parsed[0]?.id);
     logEvent('加载解析示例', project.id, '补齐多版本模拟资料及条目来源，保留已有文件和编辑');
-    toast('已补齐示例：9 条文件版本记录，包含替换原因、附件、模板与失败案例');
+    toast(project.id === BHEL_ID ? '已载入BHEL真实RFQ：40条精选要求及原PDF，保留已有编辑' : '已补齐示例：已包含 Safety / Facility 与模块组合两份 Word 示例，以及历史版本和失败案例');
   }
   function scheduleParse(file) {
+    if (running.current.has(file.id)) return;
+    running.current.add(file.id);
     const fail = !/\.(pdf|docx?|xlsx?|csv|txt)$/i.test(file.name);
     timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '处理中', error: '' } : f)), 350));
     timers.current.push(setTimeout(() => {
+      running.current.delete(file.id);
       if (fail) { setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '失败', error: '演示解析器仅支持 PDF、Word、Excel、CSV、TXT；请转换格式或手动补录。' } : f)); logEvent('解析失败', file.id, '不支持的文件格式'); return; }
       if (file.purpose !== '要求来源') { setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成' } : f)); return; }
-      const rows = makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourcePage: index + 2, sourceFileId: file.id, confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果，请与真实原件核对', version: 1 }));
+      const previous = parsedRef.current.filter((row) => row.sourceFileId === file.id);
+      const rows = previous.length ? previous : makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourceOriginal: r.original, sourceVersion: file.version, sourcePage: index + 2, sourceFileId: file.id, sectionPath: [], confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果：未读取原文件，章节待识别', version: 1 }));
       setParsed((old) => old.some((r) => r.sourceFileId === file.id) ? old : [...old, ...rows]);
-      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '待核对', parsedCount: rows.length } : f));
-      setActiveId(rows[0]?.id); logEvent('模拟解析完成', file.id, `${rows.length} 条待核对要求`);
+      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parsedCount: rows.length, parsedAt: now(), error: '' } : f));
+      setActiveId(rows[0]?.id); logEvent('模拟解析完成', file.id, `${rows.length} 条要求，自动进入细则比对`);
     }, 1250));
+  }
+  function reparse(file) {
+    if (running.current.has(file.id)) return;
+    setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '排队中', error: '' } : f));
+    scheduleParse(file); logEvent('重新解析资料', file.id, '保留已修改条款及已有应答，不重复导入');
+    toast('已重新进入模拟解析队列，保留已修改字段与已有应答');
+  }
+  function correctRow(row, patch, reason) {
+    const result = onCorrect(row, patch, reason);
+    if (typeof result === 'string') return result;
+    setParsed((old) => old.map((item) => item.id === row.id ? { ...item, ...result } : item));
+    return result;
+  }
+  function selectFiles(incoming) {
+    setUploadFiles(Array.from(incoming || []).map((f) => ({ name: f.name, size: f.size, type: f.type, lastModified: f.lastModified })));
+    setError('');
   }
   function upload() {
     if (!uploadFiles.length) { setError('请选择至少一个文件'); return; }
@@ -99,68 +123,45 @@ export function DocumentsPage({ project, requirements = [], onImport, toast, nav
     setFiles((old) => [...old, ...incoming]); incoming.forEach(scheduleParse); setUploadOpen(false); setUploadFiles([]); setError('');
     logEvent('上传资料元数据', project.id, `${incoming.length} 个文件；${purpose}；${version}`); toast('文件已进入模拟处理队列；只保存文件名、大小等元数据');
   }
-  function openEditor(mode, row = active, sourceFile = null) {
-    if (mode === 'merge' && selected.length < 2) { toast('请先选择至少两条要求'); return; }
-    const base = row || makeRequirements(project.id)[0];
-    if (!base) return;
-    const rows = parsed.filter((r) => selected.includes(r.id));
-    const draft = mode === 'add' ? { ...base, id: uid('REQ'), clause: `${parsed.length + 1}.1`, title: '', original: '', conclusion: '待确认', draft: '', evidence: '', reason: '', matchLevel: 'none', score: 0, confirmedAt: undefined, confirmedBy: undefined, conditions: '', source: sourceFile?.name || '人工补录', sourceFileId: sourceFile?.id, sourcePage: 1, category: '技术', status: '待确认', version: 1 } : mode === 'merge' ? { ...rows[0], id: uid('REQ'), title: rows.map((r) => r.title).join(' / '), original: rows.map((r) => r.original).join('\n'), source: [...new Set(rows.map((r) => `${asText(r.source)}（第 ${r.sourcePage || 1} 页）`))].join('；'), sourcePage: '多来源', conditions: [...new Set(rows.map((r) => asText(r.conditions)).filter(Boolean))].join('；'), parentIds: rows.map((r) => r.id), status: '待确认' } : { ...base, conditions: asText(base.conditions), source: asText(base.source) };
-    setEditor(draft); setEditMode(mode); setSecondText(''); setEditReason(''); setError('');
+  function openEditor(sourceFile = null) {
+    setEditor({ id: uid('REQ'), clause: '', title: '', original: '', conclusion: '待确认', draft: '', evidence: '', reason: '', matchLevel: 'none', score: 0, conditions: '', source: sourceFile?.name || '人工补录', sourceFileId: sourceFile?.id, sourcePage: 1, category: '', sectionPath: [], status: '待确认', version: 1 });
+    setEditReason(''); setError('');
   }
   function saveEditor() {
     if (!editor.title.trim() || !editor.original.trim() || !asText(editor.source).trim()) { setError('请完整填写条目标题、要求原文和来源定位'); return; }
-    if (!editReason.trim()) { setError('请填写本次修订或补录原因'); return; }
-    if (editMode === 'split' && !secondText.trim()) { setError('请填写拆分后第二条要求的原文'); return; }
-    const touched = editMode === 'merge' ? editor.parentIds : [editor.id];
-    if (touched.some((id) => imported.has(id))) { setError('已导入要求请前往RFQ比对页修订，避免覆盖已确认内容。'); return; }
-    let output = [{ ...editor, status: '待确认', version: Number(editor.version || 0) + 1, ...(editMode === 'split' || editMode === 'merge' ? { parseParents: parsed.filter((r) => touched.includes(r.id)).map((r) => ({ ...r })) } : {}), parseHistory: [...(editor.parseHistory || []), { time: now(), action: editMode, reason: editReason }] }];
-    if (editMode === 'split') output = [{ ...output[0], id: uid('REQ'), parentId: editor.id, title: `${editor.title}（1）` }, { ...output[0], id: uid('REQ'), parentId: editor.id, clause: `${editor.clause}.2`, title: `${editor.title}（2）`, original: secondText }];
-    setParsed((old) => [...old.filter((r) => !touched.includes(r.id) || editMode === 'add'), ...output]);
-    if (editMode === 'add' && editor.sourceFileId) setFiles((old) => old.map((file) => file.id === editor.sourceFileId && file.status === '失败' ? { ...file, status: '待核对', error: '', handlingMode: '人工补录' } : file));
-    setSelected((old) => old.filter((id) => !touched.includes(id))); setActiveId(output[0].id); setEditor(null); logEvent('解析条目修订', editor.id, `${editMode}：${editReason}`); toast('修订已保存；条目回到待核对，来源信息已保留');
+    if (!editReason.trim()) { setError('请填写补录原因'); return; }
+    const row = { ...editor, parseHistory: [{ time: now(), action: 'add', reason: editReason }] };
+    setParsed((old) => [...old, row]);
+    if (editor.sourceFileId) setFiles((old) => old.map((file) => file.id === editor.sourceFileId && file.status === '失败' ? { ...file, status: '完成', error: '', handlingMode: '人工补录' } : file));
+    setActiveId(row.id); setEditor(null); logEvent('补录要求', row.id, editReason); toast('补录已保存，自动进入细则比对');
   }
-  function confirmImport() {
-    const rows = parsed.filter((r) => selectable.includes(r.id));
-    if (!rows.length) { toast('请先选择尚未导入的条目'); return; }
-    onImport(rows.map((r) => ({ ...r, status: '待确认', parseConfirmed: true })));
-    const sourceIds = rows.map((r) => r.sourceFileId).filter(Boolean);
-    setFiles((old) => old.map((f) => sourceIds.includes(f.id) && parsed.filter((r) => r.sourceFileId === f.id).every((r) => imported.has(r.id) || selectable.includes(r.id)) ? { ...f, status: '完成' } : f));
-    setSelected([]); logEvent('确认解析并匹配', project.id, `明确选中 ${rows.length} 条；其余条目保留待核对`); toast(`已导入 ${rows.length} 条要求，进入RFQ比对`); navigate('response');
-  }
-  const editTitles = { edit: '修订解析条目', add: '人工补录要求', split: '拆分要求条目', merge: '合并要求条目' };
   return <div className="flow-page">
-    <div className="page-heading"><div><h1>RFQ 解析</h1><p>上传客户资料，核对解析结果并保留每一条要求的来源。</p></div><div className="page-actions"><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
-    <Notice>交互原型 · 文件仅保存元数据，解析结果使用模拟数据。仅“要求来源”生成要求条目；真实文件内容不会上传或读取。</Notice>
-    <div className="flow-stat-strip"><div><span>已添加资料</span><strong>{files.length}</strong></div><div><span>解析条目</span><strong>{parsed.length}</strong></div><div><span>待核对导入</span><strong>{parsed.filter((r) => !imported.has(r.id)).length}</strong></div><div><span>失败任务</span><strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></div></div>
-    <section className="panel"><div className="panel-header"><h2>项目资料</h2><span className="muted">上传完成不代表证据有效</span></div><div className="tabs"><button className={fileTab === '文件清单' ? 'active' : ''} onClick={() => setFileTab('文件清单')}>文件清单 <span>{files.length}</span></button><button className={fileTab === '版本记录' ? 'active' : ''} onClick={() => setFileTab('版本记录')}>文件版本</button></div>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>文件名称 / 任务编号</th><th>用途</th><th>版本</th><th>处理状态</th><th>上传时间</th><th>操作</th></tr></thead><tbody>{files.map((file) => <tr key={file.id}><td><button className="text-link flow-file-name" onClick={() => setFileDetail(file)}><FileText size={16} />{file.name}</button><div className="muted flow-small">{fileTab === '版本记录' ? (file.previousVersionId ? `替代 ${file.previousVersionId} · ${file.reason}` : '初始版本') : `${file.id} · ${(file.size / 1024 / 1024).toFixed(2)} MB`}</div></td><td>{file.purpose}</td><td>{file.version}</td><td><Badge value={file.status} />{file.error && <div className="flow-error-inline">{file.error}</div>}</td><td className="flow-nowrap">{file.createdAt}</td><td><div className="flow-inline-actions"><button className="text-link" onClick={() => setFileDetail(file)}>详情</button>{file.status === '失败' && <button className="text-link" onClick={() => { setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '排队中' } : f)); scheduleParse(file); toast('已重新进入模拟解析队列'); }}>重试</button>}{file.status === '失败' && <button className="text-link" onClick={() => openEditor('add', null, file)}>手动补录</button>}{file.status === '待核对' && <button className="text-link" onClick={() => { const row = parsed.find((r) => r.sourceFileId === file.id) || parsed[0]; setActiveId(row?.id); document.getElementById('flow-parsed-table')?.scrollIntoView({ behavior: 'smooth' }); }}>核对条目</button>}</div></td></tr>)}</tbody></table></div>{!files.length && <NoRows title="还没有项目资料">上传 RFQ 文档，或载入示例体验解析流程。</NoRows>}
-    </section>
-    <section className="panel" id="flow-parsed-table"><div className="panel-header"><h2>解析结果核对</h2><button className="text-link" onClick={() => openEditor('add')}><Plus size={15} />补录条目</button></div>
-      <div className="flow-filterbar"><label className="flow-search"><Search size={16} /><input className="input" aria-label="搜索解析条目" placeholder="搜索条款编号、标题或原文" value={search} onChange={(e) => setSearch(e.target.value)} /></label><select className="select" aria-label="条目类别" value={category} onChange={(e) => setCategory(e.target.value)}><option>全部类别</option>{[...new Set(parsed.map((r) => r.category))].filter(Boolean).map((v) => <option key={v}>{v}</option>)}</select><button className="btn" onClick={() => { setSearch(''); setCategory('全部类别'); }}>重置</button></div>
-      <div className="flow-selection"><span>已选择 <b>{selected.length}</b> 条，其中 <b>{selectable.length}</b> 条可导入</span><div className="flow-inline-actions"><button className="text-link" disabled={selected.length < 2} onClick={() => openEditor('merge')}>合并所选</button><button className="text-link" onClick={() => setSelected([])}>清空选择</button></div></div>
-      <div className="flow-parse-split"><div className="flow-original-pane"><div className="flow-pane-title"><FileText size={15} />来源定位 / 原文对照</div>{active ? <><div className="flow-source-location">{asText(active.source)}<br /><span>第 {active.sourcePage || 1} 页 · 条款 {active.clause}</span></div><div className="flow-paper"><div className="flow-paper-watermark">模拟原文视图</div><small>{project.customer || '客户'} · 技术要求</small><h3>{active.clause} {active.title}</h3><p className="flow-source-highlight">{active.original}</p><p className="muted flow-small">此处仅展示模拟条文与来源元数据。真实文件请在本地核对原件。</p><div className="flow-paper-line" /><div className="flow-paper-line" /><div className="flow-paper-line flow-short" /></div></> : <NoRows title="等待核对">添加资料后，选择右侧条目定位来源。</NoRows>}</div>
-        <div className="flow-parsed-list"><div className="table-wrap"><table className="data-table"><thead><tr><th className="flow-check-cell"><input type="checkbox" aria-label="选择本页未导入条目" checked={shown.some((r) => !imported.has(r.id)) && shown.filter((r) => !imported.has(r.id)).every((r) => selected.includes(r.id))} onChange={(e) => setSelected((old) => e.target.checked ? [...new Set([...old, ...shown.filter((r) => !imported.has(r.id)).map((r) => r.id)])] : old.filter((id) => !shown.some((r) => r.id === id)))} /></th><th>条款 / 要求条目</th><th>类别</th><th>核对状态</th><th>操作</th></tr></thead><tbody>{shown.map((row) => <tr key={row.id} className={active?.id === row.id ? 'flow-row-active' : ''} onClick={() => setActiveId(row.id)}><td><input type="checkbox" aria-label={`选择 ${row.title}`} disabled={imported.has(row.id)} checked={selected.includes(row.id)} onChange={(e) => setSelected((old) => e.target.checked ? [...old, row.id] : old.filter((id) => id !== row.id))} onClick={(e) => e.stopPropagation()} /></td><td><button className="text-link" onClick={() => setActiveId(row.id)}>{row.clause} {row.title}</button><div className="flow-cell-excerpt">{row.original}</div>{row.parentId && <span className="muted flow-small">拆分自 {row.parentId}</span>}{row.parentIds && <span className="muted flow-small">保留 {row.parentIds.length} 个父条目来源</span>}</td><td>{row.category}</td><td><Badge value={imported.has(row.id) ? '已导入' : '待核对'} /></td><td><div className="flow-inline-actions"><button className="text-link" disabled={imported.has(row.id)} onClick={(e) => { e.stopPropagation(); openEditor('edit', row); }}>编辑</button><button className="text-link" disabled={imported.has(row.id)} onClick={(e) => { e.stopPropagation(); openEditor('split', row); }}>拆分</button></div></td></tr>)}</tbody></table></div>{!shown.length && <NoRows title={parsed.length ? '没有符合条件的条目' : '尚未生成解析条目'}>{parsed.length ? '调整关键词或重置筛选。' : '可载入示例、上传要求来源，或手动补录。'}</NoRows>}<Pager count={filtered.length} page={page} onChange={setPage} /></div>
-      </div><div className="flow-bottom-actions"><span className="muted">仅选中条目进入匹配；导入后仍需人工确认答复。</span><button className="btn btn-primary" disabled={!selectable.length} onClick={confirmImport}>确认所选并匹配（{selectable.length}）<ArrowRight size={16} /></button></div>
-    </section>
-    {uploadOpen && <Modal title="上传项目资料" onClose={() => setUploadOpen(false)} footer={<><button className="btn" onClick={() => setUploadOpen(false)}>取消</button><button className="btn btn-primary" onClick={upload}>上传并模拟处理</button></>}>
-      <Notice>原型只记录文件元数据；不会读取、上传或解析真实文件内容。</Notice><div className="form-grid"><Field label="文件用途" required><select className="select" value={purpose} onChange={(e) => setPurpose(e.target.value)}><option>要求来源</option><option>补充附件</option><option>应答模板</option></select></Field><Field label="文件版本" required><input className="input" value={version} onChange={(e) => setVersion(e.target.value)} /></Field><Field label="可见范围"><select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value)}><option>项目成员可见</option><option>项目负责人及专业人员</option></select></Field><Field label="关联项目"><input className="input" value={project.name} readOnly /></Field></div>
-      <button className="flow-dropzone" onClick={() => inputRef.current?.click()}><Upload size={28} /><strong>点击选择本地文件</strong><span>PDF / Word / Excel / CSV / TXT · 可多选</span></button><input ref={inputRef} className="flow-hidden" type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []).map((f) => ({ name: f.name, size: f.size, type: f.type, lastModified: f.lastModified })))} />
+    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
+    <Notice>{project.id === BHEL_ID ? '真实RFQ演示 · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : '交互原型 · 文件仅保存元数据，解析结果使用模拟数据。仅“要求来源”生成要求条目；真实文件内容不会上传或读取。'}</Notice>
+    <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
+    {files.length > 0 ? <DocumentWorkbench files={files} rows={parsed} imported={imported} selectedId={activeId} onSelect={setActiveId} onCorrect={correctRow} onReparse={reparse} onSupplement={openEditor} onContinue={(id) => navigate('response', id)} /> : <section className="panel"><NoRows title="上传第一份 RFQ，自动抽取要求条款"><span>支持 DOC、DOCX，兼容 PDF、Excel、CSV 和 TXT；载入示例可体验不同客户章节。</span><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={15}/>上传并解析</button></NoRows></section>}
+    <details className="panel dw-file-records"><summary>文件与版本记录<span>{files.length} 份资料 · 查看历史版本和失败任务</span></summary><div className="tabs"><button className={fileTab === '文件清单' ? 'active' : ''} onClick={() => setFileTab('文件清单')}>文件清单 <span>{files.length}</span></button><button className={fileTab === '版本记录' ? 'active' : ''} onClick={() => setFileTab('版本记录')}>文件版本</button></div>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>文件名称 / 任务编号</th><th>用途</th><th>版本</th><th>处理状态</th><th>上传时间</th><th>操作</th></tr></thead><tbody>{files.map((file) => <tr key={file.id}><td><button className="text-link flow-file-name" onClick={() => setFileDetail(file)}><FileText size={16} />{file.name}</button><div className="muted flow-small">{fileTab === '版本记录' ? (file.previousVersionId ? `替代 ${file.previousVersionId} · ${file.reason}` : '初始版本') : `${file.id} · ${(file.size / 1024 / 1024).toFixed(2)} MB`}</div></td><td>{file.purpose}</td><td>{file.version}</td><td><Badge value={file.status} />{file.error && <div className="flow-error-inline">{file.error}</div>}</td><td className="flow-nowrap">{file.createdAt}</td><td><div className="flow-inline-actions"><button className="text-link" onClick={() => setFileDetail(file)}>详情</button>{file.status === '失败' && <button className="text-link" onClick={() => { reparse(file); }}>重试</button>}{file.status === '失败' && <button className="text-link" onClick={() => openEditor(file)}>手动补录</button>}{file.parsedCount > 0 && <button className="text-link" onClick={() => { const row = parsed.find((r) => r.sourceFileId === file.id) || parsed[0]; setActiveId(row?.id); document.querySelector('.dw-workbench')?.scrollIntoView({ behavior: 'smooth' }); }}>查看结果</button>}</div></td></tr>)}</tbody></table></div>{!files.length && <NoRows title="还没有项目资料">上传 RFQ 文档，或载入示例体验解析流程。</NoRows>}
+    </details>
+    {uploadOpen && <Modal title="上传并智能解析" onClose={() => setUploadOpen(false)} footer={<><button className="btn" onClick={() => setUploadOpen(false)}>取消</button><button className="btn btn-primary" onClick={upload}>开始智能解析</button></>}>
+      <div className="dw-upload-steps"><span><b>1</b>选择文件</span><ChevronRight size={14}/><span><b>2</b>自动解析</span><ChevronRight size={14}/><span><b>3</b>查看结果</span></div><div className="dw-mode-note"><ShieldCheck size={19}/><div><strong>智能抽取 · 自动导入</strong><p>按文件用途抽取条款，完成后直接进入细则比对。本原型仅记录元数据，抽取内容使用模拟数据。</p></div></div><div className="form-grid"><Field label="文件用途" required><select className="select" value={purpose} onChange={(e) => setPurpose(e.target.value)}><option>要求来源</option><option>补充附件</option><option>应答模板</option></select></Field><Field label="文件版本" required><input className="input" value={version} onChange={(e) => setVersion(e.target.value)} /></Field><Field label="可见范围"><select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value)}><option>项目成员可见</option><option>项目负责人及专业人员</option></select></Field><Field label="关联项目"><input className="input" value={project.name} readOnly /></Field></div>
+      <button className={`flow-dropzone ${dragging ? 'dw-drop-active' : ''}`} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectFiles(e.dataTransfer.files); }} onClick={() => inputRef.current?.click()}><Upload size={28} /><strong>拖拽文件到这里，或点击选择</strong><span>DOC / DOCX（主要格式）· 兼容 PDF / Excel / CSV / TXT</span></button><input ref={inputRef} aria-label="选择 RFQ 文件" className="flow-hidden" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={(e) => selectFiles(e.target.files)} />
       {uploadFiles.map((f, i) => <div className="flow-upload-item" key={`${f.name}-${i}`}><FileText size={16} /><span>{f.name}<small>{(f.size / 1024).toFixed(1)} KB</small></span>{files.some((old) => old.name === f.name) && <Badge value="同名文件 · 新版本" />}<button className="text-link" aria-label={`移除 ${f.name}`} onClick={() => setUploadFiles((old) => old.filter((_, n) => n !== i))}><X size={16} /></button></div>)}
       {uploadFiles.some((f) => files.some((old) => old.name === f.name)) && <Field label="替换原因（保留原版本）" required wide><textarea className="input" value={replacementReason} onChange={(e) => setReplacementReason(e.target.value)} placeholder="说明版本变化及受影响范围" /></Field>}{purpose !== '要求来源' && <p className="muted">该用途仅登记资料，不触发要求解析。</p>}{error && <p className="flow-error-inline" role="alert">{error}</p>}
     </Modal>}
-    {editor && <Drawer title={editTitles[editMode]} onClose={() => setEditor(null)} width={600} footer={<><button className="btn" onClick={() => setEditor(null)}>取消</button><button className="btn btn-primary" onClick={saveEditor}>保存修订</button></>}><Notice>保存后回到待核对。拆分保留父条目，合并保留全部来源；不会自动确认应答。</Notice><div className="form-grid"><Field label="条款编号"><input className="input" value={editor.clause} onChange={(e) => setEditor({ ...editor, clause: e.target.value })} /></Field><Field label="类别"><select className="select" value={editor.category} onChange={(e) => setEditor({ ...editor, category: e.target.value })}>{[...new Set(['技术参数', '交期', '商务', '验收', '质量', ...parsed.map((r) => r.category)])].map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="条目标题" required wide><input className="input" value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} /></Field><Field label={editMode === 'split' ? '第一条要求原文' : '客户要求原文'} required wide><textarea className="input flow-textarea" value={editor.original} onChange={(e) => setEditor({ ...editor, original: e.target.value })} /></Field>{editMode === 'split' && <Field label="第二条要求原文" required wide><textarea className="input flow-textarea" value={secondText} onChange={(e) => setSecondText(e.target.value)} placeholder="录入拆分后的独立要求；原有来源与条件会同时保留" /></Field>}<Field label="必要条件" wide><textarea className="input" value={asText(editor.conditions)} onChange={(e) => setEditor({ ...editor, conditions: e.target.value })} /></Field><Field label="来源文件 / 多来源定位" required wide><textarea className="input" value={asText(editor.source)} readOnly={editMode !== 'add'} onChange={(e) => setEditor({ ...editor, source: e.target.value })} /></Field><Field label="页码 / 工作表 / 单元格"><input className="input" value={editor.sourcePage || ''} onChange={(e) => setEditor({ ...editor, sourcePage: e.target.value })} /></Field><Field label="修订原因" required wide><textarea className="input" value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="说明修订内容及原因" /></Field></div>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Drawer>}
-    {fileDetail && <Drawer title="资料详情与版本" onClose={() => setFileDetail(null)} width={580}><div className="flow-detail-heading"><FileText size={24} /><div><h3>{fileDetail.name}</h3><Badge value={files.find((f) => f.id === fileDetail.id)?.status || fileDetail.status} /></div></div><dl className="flow-description"><dt>资料编号</dt><dd>{fileDetail.id}</dd><dt>用途 / 版本</dt><dd>{fileDetail.purpose} / {fileDetail.version}</dd><dt>可见范围</dt><dd>{fileDetail.visibility || '项目成员可见'}</dd><dt>来源定位</dt><dd>解析后条目保留文件名、页码及条款。</dd><dt>替代版本</dt><dd>{fileDetail.previousVersionId || '初始版本'}</dd><dt>替换原因</dt><dd>{fileDetail.reason || '—'}</dd><dt>原件状态</dt><dd>仅登记元数据，原文件请在本地查看。</dd></dl><Notice>原件预览为模拟视图，不会显示或上传真实文件内容。缺页、低可信及解析失败必须人工核对。</Notice>{fileDetail.error && <Notice type="error">{fileDetail.error}</Notice>}<h4>相关条目</h4>{parsed.filter((r) => r.sourceFileId === fileDetail.id).map((r) => <button className="flow-related-row" key={r.id} onClick={() => { setActiveId(r.id); setFileDetail(null); }}>{r.clause} {r.title}<ChevronRight size={15} /></button>)}</Drawer>}
+    {editor && <Drawer title="补录要求" onClose={() => setEditor(null)} width={600} footer={<><button className="btn" onClick={() => setEditor(null)}>取消</button><button className="btn btn-primary" onClick={saveEditor}>保存补录</button></>}><Notice>保存后自动进入RFQ细则比对。</Notice><div className="form-grid"><Field label="条款编号"><input className="input" value={editor.clause} onChange={(e) => setEditor({ ...editor, clause: e.target.value })} /></Field><Field label="原文章节路径"><input className="input" value={(editor.sectionPath || []).join(' / ')} onChange={(e) => setEditor({ ...editor, sectionPath: e.target.value.split('/').map(s => s.trim()).filter(Boolean) })} placeholder="按原文填写，例如：反应模块 / 温控" /></Field><Field label="条目标题" required wide><input className="input" value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} /></Field><Field label="客户要求原文" required wide><textarea className="input flow-textarea" value={editor.original} onChange={(e) => setEditor({ ...editor, original: e.target.value })} /></Field><Field label="必要条件" wide><textarea className="input" value={asText(editor.conditions)} onChange={(e) => setEditor({ ...editor, conditions: e.target.value })} /></Field><Field label="来源文件 / 多来源定位" required wide><textarea className="input" value={asText(editor.source)} onChange={(e) => setEditor({ ...editor, source: e.target.value })} /></Field><Field label="页码 / 工作表 / 单元格"><input className="input" value={editor.sourcePage || ''} onChange={(e) => setEditor({ ...editor, sourcePage: e.target.value })} /></Field><Field label="补录原因" required wide><textarea className="input" value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="说明补录原因" /></Field></div>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Drawer>}
+    {fileDetail && <Drawer title="资料详情与版本" onClose={() => setFileDetail(null)} width={580}><div className="flow-detail-heading"><FileText size={24} /><div><h3>{fileDetail.name}</h3><Badge value={files.find((f) => f.id === fileDetail.id)?.status || fileDetail.status} /></div></div><dl className="flow-description"><dt>资料编号</dt><dd>{fileDetail.id}</dd><dt>用途 / 版本</dt><dd>{fileDetail.purpose} / {fileDetail.version}</dd><dt>可见范围</dt><dd>{fileDetail.visibility || '项目成员可见'}</dd><dt>来源定位</dt><dd>解析后条目保留文件名、页码及条款。</dd><dt>替代版本</dt><dd>{fileDetail.previousVersionId || '初始版本'}</dd><dt>替换原因</dt><dd>{fileDetail.reason || '—'}</dd><dt>原件状态</dt><dd>{fileDetail.realSource ? <a href={fileDetail.localUrl} target="_blank" rel="noreferrer">查看BHEL原始PDF（43页）</a> : '仅登记元数据，原文件请在本地查看。'}</dd></dl><Notice>{fileDetail.realSource ? '此文件是从BHEL官网下载的原始PDF。来源页码采用PDF实际页序；中文为演示译文，摘录仅覆盖精选条款。' : '原件预览为模拟视图，不会显示或上传真实文件内容。解析异常可重试或补录；条目问题在RFQ细则比对处理。'}</Notice>{fileDetail.error && <Notice type="error">{fileDetail.error}</Notice>}<h4>相关条目</h4>{parsed.filter((r) => r.sourceFileId === fileDetail.id).map((r) => <button className="flow-related-row" key={r.id} onClick={() => { setActiveId(r.id); setFileDetail(null); }}>{r.clause} {r.title}<ChevronRight size={15} /></button>)}</Drawer>}
   </div>;
 }
 
-export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, logEvent = () => {} }) {
+export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, logEvent = () => {}, embedded = false, initialReviewId = null, onCloseEmbedded }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('全部状态');
   const [type, setType] = useState('全部类型');
   const [source, setSource] = useState('全部来源');
   const [mine, setMine] = useState(false);
   const [page, setPage] = useState(1);
-  const [activeId, setActiveId] = useState(null);
+  const [activeId, setActiveId] = useState(initialReviewId);
   const [detailTab, setDetailTab] = useState('处理方案');
   const [form, setForm] = useState({ plan: '', impact: '', evidence: '', conclusion: '', draft: '', customerCommunication: '未沟通', acceptanceResult: '未验收' });
   const [dirty, setDirty] = useState(false);
@@ -181,7 +182,9 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
   function guardLeave(next) { if (dirtyRef.current) { leaveNext.current = next; setLeaveOpen(true); return false; } return true; }
   function finishLeave(save) { if (save && !savePlan()) return; clearDirty(); const next = leaveNext.current || (() => setActiveId(null)); leaveNext.current = null; setLeaveOpen(false); next(); }
   useUnsavedWarning(dirty);
-  useEffect(() => { const hook = (next) => guardLeave(next); window.__rfqRequestNavigation = hook; return () => { if (window.__rfqRequestNavigation === hook) delete window.__rfqRequestNavigation; }; }, []);
+  useEffect(() => { const previous = window.__rfqRequestNavigation; const hook = (next) => guardLeave(next) && (!previous || previous(next)); window.__rfqRequestNavigation = hook; return () => { if (window.__rfqRequestNavigation === hook) { if (previous) window.__rfqRequestNavigation = previous; else delete window.__rfqRequestNavigation; } }; }, []);
+  useEffect(() => { if (embedded && initialReviewId) { const review = reviews.find((item) => item.id === initialReviewId); if (review) openReview(review); } }, []);
+  useEffect(() => { if (embedded && !activeId) onCloseEmbedded?.(); }, [embedded, activeId]);
   useEffect(() => { setPage(1); }, [query, status, type, source, mine]);
   useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
   function openReview(review) {
@@ -199,6 +202,8 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
   }
   function performAction() {
     if (!active) return;
+    const route = getReviewRoute(requirement, project.approvalConfig);
+    if (['submit','approve'].includes(action) && (!route.owner || route.approver !== '最终审批人')) { setError('请在项目设置中补齐专业处理职责与独立最终审批人，再提交或批准。'); return; }
     if (['assign', 'reject', 'reopen'].includes(action) && !actionReason.trim()) { setError('请填写本次操作原因，记录将保留在事项历史中。'); return; }
     if (['approve', 'reject'].includes(action) && actorRole !== '最终审批人') { setError('当前身份无专业批准权限，请切换为最终审批人。'); return; }
     if (['approve', 'reject'].includes(action) && !isPendingReview(active)) { setError('事项状态已变化，只有待批准事项可以批准或退回。'); return; }
@@ -218,28 +223,29 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
     if (action === 'reopen') Object.assign(patch, { reason, owner: assignee.trim() || active.owner, deadline: deadline || active.deadline });
     onUpdateReview(active.id, patch);
     if (['approve', 'reopen'].includes(action) && requirement) onConfirmReviewed(requirement.id, { status: '待确认', ...(action === 'approve' ? { conclusion: form.conclusion, draft: form.draft || requirement.draft, evidence: form.evidence.trim() || requirement.evidence } : {}), reason: `${labels[action]}：${reason}` });
-    logEvent(labels[action], active.id, reason); toast(action === 'approve' ? '事项已批准关闭；关联应答仍需在RFQ比对页人工确认' : `${labels[action]}成功`); setAction(null); if (action === 'submit') clearDirty();
+    logEvent(labels[action], active.id, reason); toast(action === 'approve' ? '事项已批准关闭；关联应答仍需在细则比对页签人工确认' : `${labels[action]}成功`); setAction(null); if (action === 'submit') clearDirty();
   }
   const closed = active && isClosed(active);
   const actions = { assign: '分派 / 改派事项', submit: '提交专业批准', approve: '批准并关闭事项', reject: '退回处理方案', reopen: '条件变化重开事项' };
   return <div className="flow-page">
-    <div className="page-heading"><div><h1>偏离项管理</h1><p>跟踪待澄清、差距与专业评审，保留完整的处理和批准记录。</p></div><button className="btn" onClick={() => navigate('response')}>返回RFQ比对<ArrowRight size={15} /></button></div>
+    {!embedded && <><div className="workbench-view-heading"><p className="muted">集中处理关联条目的差距、待澄清事项与专业评审。</p></div>
     <div className="flow-stat-strip"><div><span>事项总数</span><strong>{reviews.length}</strong></div><div><span>待处理 / 退回</span><strong>{reviews.filter((r) => !isClosed(r) && !isPendingReview(r)).length}</strong></div><div><span>待专业批准</span><strong>{reviews.filter((r) => isPendingReview(r)).length}</strong></div><div><span>已批准关闭</span><strong>{reviews.filter(isClosed).length}</strong></div></div>
     <section className="panel"><div className="flow-filterbar flow-review-filters"><Field label="搜索事项"><input className="input" placeholder="事项编号、名称、责任人" value={query} onChange={(e) => setQuery(e.target.value)} /></Field><Field label="事项类型"><select className="select" value={type} onChange={(e) => setType(e.target.value)}><option>全部类型</option>{[...new Set(reviews.map((r) => r.type))].filter(Boolean).map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="处理状态"><select className="select" value={status} onChange={(e) => setStatus(e.target.value)}><option>全部状态</option>{[...new Set([...reviews.map((r) => r.status), '待处理', '待审批', '已退回', '已关闭'])].map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="偏离来源"><select className="select" value={source} onChange={(e) => setSource(e.target.value)}><option>全部来源</option>{[...new Set(reviews.flatMap((r) => asText(r.source).split(/[；、]/)))].filter(Boolean).map((v) => <option key={v}>{v}</option>)}</select></Field><div className="flow-filter-buttons"><button className="btn btn-primary" onClick={() => { setPage(1); toast(`已查询到 ${filtered.length} 个事项`); }}>查询</button><button className="btn" onClick={() => { setQuery(''); setStatus('全部状态'); setType('全部类型'); setSource('全部来源'); setMine(false); }}>重置</button></div></div>
       <div className="panel-header flow-table-heading"><h2>偏离及待确认事项</h2><label className="flow-checkbox-label"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />仅看本人待办</label></div>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>事项 / 关联条目</th><th>来源与类别</th><th>影响</th><th>责任人</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead><tbody>{shown.map((review) => <tr key={review.id}><td><button className="text-link" onClick={() => openReview(review)}>{review.title}</button><div className="muted flow-small">{review.id} · {requirements.find((r) => r.id === review.requirementId)?.clause || review.requirementId}</div></td><td><span>{review.type}</span><div className="muted flow-small">{asText(review.source)}</div></td><td><div className="flow-table-impact">{asText(review.impact) || '待评估'}</div></td><td>{review.owner || <span className="flow-red">未分派</span>}</td><td className="flow-nowrap">{review.deadline || '未设置'}</td><td><Badge value={review.status} /></td><td><button className="text-link" onClick={() => openReview(review)}>{isClosed(review) ? '查看 / 重开' : '处理事项'}</button></td></tr>)}</tbody></table></div>{!shown.length && <NoRows title={reviews.length ? '没有符合条件的事项' : '暂无偏离或待评审事项'}>{reviews.length ? '调整查询条件或清除筛选。' : '在RFQ比对页将需要专业判断的条目转入评审。'}{!reviews.length && <button className="btn btn-primary" onClick={() => navigate('response')}>前往RFQ比对</button>}</NoRows>}<Pager count={filtered.length} page={page} onChange={setPage} />
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>事项 / 关联条目</th><th>来源与类别</th><th>影响</th><th>责任人</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead><tbody>{shown.map((review) => <tr key={review.id}><td><button className="text-link" onClick={() => openReview(review)}>{review.title}</button><div className="muted flow-small">{review.id} · {requirements.find((r) => r.id === review.requirementId)?.clause || review.requirementId}</div></td><td><span>{review.type}</span><div className="muted flow-small">{asText(review.source)}</div></td><td><div className="flow-table-impact">{asText(review.impact) || '待评估'}</div></td><td>{review.owner || <span className="flow-red">未分派</span>}</td><td className="flow-nowrap">{review.deadline || '未设置'}</td><td><Badge value={review.status} /></td><td><button className="text-link" onClick={() => openReview(review)}>{isClosed(review) ? '查看 / 重开' : '处理事项'}</button></td></tr>)}</tbody></table></div>{!shown.length && <NoRows title={reviews.length ? '没有符合条件的事项' : '暂无偏离或待评审事项'}>{reviews.length ? '调整查询条件或清除筛选。' : '在细则比对页签将需要专业判断的条目转入评审。'}{!reviews.length && <button className="btn btn-primary" onClick={() => navigate('response', requirement?.id)}>查看细则比对</button>}</NoRows>}<Pager count={filtered.length} page={page} onChange={setPage} />
     </section>
     <Notice>“用户未接受”表示内部使用者未接受匹配结果。客户沟通接受与实际验收分别记录；批准事项不会自动确认关联应答。</Notice>
+    </>}
     {active && <Drawer title="事项详情与处理" width={720} onClose={() => { const next = () => setActiveId(null); if (guardLeave(next)) next(); }} footer={<>{closed ? <button className="btn" onClick={() => startAction('reopen')}><RefreshCw size={15} />条件变化重开</button> : <><button className="btn" onClick={() => startAction('assign')}>分派 / 改派</button><button className="btn" disabled={isPendingReview(active)} onClick={() => savePlan()}>保存方案</button>{!isPendingReview(active) && <button className="btn btn-primary" onClick={() => startAction('submit')}>提交专业批准</button>}{isPendingReview(active) && <><button className="btn btn-danger" disabled={actorRole !== '最终审批人'} onClick={() => startAction('reject')}>退回</button><button className="btn btn-primary" disabled={actorRole !== '最终审批人'} onClick={() => startAction('approve')}>批准关闭</button></>}</>}</>}>
-      <div className="flow-detail-top"><div><span className="muted flow-small">{active.id}</span><h3>{active.title}</h3></div><Badge value={active.status} /></div><dl className="flow-description"><dt>事项类型 / 来源</dt><dd>{active.type} · {asText(active.source)}</dd><dt>责任人 / 截止</dt><dd>{active.owner || '未分派'} / {active.deadline || '未设置'}</dd><dt>要求与差距</dt><dd>{active.description || active.reason || '待补充问题说明'}</dd></dl>
-      <div className="flow-requirement-card"><div><strong>{requirement?.clause} {requirement?.title || '关联要求'}</strong><button className="text-link" onClick={() => navigate('response')}>定位要求<ArrowRight size={13} /></button></div><p>{requirement?.original || '关联条目已不可用，请联系项目负责人核对。'}</p><small>来源：{asText(requirement?.source)} · 第 {requirement?.sourcePage || '—'} 页</small></div>
+      <ApprovalRoute requirement={requirement} config={project.approvalConfig} review={active}/><div className="flow-detail-top"><div><span className="muted flow-small">{active.id}</span><h3>{active.title}</h3></div><Badge value={active.status} /></div><dl className="flow-description"><dt>事项类型 / 来源</dt><dd>{active.type} · {asText(active.source)}</dd><dt>责任人 / 截止</dt><dd>{active.owner || '未分派'} / {active.deadline || '未设置'}</dd><dt>要求与差距</dt><dd>{active.description || active.reason || '待补充问题说明'}</dd></dl>
+      <div className="flow-requirement-card"><div><strong>{requirement?.clause} {requirement?.title || '关联要求'}</strong><button className="text-link" onClick={() => navigate('response', requirement?.id)}>定位要求<ArrowRight size={13} /></button></div><p>{requirement?.original || '关联条目已不可用，请联系项目负责人核对。'}</p><small>来源：{asText(requirement?.source)} · 第 {requirement?.sourcePage || '—'} 页</small></div>
       {closed && <Notice>已关闭结果与处理记录保留为只读。条件变化请使用“重开”，关联应答将回到待确认。</Notice>}{isPendingReview(active) && <Notice>正在等待专业批准。当前职责：{actorRole}。只有最终审批人可以批准或退回。</Notice>}
       <div className="tabs flow-inner-tabs">{['处理方案', '沟通与验收', '处理记录'].map((tab) => <button className={detailTab === tab ? 'active' : ''} key={tab} onClick={() => setDetailTab(tab)}>{tab}</button>)}</div>
       {detailTab === '处理方案' && <div className="form-grid"><Field label="处理方案" required wide><textarea className="input flow-textarea" value={form.plan} readOnly={closed || isPendingReview(active)} onChange={(e) => change('plan', e.target.value)} placeholder="说明可执行方案、必要条件、差距弥补措施及证据" /></Field><Field label="成本 / 交期 / 质量影响" wide><textarea className="input" value={form.impact} readOnly={closed || isPendingReview(active)} onChange={(e) => change('impact', e.target.value)} placeholder="分别说明影响；无影响也请明确记录" /></Field><Field label="证据与依据" wide><textarea className="input" value={form.evidence} readOnly={closed || isPendingReview(active)} onChange={(e) => change('evidence', e.target.value)} placeholder="资料编号、版本、适用条件及证据定位" /></Field><Field label="评审建议结论"><select className="select" disabled={closed || isPendingReview(active)} value={form.conclusion} onChange={(e) => change('conclusion', e.target.value)}>{[...new Set([form.conclusion, 'Comply', '有条件 Comply', '不满足', '不适用', '待确认'])].map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="关联应答处理"><input className="input" readOnly value="批准后回到待确认" /></Field><Field label="评审建议答复" wide><textarea className="input flow-textarea" value={form.draft} readOnly={closed || isPendingReview(active)} onChange={(e) => change('draft', e.target.value)} /></Field><span className="muted flow-small">{dirty ? '● 存在未保存修改' : '方案已保存 / 只读核对'}</span></div>}
       {detailTab === '沟通与验收' && <><Notice>客户沟通结果由销售负责人录入，与验收结果分开保存。</Notice><div className="form-grid flow-spaced"><Field label="客户沟通结果"><select className="select" value={form.customerCommunication} disabled={closed || actorRole !== '销售负责人' || isPendingReview(active)} onChange={(e) => change('customerCommunication', e.target.value)}><option>未沟通</option><option>待客户澄清</option><option>客户已接受</option><option>客户未接受</option></select></Field><Field label="实际验收结果"><select className="select" value={form.acceptanceResult} disabled={closed || actorRole !== '销售负责人' || isPendingReview(active)} onChange={(e) => change('acceptanceResult', e.target.value)}><option>未验收</option><option>验收通过</option><option>验收不通过</option></select></Field></div></>}
       {detailTab === '处理记录' && <div className="flow-timeline">{(active.history || []).length ? (active.history || []).map((entry, index) => <div className="flow-timeline-item" key={entry?.id || index}><i /><strong>{typeof entry === 'string' ? entry : entry.action || entry.title || '事项更新'}</strong>{typeof entry === 'object' && <><small>{entry.time || entry.createdAt || '—'} · {entry.actor || entry.by || '系统'}</small><p>{entry.reason || entry.detail || entry.description || '—'}</p></>}</div>) : <NoRows title="暂无历史操作">后续分派、方案、批准、退回和重开记录将保留在此。</NoRows>}</div>}
     </Drawer>}
-    {action && active && <Modal title={actions[action]} onClose={() => setAction(null)} footer={<><button className="btn" onClick={() => setAction(null)}>取消</button><button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} onClick={performAction}>确认{actions[action].replace('事项', '')}</button></>}><div className="flow-modal-object"><strong>{active.title}</strong><span>{active.id} · <Badge value={active.status} /></span></div>{action === 'approve' && <Notice>请核对方案、证据及承诺条件。批准关闭后，关联应答仍须由责任人在RFQ比对页确认。</Notice>}{action === 'submit' && <><Notice>将当前处理方案提交专业批准；提交后待批准内容以只读方式展示。</Notice><div className="flow-preview-text">{form.plan || '尚未填写处理方案'}</div></>}{['assign', 'reopen'].includes(action) && <div className="form-grid flow-spaced"><Field label="责任人" required><input className="input" value={assignee} onChange={(e) => setAssignee(e.target.value)} list="flow-review-owners" /><datalist id="flow-review-owners"><option>技术确认人</option><option>销售负责人</option><option>质量负责人</option></datalist></Field><Field label="截止时间" required><input className="input" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></Field></div>}<Field label={action === 'reopen' ? '新条件与重开原因' : action === 'assign' ? '分派 / 改派原因' : action === 'reject' ? '退回原因' : '处理意见'} required={['assign', 'reject', 'reopen'].includes(action)} wide><textarea className="input flow-textarea" value={actionReason} onChange={(e) => setActionReason(e.target.value)} placeholder="记录具体意见，便于后续追溯" /></Field>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Modal>}
+    {action && active && <Modal title={actions[action]} onClose={() => setAction(null)} footer={<><button className="btn" onClick={() => setAction(null)}>取消</button><button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} onClick={performAction}>确认{actions[action].replace('事项', '')}</button></>}><div className="flow-modal-object"><strong>{active.title}</strong><span>{active.id} · <Badge value={active.status} /></span></div>{action === 'approve' && <Notice>请核对方案、证据及承诺条件。批准关闭后，关联应答仍须由责任人在细则比对页签确认。</Notice>}{action === 'submit' && <><Notice>将当前处理方案提交专业批准；提交后待批准内容以只读方式展示。</Notice><div className="flow-preview-text">{form.plan || '尚未填写处理方案'}</div></>}{['assign', 'reopen'].includes(action) && <div className="form-grid flow-spaced"><Field label="责任人" required><input className="input" value={assignee} onChange={(e) => setAssignee(e.target.value)} list="flow-review-owners" /><datalist id="flow-review-owners"><option>技术确认人</option><option>销售负责人</option><option>质量负责人</option></datalist></Field><Field label="截止时间" required><input className="input" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></Field></div>}<Field label={action === 'reopen' ? '新条件与重开原因' : action === 'assign' ? '分派 / 改派原因' : action === 'reject' ? '退回原因' : '处理意见'} required={['assign', 'reject', 'reopen'].includes(action)} wide><textarea className="input flow-textarea" value={actionReason} onChange={(e) => setActionReason(e.target.value)} placeholder="记录具体意见，便于后续追溯" /></Field>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Modal>}
     {leaveOpen && <Modal title="处理方案尚未保存" onClose={() => { setLeaveOpen(false); leaveNext.current = null; }} footer={<><button className="btn" onClick={() => { setLeaveOpen(false); leaveNext.current = null; }}>取消离开</button><button className="btn" onClick={() => finishLeave(false)}>放弃修改</button><button className="btn btn-primary" onClick={() => finishLeave(true)}>保存后离开</button></>}><p>当前编辑尚未保存。保存成功后继续跳转，或放弃本次修改；取消会保留当前输入。</p></Modal>}
   </div>;
 }
@@ -268,7 +274,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const documentState = readDocumentState(project.id);
   const unimportedParsed = (documentState?.parsed || []).filter((r) => !requirements.some((current) => current.id === r.id));
   const unfinishedFiles = (documentState?.files || []).filter((f) => f.purpose === '要求来源' && !(documentState?.files || []).some((newer) => newer.previousVersionId === f.id) && ['排队中', '处理中', '失败'].includes(f.status));
-  const documentIssues = [...unimportedParsed.map((r) => ({ id: `document-${r.id}`, label: `${r.clause} ${r.title}`, message: '来源解析条目尚未核对导入，部分导入不会排除此缺项' })), ...unfinishedFiles.map((f) => ({ id: `document-${f.id}`, label: f.name, message: f.status === '失败' ? `要求来源解析失败：${f.error || '请重试或补录'}` : `要求来源仍在${f.status}，请等待并核对解析结果` }))];
+  const documentIssues = [...unimportedParsed.map((r) => ({ id: `document-${r.id}`, label: `${r.clause} ${r.title}`, message: '解析条目尚未自动同步，请返回解析页完成同步' })), ...unfinishedFiles.map((f) => ({ id: `document-${f.id}`, label: f.name, message: f.status === '失败' ? `要求来源解析失败：${f.error || '请重试或补录'}` : `要求来源仍在${f.status}，请等待解析完成` }))];
   const mappingIssues = columns.filter((c) => c.required && mapping[c.key] !== c.key).map((c) => ({ id: `mapping-${c.key}`, label: `${c.label}映射`, message: !mapping[c.key] ? '必要列尚未映射，请补全字段映射' : '必要列必须与同名业务字段对应，避免遗漏承诺或错误映射' }));
   const issues = [...getExportIssues(requirements, reviews), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
   const pending = projectSnapshots.filter((s) => s.status === '审批中');
@@ -279,7 +285,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     if (approvalConfigIssues.length) return { valid: false, message: approvalConfigIssues[0].message };
     if (snapshot.status !== '已批准') return { valid: false, message: snapshot.status === '审批中' ? '快照尚在审批中' : '快照未经批准' };
     if (snapshot.reviewedBy !== '最终审批人' || snapshot.createdBy === snapshot.reviewedBy) return { valid: false, message: '缺少有效的独立最终批准记录' };
-    if (documentIssues.length) return { valid: false, message: '来源资料仍有失败任务或未核对条目，请完成解析后重新提交' };
+    if (documentIssues.length) return { valid: false, message: '来源资料仍有失败任务或未同步条目，请完成解析后重新提交' };
     if (signature(snapshot.rows || []) !== signature(requirements)) return { valid: false, message: '当前工作内容或条目版本已变化，请重新提交新快照' };
     if (getExportIssues(requirements, reviews).length) return { valid: false, message: '当前工作版本存在未确认内容或未关闭事项' };
     return { valid: true, message: '与当前工作版本一致，可以正式导出' };

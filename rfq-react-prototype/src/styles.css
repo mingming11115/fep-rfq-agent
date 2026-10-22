@@ -15,3 +15,5 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
 
 .column-settings{display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:14px 22px;background:#fafcff;border-bottom:1px solid #edf0f3;font-size:12px}.column-settings label{display:flex;gap:6px;align-items:center}.column-settings strong{color:#66758a;font-weight:500}.column-settings .text-link{margin-left:auto;font-size:12px}.project-table[data-hide-equipment=true] :is(th,td):nth-child(3),.project-table[data-hide-owner=true] :is(th,td):nth-child(4),.project-table[data-hide-deadline=true] :is(th,td):nth-child(5),.project-table[data-hide-stage=true] :is(th,td):nth-child(6),.project-table[data-hide-todo=true] :is(th,td):nth-child(7){display:none}
+
+.workbench-view-heading{min-height:0;margin-bottom:18px;align-items:center}.workbench-view-heading>p{line-height:1.7}

@@ -2,8 +2,36 @@ const FINAL_CONCLUSIONS = new Set(['Comply', '有条件 Comply', '不满足', '�
 const MATERIAL_FIELDS = ['original', 'conclusion', 'draft', 'conditions', 'evidence', 'reason', 'owner'];
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
 
+export function importParsedRequirements(existing, parsed) {
+  const rows = new Map(existing.map((row) => [row.id, row]));
+  for (const row of parsed) {
+    if (rows.has(row.id)) continue;
+    const added = { ...row, status: '待确认' };
+    delete added.confirmedAt;
+    delete added.confirmedBy;
+    rows.set(row.id, added);
+  }
+  return [...rows.values()];
+}
+
+export function correctParsedRequirement(row, patch, reason) {
+  const fields = ['clause', 'title', 'original', 'category', 'sourcePage'];
+  const corrected = { ...row };
+  for (const key of fields) if (Object.hasOwn(patch, key)) corrected[key] = String(patch[key] ?? '').trim();
+  if (['title', 'original', 'sourcePage'].some((key) => !String(corrected[key] ?? '').trim())) throw new Error('请完整填写标题、要求原文和来源页码');
+  if (!fields.some((key) => String(row[key] ?? '') !== String(corrected[key] ?? ''))) return row;
+  if (!hasText(reason)) throw new Error('请填写字段修改原因');
+  return {
+    ...corrected, sourceOriginal: row.sourceOriginal ?? row.original, sourceCorrected: true,
+    previousOriginal: row.original, status: '待确认', version: (row.version || 1) + 1,
+    matchLevel: 'none', score: 0, confirmedAt: undefined, confirmedBy: undefined,
+    parseHistory: [...(row.parseHistory || []), { time: new Date().toISOString(), action: 'correct', reason: reason.trim() }],
+  };
+}
+
 export function requirementValidation(row) {
   const issues = [];
+  if (row.removedFromSource && row.conclusion !== '不适用') issues.push('客户新版已删除此条款，请确认不适用范围处置');
   if (!hasText(row.original)) issues.push('请填写客户要求原文');
   if (!hasText(row.draft)) issues.push('请填写对外答复');
   if (!hasText(row.owner)) issues.push('请分派确认责任人');

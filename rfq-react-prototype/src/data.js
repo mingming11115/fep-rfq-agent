@@ -1,11 +1,11 @@
-// All projects, people, claims, matches, evidence and capabilities below are synthetic demo data.
+import { BHEL_ID, BHEL_PROJECT, makeBhelRequirements, makeBhelReviews } from './bhelDemo.js';
+// BHEL customer requirements are sourced; other projects and all supplier claims / people are synthetic.
 export const NAV_ITEMS = [
   { key: 'dashboard', label: '个人工作台与待办', section: '全局' },
   { key: 'projects', label: '项目列表', section: '全局' },
   { key: 'capabilities', label: '机型能力边界', section: '全局' },
   { key: 'documents', label: 'RFQ解析', section: '项目' },
-  { key: 'response', label: 'RFQ比对', section: '项目' },
-  { key: 'reviews', label: '偏离项管理', section: '项目' },
+  { key: 'response', label: 'RFQ细则比对', section: '项目' },
   { key: 'export', label: '导出文档', section: '项目' },
   { key: 'versions', label: '项目版本、变更与快照记录', section: '项目' },
   { key: 'settings', label: '项目设置、成员与审批配置', section: '项目' },
@@ -108,6 +108,7 @@ const REQUIREMENT_TEMPLATES = [
 ];
 
 export function makeRequirements(projectId) {
+  if (projectId === BHEL_ID) return makeBhelRequirements();
   const projectNumber = Number(String(projectId).match(/\d+$/)?.[0] || 1);
   const offset = (projectNumber - 1) * 100;
   return REQUIREMENT_TEMPLATES.map((template, index) => ({
@@ -123,12 +124,14 @@ export function makeRequirements(projectId) {
 
 export function createDemoState() {
   const projects = [
+    { ...BHEL_PROJECT },
     { id: 'RFQ-001', name: '新能源精密切割产线', customer: '华东新能源客户（模拟）', equipment: 'DEMO-CUT 300 · V2.1 · 选配 X 待确认', owner: '林晓', deadline: '2026-10-25', stage: 'RFQ比对' },
     { id: 'RFQ-002', name: '精密零件加工设备', customer: '苏州精密制造客户（模拟）', equipment: 'DEMO-CUT 200 · V1.4 · 标准配置', owner: '陈晨', deadline: '2026-10-29', stage: '资料解析' },
     { id: 'RFQ-003', name: '实验室样品验证设备', customer: '华南材料研究客户（模拟）', equipment: 'DEMO-LAB 100 · V1.0 · 研究配置', owner: '周宁', deadline: '2026-11-03', stage: '评审处理' },
   ];
   const requirementsByProject = Object.fromEntries(projects.map((project) => [project.id, makeRequirements(project.id)]));
   const reviewsByProject = Object.fromEntries(projects.map((project) => [project.id, []]));
+  reviewsByProject[BHEL_ID] = makeBhelReviews();
   reviewsByProject['RFQ-001'] = [
     { id: 'DEV-001', requirementId: 'req-22', title: '选配 X 与切缝宽度保证条件', type: '条件差异', source: '历史条件与本次配置不同', owner: '技术确认人', deadline: '2026-10-22', status: '处理中', description: '模拟历史案例依赖选配 X；当前选配状态及样品验证尚未确认。', plan: '确认选配清单，按客户材料安排样品验证并补充测试记录。', impact: '可能影响选配成本与样品确认日程。', reason: '', history: [{ time: '2026-10-20 14:20', actor: '销售负责人', action: '建立事项并分派技术确认人' }] },
     { id: 'DEV-002', requirementId: 'req-24', title: '复合材料信息与工艺依据缺失', type: '知识缺口', source: '知识库中没有可用依据', owner: '技术确认人', deadline: '2026-10-23', status: '待处理', description: '当前要求缺少材料成分与样品，三级检索完成后仍无可用依据。', plan: '', impact: '材料适用性尚不能形成对外承诺。', reason: '', history: [{ time: '2026-10-20 14:22', actor: '销售负责人', action: '登记缺口，等待客户澄清' }] },
@@ -147,6 +150,7 @@ export function createDemoState() {
       { id: 'member-6', name: '赵明', role: '项目最终批准人', scope: '具体应答快照', status: '生效', canConfirm: false, canExport: false },
     ],
     audit: [
+      { id: 'BHEL-EVT-001', time: '2026-10-22', actor: '销售负责人', action: '载入真实RFQ演示', object: BHEL_ID, result: '成功', detail: 'BHEL IKCCAP0034原始PDF及40条精选要求已核对页码；供应商应答与评审为模拟。历史采购于2018年截止。' },
       { id: 'EVT-0003', time: '2026-10-20 15:10', actor: '商务确认人', action: '提交评审方案', object: 'DEV-003 · RFQ-001', result: '成功', detail: '交期偏离方案提交审批，尚未批准关闭。' },
       { id: 'EVT-0002', time: '2026-10-20 14:22', actor: '销售负责人', action: '完成分级匹配', object: 'RFQ-001 · 工作版本 V1', result: '成功', detail: '12 条模拟要求已匹配；自动填入及候选答复均等待内部确认。' },
       { id: 'EVT-0001', time: '2026-10-20 13:40', actor: '销售负责人', action: '创建模拟项目', object: 'RFQ-001', result: '成功', detail: '已选择演示机型与配置基线，选配 X 尚待确认。' },
