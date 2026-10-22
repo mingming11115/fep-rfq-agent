@@ -9,6 +9,7 @@ import './workflow-pages.css';
 import ApprovalRoute from '../components/ApprovalRoute';
 import { getReviewRoute } from '../rfqWorkflow';
 import DocumentWorkbench from '../components/DocumentWorkbench';
+import WordCommentsPrototype from '../components/WordCommentsPrototype';
 
 const uid = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const now = () => new Date().toLocaleString('zh-CN', { hour12: false });
@@ -36,6 +37,7 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
   const [parsed, setParsed] = useState(() => readDocumentState(project.id)?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []));
   const [activeId, setActiveId] = useState(focusedRequirementId || null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [wordCommentsOpen, setWordCommentsOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [purpose, setPurpose] = useState('要求来源');
@@ -136,7 +138,8 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
     setActiveId(row.id); setEditor(null); logEvent('补录要求', row.id, editReason); toast('补录已保存，自动进入细则比对');
   }
   return <div className="flow-page">
-    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
+    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />Word批注</button><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
+    {wordCommentsOpen && <WordCommentsPrototype projectId={project.id} onClose={() => setWordCommentsOpen(false)} />}
     <Notice>{project.id === BHEL_ID ? '真实RFQ演示 · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : '交互原型 · 文件仅保存元数据，解析结果使用模拟数据。仅“要求来源”生成要求条目；真实文件内容不会上传或读取。'}</Notice>
     <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
     {files.length > 0 ? <DocumentWorkbench files={files} rows={parsed} imported={imported} selectedId={activeId} onSelect={setActiveId} onCorrect={correctRow} onReparse={reparse} onSupplement={openEditor} onContinue={(id) => navigate('response', id)} /> : <section className="panel"><NoRows title="上传第一份 RFQ，自动抽取要求条款"><span>支持 DOC、DOCX，兼容 PDF、Excel、CSV 和 TXT；载入示例可体验不同客户章节。</span><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={15}/>上传并解析</button></NoRows></section>}
