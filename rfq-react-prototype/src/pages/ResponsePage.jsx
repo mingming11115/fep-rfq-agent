@@ -30,7 +30,7 @@ function matchingSuggestion(row, projectId) {
   return { conclusion: template?.conclusion || '待确认', draft: template?.draft || '当前无可直接采用的有效答复，请补充依据或转专业评审。', conditions: template?.conditions || '', evidence: template?.evidence || '', version: row?.matchLevel === 'history' ? 'V3' : 'V2', confidence: row?.score || 0 };
 }
 
-export function ResponsePage({ project, requirements = [], reviews = [], onUpdateRequirement, onConfirm, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,actorId,onAdoptReview,onSubmitRequirement, logEvent = () => {} }) {
+export function ResponsePage({ project, requirements = [], reviews = [], onUpdateRequirement, onConfirm, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,actorId,onAdoptReview,onSubmitRequirement,onAnalysisRun, logEvent = () => {} }) {
   const initialRow = requirements.find((row) => row.id === focusedRequirementId) || requirements[0];
   const [activeId, setActiveId] = useState(initialRow?.id || null);
   const active = requirements.find((r) => r.id === activeId) || requirements[0];
@@ -157,7 +157,7 @@ export function ResponsePage({ project, requirements = [], reviews = [], onUpdat
     if (created === false) return;
     setInlineReviewId(created); setReviewCreated((old) => ({ ...old, [active.id]: true })); addActivity(reviewForm.kind === 'reject' ? '明确拒绝本条匹配并建立偏离' : '转入专业评审', reviewForm.description); setReviewForm(null); toast('关联事项已创建，可直接在当前条目处理');
   }
-  function rematch() { setModal(null); setMatching(true); const id = active.id; timer.current = setTimeout(() => { setRetrievalById((old) => ({ ...old, [id]: retrievalMode })); setMatching(false); addActivity('重新分级匹配', retrievalMode === 'normal' ? '标准回复 → 历史 RFQ → 能力边界；保留人工答复' : retrievalMode === 'failed' ? '检索服务模拟失败；未修改人工答复' : '当前检索来源模拟无权限；不展示名称与摘要', id); toast(retrievalMode === 'normal' ? '匹配结果已刷新，人工答复与确认状态保持当前值' : '检索未完成，请查看状态与重试入口'); }, 900); }
+  function rematch() { setModal(null); setMatching(true); const id = active.id; timer.current = setTimeout(() => { setRetrievalById((old) => ({ ...old, [id]: retrievalMode })); setMatching(false);onAnalysisRun?.({id:uid('RUN'),fileId:active.sourceFileId||active.source,sourceVersion:active.sourceVersion,type:'match',status:retrievalMode==='normal'?'完成':'失败',startedAt:new Date().toISOString(),endedAt:new Date().toISOString(),successCount:retrievalMode==='normal'?1:0,failedCount:retrievalMode==='normal'?0:1,needsHumanCount:active.matchLevel==='none'?1:0}); addActivity('重新分级匹配', retrievalMode === 'normal' ? '标准回复 → 历史 RFQ → 能力边界；保留人工答复' : retrievalMode === 'failed' ? '检索服务模拟失败；未修改人工答复' : '当前检索来源模拟无权限；不展示名称与摘要', id); toast(retrievalMode === 'normal' ? '匹配结果已刷新，人工答复与确认状态保持当前值' : '检索未完成，请查看状态与重试入口'); }, 900); }
   function openCapability() {
     const models = read('rfq.reference.models.v1', []);
     const matched = models.find((m) => `${project.equipment || ''}`.includes(m.name)) || models.find((m) => m.status === '已发布') || { id: 'MOD-A-R2', name: '机型 A', revision: 'R2', config: 'CFG-A-R2 v1' };

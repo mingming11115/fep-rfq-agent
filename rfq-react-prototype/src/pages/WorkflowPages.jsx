@@ -1,3 +1,4 @@
+import {snapshotFingerprint,checkSnapshotValidity} from '../snapshotDomain';
 import ClarificationPanel from '../components/ClarificationPanel';
 import {assertIndependentApproval} from '../reviewDomain';
 import React, { useEffect, useRef, useState } from 'react';
@@ -83,6 +84,7 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
       return [...linked, ...demo.parsed.filter((row) => !old.some((existing) => existing.id === row.id))];
     });
     setActiveId(demo.parsed[0]?.id || parsed[0]?.id);
+    onAnalysisRun({id:uid('RUN'),projectId:project.id,fileId:demo.files[0]?.id,sourceVersion:demo.files[0]?.version,type:'parse',status:'完成',startedAt:new Date().toISOString(),endedAt:new Date().toISOString(),successCount:demo.parsed.length,failedCount:0,needsHumanCount:demo.parsed.filter(r=>r.matchLevel==='none').length});
     logEvent('加载解析示例', project.id, '补齐多版本模拟资料及条目来源，保留已有文件和编辑');
     toast(project.id === BHEL_ID ? '已载入BHEL真实RFQ：40条精选要求及原PDF，保留已有编辑' : '已补齐示例：已包含 Safety / Facility 与模块组合两份 Word 示例，以及历史版本和失败案例');
   }
@@ -260,14 +262,15 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
   </div>;
 }
 
-export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], onSnapshot, toast, navigate, actorRole, logEvent = () => {} }) {
+export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], onSnapshot, onExportScope,route,toast, navigate, actorRole,actorId, logEvent = () => {} }) {
   const columns = [{ key: 'clause', label: '条款编号', required: true }, { key: 'original', label: '客户要求', required: true }, { key: 'conclusion', label: '应答结论', required: true }, { key: 'draft', label: '对外答复', required: true }, { key: 'conditions', label: '适用条件', required: true }, { key: 'status', label: '确认状态', required: false }];
   const templates = [{ id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' }, { id: 'customer', title: '客户条款对照清单', version: 'V1.3', description: '以客户条款为索引，保留全部必要条件与批准状态。' }, { id: 'delivery', title: '交付条件核对清单', version: 'V1.0', description: '集中核对承诺条件，供交付前再次对照确认。' }];
-  const [tab, setTab] = useState('模板与映射');
-  const [templateId, setTemplateId] = useState('standard');
-  const [mapping, setMapping] = useState(Object.fromEntries(columns.map((c) => [c.key, c.key])));
+  const savedExport=(()=>{try{return JSON.parse(sessionStorage.getItem(`rfq.export.settings.${project.id}`))||{};}catch{return {};}})();
+  const [tab, setTab] = useState(route?.snapshotId?'审批与快照':savedExport.tab||'模板与映射');
+  const [templateId, setTemplateId] = useState(savedExport.templateId||'standard');
+  const [mapping, setMapping] = useState(savedExport.mapping||Object.fromEntries(columns.map((c) => [c.key, c.key])));
   const [checked, setChecked] = useState(false);
-  const [detailId, setDetailId] = useState(null);
+  const [detailId, setDetailId] = useState(route?.snapshotId||null);
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -287,15 +290,18 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const documentIssues = [...unimportedParsed.map((r) => ({ id: `document-${r.id}`, label: `${r.clause} ${r.title}`, message: '解析条目尚未自动同步，请返回解析页完成同步' })), ...unfinishedFiles.map((f) => ({ id: `document-${f.id}`, label: f.name, message: f.status === '失败' ? `要求来源解析失败：${f.error || '请重试或补录'}` : `要求来源仍在${f.status}，请等待解析完成` }))];
   const mappingIssues = columns.filter((c) => c.required && mapping[c.key] !== c.key).map((c) => ({ id: `mapping-${c.key}`, label: `${c.label}映射`, message: !mapping[c.key] ? '必要列尚未映射，请补全字段映射' : '必要列必须与同名业务字段对应，避免遗漏承诺或错误映射' }));
   const issues = [...getExportIssues(requirements, reviews), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
-  const pending = projectSnapshots.filter((s) => s.status === '审批中');
+  const pending = projectSnapshots.filter((s) => s.status === '审批中'&&!s.stale);
+  const approvalScope={rows:requirements,sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval},template:activeTemplate,mapping,attachments:[]};
+  useEffect(()=>{sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({tab,templateId,mapping}));onExportScope?.(approvalScope);},[tab,templateId,JSON.stringify(mapping),JSON.stringify(approvalScope)]);
   const approved = projectSnapshots.filter((s) => s.status === '已批准');
   const signature = (rows) => JSON.stringify(rows.map((r) => ({ id: r.id, version: r.version, status: r.status, original: r.original, conclusion: r.conclusion, draft: r.draft, conditions: r.conditions, evidence: r.evidence, reason: r.reason, owner: r.owner })).sort((a, b) => a.id.localeCompare(b.id)));
   function validity(snapshot) {
     if (!snapshot) return { valid: false, message: '未选择批准快照' };
     if (approvalConfigIssues.length) return { valid: false, message: approvalConfigIssues[0].message };
     if (snapshot.status !== '已批准') return { valid: false, message: snapshot.status === '审批中' ? '快照尚在审批中' : '快照未经批准' };
-    if (snapshot.reviewedBy !== '最终审批人' || snapshot.createdBy === snapshot.reviewedBy) return { valid: false, message: '缺少有效的独立最终批准记录' };
+    if (snapshot.reviewedBy !== '最终审批人' || !snapshot.createdById||snapshot.createdById===snapshot.reviewedById) return { valid: false, message: '缺少有效的独立最终批准记录' };
     if (documentIssues.length) return { valid: false, message: '来源资料仍有失败任务或未同步条目，请完成解析后重新提交' };
+    const scopeCheck=checkSnapshotValidity(snapshot,approvalScope);if(!scopeCheck.valid)return {valid:false,message:scopeCheck.reasons.join('；')};
     if (signature(snapshot.rows || []) !== signature(requirements)) return { valid: false, message: '当前工作内容或条目版本已变化，请重新提交新快照' };
     if (getExportIssues(requirements, reviews).length) return { valid: false, message: '当前工作版本存在未确认内容或未关闭事项' };
     return { valid: true, message: '与当前工作版本一致，可以正式导出' };
@@ -303,12 +309,13 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const downloadable = approved.find((s) => validity(s).valid);
   useEffect(() => { localStorage.setItem(`fep-rfq-export-history:${project.id}`, JSON.stringify(history)); }, [history, project.id]);
   function goIssue(issue) {
+    if(issue.route){navigate(issue.route.page,issue.route.requirementId,{...issue.route,returnKey:'export'});return;}
     if (issue.id === 'approval-config') navigate('settings');
     else if (String(issue.id).startsWith('document-')) navigate('documents');
     else if (String(issue.id).startsWith('mapping-')) setTab('模板与映射');
     else if (issue.id === 'empty-requirements') navigate('documents');
-    else if (reviews.some((r) => r.id === issue.id)) navigate('reviews');
-    else navigate('response');
+    else if (reviews.some((r) => r.id === issue.id)) navigate('reviews',issue.requirementId,{reviewId:issue.id,returnKey:'export'});
+    else navigate('response',issue.id,{returnKey:'export'});
   }
   function mappedRows(rows, selectedMapping) { return rows.map((row) => ({ ...row, ...Object.fromEntries(columns.map((c) => [c.key, row[selectedMapping[c.key]] ?? ''])) })); }
   function saveFile(content, filename) {
@@ -329,9 +336,9 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     const currentIssues = [...getExportIssues(requirements, reviews), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
     if (currentIssues.length) { setError(`当前仍有 ${currentIssues.length} 个检查项未通过，请返回修正。`); return; }
     if (actorRole === '最终审批人') { setError('最终审批人不能提交本人待批准快照，请切换为销售负责人或技术确认人后提交。'); return; }
-    const existing = pending.find((s) => signature(s.rows || []) === signature(requirements) && s.template?.id === templateId && JSON.stringify(s.mapping) === JSON.stringify(mapping));
+    const existing = pending.find((s) => s.approvalFingerprint===snapshotFingerprint(approvalScope));
     if (existing) { setAction(null); setDetailId(existing.id); toast('相同内容已在审批中，已打开原快照'); return; }
-    const snapshot = { ...makeSnapshot(project.id, requirements, actorRole), template: { ...activeTemplate }, mapping: { ...mapping }, approvalConfig: { ...effectiveApproval }, submissionReason: reason.trim() || '已完成内部确认、专业事项及字段分标检查', history: [{ id: uid('EVENT'), action: '提交快照审批', actor: actorRole, time: now(), reason: reason.trim() || '检查通过，冻结应答快照' }], attachments: [] };
+    const snapshot = { ...makeSnapshot(project.id, requirements, actorRole), approvalFingerprint:snapshotFingerprint(approvalScope),approvalScope:structuredClone(approvalScope),createdById:actorId,template: { ...activeTemplate }, mapping: { ...mapping }, approvalConfig: { ...effectiveApproval }, submissionReason: reason.trim() || '已完成内部确认、专业事项及字段分标检查', history: [{ id: uid('EVENT'), action: '提交快照审批', actor: actorRole, time: now(), reason: reason.trim() || '检查通过，冻结应答快照' }], attachments: [] };
     onSnapshot(snapshot); logEvent('提交快照审批', snapshot.id, `${requirements.length} 条要求；${activeTemplate.title} ${activeTemplate.version}`); toast('已冻结审批快照，请由独立最终审批人核对'); setAction(null); setDetailId(snapshot.id); setTab('审批与快照');
   }
   function reviewSnapshot() {
@@ -340,11 +347,12 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     if (approvalConfigIssues.length) { setError(approvalConfigIssues[0].message); return; }
     if (actorRole !== '最终审批人') { setError('当前身份无最终审批权限'); return; }
     if (actorRole !== configuredFinalApprover) { setError('当前身份与项目配置的最终批准人不一致'); return; }
-    if (current.createdBy === actorRole) { setError('提交人与最终批准人必须独立，不能批准本人提交的快照'); return; }
+    if (!current.createdById||current.createdById === actorId) { setError('提交人与最终批准人必须独立，不能批准本人提交的快照'); return; }
     if (action === 'reject' && !reason.trim()) { setError('退回必须填写具体原因'); return; }
+    if(action==='approve'&&!checkSnapshotValidity(current,approvalScope).valid){setError('批准范围已经变化，请重新提交快照');return;}
     if (action === 'approve' && (signature(current.rows || []) !== signature(requirements) || getExportIssues(requirements, reviews).length || documentIssues.length)) { setError('当前工作数据已变化或检查未通过，请退回原快照并提交新快照'); return; }
     const label = action === 'approve' ? '批准定稿' : '退回快照';
-    const patch = { ...current, status: action === 'approve' ? '已批准' : '已退回', reviewedAt: new Date().toISOString(), reviewedBy: actorRole, reviewReason: reason.trim() || '快照内容、必要条件和附件分标检查通过', history: [...(current.history || []), { id: uid('EVENT'), action: label, actor: actorRole, time: now(), reason: reason.trim() || '批准定稿' }] };
+    const patch = { ...current, status: action === 'approve' ? '已批准' : '已退回', reviewedAt: new Date().toISOString(), reviewedBy: actorRole,reviewedById:actorId, reviewReason: reason.trim() || '快照内容、必要条件和附件分标检查通过', history: [...(current.history || []), { id: uid('EVENT'), action: label, actor: actorRole, time: now(), reason: reason.trim() || '批准定稿' }] };
     onSnapshot(patch); logEvent(label, current.id, patch.reviewReason); toast(action === 'approve' ? '快照已批准，当前有效性检查通过后可正式导出' : '快照已退回，原内容继续保留'); setAction(null);
   }
   function downloadFormal() {
@@ -357,7 +365,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
       saveFile(toCsv(rows), filename);
       const record = { id: uid('EXP'), type: '正式应答', filename, createdAt: now(), actor: actorRole, status: '已生成', snapshotId: current.id, template: current.template?.title || '标准 RFQ 应答矩阵', rowCount: rows.length };
       setHistory((old) => [record, ...old]);
-      onSnapshot({ ...current, exports: [...(current.exports || []), record] }); logEvent('正式导出', current.id, `当前有效性校验通过；${rows.length} 条；CSV UTF-8`); toast('正式应答已导出，记录已绑定批准快照'); setAction(null); setTab('导出记录');
+      onSnapshot({ ...current, exports: [...(current.exports || []), record],exportedAt:new Date().toISOString() }); logEvent('正式导出', current.id, `当前有效性校验通过；${rows.length} 条；CSV UTF-8`); toast('正式应答已导出，记录已绑定批准快照'); setAction(null); setTab('导出记录');
     } catch (err) { setError(`文件生成失败：${err.message}`); logEvent('正式导出失败', current.id, err.message); }
   }
   function snapshotTable(snapshot) { return <div className="table-wrap flow-snapshot-table"><table className="data-table"><thead><tr><th>条款</th><th>客户要求</th><th>最终结论</th><th>冻结答复</th><th>必要条件</th><th>版本</th></tr></thead><tbody>{(snapshot.rows || []).map((r) => <tr key={r.id}><td>{r.clause}</td><td>{r.original}</td><td><Badge value={r.conclusion} /></td><td>{r.draft}</td><td>{asText(r.conditions) || '—'}</td><td>V{r.version || 1}</td></tr>)}</tbody></table></div>; }

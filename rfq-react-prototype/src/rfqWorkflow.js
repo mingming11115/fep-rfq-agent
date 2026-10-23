@@ -34,11 +34,14 @@ function indexRows(rows) {
 }
 export function diffRfqRequirements(existing, incoming) {
   if (!Array.isArray(incoming) || !incoming.length) throw new Error('至少提供一条新版要求，空文件不能推断为全部删除');
-  const previous = indexRows(existing), next = indexRows(incoming);
+  const mapped=incoming.some(r=>r.previousId||existing.some(old=>old.id===r.id));
+  let previous,next;
+  if(mapped){previous=new Map(existing.map(r=>[r.id,r]));next=new Map();incoming.forEach((row,i)=>{let key=row.previousId||(previous.has(row.id)?row.id:null);if(!key&&!incoming.some(r=>r.previousId)){const clause=clean(row.clause);if(clause&&existing.filter(r=>clean(r.clause)===clause).length<=1&&incoming.filter(r=>clean(r.clause)===clause).length===1)key=existing.find(r=>clean(r.clause)===clause)?.id||'new';}if(!key)throw new Error('每条新版要求都需指定原条款 ID，新增项填写 new');if(key!=='new'&&!previous.has(key))throw new Error('原条款 ID 不存在，请人工核对映射');const id=key==='new'?`new:${i}`:key;if(next.has(id))throw new Error('同一旧条款不能重复映射');if(!clean(row.original))throw new Error('每条要求必须填写原文');next.set(id,row);});}
+  else {previous=indexRows(existing);next=indexRows(incoming);}
   const changes = [...next].map(([clause, after]) => {
     const before = previous.get(clause);
-    const modified = before && (before.removedFromSource || ['original', 'title', 'category'].some((key) => clean(before[key]) !== clean(after[key])));
-    return { clause, before, after, kind: !before ? 'added' : modified ? 'modified' : 'unchanged' };
+    const modified = before && (before.removedFromSource || ['clause','original', 'title', 'category'].some((key) => clean(before[key]) !== clean(after[key])));
+    return { clause:after.clause, before, after, kind: !before ? 'added' : modified ? 'modified' : 'unchanged' };
   });
   for (const [clause, before] of previous) if (!next.has(clause) && !before.removedFromSource) changes.push({ clause, before, after: null, kind: 'removed' });
   return changes;
@@ -50,7 +53,7 @@ export function applyRfqRevision(existing, incoming, reason, source, config = {}
     if (kind === 'unchanged') return before;
     const id = before?.id || `REQ-${globalThis.crypto.randomUUID()}`;
     affectedIds.push(id);
-    const row = { ...(before || { conclusion: '待确认', draft: '', conditions: '', evidence: '', matchLevel: 'none', score: 0 }), ...(after ? { clause: clean(after.clause), title: clean(after.title), category: after.category || before?.category || '技术', original: after.original } : {}), id, status: '待确认', matchLevel: 'none', score: 0, version: (before?.version || 0) + 1, source, previousOriginal: before?.original || '', sourceChange: kind, removedFromSource: kind === 'removed', reason, sourceRevision: true };
+    const row = { ...(before || { conclusion: '待确认', draft: '', conditions: '', evidence: '', matchLevel: 'none', score: 0 }), ...(after ? { clause: clean(after.clause), title: clean(after.title), category: after.category || before?.category || '技术', original: after.original } : {}), id, status: '待确认', matchLevel: 'none', score: 0, version: (before?.version || 0) + 1, source, sourceFileId:after?.sourceFileId||before?.sourceFileId||source,sourceVersion:after?.sourceVersion||`${before?.sourceVersion||'V1'}-r${(before?.version||0)+1}`,sourceOriginal:after?.original||before?.sourceOriginal||before?.original,needsReview:true,readyForConfirmation:false,pendingReviewProposal:null, previousOriginal: before?.original || '', sourceChange: kind, removedFromSource: kind === 'removed', reason, sourceRevision: true };
     if (!before || before.category !== row.category || !row.owner) row.owner = getReviewRoute(row, config).owner;
     delete row.confirmedAt; delete row.confirmedBy;
     return row;

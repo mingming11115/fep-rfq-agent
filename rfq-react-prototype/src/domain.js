@@ -65,11 +65,12 @@ export function getExportIssues(requirements = [], reviews = []) {
   if (requirements.length === 0) issues.push({ id: 'empty-requirements', label: '应答矩阵', message: '尚无可提交的要求条目，请先解析并确认客户要求' });
   for (const row of requirements) {
     const messages = requirementValidation(row);
+    if(row.pendingReviewProposal)messages.push('评审或澄清建议尚未核对');
     if (row.status !== '已确认') messages.unshift('条目尚未完成内部确认');
-    if (messages.length) issues.push({ id: row.id, label: `${row.clause || ''} ${row.title || '要求条目'}`.trim(), message: messages.join('；') });
+    if (messages.length) issues.push({ id: row.id,objectType:'requirement',objectId:row.id,route:{page:'response',requirementId:row.id,fileId:row.sourceFileId,sourceVersion:row.sourceVersion}, label: `${row.clause || ''} ${row.title || '要求条目'}`.trim(), message: messages.join('；') });
   }
   for (const review of reviews) {
-    if (review.status !== '已关闭') issues.push({ id: review.id, label: review.title || '评审事项', message: `关联评审尚未关闭（${review.status || '待处理'}），请完成处理及所需批准` });
+    if (!['已关闭','已取消'].includes(review.status)) issues.push({ id: review.id,objectType:'review',objectId:review.id,route:{page:'reviews',reviewId:review.id,requirementId:review.requirementId}, label: review.title || '评审事项', message: `关联评审尚未关闭（${review.status || '待处理'}），请完成处理及所需批准` });
   }
   return issues;
 }
