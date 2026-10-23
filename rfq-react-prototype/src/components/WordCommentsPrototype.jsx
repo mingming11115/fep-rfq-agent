@@ -18,9 +18,9 @@ export default function WordCommentsPrototype({ projectId, onClose }) {
     return () => window.removeEventListener('message', resize);
   }, [projectId]);
 
-  return <Modal title="Word批注" width={1360} onClose={onClose}>
+  return <Modal title="历史独立 Word 批注示例" width={1360} onClose={onClose}>
     <p className="muted" style={{ fontSize: 12, lineHeight: 1.8 }}>
-      示例文档 · 按项目保存在当前浏览器 · 选中文字后新建批注，页边输入自动保存 · 导出为预览
+      历史独立示例；当前条款批注请在“原文与应答 → 批注与记录”中处理 · 原批注按项目保存在当前浏览器 · 选中文字后新建批注，页边输入自动保存 · 导出为预览
     </p>
     <iframe
       ref={frame}

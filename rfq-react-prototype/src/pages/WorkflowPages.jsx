@@ -1,3 +1,5 @@
+import ClarificationPanel from '../components/ClarificationPanel';
+import {assertIndependentApproval} from '../reviewDomain';
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, FileText, Check, AlertCircle, ArrowRight, Download, Plus, Search, RefreshCw, X, ShieldCheck, ChevronRight, ListChecks } from 'lucide-react';
 import { Modal, Drawer } from '../components/ui';
@@ -141,7 +143,7 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
     setActiveId(row.id); setEditor(null); logEvent('补录要求', row.id, editReason); toast('补录已保存，自动进入细则比对');
   }
   return <div className="flow-page">
-    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />Word批注</button><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
+    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />历史批注示例</button><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
     {wordCommentsOpen && <WordCommentsPrototype projectId={project.id} onClose={() => setWordCommentsOpen(false)} />}
     <Notice>{project.id === BHEL_ID ? '真实RFQ演示 · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : '交互原型 · 文件仅保存元数据，解析结果使用模拟数据。仅“要求来源”生成要求条目；真实文件内容不会上传或读取。'}</Notice>
     <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
@@ -160,7 +162,7 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
   </div>;
 }
 
-export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, logEvent = () => {}, embedded = false, initialReviewId = null, onCloseEmbedded }) {
+export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, actorId, logEvent = () => {}, embedded = false, initialReviewId = null, onCloseEmbedded }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('全部状态');
   const [type, setType] = useState('全部类型');
@@ -189,7 +191,7 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
   function finishLeave(save) { if (save && !savePlan()) return; clearDirty(); const next = leaveNext.current || (() => setActiveId(null)); leaveNext.current = null; setLeaveOpen(false); next(); }
   useUnsavedWarning(dirty);
   useEffect(() => { const previous = window.__rfqRequestNavigation; const hook = (next) => guardLeave(next) && (!previous || previous(next)); window.__rfqRequestNavigation = hook; return () => { if (window.__rfqRequestNavigation === hook) { if (previous) window.__rfqRequestNavigation = previous; else delete window.__rfqRequestNavigation; } }; }, []);
-  useEffect(() => { if (embedded && initialReviewId) { const review = reviews.find((item) => item.id === initialReviewId); if (review) openReview(review); } }, []);
+  useEffect(() => { if (initialReviewId) { const review = reviews.find((item) => item.id === initialReviewId); if (review) openReview(review); } }, []);
   useEffect(() => { if (embedded && !activeId) onCloseEmbedded?.(); }, [embedded, activeId]);
   useEffect(() => { setPage(1); }, [query, status, type, source, mine]);
   useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
@@ -217,19 +219,20 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
     if (action === 'submit' && (!form.plan.trim() || !active.owner || !active.deadline)) { setError('提交前请填写处理方案，并完成责任人与截止时间分派。'); return; }
     if (['assign', 'reopen'].includes(action) && (!assignee.trim() || !deadline)) { setError('请填写责任人及截止时间。'); return; }
     if (action === 'reopen' && !isClosed(active)) { setError('只有已关闭事项可以重开。'); return; }
-    if (action === 'approve' && active.submittedBy === actorRole) { setError('提交人与批准人需独立，请由另一职责提交后再批准。'); return; }
+    if(action==='approve'){try{assertIndependentApproval(active,{id:actorId,role:actorRole});}catch(e){setError(e.message);return;}}
     if (action === 'approve' && !form.plan.trim()) { setError('处理方案为空，不能批准关闭。'); return; }
     const labels = { assign: '重新分派', submit: '提交专业批准', approve: '批准关闭', reject: '退回修改', reopen: '条件变化重开' };
     const statuses = { assign: active.status, submit: '待审批', approve: '已关闭', reject: '已退回', reopen: '待处理' };
     const reason = actionReason.trim() || (action === 'approve' ? '方案及必要条件核对通过，相关应答仍需确认。' : '处理方案已就绪，提交专业批准。');
     const patch = { status: statuses[action], history: [...(active.history || []), historyEntry(labels[action], action === 'assign' ? `${active.owner} → ${assignee}；${reason}` : reason)] };
     if (action === 'assign') Object.assign(patch, { owner: assignee.trim(), deadline, reason });
-    if (action === 'submit') Object.assign(patch, { plan: form.plan, impact: form.impact, evidence: form.evidence, proposedConclusion: form.conclusion, proposedDraft: form.draft, submittedBy: actorRole, submittedAt: now(), ...(actorRole === '销售负责人' ? { customerCommunication: form.customerCommunication, acceptanceResult: form.acceptanceResult } : {}) });
-    if (action === 'approve') Object.assign(patch, { approvedBy: actorRole, approvedAt: now(), approvalReason: reason });
+    if (action === 'submit') Object.assign(patch, { plan: form.plan, impact: form.impact, evidence: form.evidence, proposedConclusion: form.conclusion, proposedDraft: form.draft, submittedBy: actorRole, submittedById:actorId,requirementVersion:requirement?.version||1,requirementAtSubmission:structuredClone(requirement),submittedAt: now(), ...(actorRole === '销售负责人' ? { customerCommunication: form.customerCommunication, acceptanceResult: form.acceptanceResult } : {}) });
+    if (action === 'approve') Object.assign(patch, { approvedBy: actorRole,approvedById:actorId, approvedAt: now(), approvalReason: reason });
+    if(['reopen','reject'].includes(action))patch.round=(active.round||1)+1;
     if (action === 'reopen') Object.assign(patch, { reason, owner: assignee.trim() || active.owner, deadline: deadline || active.deadline });
-    onUpdateReview(active.id, patch);
-    if (['approve', 'reopen'].includes(action) && requirement) onConfirmReviewed(requirement.id, { status: '待确认', ...(action === 'approve' ? { conclusion: form.conclusion, draft: form.draft || requirement.draft, evidence: form.evidence.trim() || requirement.evidence } : {}), reason: `${labels[action]}：${reason}` });
-    logEvent(labels[action], active.id, reason); toast(action === 'approve' ? '事项已批准关闭；关联应答仍需在细则比对页签人工确认' : `${labels[action]}成功`); setAction(null); if (action === 'submit') clearDirty();
+    if(onUpdateReview(active.id, patch)===false)return;
+    if(action==='reopen'&&requirement)onConfirmReviewed(requirement.id,{status:'待复核',needsReview:true});
+    logEvent(labels[action], active.id, reason); toast(action === 'approve' ? '事项已批准关闭；请核对差异并采用建议，人工答复已保留' : `${labels[action]}成功`); setAction(null); if (action === 'submit') clearDirty();
   }
   const closed = active && isClosed(active);
   const actions = { assign: '分派 / 改派事项', submit: '提交专业批准', approve: '批准并关闭事项', reject: '退回处理方案', reopen: '条件变化重开事项' };
@@ -242,7 +245,8 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
     </section>
     <Notice>“用户未接受”表示内部使用者未接受匹配结果。客户沟通接受与实际验收分别记录；批准事项不会自动确认关联应答。</Notice>
     </>}
-    {active && <Drawer title="事项详情与处理" width={720} onClose={() => { const next = () => setActiveId(null); if (guardLeave(next)) next(); }} footer={<>{closed ? <button className="btn" onClick={() => startAction('reopen')}><RefreshCw size={15} />条件变化重开</button> : <><button className="btn" onClick={() => startAction('assign')}>分派 / 改派</button><button className="btn" disabled={isPendingReview(active)} onClick={() => savePlan()}>保存方案</button>{!isPendingReview(active) && <button className="btn btn-primary" onClick={() => startAction('submit')}>提交专业批准</button>}{isPendingReview(active) && <><button className="btn btn-danger" disabled={actorRole !== '最终审批人'} onClick={() => startAction('reject')}>退回</button><button className="btn btn-primary" disabled={actorRole !== '最终审批人'} onClick={() => startAction('approve')}>批准关闭</button></>}</>}</>}>
+    {active?.kind==='clarification'&&<Drawer title="客户澄清跟进" width={680} onClose={()=>setActiveId(null)}><ClarificationPanel issue={active} onChange={onUpdateReview} actorId={actorId} actorRole={actorRole} toast={toast}/><button className="text-link" onClick={()=>navigate('response',active.requirementId)}>返回关联条款 →</button></Drawer>}
+    {active && active.kind!=='clarification' && <Drawer title="事项详情与处理" width={720} onClose={() => { const next = () => setActiveId(null); if (guardLeave(next)) next(); }} footer={<>{closed ? <button className="btn" onClick={() => startAction('reopen')}><RefreshCw size={15} />条件变化重开</button> : <><button className="btn" onClick={() => startAction('assign')}>分派 / 改派</button><button className="btn" disabled={isPendingReview(active)} onClick={() => savePlan()}>保存方案</button>{!isPendingReview(active) && <button className="btn btn-primary" onClick={() => startAction('submit')}>提交专业批准</button>}{isPendingReview(active) && <><button className="btn btn-danger" disabled={actorRole !== '最终审批人'} onClick={() => startAction('reject')}>退回</button><button className="btn btn-primary" disabled={actorRole !== '最终审批人'} onClick={() => startAction('approve')}>批准关闭</button></>}</>}</>}>
       <ApprovalRoute requirement={requirement} config={project.approvalConfig} review={active}/><div className="flow-detail-top"><div><span className="muted flow-small">{active.id}</span><h3>{active.title}</h3></div><Badge value={active.status} /></div><dl className="flow-description"><dt>事项类型 / 来源</dt><dd>{active.type} · {asText(active.source)}</dd><dt>责任人 / 截止</dt><dd>{active.owner || '未分派'} / {active.deadline || '未设置'}</dd><dt>要求与差距</dt><dd>{active.description || active.reason || '待补充问题说明'}</dd></dl>
       <div className="flow-requirement-card"><div><strong>{requirement?.clause} {requirement?.title || '关联要求'}</strong><button className="text-link" onClick={() => navigate('response', requirement?.id)}>定位要求<ArrowRight size={13} /></button></div><p>{requirement?.original || '关联条目已不可用，请联系项目负责人核对。'}</p><small>来源：{asText(requirement?.source)} · 第 {requirement?.sourcePage || '—'} 页</small></div>
       {closed && <Notice>已关闭结果与处理记录保留为只读。条件变化请使用“重开”，关联应答将回到待确认。</Notice>}{isPendingReview(active) && <Notice>正在等待专业批准。当前职责：{actorRole}。只有最终审批人可以批准或退回。</Notice>}

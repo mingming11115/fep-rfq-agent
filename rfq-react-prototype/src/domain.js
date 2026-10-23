@@ -57,7 +57,7 @@ export function applyRequirementEdit(row, patch) {
 export function confirmRequirement(row) {
   const issues = requirementValidation(row);
   if (issues.length) throw new Error(issues.join('；'));
-  return { ...row, status: '已确认', confirmedAt: new Date().toISOString() };
+  return { ...row, status: '已确认', needsReview:false,sourceRevision:false,sourceCorrected:false,confirmedAt: new Date().toISOString() };
 }
 
 export function getExportIssues(requirements = [], reviews = []) {

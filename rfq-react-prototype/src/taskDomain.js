@@ -44,7 +44,7 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
     const collection=task.objectType==='requirement'?state.requirementsByProject:task.objectType==='review'?state.reviewsByProject:state.snapshotsByProject;
     const object=collection?.[task.projectId]?.find(row=>row.id===task.objectId);
     const sameVersion=(object?.version||1)===task.objectVersion;
-    const finished=sameVersion&&((task.objectType==='requirement'&&(object?.status==='已确认'||task.kind==='draft'&&object?.readyForConfirmation))||(task.objectType==='review'&&(object?.status==='已关闭'||task.kind==='review-process'&&['待审批','待批准'].includes(object?.status)))||(task.objectType==='snapshot'&&['已批准','已退回'].includes(object?.status)));
+    const finished=sameVersion&&((task.objectType==='requirement'&&(object?.status==='已确认'||task.kind==='draft'&&object?.readyForConfirmation))||(task.objectType==='review'&&(object?.status==='已关闭'||task.kind==='review-approve'&&object?.status==='已退回'||task.kind==='review-process'&&['待审批','待批准'].includes(object?.status)))||(task.objectType==='snapshot'&&['已批准','已退回'].includes(object?.status)));
     tasks[id]={...task,status:finished?'已办理':'已失效',...(finished?{completedAt:at}:{}),history:[...(task.history||[]),{action:finished?'业务节点已完成':'对象或版本已变化',time:at}]};
   }
   return {...state,tasksById:tasks};

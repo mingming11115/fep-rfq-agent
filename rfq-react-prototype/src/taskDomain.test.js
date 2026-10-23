@@ -34,3 +34,10 @@ test('review submit creates approval task, approval closes it without confirming
  assert.equal(closed.requirementsByProject.P[0].status,'待确认');
  assert.equal(selectMyTasks(closed,{actorId:'demo-approver',tab:'done'}).length,1);
 });
+test('returned review approval is completed and a new processing round is created',()=>{
+ const review={id:'D',requirementId:'R',status:'待审批',version:1,round:1,owner:'技术确认人'};
+ const state=reconcileTasks({projects:[{id:'P'}],reviewsByProject:{P:[review]}});
+ const next=reconcileTasks({...state,reviewsByProject:{P:[{...review,status:'已退回',round:2}]}});
+ assert.equal(selectMyTasks(next,{actorId:'demo-approver',tab:'done'}).length,1);
+ assert.equal(selectMyTasks(next,{actorId:'demo-technical'}).length,1);
+});

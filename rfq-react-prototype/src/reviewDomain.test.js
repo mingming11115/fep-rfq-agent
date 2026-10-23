@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {prepareReviewProposal,applyReviewProposal,assertIndependentApproval,recordClarificationReply} from './reviewDomain.js';
+const row={id:'R',version:2,draft:'人工答复',status:'待确认'};const review={id:'D',requirementId:'R',status:'已关闭',proposedDraft:'建议',proposedConclusion:'Comply'};
+test('approved proposal preserves human answer until adopted',()=>{const p=prepareReviewProposal(row,review);assert.equal(row.draft,'人工答复');assert.equal(p.before.draft,'人工答复');assert.equal(applyReviewProposal(row,p,{expectedVersion:2,actor:{id:'tech',role:'技术确认人'}}).draft,'建议');});
+test('stale proposal cannot overwrite newer reply',()=>assert.throws(()=>applyReviewProposal({...row,version:3},prepareReviewProposal(row,review),{expectedVersion:2,actor:{id:'tech',role:'技术确认人'}}),/版本/));
+test('role switch cannot approve own submitted version',()=>assert.throws(()=>assertIndependentApproval({submittedById:'same'}, {id:'same',role:'最终审批人'}),/独立/));
+test('recording incomplete customer reply keeps follow-up open',()=>{const r=recordClarificationReply({id:'C',status:'待处理'}, {reply:'还在查',sufficient:false,attachment:'邮件.eml'}, {id:'sales'});assert.equal(r.status,'跟进中');assert.equal(r.replies.length,1);assert.equal(r.replies[0].attachment,'邮件.eml');});

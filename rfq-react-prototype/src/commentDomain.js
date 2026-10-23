@@ -1,0 +1,2 @@
+export function promoteCommentToIssue(comment,{kind,actor,at}){if(!['review','clarification'].includes(kind))throw new Error('请选择评审或澄清');return {id:comment.linkedIssues?.[kind]||`ISSUE-${comment.id}-${kind}`,kind,anchor:structuredClone(comment.anchor),requirementId:comment.anchor.requirementId,sourceCommentId:comment.id,title:comment.text.slice(0,60),description:`${comment.text}\n原文：${comment.quote||''}`,createdById:actor,createdAt:at,status:'待处理'};}
+export function resolveComment(comment,actor,at){return {...comment,status:'已解决',resolvedBy:actor,resolvedAt:at};}

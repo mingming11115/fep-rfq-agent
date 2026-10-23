@@ -7,6 +7,7 @@ export function upgradePrototypeState(previous, demo) {
   state.actorId = actorIdForRole(state.actorRole);
   state.tasksById ||= {};
   state.analysisRuns ||= [];
+  state.commentsByProject ||= {};
   state.navigationContext ||= {};
   state.members ||= structuredClone(demo.members || []);
   state.audit ||= [];
@@ -16,6 +17,7 @@ export function upgradePrototypeState(previous, demo) {
     for (const project of state.projects) state[key][project.id] ||= [];
   }
   for (const project of state.projects) {
+    state.commentsByProject[project.id] ||= [];
     state.membersByProject[project.id] ||= structuredClone(state.members);
     project.createdById ||= 'demo-sales';
     project.ownerId ||= 'demo-sales';
