@@ -1,4 +1,5 @@
 import { BHEL_ID } from './bhelDemo';
+import {reconcileTasks} from './taskDomain';
 import {upgradePrototypeState,actorIdForRole} from './stateMigration';
 import React,{useEffect,useRef,useState} from 'react';
 import {LayoutDashboard,FolderKanban,Layers3,FileSearch,ListChecks,GitPullRequest,FileOutput,History,Settings,BookOpen,Files,ShieldCheck,SlidersHorizontal,ChevronDown,ChevronRight,PanelLeftClose,PanelLeftOpen,HelpCircle,RotateCcw,CheckCircle2,AlertCircle,X,ArrowRight,Search,Bell,Globe} from 'lucide-react';
@@ -18,14 +19,14 @@ const icons={dashboard:LayoutDashboard,projects:FolderKanban,capabilities:Layers
 const shortLabels={dashboard:'个人工作台',versions:'版本记录',settings:'项目设置',knowledge:'知识与结果',evidence:'资料与证据',admin:'系统配置'};
 const validPage=key=>key==='reviews'||NAV_ITEMS.some(n=>n.key===key)?key:'projects';
 function withProjectMembers(s){return {...s,membersByProject:Object.fromEntries(s.projects.map(p=>[p.id,structuredClone(s.membersByProject?.[p.id]??s.members??[])]))};}
-function initial(){try{const s=JSON.parse(localStorage.getItem(STORAGE));if(s?.projects?.length&&s.requirementsByProject&&s.reviewsByProject&&s.snapshotsByProject){ if(!s.projects.some(p=>p.id===BHEL_ID)){ const demo=createDemoState(); s.projects=[demo.projects[0],...s.projects]; s.requirementsByProject[BHEL_ID]=demo.requirementsByProject[BHEL_ID]; s.reviewsByProject[BHEL_ID]=demo.reviewsByProject[BHEL_ID]; s.snapshotsByProject[BHEL_ID]=[]; s.activeProjectId=BHEL_ID; } return upgradePrototypeState(withProjectMembers(s),createDemoState()); }}catch{}return upgradePrototypeState(withProjectMembers({...createDemoState(),activeProjectId:BHEL_ID}),createDemoState());}
+function initial(){try{const s=JSON.parse(localStorage.getItem(STORAGE));if(s?.projects?.length&&s.requirementsByProject&&s.reviewsByProject&&s.snapshotsByProject){ if(!s.projects.some(p=>p.id===BHEL_ID)){ const demo=createDemoState(); s.projects=[demo.projects[0],...s.projects]; s.requirementsByProject[BHEL_ID]=demo.requirementsByProject[BHEL_ID]; s.reviewsByProject[BHEL_ID]=demo.reviewsByProject[BHEL_ID]; s.snapshotsByProject[BHEL_ID]=[]; s.activeProjectId=BHEL_ID; } return reconcileTasks(upgradePrototypeState(withProjectMembers(s),createDemoState())); }}catch{}return reconcileTasks(upgradePrototypeState(withProjectMembers({...createDemoState(),activeProjectId:BHEL_ID}),createDemoState()));}
 const now=()=>new Date().toLocaleString('zh-CN',{hour12:false});
 const event=(s,action,object='',detail='',result='成功')=>({...s,audit:[{id:`EVT-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,time:now(),actor:s.actorRole,action,object,result,detail},...(s.audit||[])].slice(0,500)});
 
 export default function App(){
  const [state,setState]=useState(initial),stateRef=useRef(state),[page,setPage]=useState(()=>validPage(location.hash.replace('#/',''))),[collapsed,setCollapsed]=useState(false),[messages,setMessages]=useState([]),[help,setHelp]=useState(false),[reset,setReset]=useState(false),[globalSearch,setGlobalSearch]=useState(false),[search,setSearch]=useState('');
  const [focusedRequirementId,setFocusedRequirementId]=useState(null);
- const timers=useRef([]),pageRef=useRef(page);const update=fn=>{const next=fn(stateRef.current);stateRef.current=next;setState(next);};
+ const timers=useRef([]),pageRef=useRef(page);const update=fn=>{const next=reconcileTasks(upgradePrototypeState(fn(stateRef.current),createDemoState()));stateRef.current=next;setState(next);};
  const project=state.projects.find(p=>p.id===state.activeProjectId)||state.projects[0],requirements=state.requirementsByProject[project.id]||[],reviews=state.reviewsByProject[project.id]||[],snapshots=state.snapshotsByProject[project.id]||[];
  const item=NAV_ITEMS.find(n=>n.key===(page==='reviews'?'response':page)),isProjectPage=item?.section==='项目';
  useEffect(()=>{try{localStorage.setItem(STORAGE,JSON.stringify(state));}catch{}},[state]);
