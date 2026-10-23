@@ -32,7 +32,7 @@ function useUnsavedWarning(dirty) {
 const metadataStorage = (projectId) => `fep-rfq-documents:${projectId}`;
 function readDocumentState(projectId) { try { return JSON.parse(localStorage.getItem(metadataStorage(projectId)) || 'null'); } catch { return null; } }
 
-export function DocumentsPage({ project, requirements = [], onImport, onCorrect, toast, navigate, focusedRequirementId, logEvent = () => {} }) {
+export function DocumentsPage({ project, requirements = [], onImport, onCorrect, toast, navigate, focusedRequirementId, onAnalysisRun = () => {}, logEvent = () => {} }) {
   const [files, setFiles] = useState(() => readDocumentState(project.id)?.files || (requirements.length ? makeDocumentDemo(project.id).files : []));
   const [parsed, setParsed] = useState(() => readDocumentState(project.id)?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []));
   const [activeId, setActiveId] = useState(focusedRequirementId || null);
@@ -87,16 +87,19 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
   function scheduleParse(file) {
     if (running.current.has(file.id)) return;
     running.current.add(file.id);
+    const runId=uid('RUN'),startedAt=new Date().toISOString();
+    const finish=(status,counts={})=>onAnalysisRun({id:runId,fileId:file.id,sourceVersion:file.version,type:'parse',status,startedAt,endedAt:new Date().toISOString(),successCount:0,failedCount:0,needsHumanCount:0,previousRunId:file.lastRunId,...counts});
     const fail = !/\.(pdf|docx?|xlsx?|csv|txt)$/i.test(file.name);
     timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '处理中', error: '' } : f)), 350));
     timers.current.push(setTimeout(() => {
       running.current.delete(file.id);
-      if (fail) { setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '失败', error: '演示解析器仅支持 PDF、Word、Excel、CSV、TXT；请转换格式或手动补录。' } : f)); logEvent('解析失败', file.id, '不支持的文件格式'); return; }
-      if (file.purpose !== '要求来源') { setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成' } : f)); return; }
+      if (fail) { finish('失败',{failedCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '失败', lastRunId:runId, error: '演示解析器仅支持 PDF、Word、Excel、CSV、TXT；请转换格式或手动补录。' } : f)); logEvent('解析失败', file.id, '不支持的文件格式'); return; }
+      if (file.purpose !== '要求来源') { finish('完成',{successCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成' } : f)); return; }
       const previous = parsedRef.current.filter((row) => row.sourceFileId === file.id);
       const rows = previous.length ? previous : makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourceOriginal: r.original, sourceVersion: file.version, sourcePage: index + 2, sourceFileId: file.id, sectionPath: [], confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果：未读取原文件，章节待识别', version: 1 }));
       setParsed((old) => old.some((r) => r.sourceFileId === file.id) ? old : [...old, ...rows]);
-      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parsedCount: rows.length, parsedAt: now(), error: '' } : f));
+      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parsedCount: rows.length, lastRunId:runId, parsedAt: now(), error: '' } : f));
+      finish('完成',{successCount:rows.length,needsHumanCount:rows.filter(r=>r.matchLevel==='none').length});
       setActiveId(rows[0]?.id); logEvent('模拟解析完成', file.id, `${rows.length} 条要求，自动进入细则比对`);
     }, 1250));
   }

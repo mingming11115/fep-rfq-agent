@@ -1,4 +1,7 @@
 import {selectMyTasks} from './taskDomain.js';
+export function selectProjects(state,{actorId,tab='all',query=''}={}) {
+ return (state.projects||[]).filter(p=>(p.ownerId===actorId||p.createdById===actorId||p.participantIds?.includes(actorId))&&(tab!=='initiated'||p.createdById===actorId)&&(tab!=='participated'||p.participantIds?.includes(actorId))&&`${p.name} ${p.id} ${p.customer}`.toLowerCase().includes(query.toLowerCase()));
+}
 export function getProjectSummary(state,projectId,actorId) {
   const rows=state.requirementsByProject?.[projectId]||[],reviews=state.reviewsByProject?.[projectId]||[],snapshots=state.snapshotsByProject?.[projectId]||[];
   const open=reviews.filter(r=>!['已关闭','已取消'].includes(r.status));

@@ -1,7 +1,7 @@
 export const PROJECT_PAGES=['documents','response','reviews','export','versions','settings'];
 export const ADMIN_PAGES=['admin','knowledge','capabilities','evidence','audit'];
 const pages=['dashboard','tasks','projects','analysis',...PROJECT_PAGES,...ADMIN_PAGES];
-const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey'];
+const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action'];
 export function parseWorkRoute(hash='') {
  const [path,query='']=hash.replace(/^#\/?/,'').split('?');const route={page:pages.includes(path)?path:'dashboard'};
  const params=new URLSearchParams(query);for(const key of fields)if(params.has(key))route[key]=params.get(key);
