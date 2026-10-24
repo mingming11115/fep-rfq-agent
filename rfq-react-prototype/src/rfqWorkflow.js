@@ -65,5 +65,5 @@ export function applyRfqRevision(existing, incoming, reason, source, config = {}
 export function refreshReviewForRevision(review, before, after, config = {}) {
   if (review.status === '已关闭') return review;
   const routing = getReviewRoute(after, config);
-  return { ...review, status: '待处理', routing, owner: before?.category !== after?.category ? routing.owner : review.owner, submittedAt: undefined, submittedBy: undefined, approvedAt: undefined, approvedBy: undefined };
+  return { ...review, version:(review.version||1)+1,round:(review.round||1)+1,status: '待处理', routing, owner: before?.category !== after?.category ? routing.owner : review.owner, submittedAt: undefined, submittedBy: undefined, submittedById:undefined,requirementVersion:undefined,requirementAtSubmission:undefined,approvedAt: undefined, approvedBy: undefined,approvedById:undefined };
 }

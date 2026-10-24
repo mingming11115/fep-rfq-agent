@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDemoState } from './data.js';
 import { upgradePrototypeState, getActor } from './stateMigration.js';
+import {reconcileTasks} from './taskDomain.js';
 
 test('upgrade preserves edited replies, snapshots and independent storage references', () => {
   const old = createDemoState();
@@ -26,3 +27,14 @@ test('upgrade is idempotent and retains missing-map projects rather than replaci
   assert.equal(upgraded.schemaVersion, 2);
 });
 test('migration keeps stable actor identity independent of displayed role',()=>{const upgraded=upgradePrototypeState({projects:[{id:'P'}],actorId:'person-7',actorRole:'最终审批人'},{members:[]});assert.equal(upgraded.actorId,'person-7');});
+test('legacy duplicate review ids migrate without merging matters or reusing ambiguous tasks',()=>{
+ const old={projects:[{id:'P'}],reviewsByProject:{P:[{id:'D',requirementId:'R1',status:'待处理',plan:'方案一'},{id:'D',requirementId:'R2',status:'待处理',plan:'方案二'}]},commentsByProject:{P:[{id:'C',anchor:{requirementId:'R2'},linkedIssues:{review:'D'}}]},snapshotsByProject:{P:[{id:'S',status:'已批准'}]}};
+ const before=reconcileTasks(old),next=reconcileTasks(upgradePrototypeState(before,{members:[]}));
+ const rows=next.reviewsByProject.P;assert.equal(new Set(rows.map(r=>r.id)).size,2);
+ assert.deepEqual(rows.map(r=>r.plan),['方案一','方案二']);
+ assert.equal(next.commentsByProject.P[0].linkedIssues.review,rows[1].id);
+ assert.ok(Object.values(next.tasksById).some(t=>t.objectId==='D'&&t.status==='已失效'));
+ assert.equal(Object.values(next.tasksById).filter(t=>t.objectType==='review'&&t.status==='待办理').length,2);
+ assert.deepEqual(upgradePrototypeState(next,{members:[]}),next);
+ assert.deepEqual(next.snapshotsByProject.P,old.snapshotsByProject.P);
+});
