@@ -145,7 +145,7 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
     setActiveId(row.id); setEditor(null); logEvent('补录要求', row.id, editReason); toast('补录已保存，自动进入细则比对');
   }
   return <div className="flow-page">
-    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />历史批注示例</button><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
+    <div className="page-heading"><div><h1>RFQ 解析</h1><p>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</p></div><div className="page-actions"><button className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />历史批注示例</button><button className="btn" onClick={()=>openEditor()}>人工补录</button><button className="btn" onClick={loadSample}><FileText size={16} />载入示例</button><button className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</button></div></div>
     {wordCommentsOpen && <WordCommentsPrototype projectId={project.id} onClose={() => setWordCommentsOpen(false)} />}
     <Notice>{project.id === BHEL_ID ? '真实RFQ演示 · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : '交互原型 · 文件仅保存元数据，解析结果使用模拟数据。仅“要求来源”生成要求条目；真实文件内容不会上传或读取。'}</Notice>
     <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
@@ -292,7 +292,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const issues = [...getExportIssues(requirements, reviews), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
   const pending = projectSnapshots.filter((s) => s.status === '审批中'&&!s.stale);
   const approvalScope={rows:requirements,sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval},template:activeTemplate,mapping,attachments:[]};
-  useEffect(()=>{sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({tab,templateId,mapping}));onExportScope?.(approvalScope);},[tab,templateId,JSON.stringify(mapping),JSON.stringify(approvalScope)]);
+  useEffect(()=>{sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({...savedExport,tab,templateId,mapping}));onExportScope?.(approvalScope);},[tab,templateId,JSON.stringify(mapping),JSON.stringify(approvalScope)]);
   const approved = projectSnapshots.filter((s) => s.status === '已批准');
   const signature = (rows) => JSON.stringify(rows.map((r) => ({ id: r.id, version: r.version, status: r.status, original: r.original, conclusion: r.conclusion, draft: r.draft, conditions: r.conditions, evidence: r.evidence, reason: r.reason, owner: r.owner })).sort((a, b) => a.id.localeCompare(b.id)));
   function validity(snapshot) {
@@ -308,7 +308,9 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   }
   const downloadable = approved.find((s) => validity(s).valid);
   useEffect(() => { localStorage.setItem(`fep-rfq-export-history:${project.id}`, JSON.stringify(history)); }, [history, project.id]);
+  useEffect(()=>{if(savedExport.scroll)requestAnimationFrame(()=>window.scrollTo(0,savedExport.scroll));},[]);
   function goIssue(issue) {
+    sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({...savedExport,tab,templateId,mapping,scroll:window.scrollY}));
     if(issue.route){navigate(issue.route.page,issue.route.requirementId,{...issue.route,returnKey:'export'});return;}
     if (issue.id === 'approval-config') navigate('settings');
     else if (String(issue.id).startsWith('document-')) navigate('documents');

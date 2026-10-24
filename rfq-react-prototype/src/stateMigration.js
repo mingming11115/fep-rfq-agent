@@ -4,7 +4,7 @@ export function upgradePrototypeState(previous, demo) {
   const state = structuredClone(previous?.projects?.length ? previous : demo);
   state.schemaVersion = 2;
   state.actorRole ||= '销售负责人';
-  state.actorId = actorIdForRole(state.actorRole);
+  state.actorId ||= actorIdForRole(state.actorRole);
   state.tasksById ||= {};
   state.analysisRuns ||= [];
   state.commentsByProject ||= {};

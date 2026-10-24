@@ -25,3 +25,4 @@ test('upgrade is idempotent and retains missing-map projects rather than replaci
   assert.equal(getActor(upgraded).id, 'demo-technical');
   assert.equal(upgraded.schemaVersion, 2);
 });
+test('migration keeps stable actor identity independent of displayed role',()=>{const upgraded=upgradePrototypeState({projects:[{id:'P'}],actorId:'person-7',actorRole:'最终审批人'},{members:[]});assert.equal(upgraded.actorId,'person-7');});
