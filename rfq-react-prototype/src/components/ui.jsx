@@ -1,5 +1,6 @@
 import React, {useEffect, useId, useRef} from 'react';
 import {createPortal} from 'react-dom';
+import {normalizeTaskStatus} from '../taskStatus';
 import {X, Inbox, ChevronLeft, ChevronRight} from 'lucide-react';
 
 const overlayStack=[];
@@ -12,7 +13,7 @@ function Overlay({title,onClose,children,footer,width=640,drawer=false}) {
 }
 export function Modal(props){return <Overlay {...props}/>;}
 export function Drawer(props){return <Overlay {...props} width={props.width||660} drawer/>;}
-export const displayStatus=value=>({'待办理':'待处理','办理中':'处理中','已办理':'已处理'}[value]||value);
-export function StatusBadge({status,value,children,tone}) {const text=displayStatus(status||value||children||'待确认');const type=tone||(/已确认|已关闭|已批准|已发布|已处理|完成|有效|生效|通过|Comply/.test(text)&&!/有条件/.test(text)?'success':/失败|不满足|撤销|过期|退回|失效/.test(text)?'danger':/待|评审|处理中|有条件|审批/.test(text)?'warning':'neutral');return <span className={`badge ${type}`}><i/>{text}</span>;}
+export const displayStatus=normalizeTaskStatus;
+export function StatusBadge({status,value,children,tone}) {const text=displayStatus(status||value||children||'待确认');const type=tone||(/已确认|已关闭|已批准|已发布|已处理|已导出|完成|有效|生效|通过|Comply/.test(text)&&!/有条件/.test(text)?'success':/失败|不满足|撤销|过期|退回|失效/.test(text)?'danger':/待|评审|解析中|处理中|有条件|审批/.test(text)?'warning':'neutral');return <span className={`badge ${type}`}><i/>{text}</span>;}
 export function EmptyState({title='暂无数据',description,children,action}){return <div className="empty-state"><Inbox size={38}/><strong>{title}</strong><p>{description||children}</p>{action}</div>;}
 export function Pagination({count,page,onChange,pageSize=10}){const pages=Math.max(1,Math.ceil(count/pageSize));return <div className="pagination"><span>共 {count} 条记录</span><div><button className="icon-btn" aria-label="上一页" disabled={page<=1} onClick={()=>onChange(page-1)}><ChevronLeft size={16}/></button>{Array.from({length:Math.min(pages,5)},(_,i)=><button key={i} className={`page-number ${page===i+1?'active':''}`} onClick={()=>onChange(i+1)}>{i+1}</button>)}<button className="icon-btn" aria-label="下一页" disabled={page>=pages} onClick={()=>onChange(page+1)}><ChevronRight size={16}/></button><span>{pageSize} 条 / 页</span></div></div>;}

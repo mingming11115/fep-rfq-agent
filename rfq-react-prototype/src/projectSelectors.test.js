@@ -6,23 +6,46 @@ test('initiated and participated tabs can overlap without exposing unrelated pro
  assert.deepEqual(selectProjects(state,{actorId:'me',tab:'all'}).map(p=>p.id),['A']);
  assert.equal(selectProjects(state,{actorId:'me',tab:'initiated'}).length,1);assert.equal(selectProjects(state,{actorId:'me',tab:'participated'}).length,1);
 });
-test('completed stage requires exported scope to remain current with no unfinished work',()=>{
+test('approved and exported projects have separate stages and require current finished work',()=>{
  const row={id:'R',version:1,status:'已确认',draft:'原答复'};
  const scope={rows:[row],configuration:{equipment:'机型A'}};
  const snapshot={id:'S',status:'已批准',exportedAt:'2026-10-24',approvalScope:scope,approvalFingerprint:snapshotFingerprint(scope)};
  const s={projects:[{id:'P',equipment:'机型A'}],requirementsByProject:{P:[row]},reviewsByProject:{P:[]},snapshotsByProject:{P:[snapshot]},exportScopesByProject:{P:scope}};
- assert.equal(getProjectSummary(s,'P','demo-sales').stage,'本轮已完成');
+ assert.equal(getProjectSummary(s,'P','demo-sales').stage,'已导出');
+ assert.equal(getProjectSummary({...s,snapshotsByProject:{P:[{...snapshot,exportedAt:undefined}]}},'P','demo-sales').stage,'审批完成');
+ assert.equal(getProjectSummary({...s,snapshotsByProject:{P:[{...snapshot,status:'审批中',exportedAt:undefined}]}},'P','demo-sales').stage,'评审中');
  const edited={...s,requirementsByProject:{P:[{...row,version:2,draft:'修改答复',status:'待确认'}]}};
- assert.equal(getProjectSummary(edited,'P','demo-sales').stage,'应答编制中');
- assert.equal(getProjectSummary({...s,exportScopesByProject:{P:{...scope,mapping:{draft:'original'}}}},'P','demo-sales').stage,'应答编制中');
- assert.equal(getProjectSummary({...s,reviewsByProject:{P:[{id:'D',status:'待处理'}]}},'P','demo-sales').stage,'应答编制中');
+ assert.equal(getProjectSummary(edited,'P','demo-sales').stage,'评审中');
+ assert.equal(getProjectSummary({...s,exportScopesByProject:{P:{...scope,mapping:{draft:'original'}}}},'P','demo-sales').stage,'评审中');
+ assert.equal(getProjectSummary({...s,reviewsByProject:{P:[{id:'D',status:'待处理'}]}},'P','demo-sales').stage,'评审中');
  assert.equal(snapshot.status,'已批准');assert.ok(snapshot.exportedAt);
 });
-test('parallel review and clarification do not replace response preparation stage',()=>{
+test('drafting professional review and clarification share the project review stage',()=>{
  const s=reconcileTasks({projects:[{id:'P'}],requirementsByProject:{P:[{id:'R',status:'待确认',version:1}]},reviewsByProject:{P:[{id:'D1',requirementId:'R',status:'待处理',owner:'技术确认人'},{id:'D2',requirementId:'R',kind:'clarification',status:'待处理',owner:'销售负责人'}]},snapshotsByProject:{P:[]},tasksById:{}},{at:'2026-10-23T00:00:00Z'});
- const summary=getProjectSummary(s,'P','demo-sales');assert.equal(summary.stage,'应答编制中');assert.equal(summary.reviews,1);assert.equal(summary.clarifications,1);
+ const summary=getProjectSummary(s,'P','demo-sales');assert.equal(summary.stage,'评审中');assert.equal(summary.reviews,1);assert.equal(summary.clarifications,1);
  assert.equal(summary.pending,selectMyTasks(s,{actorId:'demo-sales',projectId:'P',tab:'pending'}).length);
  assert.equal(summary.total,1);
+});
+test('source upload and parsing determine early stages without reading browser storage',()=>{
+ const state={projects:[{id:'P'}],requirementsByProject:{P:[]}};
+ const source={id:'F',purpose:'要求来源',version:'V1',status:'排队中'};
+ assert.equal(getProjectSummary(state,'P','demo-sales').stage,'待上传');
+ for(const status of ['排队中','处理中','失败','完成'])assert.equal(getProjectSummary({...state,documentsByProject:{P:[{...source,status}]}},'P','demo-sales').stage,'解析中');
+ assert.equal(getProjectSummary({...state,documentsByProject:{P:[{...source,purpose:'补充附件'}]}},'P','demo-sales').stage,'待上传');
+ const rows=[{id:'R',status:'待确认'}];
+ assert.equal(getProjectSummary({...state,requirementsByProject:{P:rows},documentsByProject:{P:[{...source,status:'完成'}]}},'P','demo-sales').stage,'评审中');
+ assert.equal(getProjectSummary({...state,requirementsByProject:{P:rows},documentsByProject:{P:[source]}},'P','demo-sales').stage,'解析中');
+ assert.equal(getProjectSummary({...state,requirementsByProject:{P:rows},documentsByProject:{P:[{...source,status:'失败'},{...source,id:'F2',previousVersionId:'F',status:'完成'}]}},'P','demo-sales').stage,'评审中');
+});
+test('pending reapproval takes precedence over a historical approved export',()=>{
+ const row={id:'R',version:1,status:'已确认'},scope={rows:[row],configuration:{equipment:'A'}};
+ const snapshot={id:'S',createdAt:'2026-10-23T00:00:00Z',status:'已批准',exportedAt:'2026-10-24',approvalScope:scope,approvalFingerprint:snapshotFingerprint(scope)};
+ const current={...snapshot,id:'S2',createdAt:'2026-10-24T00:00:00Z',status:'审批中',exportedAt:undefined};
+ const state={projects:[{id:'P',equipment:'A'}],requirementsByProject:{P:[row]},snapshotsByProject:{P:[snapshot,current]}};
+ assert.equal(getProjectSummary(state,'P','demo-sales').stage,'评审中');
+ assert.equal(getProjectSummary({...state,snapshotsByProject:{P:[snapshot,{...current,status:'已退回'}]}},'P','demo-sales').stage,'评审中');
+ assert.equal(getProjectSummary({...state,snapshotsByProject:{P:[snapshot,{...current,status:'已批准'}]}},'P','demo-sales').stage,'审批完成');
+ assert.equal(getProjectSummary({...state,snapshotsByProject:{P:[snapshot,{...current,status:'已批准',exportedAt:'2026-10-24'}]}},'P','demo-sales').stage,'已导出');
 });
 test('project owner handover preserves existing task assignee and deadlines',()=>{
  const s=reconcileTasks({projects:[{id:'P',ownerId:'demo-sales',deadline:'2026-11-01'}],requirementsByProject:{P:[{id:'R',status:'待确认'}]}});

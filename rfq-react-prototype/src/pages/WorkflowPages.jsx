@@ -1,4 +1,4 @@
-import {snapshotFingerprint,checkSnapshotValidity} from '../snapshotDomain';
+import {snapshotFingerprint,latestSnapshot,checkSnapshotValidity} from '../snapshotDomain';
 import ClarificationPanel from '../components/ClarificationPanel';
 import {assertIndependentApproval} from '../reviewDomain';
 import React, { useEffect, useRef, useState } from 'react';
@@ -35,7 +35,7 @@ function useUnsavedWarning(dirty) {
 const metadataStorage = (projectId) => `fep-rfq-documents:${projectId}`;
 function readDocumentState(projectId) { try { return JSON.parse(localStorage.getItem(metadataStorage(projectId)) || 'null'); } catch { return null; } }
 
-export function DocumentsPage({ project, requirements = [], onImport, onCorrect, toast, navigate, focusedRequirementId, onAnalysisRun = () => {}, logEvent = () => {} }) {
+export function DocumentsPage({ project, requirements = [], onImport, onCorrect, toast, navigate, focusedRequirementId, onAnalysisRun = () => {}, onFilesChange, logEvent = () => {} }) {
   const [files, setFiles] = useState(() => readDocumentState(project.id)?.files || (requirements.length ? makeDocumentDemo(project.id).files : []));
   const [parsed, setParsed] = useState(() => readDocumentState(project.id)?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []));
   const [activeId, setActiveId] = useState(focusedRequirementId || null);
@@ -66,7 +66,7 @@ export function DocumentsPage({ project, requirements = [], onImport, onCorrect,
       return next.some((file, i) => file !== old[i]) ? next : old;
     });
   }, [parsed, requirements, onImport]);
-  useEffect(() => { localStorage.setItem(metadataStorage(project.id), JSON.stringify({ files, parsed })); }, [files, parsed, project.id]);
+  useEffect(() => { localStorage.setItem(metadataStorage(project.id), JSON.stringify({ files, parsed })); onFilesChange?.(project.id,files); }, [files, parsed, project.id, onFilesChange]);
   useEffect(() => {
     files.filter((file) => ['排队中', '处理中'].includes(file.status)).forEach(scheduleParse);
     return () => timers.current.forEach(clearTimeout);
@@ -304,7 +304,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     if (snapshot.status !== '已批准') return { valid: false, message: snapshot.status === '审批中' ? '快照尚在审批中' : '快照未经批准' };
     if (snapshot.reviewedBy !== '最终审批人' || !snapshot.createdById||snapshot.createdById===snapshot.reviewedById) return { valid: false, message: '缺少有效的独立最终批准记录' };
     if (documentIssues.length) return { valid: false, message: '来源资料仍有失败任务或未同步条目，请完成解析后重新提交' };
-    const scopeCheck=checkSnapshotValidity(snapshot,approvalScope);if(!scopeCheck.valid)return {valid:false,message:scopeCheck.reasons.join('；')};
+    const scopeCheck=checkSnapshotValidity(snapshot,approvalScope,latestSnapshot(projectSnapshots));if(!scopeCheck.valid)return {valid:false,message:scopeCheck.reasons.join('；')};
     if (signature(snapshot.rows || []) !== signature(requirements)) return { valid: false, message: '当前工作内容或条目版本已变化，请重新提交新快照' };
     if (getExportIssues(requirements, reviews).length) return { valid: false, message: '当前工作版本存在未确认内容或未关闭事项' };
     return { valid: true, message: '与当前工作版本一致，可以正式导出' };
@@ -341,9 +341,11 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     const currentIssues = [...getExportIssues(requirements, reviews), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
     if (currentIssues.length) { setError(`当前仍有 ${currentIssues.length} 个检查项未通过，请返回修正。`); return; }
     if (actorRole === '最终审批人') { setError('最终审批人不能提交本人待批准快照，请切换为销售负责人或技术确认人后提交。'); return; }
-    const existing = pending.find((s) => s.approvalFingerprint===snapshotFingerprint(approvalScope));
+    const latest=latestSnapshot(projectSnapshots);
+    const existing = pending.find((s) => s.id===latest?.id&&s.approvalFingerprint===snapshotFingerprint(approvalScope));
     if (existing) { setAction(null); setDetailId(existing.id); toast('相同内容已在审批中，已打开原快照'); return; }
-    const snapshot = { ...makeSnapshot(project.id, requirements, actorRole), approvalFingerprint:snapshotFingerprint(approvalScope),approvalScope:structuredClone(approvalScope),createdById:actorId,template: { ...activeTemplate }, mapping: { ...mapping }, approvalConfig: { ...effectiveApproval }, submissionReason: reason.trim() || '已完成内部确认、专业事项及字段分标检查', history: [{ id: uid('EVENT'), action: '提交快照审批', actor: actorRole, time: now(), reason: reason.trim() || '检查通过，冻结应答快照' }], attachments: [] };
+    const returned=latest?.status==='已退回'?latest:null;
+    const snapshot = { ...makeSnapshot(project.id, requirements, actorRole), ...(returned?{revisionOf:returned.id}:{}), approvalFingerprint:snapshotFingerprint(approvalScope),approvalScope:structuredClone(approvalScope),createdById:actorId,template: { ...activeTemplate }, mapping: { ...mapping }, approvalConfig: { ...effectiveApproval }, submissionReason: reason.trim() || '已完成内部确认、专业事项及字段分标检查', history: [{ id: uid('EVENT'), action: '提交快照审批', actor: actorRole, time: now(), reason: reason.trim() || '检查通过，冻结应答快照' }], attachments: [] };
     if(onSnapshot(snapshot)===false)return; logEvent('提交快照审批', snapshot.id, `${requirements.length} 条要求；${activeTemplate.title} ${activeTemplate.version}`); toast('已冻结审批快照，请由独立最终审批人核对'); setAction(null); setDetailId(snapshot.id); setTab('审批与快照');
   }
   function reviewSnapshot() {
@@ -354,7 +356,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     if (actorRole !== configuredFinalApprover) { setError('当前身份与项目配置的最终批准人不一致'); return; }
     if (!current.createdById||current.createdById === actorId) { setError('提交人与最终批准人必须独立，不能批准本人提交的快照'); return; }
     if (action === 'reject' && !reason.trim()) { setError('退回必须填写具体原因'); return; }
-    if(action==='approve'&&!checkSnapshotValidity(current,approvalScope).valid){setError('批准范围已经变化，请重新提交快照');return;}
+    if(action==='approve'&&!checkSnapshotValidity(current,approvalScope,latestSnapshot(projectSnapshots)).valid){setError('批准范围已经变化，请重新提交快照');return;}
     if (action === 'approve' && (signature(current.rows || []) !== signature(requirements) || getExportIssues(requirements, reviews).length || documentIssues.length)) { setError('当前工作数据已变化或检查未通过，请退回原快照并提交新快照'); return; }
     const label = action === 'approve' ? '批准定稿' : '退回快照';
     const patch = { ...current, status: action === 'approve' ? '已批准' : '已退回', reviewedAt: new Date().toISOString(), reviewedBy: actorRole,reviewedById:actorId, reviewReason: reason.trim() || '快照内容、必要条件和附件分标检查通过', history: [...(current.history || []), { id: uid('EVENT'), action: label, actor: actorRole, time: now(), reason: reason.trim() || '批准定稿' }] };

@@ -1,5 +1,5 @@
 import {selectMyTasks} from './taskDomain.js';
-import {checkSnapshotValidity,currentProjectScope} from './snapshotDomain.js';
+import {checkSnapshotValidity,currentProjectScope,latestSnapshot} from './snapshotDomain.js';
 export function selectProjects(state,{actorId,tab='all',query=''}={}) {
  return (state.projects||[]).filter(p=>(p.ownerId===actorId||p.createdById===actorId||p.participantIds?.includes(actorId))&&(tab!=='initiated'||p.createdById===actorId)&&(tab!=='participated'||p.participantIds?.includes(actorId))&&`${p.name} ${p.id} ${p.customer}`.toLowerCase().includes(query.toLowerCase()));
 }
@@ -9,6 +9,11 @@ export function getProjectSummary(state,projectId,actorId) {
   const pending=selectMyTasks(state,{actorId,projectId,tab:'pending'}).length;
   const current=s=>checkSnapshotValidity(s,currentProjectScope(state,projectId,s)).valid;
   const finished=rows.length>0&&rows.every(r=>r.status==='已确认'&&!r.needsReview&&!r.sourceRevision&&!r.sourceCorrected)&&!open.length;
-  const stage=snapshots.some(s=>s.status==='审批中'&&current(s))?'最终审批中':finished&&snapshots.some(s=>s.status==='已批准'&&s.exportedAt&&current(s))?'本轮已完成':rows.length?'应答编制中':'待上传';
+  const files=state.documentsByProject?.[projectId]||[];
+  const sources=files.filter(f=>f.purpose==='要求来源'&&!files.some(newer=>newer.previousVersionId===f.id));
+  const parsing=sources.some(f=>['排队中','处理中','失败'].includes(f.status));
+  const snapshot=latestSnapshot(snapshots);
+  const approved=finished&&!parsing&&snapshot?.status==='已批准'&&current(snapshot);
+  const stage=parsing?'解析中':approved?(snapshot.exportedAt?'已导出':'审批完成'):rows.length?'评审中':sources.length?'解析中':'待上传';
   return {stage,pending,total:rows.length,confirmed:rows.filter(r=>r.status==='已确认'&&!r.needsReview).length,reviews:open.filter(r=>r.kind!=='clarification').length,clarifications:open.filter(r=>r.kind==='clarification').length,rechecks:rows.filter(r=>r.needsReview||r.status==='待复核'||r.sourceRevision||r.sourceCorrected).length};
 }

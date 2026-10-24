@@ -1,11 +1,14 @@
+import {normalizeTaskStatus} from './taskStatus.js';
 export const actorIdForRole = role => role === '销售负责人' ? 'demo-sales' : /最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo) {
   const state = structuredClone(previous?.projects?.length ? previous : demo);
-  state.schemaVersion = 2;
+  state.schemaVersion = 3;
   state.actorRole ||= '销售负责人';
   state.actorId ||= actorIdForRole(state.actorRole);
   state.tasksById ||= {};
+  for(const task of Object.values(state.tasksById))task.status=normalizeTaskStatus(task.status);
+  state.documentsByProject ||= {};
   state.analysisRuns ||= [];
   state.commentsByProject ||= {};
   state.navigationContext ||= {};

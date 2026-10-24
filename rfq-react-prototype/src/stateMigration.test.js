@@ -24,9 +24,18 @@ test('upgrade is idempotent and retains missing-map projects rather than replaci
   assert.equal(upgraded.projects[0].id, 'P-custom');
   assert.deepEqual(upgraded.requirementsByProject['P-custom'], []);
   assert.equal(getActor(upgraded).id, 'demo-technical');
-  assert.equal(upgraded.schemaVersion, 2);
+  assert.equal(upgraded.schemaVersion, 3);
 });
 test('migration keeps stable actor identity independent of displayed role',()=>{const upgraded=upgradePrototypeState({projects:[{id:'P'}],actorId:'person-7',actorRole:'最终审批人'},{members:[]});assert.equal(upgraded.actorId,'person-7');});
+test('legacy task states migrate without changing ownership deadlines or history',()=>{
+ const history=[{action:'transfer',to:'demo-technical',reason:'移交'}];
+ const old={projects:[{id:'P'}],tasksById:{T1:{id:'T1',status:'待办理',assigneeId:'demo-sales',dueAt:'2026-11-01'},T2:{id:'T2',status:'办理中',assigneeId:'demo-technical',history},T3:{id:'T3',status:'已办理',completedAt:'2026-10-23',result:'退回'}}};
+ const next=upgradePrototypeState(old,{members:[]});
+ assert.deepEqual(Object.values(next.tasksById).map(t=>t.status),['待处理','处理中','已处理']);
+ assert.equal(next.tasksById.T1.dueAt,'2026-11-01');assert.equal(next.tasksById.T2.assigneeId,'demo-technical');assert.deepEqual(next.tasksById.T2.history,history);
+ assert.equal(next.tasksById.T3.result,'退回');assert.equal(next.tasksById.T3.completedAt,'2026-10-23');
+ assert.deepEqual(upgradePrototypeState(next,{members:[]}),next);assert.equal(old.tasksById.T2.status,'办理中');
+});
 test('legacy duplicate review ids migrate without merging matters or reusing ambiguous tasks',()=>{
  const old={projects:[{id:'P'}],reviewsByProject:{P:[{id:'D',requirementId:'R1',status:'待处理',plan:'方案一'},{id:'D',requirementId:'R2',status:'待处理',plan:'方案二'}]},commentsByProject:{P:[{id:'C',anchor:{requirementId:'R2'},linkedIssues:{review:'D'}}]},snapshotsByProject:{P:[{id:'S',status:'已批准'}]}};
  const before=reconcileTasks(old),next=reconcileTasks(upgradePrototypeState(before,{members:[]}));
@@ -34,7 +43,7 @@ test('legacy duplicate review ids migrate without merging matters or reusing amb
  assert.deepEqual(rows.map(r=>r.plan),['方案一','方案二']);
  assert.equal(next.commentsByProject.P[0].linkedIssues.review,rows[1].id);
  assert.ok(Object.values(next.tasksById).some(t=>t.objectId==='D'&&t.status==='已失效'));
- assert.equal(Object.values(next.tasksById).filter(t=>t.objectType==='review'&&t.status==='待办理').length,2);
+ assert.equal(Object.values(next.tasksById).filter(t=>t.objectType==='review'&&t.status==='待处理').length,2);
  assert.deepEqual(upgradePrototypeState(next,{members:[]}),next);
  assert.deepEqual(next.snapshotsByProject.P,old.snapshotsByProject.P);
 });
