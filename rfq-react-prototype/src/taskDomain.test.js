@@ -11,7 +11,7 @@ test('saving does not complete tasks and wrong actor or stale version cannot com
  assert.equal(applyTaskAction(task,{type:'confirm',actorId:'demo-technical',objectVersion:2,at}).status,'已办理');
 });
 test('transfer keeps arrival and deadline and does not count as completion',()=>{
- assert.throws(()=>applyTaskAction(task,{type:'transfer',actorId:'demo-technical',objectVersion:2,to:'demo-sales',reason:'接续核对',at}),/办理资格/);
+ assert.throws(()=>applyTaskAction(task,{type:'transfer',actorId:'demo-technical',objectVersion:2,to:'demo-sales',reason:'接续核对',at}),/处理资格/);
  const next=applyTaskAction({...task,assigneeId:'demo-sales'},{type:'transfer',actorId:'demo-sales',objectVersion:2,to:'demo-technical',reason:'改回具备确认资格的人员',at});
  assert.equal(next.assigneeId,'demo-technical');assert.equal(next.status,'待办理');
  assert.equal(next.arrivedAt,task.arrivedAt);assert.equal(next.dueAt,task.dueAt);assert.equal(next.completedAt,undefined);
@@ -27,8 +27,8 @@ test('business mutations check assignment, qualification and stale task context 
  assert.throws(()=>assertBusinessAction({...s,actorId:'demo-sales',actorRole:'销售负责人'},{projectId:'P',objectType:'requirement',objectId:'R',action:'confirm'}),/资格|职责/);
  s.tasksById[t.id]={...t,status:'已失效'};
  const route={taskId:t.id,projectId:'P'};
- assert.match(getTaskContextError(s,route),/失效|办结/);
- assert.throws(()=>assertBusinessAction(s,{projectId:'P',objectType:'requirement',objectId:'R',action:'save',route}),/失效|办结/);
+ assert.match(getTaskContextError(s,route),/失效|完成/);
+ assert.throws(()=>assertBusinessAction(s,{projectId:'P',objectType:'requirement',objectId:'R',action:'save',route}),/失效|完成/);
  assert.throws(()=>assertBusinessAction(s,{projectId:'P',objectType:'requirement',objectId:'R',action:'save',expectedVersion:1}),/版本/);
  assert.match(getTaskContextError({...s,tasksById:{[t.id]:t}},{...route,action:'view'}),/查看/);
 });
