@@ -1,0 +1,14 @@
+services:
+  rfq-service:
+    image: rfq-service:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-prod}"
+      SERVER_PORT: "48081"
+      JAVA_TOOL_OPTIONS: "${JAVA_TOOL_OPTIONS:-}"
+    ports:
+      - "127.0.0.1:${RFQ_HOST_PORT:-48081}:48081"
+    restart: unless-stopped
+    stop_grace_period: 35s
