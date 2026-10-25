@@ -1,5 +1,7 @@
 # RFQ V0.3 交互原型改造实施计划
 
+> 历史计划：本文保留实施当时的状态名称。当前项目五态、任务三态及退回规则以 [2026-10-24 状态调整设计](../specs/2026-10-24-rfq-status-workflow-design.md) 为准，勿按下文旧状态重新实现。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 基于现有 React 原型落地 V0.3 的五入口、项目处理页和任务闭环，保留已有数据及确认、评审、快照规则。

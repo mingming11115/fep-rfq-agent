@@ -29,15 +29,19 @@ export function correctParsedRequirement(row, patch, reason) {
   };
 }
 
-export function requirementValidation(row) {
+export function confirmationValidation(row) {
   const issues = [];
   if (row.removedFromSource && row.conclusion !== '不适用') issues.push('客户新版已删除此条款，请确认不适用范围处置');
   if (!hasText(row.original)) issues.push('请填写客户要求原文');
-  if (!hasText(row.draft)) issues.push('请填写对外答复');
-  if (!hasText(row.owner)) issues.push('请分派确认责任人');
   if (!FINAL_CONCLUSIONS.has(row.conclusion)) issues.push('请选择明确的最终结论，待确认不能作为最终处置');
+  if (row.conclusion === '不适用' && !hasText(row.reason)) issues.push('选择不适用时，请在备注中说明范围依据');
+  return issues;
+}
+
+export function requirementValidation(row) {
+  const issues = confirmationValidation(row);
+  if (!hasText(row.draft)) issues.push('请填写对外答复');
   if (row.conclusion === '有条件 Comply' && !hasText(row.conditions)) issues.push('有条件 Comply 必须填写适用条件');
-  if (row.conclusion === '不适用' && !hasText(row.reason)) issues.push('不适用必须填写范围依据');
   if (['Comply', '有条件 Comply'].includes(row.conclusion) && !hasText(row.evidence)) issues.push('满足类结论必须关联有效证据');
   return issues;
 }
@@ -55,9 +59,9 @@ export function applyRequirementEdit(row, patch) {
 }
 
 export function confirmRequirement(row) {
-  const issues = requirementValidation(row);
+  const issues = confirmationValidation(row);
   if (issues.length) throw new Error(issues.join('；'));
-  return { ...row, status: '已确认', needsReview:false,sourceRevision:false,sourceCorrected:false,confirmedAt: new Date().toISOString() };
+  return { ...row, status: '已确认', needsReview:false,sourceRevision:false,sourceCorrected:false,confirmationReason:undefined,confirmedAt: new Date().toISOString() };
 }
 
 export function getExportIssues(requirements = [], reviews = []) {

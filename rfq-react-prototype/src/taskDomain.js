@@ -1,14 +1,15 @@
 import {actorIdForRole} from './stateMigration.js';
 import {normalizeTaskStatus} from './taskStatus.js';
 import {latestSnapshot} from './snapshotDomain.js';
-export const taskLabels={draft:'应答起草',confirm:'条款确认',recheck:'条款复核','review-process':'专业处理','review-approve':'专业批准',clarify:'客户澄清跟进','response-revise':'应答修改','final-approve':'最终审批'};
+import {assertPermission} from './permissions.js';
+export const taskLabels={draft:'应答起草',confirm:'条款确认',recheck:'条款重新确认','review-process':'专业处理','review-approve':'专业批准',clarify:'客户澄清跟进','response-revise':'应答修改','final-approve':'最终审批'};
 export const isTaskPending=task=>['待处理','处理中'].includes(normalizeTaskStatus(task.status));
 export function isTaskOverdue(task,now=new Date()){
   const dueAt=/^\d{4}-\d{2}-\d{2}$/.test(task.dueAt)?`${task.dueAt}T23:59:59.999+08:00`:task.dueAt;
   return isTaskPending(task)&&!!dueAt&&new Date(dueAt)<now;
 }
 export function isQualifiedTaskActor(task,actorId) {
-  const qualified={draft:['demo-sales'],confirm:['demo-technical'],recheck:['demo-technical'],'review-process':[task.requiredActorId||'demo-technical'],'review-approve':['demo-approver'],clarify:['demo-sales'],'response-revise':[task.requiredActorId||'demo-sales'],'final-approve':['demo-approver']};
+  const qualified={draft:['demo-sales'],confirm:['demo-technical'],recheck:['demo-technical'],'review-process':['demo-technical'],'review-approve':['demo-approver'],clarify:['demo-sales'],'response-revise':[task.requiredActorId||'demo-sales'],'final-approve':['demo-approver']};
   return !!qualified[task.kind]?.includes(actorId);
 }
 function taskObject(state,task) {
@@ -34,9 +35,18 @@ export function assertBusinessAction(state,{projectId,objectType,objectId,action
   if(!object)throw new Error('业务对象已不存在，请刷新后查看');
   if(objectType==='snapshot'&&['approve','reject'].includes(action)&&latestSnapshot(state.snapshotsByProject?.[projectId])?.id!==objectId)throw new Error('审批轮次已变化，请处理最新快照');
   if(expectedVersion!==undefined&&(object.version||1)!==expectedVersion||expectedRound!==undefined&&(object.round||1)!==expectedRound)throw new Error('对象版本或处理轮次已变化，请重新打开');
-  const role=state.actorRole;
-  const eligible=['approve','reject'].includes(action)?role==='最终审批人':['confirm','adopt'].includes(action)?role==='技术确认人':action==='submit-requirement'?role==='销售负责人':role==='销售负责人'||role==='技术确认人';
-  if(!eligible)throw new Error('当前身份不具备该操作的处理职责');
+  const permission = objectType === 'snapshot' ? 'snapshot:approve'
+    : ['approve','reject'].includes(action) ? 'review:approve'
+    : action === 'communicate' && objectType === 'review' ? 'review:communicate'
+    : action === 'reopen' ? 'response:edit'
+    : ['confirm','adopt'].includes(action) ? 'response:confirm'
+    : action === 'submit-requirement' ? 'response:submit'
+    : objectType === 'review' ? object.kind === 'clarification' ? 'review:clarify' : 'review:process'
+    : 'response:edit';
+  assertPermission(state.actorRole,permission);
+  // Sales communication is independent of the technical proposal task. It may
+  // only change communication fields; the App mutation boundary enforces that.
+  if(action==='communicate'&&objectType==='review')return true;
   const tasks=Object.values(state.tasksById||{}).filter(t=>t.projectId===projectId&&t.objectType===objectType&&t.objectId===objectId&&isTaskPending(t));
   if(tasks.length&&!tasks.some(t=>t.assigneeId===state.actorId))throw new Error('当前身份不是该业务节点的处理人，请由当前处理人处理');
   if(tasks.length&&!tasks.some(t=>t.assigneeId===state.actorId&&isQualifiedTaskActor(t,state.actorId)))throw new Error('当前身份不具备该节点的处理资格');
@@ -84,7 +94,10 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
       if(['已关闭','已取消'].includes(review.status))continue;
       const approval=['待审批','待批准'].includes(review.status);
       const kind=review.kind==='clarification'?'clarify':approval?'review-approve':'review-process';
-      ensure(project,review,'review',kind,approval?'demo-approver':kind==='clarify'?'demo-sales':actorIdForRole(review.owner),{requirementId:review.requirementId,reviewId:review.id});
+      const assignee=approval?'demo-approver':kind==='clarify'?'demo-sales':'demo-technical';
+      ensure(project,review,'review',kind,assignee,{requirementId:review.requirementId,reviewId:review.id});
+      const current=Object.values(tasks).find(t=>t.projectId===project.id&&t.objectId===review.id&&t.objectType==='review'&&t.kind===kind&&t.objectVersion===(review.version||1)&&t.round===(review.round||1));
+      if(current&&isTaskPending(current)&&!isQualifiedTaskActor(current,current.assigneeId))tasks[current.id]={...current,assigneeId:assignee,requiredActorId:assignee};
     }
     const snapshots=state.snapshotsByProject?.[project.id]||[],latest=latestSnapshot(snapshots);
     for(const snapshot of snapshots){

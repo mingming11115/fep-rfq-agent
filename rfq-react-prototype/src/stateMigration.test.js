@@ -3,6 +3,37 @@ import assert from 'node:assert/strict';
 import { createDemoState } from './data.js';
 import { upgradePrototypeState, getActor } from './stateMigration.js';
 import {reconcileTasks} from './taskDomain.js';
+import {makeDocumentDemo} from './documentMocks.js';
+import {requirementValidation} from './domain.js';
+
+test('Word status examples seed once with a real review task and preserve subsequent edits', () => {
+  const demo = createDemoState();
+  const initial = upgradePrototypeState(demo, demo);
+  const pid = 'RFQ-001';
+  const rows = initial.requirementsByProject[pid].filter(row => row.sourceFileId === `${pid}-DEMO-FILE-CLAUSE-STATUSES`);
+  assert.deepEqual(rows.map(row => row.status), ['待确认', '评审中', '已确认']);
+  assert.deepEqual(requirementValidation(rows[2]), []);
+  assert.ok(rows[2].confirmedAt);
+  const reconciled = reconcileTasks(initial);
+  assert.ok(Object.values(reconciled.tasksById).some(task => task.requirementId === rows[1].id && task.kind === 'review-process' && task.assigneeId === 'demo-technical'));
+  rows[2].draft = '用户修改后的答复';
+  rows[2].status = '待确认';
+  assert.deepEqual(upgradePrototypeState(initial, demo), initial);
+});
+
+test('seeding old Word examples preserves user work, historical snapshots and unrelated projects', () => {
+  const demo = createDemoState();
+  const old = structuredClone(demo);
+  const rows = makeDocumentDemo('RFQ-001').parsed.slice(0, 3);
+  rows[0].draft = '已有人工答复';
+  old.requirementsByProject['RFQ-001'].push(...rows);
+  old.snapshotsByProject['RFQ-001'] = [{ id: 'frozen', status: '已批准', rows: structuredClone(rows) }];
+  const next = upgradePrototypeState(old, demo);
+  assert.deepEqual(next.requirementsByProject['RFQ-001'].find(row => row.id === rows[0].id), rows[0]);
+  assert.deepEqual(next.requirementsByProject['RFQ-001'].filter(row => rows.some(original => original.id === row.id)), rows);
+  assert.deepEqual(next.snapshotsByProject['RFQ-001'], old.snapshotsByProject['RFQ-001']);
+  assert.deepEqual(next.requirementsByProject['RFQ-002'], old.requirementsByProject['RFQ-002']);
+});
 
 test('upgrade preserves edited replies, snapshots and independent storage references', () => {
   const old = createDemoState();

@@ -40,6 +40,7 @@ export function makeDocumentDemo(projectId, requirements = makeRequirements(proj
   const customerFiles = [
     file('CUSTOMER-A', '客户一_RFQ_Safety_Facility.docx', '要求来源', 'V1.0', '完成', '2026/10/22 09:00:00'),
     file('CUSTOMER-B', '客户二_RFQ_模块组合.doc', '要求来源', 'V1.0', '完成', '2026/10/22 09:10:00'),
+    ...(projectId === 'RFQ-001' ? [file('CLAUSE-STATUSES', '条款状态示例.docx', '要求来源', 'V1.0', '完成', '2026/10/24 09:00:00')] : []),
   ];
   const examples = [
     ['CUSTOMER-A', 'S1', ['Safety', 'Interlock'], '门禁联锁', '防护门打开时停止危险运动，复位后方可恢复。', 2],
@@ -48,6 +49,11 @@ export function makeDocumentDemo(projectId, requirements = makeRequirements(proj
     ['CUSTOMER-B', '1.1', ['反应模块', '温度控制'], '反应温控', '反应模块温度控制精度应达到 ±1 ℃，以双方确认的测试工况为准。', 3],
     ['CUSTOMER-B', '1.1', ['中转模块'], '中转联锁', '中转模块须与反应模块联锁，异常时暂停物料转移。', 7],
     ['CUSTOMER-B', '', ['中转模块'], '转移记录', '记录每次物料转移的开始时间、结束时间及异常信息。', 8],
+    ...(projectId === 'RFQ-001' ? [
+      ['CLAUSE-STATUSES', 'S1', ['Safety'], '门禁联锁', '防护门打开时停止危险运动，复位后方可恢复。', 1],
+      ['CLAUSE-STATUSES', 'F1', ['Facility'], '公用设施接口', '提供设备电力、冷却水和排风接口要求，注明额定值及允许范围。', 1],
+      ['CLAUSE-STATUSES', 'F2', ['Facility'], '安装条件', '安装位置应预留设备维护空间，具体尺寸见布局附件。', 1],
+    ] : []),
   ];
   const customerRows = examples.map(([key, clause, sectionPath, title, original, sourcePage], i) => {
     const sourceFile = customerFiles.find(f => f.id === id(key));

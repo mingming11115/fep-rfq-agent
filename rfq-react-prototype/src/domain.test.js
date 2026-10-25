@@ -64,25 +64,58 @@ test('extraction corrections reject incomplete fields and unchanged saves do not
   assert.equal(call('correctParsedRequirement', original, { title: original.title }, ''), original);
 });
 
-test('a conditional reply cannot be confirmed until its conditions are explicit', () => {
+test('a conditional reply still needs explicit conditions before formal export', () => {
   const row = validRow({ conclusion: '有条件 Comply', conditions: '  ' });
-  assert.throws(() => call('confirmRequirement', row), /适用条件/);
+  assert.ok(call('getExportIssues', [{ ...row, status: '已确认' }], []).some(issue => /适用条件/.test(issue.message)));
   const confirmed = call('confirmRequirement', { ...row, conditions: '选配 X 已确认，按约定材料测试。' });
   assert.equal(confirmed.status, '已确认');
   assert.ok(Number.isFinite(Date.parse(confirmed.confirmedAt)));
   assert.equal(row.status, '待确认');
 });
 
-test('an unresolved conclusion, missing reply, missing owner, or missing compliance evidence blocks confirmation', () => {
+test('an unresolved conclusion or missing source blocks confirmation', () => {
   for (const [patch, message] of [
     [{ original: '  ' }, /客户要求原文/],
     [{ conclusion: '待确认' }, /最终结论/],
-    [{ draft: '  ' }, /对外答复/],
-    [{ owner: '' }, /责任人/],
-    [{ evidence: '' }, /证据/],
   ]) {
     assert.throws(() => call('confirmRequirement', validRow(patch)), message);
   }
+});
+
+test('confirmation and export do not require the removed owner field', () => {
+  for (const owner of [undefined, '', '  ']) {
+    const row = validRow({ owner });
+    const confirmed = call('confirmRequirement', row);
+    assert.equal(confirmed.status, '已确认');
+    assert.equal(row.status, '待确认');
+    assert.deepEqual(call('getExportIssues', [confirmed], []), []);
+  }
+});
+
+test('clause confirmation does not require removed response fields and preserves existing content', () => {
+  for (const conclusion of ['Comply', '有条件 Comply', '不满足']) {
+    const row = validRow({ conclusion, draft: '', conditions: '', evidence: '' });
+    const confirmed = call('confirmRequirement', row);
+    assert.equal(confirmed.status, '已确认');
+    assert.ok(Number.isFinite(Date.parse(confirmed.confirmedAt)));
+    assert.equal(row.status, '待确认');
+    assert.equal(confirmed.draft, '');
+    assert.equal(confirmed.conditions, '');
+    assert.equal(confirmed.evidence, '');
+  }
+  const row = validRow({ conditions: '选配 X', evidence: '安全方案 V2' });
+  const confirmed = call('confirmRequirement', row);
+  assert.equal(confirmed.draft, row.draft);
+  assert.equal(confirmed.conditions, '选配 X');
+  assert.equal(confirmed.evidence, '安全方案 V2');
+});
+
+test('formal export still checks response completeness after clause confirmation', () => {
+  const confirmed = call('confirmRequirement', validRow({ conclusion: '有条件 Comply', draft: '', conditions: '', evidence: '' }));
+  const issues = call('getExportIssues', [confirmed], []);
+  assert.ok(issues.some(issue => /对外答复/.test(issue.message)));
+  assert.ok(issues.some(issue => /适用条件/.test(issue.message)));
+  assert.ok(issues.some(issue => /证据/.test(issue.message)));
 });
 
 test('not-applicable replies require a scope reason while non-compliance need not invent evidence', () => {

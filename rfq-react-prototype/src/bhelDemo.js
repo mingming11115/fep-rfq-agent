@@ -1,7 +1,7 @@
 // Customer requirements transcribed from the public BHEL RFQ. Supplier answers and matches are fictional demo scenarios.
 export const BHEL_ID = 'RFQ-BHEL-2018';
 export const BHEL_SOURCE = { name: 'BHEL_IKCCAP0034_RFQ.pdf', url: 'https://www.bhel.com/sites/default/files/rfq-ikccap0034-laser-cutting_merged-1515663096.pdf', localUrl: '/BHEL_IKCCAP0034_RFQ.pdf', pages: 43, issuedAt: '2018-01-10', deadline: '2018-01-31' };
-export const BHEL_PROJECT = { id: BHEL_ID, name: 'BHEL · 硅晶圆激光切割设备', customer: 'BHEL Electronics Division · Bangalore', equipment: 'DEMO-YAG 150 · 演示候选机型 · 配置待核实', owner: '林晓', deadline: '2018-01-31', stage: 'RFQ细则比对', sourceUrl: BHEL_SOURCE.url, historicalDemo: true, version: 1 };
+export const BHEL_PROJECT = { id: BHEL_ID, name: 'BHEL · 硅晶圆激光切割设备', customer: 'BHEL Electronics Division · Bangalore', equipment: 'DEMO-YAG 150 · 演示候选机型 · 配置待核实', owner: '林晓', deadline: '2018-01-31', sourceUrl: BHEL_SOURCE.url, historicalDemo: true, version: 1 };
 const extracts = [
   [
     "RFQ",

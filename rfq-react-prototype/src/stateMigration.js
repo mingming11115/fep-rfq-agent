@@ -1,4 +1,5 @@
 import {normalizeTaskStatus} from './taskStatus.js';
+import {makeDocumentDemo} from './documentMocks.js';
 export const actorIdForRole = role => role === '销售负责人' ? 'demo-sales' : /最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo) {
@@ -20,8 +21,18 @@ export function upgradePrototypeState(previous, demo) {
     for (const project of state.projects) state[key][project.id] ||= [];
   }
   for (const project of state.projects) {
+    // Project stages are derived by getProjectSummary, never restored from a cached label.
+    delete project.stage;
     state.commentsByProject[project.id] ||= [];
     const reviews=state.reviewsByProject[project.id],counts=new Map();
+    for (const row of state.requirementsByProject[project.id]) {
+      if (row.status !== '待复核') continue;
+      row.status = reviews.some(review => review.requirementId === row.id && !['已关闭', '已取消'].includes(review.status)) ? '评审中' : '待确认';
+      row.needsReview = true;
+      row.confirmationReason ||= '评审结果或来源内容已变化，请重新确认应答。';
+      delete row.confirmedAt;
+      delete row.confirmedBy;
+    }
     for(const review of reviews)counts.set(review.id,(counts.get(review.id)||0)+1);
     const used=new Set(reviews.filter(r=>counts.get(r.id)===1).map(r=>r.id));
     reviews.forEach((review,index)=>{
@@ -39,6 +50,34 @@ export function upgradePrototypeState(previous, demo) {
     project.createdById ||= 'demo-sales';
     project.ownerId ||= 'demo-sales';
     project.participantIds ||= ['demo-sales', 'demo-technical', 'demo-approver'];
+    seedClauseStatusExamples(state, project);
   }
   return state;
+}
+
+function seedClauseStatusExamples(state, project) {
+  // Curated workflow examples are separate from parsing, which always imports unconfirmed rows.
+  if (project.id !== 'RFQ-001' || project.customer !== '华东新能源客户（模拟）' || project.clauseStatusExamplesVersion === 2) return;
+  const rows = state.requirementsByProject[project.id], reviews = state.reviewsByProject[project.id];
+  const examples = makeDocumentDemo(project.id).parsed.filter(row => row.sourceFileId === `${project.id}-DEMO-FILE-CLAUSE-STATUSES`);
+  const answers = [
+    { status: '待确认', conclusion: 'Comply', draft: '配置门禁联锁；防护门打开时停止危险运动，复位确认后方可恢复。', evidence: '模拟安全方案 SAF-001 V1，第 2 页', readyForConfirmation: true },
+    { status: '评审中', conclusion: '有条件 Comply', draft: '按最终配置提供电力、冷却水与排风接口表，额定值及允许范围待双方核对。', conditions: '客户现场公用设施参数与最终接口表一致后实施。', evidence: '模拟接口表 FAC-001 V1（评审稿）' },
+    { status: '已确认', conclusion: 'Comply', draft: '按双方确认的布局附件预留设备维护空间，并在安装前核对现场尺寸。', evidence: '模拟布局附件 LAYOUT-001 V1，第 5 页', confirmedAt: '2026-10-24T01:00:00.000Z', confirmedBy: '技术确认人' },
+  ];
+  examples.forEach((example, index) => {
+    const current = rows.find(row => row.id === example.id);
+    if (current) return;
+    const seeded = { ...example, category: '技术', ...answers[index], demoStatusExample: true };
+    rows.push(seeded);
+    if (seeded.status === '评审中') reviews.push({
+      id: `${project.id}-DEMO-REVIEW-CLAUSE-STATUS`, requirementId: seeded.id, kind: 'review', title: '公用设施接口参数核对', type: '条件差异', source: '示例流程',
+      status: '处理中', owner: '技术确认人', deadline: project.deadline, version: 1, round: 1, requirementVersion: seeded.version,
+      description: '客户现场电力、冷却水和排风参数尚待核对，需要明确额定值及允许范围。',
+      plan: '核对客户现场参数，完善接口表后提交独立专业批准。', evidence: seeded.evidence,
+      proposedDraft: seeded.draft, proposedConclusion: seeded.conclusion, conditions: seeded.conditions,
+      history: [{ time: '2026/10/24 09:00:00', actor: '销售负责人', action: '建立示例评审并分派技术确认人' }],
+    });
+  });
+  project.clauseStatusExamplesVersion = 2;
 }

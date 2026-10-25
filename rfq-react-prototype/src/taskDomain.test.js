@@ -136,3 +136,32 @@ test('overdue is a reminder for open tasks after the Shanghai deadline day',()=>
  assert.equal(taskDomain.isTaskOverdue({...task,dueAt:''},new Date('2026-10-25T00:00:00Z')),false);
  assert.equal(taskDomain.isTaskOverdue({...task,dueAt:'2026-10-24T10:00:00Z'},new Date('2026-10-24T11:00:00Z')),true);
 });
+
+test('technical and approval roles cannot write customer clarification even outside task routes',()=>{
+ const s={...state(),reviewsByProject:{P:[{id:'C',kind:'clarification',version:1,status:'待处理'}]}};
+ for(const [actorRole,actorId] of [['技术确认人','demo-technical'],['最终审批人','demo-approver']]) {
+  assert.throws(()=>assertBusinessAction({...s,actorRole,actorId},{projectId:'P',objectType:'review',objectId:'C',action:'save'}),/权限|职责/);
+ }
+ assert.doesNotThrow(()=>assertBusinessAction({...s,actorRole:'销售负责人',actorId:'demo-sales'},{projectId:'P',objectType:'review',objectId:'C',action:'save'}));
+});
+
+test('sales cannot process a professional proposal even if a legacy owner field names sales',()=>{
+ const s={...state(),actorRole:'销售负责人',actorId:'demo-sales',reviewsByProject:{P:[{id:'D',owner:'销售负责人',version:1,status:'待处理'}]}};
+ assert.throws(()=>assertBusinessAction(s,{projectId:'P',objectType:'review',objectId:'D',action:'save'}),/权限|职责/);
+ const next=reconcileTasks(s,{at});
+ assert.equal(selectMyTasks(next,{actorId:'demo-technical'}).find(t=>t.objectId==='D')?.kind,'review-process');
+});
+
+test('sales may request a new professional review round without editing the professional proposal',()=>{
+ const s={...state(),actorRole:'销售负责人',actorId:'demo-sales',reviewsByProject:{P:[{id:'D',version:1,status:'已关闭'}]}};
+ assert.doesNotThrow(()=>assertBusinessAction(s,{projectId:'P',objectType:'review',objectId:'D',action:'reopen'}));
+ assert.throws(()=>assertBusinessAction(s,{projectId:'P',objectType:'review',objectId:'D',action:'save'}),/权限|职责/);
+});
+
+test('sales can record communication on a technical review without taking over its proposal task',()=>{
+ const s=reconcileTasks({...state(),actorRole:'销售负责人',actorId:'demo-sales',reviewsByProject:{P:[{id:'D',requirementId:'R',version:1,status:'待处理',owner:'技术确认人'}]}},{at});
+ assert.doesNotThrow(()=>assertBusinessAction(s,{projectId:'P',objectType:'review',objectId:'D',action:'communicate'}));
+ assert.throws(()=>assertBusinessAction(s,{projectId:'P',objectType:'review',objectId:'D',action:'save'}),/权限|职责|处理人/);
+ assert.throws(()=>assertBusinessAction({...s,actorRole:'技术确认人',actorId:'demo-technical'},{projectId:'P',objectType:'review',objectId:'D',action:'communicate'}),/权限|职责/);
+ assert.equal(selectMyTasks(s,{actorId:'demo-technical'})[0]?.kind,'review-process');
+});
