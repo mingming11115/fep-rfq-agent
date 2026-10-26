@@ -209,7 +209,7 @@ test('CSV preserves ordinary leading whitespace and line breaks', () => {
 test('demo projects have independent working rows and do not imply standard hits are confirmed', () => {
   assert.equal(typeof data.createDemoState, 'function', 'Demo state factory is required');
   const state = data.createDemoState();
-  assert.equal(state.projects.length, 4);
+  assert.equal(state.projects.length, 5);
   const rows = state.requirementsByProject['RFQ-001'];
   assert.equal(rows.length, 12);
   assert.ok(rows.some((row) => row.matchLevel === 'standard' && row.score > 80 && row.draft && row.status === '待确认'));

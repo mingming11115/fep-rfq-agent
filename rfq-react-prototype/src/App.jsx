@@ -32,7 +32,7 @@ const validPage=key=>parseWorkRoute('#/'+key).page;
 function withProjectMembers(s){return {...s,membersByProject:Object.fromEntries(s.projects.map(p=>[p.id,structuredClone(s.membersByProject?.[p.id]??s.members??[])]))};}
 function withProjectDocuments(state){
  const documentsByProject={...state.documentsByProject};
- for(const project of state.projects){try{const saved=JSON.parse(localStorage.getItem(`fep-rfq-documents:${project.id}`)||'null');if(Array.isArray(saved?.files))documentsByProject[project.id]=saved.files;}catch{}}
+ for(const project of state.projects){if(Array.isArray(documentsByProject[project.id]))continue;try{const saved=JSON.parse(localStorage.getItem(`fep-rfq-documents:${project.id}`)||'null');if(Array.isArray(saved?.files))documentsByProject[project.id]=saved.files;}catch{}}
  return {...state,documentsByProject};
 }
 function initial(){try{const s=JSON.parse(localStorage.getItem(STORAGE));if(s?.projects?.length)return reconcileTasks(invalidatePendingSnapshots(upgradePrototypeState(withProjectDocuments(withProjectMembers(s)),createDemoState())));}catch{}return reconcileTasks(upgradePrototypeState(withProjectMembers({...createDemoState(),activeProjectId:BHEL_ID}),createDemoState()));}
@@ -51,6 +51,18 @@ export default function App(){
  useEffect(()=>{document.title=`${DETAIL_PAGES.includes(page)?'RFQ 详情':shortLabels[page]||item?.label||'工作台'} · FEP RFQ`;window.scrollTo(0,0);},[page]);
  function toast(message,type='success'){const id=Date.now()+Math.random();setMessages(m=>[...m,{id,message,type}]);timers.current.push(setTimeout(()=>setMessages(m=>m.filter(t=>t.id!==id)),4500));}
  function allow(action){try{assertPermission(stateRef.current.actorRole,action);return true;}catch(error){toast(error.message,'error');return false;}}
+ function resetDemoData(){
+  if(!allow('project:manage'))return;
+  const demo=createDemoState(),ids=new Set([...stateRef.current.projects,...demo.projects].map(p=>p.id));
+  const related={};
+  try{
+   for(const id of ids)for(const key of [`fep-rfq-documents:${id}`,`fep-rfq-export-history:${id}`])related[key]=localStorage.getItem(key);
+   localStorage.setItem('fep-rfq-demo-before-reset',JSON.stringify({savedAt:new Date().toISOString(),state:stateRef.current,related}));
+  }catch{toast('本机演示数据备份失败，请释放浏览器存储后重试','error');return;}
+  for(const p of demo.projects){localStorage.removeItem(`fep-rfq-documents:${p.id}`);localStorage.removeItem(`fep-rfq-export-history:${p.id}`);sessionStorage.removeItem(`rfq.export.settings.${p.id}`);}
+  delete window.__rfqRequestNavigation;
+  update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，看板已恢复为五种状态各一条示例');
+ }
  function rawNavigate(key,details={}){const next={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...details};routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;setFocusedRequirementId(next.requirementId||null);history.pushState(null,'',buildWorkRoute(next));}
  function guarded(action){if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(action))return;action();}
  function navigate(key,requirementId,details={}){guarded(()=>{const current=routeRef.current;const context=PROJECT_PAGES.includes(key)&&current.projectId===stateRef.current.activeProjectId?{taskId:current.taskId,action:current.action,returnKey:current.returnKey}:{};rawNavigate(key,{...context,...(requirementId?{requirementId}:{}),...details});});}
@@ -120,7 +132,7 @@ export default function App(){
  <main className="main"><div className="breadcrumb"><span>工作空间</span><ChevronRight size={13}/><span>{DETAIL_PAGES.includes(page)?'RFQ 详情':shortLabels[page]||item?.label}</span></div><div className="page-content" key={`${state.actorRole}-${DETAIL_PAGES.includes(page)?'detail':page}-${project.id}`}>{body}</div><footer className="app-footer"><span>FEP RFQ · 让每一条应答都有依据</span>{canPerform(state.actorRole,'project:manage')&&<button className="text-link" onClick={()=>setReset(true)}><RotateCcw size={12}/>重置演示</button>}</footer></main>
  <div className="toast-stack" aria-live="polite">{messages.map(t=><div key={t.id} className={`toast ${t.type==='error'?'toast-error':''}`}>{t.type==='error'?<AlertCircle size={18}/>:<CheckCircle2 size={18}/>}<span>{t.message}</span><button className="icon-btn" aria-label="关闭提示" onClick={()=>setMessages(m=>m.filter(x=>x.id!==t.id))}><X size={14}/></button></div>)}</div>
  {help&&<Drawer title="从这里开始体验" onClose={()=>setHelp(false)}><div className="guide-intro"><span className="brand-mark">F</span><h2>一次完整的 RFQ 应答流程</h2><p>所有页面均可点击。默认案例使用真实BHEL RFQ，供应商应答与评审为演示设定。浏览器会保存你的操作进展。</p></div><div className="flow-steps">{[['projects','新建项目','填写基本信息，明确负责人和设备范围。'],['documents','解析客户 RFQ','上传文件元数据，或载入示例，解析后自动进入工作台。'],['response','RFQ细则比对','逐条完善应答，并在偏离处理页签完成方案与批准。'],['export','生成并导出','内部草稿随时下载；正式版需独立批准快照。']].map(([key,title,desc],i)=><button key={key} onClick={()=>{setHelp(false);navigate(key);}}><b>{i+1}</b><span><strong>{title}</strong><small>{desc}</small></span><ArrowRight size={17}/></button>)}</div><div className="inline-notice">顶部“演示身份”可切换销售、技术和最终审批人，体验各自的操作。此版本不连接实际 OCR、模型或企业后端。</div></Drawer>}
- {reset&&canPerform(state.actorRole,'project:manage')&&<Modal title="重置核心演示数据" onClose={()=>setReset(false)} footer={<><button className="btn" onClick={()=>setReset(false)}>取消</button><button className="btn btn-primary" onClick={()=>{if(!allow('project:manage'))return;delete window.__rfqRequestNavigation;update(()=>withProjectMembers({...createDemoState(),activeProjectId:BHEL_ID}));setReset(false);rawNavigate('projects');toast('项目、要求与审批记录已恢复为初始演示数据');}}>重置核心数据</button></>}><p>将恢复项目、应答和评审的示例状态。知识、机型和资料维护中的独立演示记录继续保留。</p></Modal>}
+ {reset&&canPerform(state.actorRole,'project:manage')&&<Modal title="重置核心演示数据" onClose={()=>setReset(false)} footer={<><button className="btn" onClick={()=>setReset(false)}>取消</button><button className="btn btn-primary" onClick={resetDemoData}>重置核心数据</button></>}><p>备份当前本机演示数据，并恢复为五种状态各一条示例。知识、机型和资料维护中的独立演示记录继续保留。</p></Modal>}
  {globalSearch&&<Modal title="搜索页面和项目" onClose={()=>setGlobalSearch(false)}><input autoFocus className="input" aria-label="搜索关键词" placeholder="输入页面名、项目名或项目编号" value={search} onChange={e=>setSearch(e.target.value)}/><div className="search-results">{NAV_ITEMS.filter(n=>canAccessPage(state.actorRole,n.key)&&n.label.includes(search)).map(n=><button key={n.key} onClick={()=>{setGlobalSearch(false);navigate(n.key);}}>{n.label}<ChevronRight size={15}/></button>)}{state.projects.filter(p=>`${p.name}${p.id}`.includes(search)).map(p=><button key={p.id} onClick={()=>{setGlobalSearch(false);selectProject(p.id,'response');}}>{p.id} · {p.name}<ChevronRight size={15}/></button>)}</div></Modal>}
  </div>;
 }

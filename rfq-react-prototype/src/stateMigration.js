@@ -4,6 +4,7 @@ export const actorIdForRole = role => role === '销售负责人' ? 'demo-sales' 
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo) {
   const state = structuredClone(previous?.projects?.length ? previous : demo);
+  seedProjectStageExamples(state, demo);
   state.schemaVersion = 3;
   state.actorRole ||= '销售负责人';
   state.actorId ||= actorIdForRole(state.actorRole);
@@ -53,6 +54,26 @@ export function upgradePrototypeState(previous, demo) {
     seedClauseStatusExamples(state, project);
   }
   return state;
+}
+
+function seedProjectStageExamples(state, demo) {
+  if (!demo.demoProjectStagesVersion || state.demoProjectStagesVersion === demo.demoProjectStagesVersion) return;
+  if (!state.projects.some(p => p.id === 'RFQ-001' && p.customer === '华东新能源客户（模拟）')) return;
+  const examples = demo.projects.filter(example => !state.projects.some(p => p.id === example.id && p.customer !== example.customer));
+  const ids = new Set(examples.map(p => p.id));
+  const maps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByProject', 'documentsByProject', 'exportScopesByProject', 'commentsByProject', 'membersByProject'];
+  state.demoProjectStagesBackup = { projects: state.projects.filter(p => ids.has(p.id)), tasksById: Object.fromEntries(Object.entries(state.tasksById || {}).filter(([, task]) => ids.has(task.projectId))) };
+  for (const key of maps) {
+    state.demoProjectStagesBackup[key] = Object.fromEntries(Object.entries(state[key] || {}).filter(([id]) => ids.has(id)));
+    state[key] ||= {};
+    for (const project of examples) {
+      delete state[key][project.id];
+      if (demo[key]?.[project.id] !== undefined) state[key][project.id] = structuredClone(demo[key][project.id]);
+    }
+  }
+  state.projects = [...structuredClone(examples), ...state.projects.filter(p => !ids.has(p.id))];
+  state.tasksById = Object.fromEntries(Object.entries(state.tasksById || {}).filter(([, task]) => !ids.has(task.projectId)));
+  state.demoProjectStagesVersion = demo.demoProjectStagesVersion;
 }
 
 function seedClauseStatusExamples(state, project) {

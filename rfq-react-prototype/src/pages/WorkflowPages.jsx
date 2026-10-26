@@ -37,10 +37,15 @@ function useUnsavedWarning(dirty) {
 const metadataStorage = (projectId) => `fep-rfq-documents:${projectId}`;
 function readDocumentState(projectId) { try { return JSON.parse(localStorage.getItem(metadataStorage(projectId)) || 'null'); } catch { return null; } }
 
-export function DocumentsPage({ actorRole, route, project, requirements = [], onImport, onCorrect, toast, navigate, focusedRequirementId, onAnalysisRun = () => {}, onFilesChange, logEvent = () => {} }) {
+export function DocumentsPage({ actorRole, route, project, requirements = [], appState, onImport, onCorrect, toast, navigate, focusedRequirementId, onAnalysisRun = () => {}, onFilesChange, logEvent = () => {} }) {
   const canManage=canPerform(actorRole,'source:manage');
-  const [files, setFiles] = useState(() => readDocumentState(project.id)?.files || (requirements.length ? makeDocumentDemo(project.id).files : []));
-  const [parsed, setParsed] = useState(() => readDocumentState(project.id)?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []));
+  const [files, setFiles] = useState(() => appState?.documentsByProject?.[project.id] ?? readDocumentState(project.id)?.files ?? (requirements.length ? makeDocumentDemo(project.id).files : []));
+  const [parsed, setParsed] = useState(() => {
+    const stored=readDocumentState(project.id),currentFiles=appState?.documentsByProject?.[project.id];
+    if(currentFiles===undefined)return stored?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []);
+    const currentParsed=(stored?.parsed||[]).filter(row=>currentFiles.some(file=>file.id===row.sourceFileId));
+    return [...currentParsed,...structuredClone(requirements.filter(row=>!currentParsed.some(parsedRow=>parsedRow.id===row.id)))];
+  });
   const [activeId, setActiveId] = useState(focusedRequirementId || null);
   const [uploadOpen, setUploadOpen] = useState(()=>shouldOpenSourceUpload(route,actorRole));
   const [wordCommentsOpen, setWordCommentsOpen] = useState(false);
@@ -116,7 +121,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], on
       if (fail) { finish('失败',{failedCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '失败', lastRunId:runId, error: '演示解析器仅支持 PDF、Word、Excel、CSV、TXT；请转换格式或手动补录。' } : f)); logEvent('解析失败', file.id, '不支持的文件格式'); return; }
       if (file.purpose !== '要求来源') { finish('完成',{successCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成' } : f)); return; }
       const previous = parsedRef.current.filter((row) => row.sourceFileId === file.id);
-      const rows = previous.length ? previous : makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourceOriginal: r.original, sourceVersion: file.version, sourcePage: index + 2, sourceFileId: file.id, sectionPath: [], confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果：未读取原文件，章节待识别', version: 1 }));
+      const rows = previous.length ? previous : project.id === BHEL_ID && file.realSource ? makeDocumentDemo(project.id).parsed : makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourceOriginal: r.original, sourceVersion: file.version, sourcePage: index + 2, sourceFileId: file.id, sectionPath: [], confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果：未读取原文件，章节待识别', version: 1 }));
       setParsed((old) => old.some((r) => r.sourceFileId === file.id) ? old : [...old, ...rows]);
       setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parsedCount: rows.length, lastRunId:runId, parsedAt: now(), error: '' } : f));
       finish('完成',{successCount:rows.length,needsHumanCount:rows.filter(r=>r.matchLevel==='none').length});
@@ -293,7 +298,7 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
   </div>;
 }
 
-export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, logEvent = () => {} }) {
+export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], appState, onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, logEvent = () => {} }) {
   const columns = [{ key: 'clause', label: '条款编号', required: true }, { key: 'original', label: '客户要求', required: true }, { key: 'conclusion', label: '应答结论', required: true }, { key: 'draft', label: '对外答复', required: true }, { key: 'conditions', label: '适用条件', required: true }, { key: 'status', label: '确认状态', required: false }];
   const templates = [{ id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' }, { id: 'customer', title: '客户条款对照清单', version: 'V1.3', description: '以客户条款为索引，保留全部必要条件与批准状态。' }, { id: 'delivery', title: '交付条件核对清单', version: 'V1.0', description: '集中核对承诺条件，供交付前再次对照确认。' }];
   const savedExport=(()=>{try{return JSON.parse(sessionStorage.getItem(`rfq.export.settings.${project.id}`))||{};}catch{return {};}})();
@@ -307,7 +312,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
-  const [history, setHistory] = useState(() => { try { return JSON.parse(localStorage.getItem(`fep-rfq-export-history:${project.id}`) || '[]'); } catch { return []; } });
+  const [history, setHistory] = useState(() => { let saved=[];try { const stored=JSON.parse(localStorage.getItem(`fep-rfq-export-history:${project.id}`) || '[]');if(Array.isArray(stored))saved=stored; } catch {} return [...new Map([...snapshots.flatMap(snapshot=>snapshot.exports||[]),...saved].map(record=>[record.id,record])).values()]; });
   const activeTemplate = templates.find((t) => t.id === templateId) || templates[0];
   const projectSnapshots = snapshots.filter((s) => s.projectId === project.id);
   const detail = projectSnapshots.find((s) => s.id === detailId);
@@ -315,7 +320,8 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const effectiveApproval = project.approvalConfig !== undefined ? project.approvalConfig : savedApproval || { final: '最终审批人' };
   const configuredFinalApprover = typeof effectiveApproval?.final === 'string' ? effectiveApproval.final.trim() : '';
   const approvalConfigIssues = configuredFinalApprover === '最终审批人' ? [] : [{ id: 'approval-config', label: '项目最终批准人配置', message: configuredFinalApprover ? '项目最终批准身份须为独立最终审批人，请在项目设置中修正' : '尚未配置项目最终批准人，请先补齐独立审批配置' }];
-  const documentState = readDocumentState(project.id);
+  const storedDocuments=readDocumentState(project.id),currentFiles=appState?.documentsByProject?.[project.id];
+  const documentState = currentFiles !== undefined ? { files: currentFiles, parsed: (storedDocuments?.parsed||[]).filter(row=>currentFiles.some(file=>file.id===row.sourceFileId)) } : storedDocuments;
   const unimportedParsed = (documentState?.parsed || []).filter((r) => !requirements.some((current) => current.id === r.id));
   const unfinishedFiles = (documentState?.files || []).filter((f) => f.purpose === '要求来源' && !(documentState?.files || []).some((newer) => newer.previousVersionId === f.id) && ['排队中', '处理中', '失败'].includes(f.status));
   const documentIssues = [...unimportedParsed.map((r) => ({ id: `document-${r.id}`, label: `${r.clause} ${r.title}`, message: '解析条目尚未自动同步，请返回解析页完成同步' })), ...unfinishedFiles.map((f) => ({ id: `document-${f.id}`, label: f.name, message: f.status === '失败' ? `要求来源解析失败：${f.error || '请重试或补录'}` : `要求来源仍在${f.status}，请等待解析完成` }))];

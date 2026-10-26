@@ -1,4 +1,6 @@
-import { BHEL_ID, BHEL_PROJECT, makeBhelRequirements, makeBhelReviews } from './bhelDemo.js';
+import { BHEL_ID, BHEL_PROJECT, makeBhelRequirements, makeBhelDocument } from './bhelDemo.js';
+import { makeDocumentDemo } from './documentMocks.js';
+import { snapshotFingerprint } from './snapshotDomain.js';
 // BHEL customer requirements are sourced; other projects and all supplier claims / people are synthetic.
 export const NAV_ITEMS = [
   { key: 'tasks', label: '任务中心', section: '全局' },
@@ -127,22 +129,48 @@ export function makeRequirements(projectId) {
 
 export function createDemoState() {
   const projects = [
-    { ...BHEL_PROJECT },
     { id: 'RFQ-001', name: '新能源精密切割产线', customer: '华东新能源客户（模拟）', equipment: 'DEMO-CUT 300 · V2.1 · 选配 X 待确认', owner: '林晓', deadline: '2026-10-25' },
+    { id: 'RFQ-DEMO-UPLOAD', name: '半导体薄膜沉积设备', customer: '华北半导体客户（模拟）', equipment: 'DEMO-CVD 200 · V1.0 · 标准配置', owner: '林晓', deadline: '2026-11-10' },
+    { ...BHEL_PROJECT },
     { id: 'RFQ-002', name: '精密零件加工设备', customer: '苏州精密制造客户（模拟）', equipment: 'DEMO-CUT 200 · V1.4 · 标准配置', owner: '陈晨', deadline: '2026-10-29' },
     { id: 'RFQ-003', name: '实验室样品验证设备', customer: '华南材料研究客户（模拟）', equipment: 'DEMO-LAB 100 · V1.0 · 研究配置', owner: '周宁', deadline: '2026-11-03' },
   ];
   const requirementsByProject = Object.fromEntries(projects.map((project) => [project.id, makeRequirements(project.id)]));
   const reviewsByProject = Object.fromEntries(projects.map((project) => [project.id, []]));
-  reviewsByProject[BHEL_ID] = makeBhelReviews();
+  requirementsByProject['RFQ-DEMO-UPLOAD'] = [];
+  requirementsByProject[BHEL_ID] = [];
+  const documentsByProject = Object.fromEntries(projects.map(project => [project.id, []]));
+  const reviewDemo = makeDocumentDemo('RFQ-001', requirementsByProject['RFQ-001']);
+  requirementsByProject['RFQ-001'] = reviewDemo.parsed.filter(row => requirementsByProject['RFQ-001'].some(original => original.id === row.id));
+  documentsByProject['RFQ-001'] = reviewDemo.files.filter(file => file.status !== '失败').map(file => ({ ...file, status: '完成' }));
+  documentsByProject[BHEL_ID] = makeBhelDocument([]).files.map(file => ({ ...file, status: '排队中', parsedCount: 0 }));
+  const snapshotsByProject = Object.fromEntries(projects.map(project => [project.id, []]));
+  const exportScopesByProject = {};
+  const template = { id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' };
+  const mapping = Object.fromEntries(['clause', 'original', 'conclusion', 'draft', 'conditions', 'status'].map(key => [key, key]));
+  for (const project of projects.filter(p => ['RFQ-002', 'RFQ-003'].includes(p.id))) {
+    project.approvalConfig = { final: '最终审批人' };
+    const file = { id: `${project.id}-DEMO-FILE-FINAL`, name: `${project.name}_客户要求.pdf`, purpose: '要求来源', version: 'V1.0', status: '完成', createdAt: '2026/10/23 09:00:00', size: 1482000, visibility: '项目成员可见', sample: true, parsedCount: 3 };
+    documentsByProject[project.id] = [file];
+    const rows = makeRequirements(project.id).filter((_, index) => [0, 4, 8].includes(index)).map(row => ({ ...row, source: file.name, sourceFileId: file.id, sourceVersion: file.version, sourceOriginal: row.original, status: '已确认', confirmedAt: '2026-10-23T06:00:00.000Z', confirmedBy: '技术确认人' }));
+    requirementsByProject[project.id] = rows;
+    const approvalScope = { rows, sourceVersions: [`${file.id}:${file.version}`], configuration: { equipment: project.equipment, approvalConfig: project.approvalConfig }, template, mapping, attachments: [] };
+    exportScopesByProject[project.id] = structuredClone(approvalScope);
+    const snapshot = { id: `SNAP-DEMO-${project.id}`, projectId: project.id, status: '已批准', createdAt: '2026-10-23T07:00:00.000Z', createdBy: '技术确认人', createdById: 'demo-technical', reviewedAt: '2026-10-24T02:00:00.000Z', reviewedBy: '最终审批人', reviewedById: 'demo-approver', reviewReason: '模拟审批：条款、适用条件和应答范围已核对。', rows: structuredClone(rows), approvalScope: structuredClone(approvalScope), approvalFingerprint: snapshotFingerprint(approvalScope), template: { ...template }, mapping: { ...mapping }, approvalConfig: { ...project.approvalConfig }, attachments: [], history: [{ action: '提交快照审批', actor: '技术确认人', time: '2026/10/23 15:00:00' }, { action: '批准定稿', actor: '最终审批人', time: '2026/10/24 10:00:00', reason: '示例审批记录' }] };
+    if (project.id === 'RFQ-003') {
+      snapshot.exportedAt = '2026-10-24T03:00:00.000Z';
+      snapshot.exports = [{ id: `EXP-DEMO-${project.id}`, type: '正式应答', filename: `${project.name}_正式应答_${snapshot.id}.csv`, createdAt: '2026/10/24 11:00:00', actor: '销售负责人', status: '已生成', snapshotId: snapshot.id, template: template.title, rowCount: rows.length, sample: true }];
+    }
+    snapshotsByProject[project.id] = [snapshot];
+  }
   reviewsByProject['RFQ-001'] = [
     { id: 'DEV-001', requirementId: 'req-22', title: '选配 X 与切缝宽度保证条件', type: '条件差异', source: '历史条件与本次配置不同', owner: '技术确认人', deadline: '2026-10-22', status: '处理中', description: '模拟历史案例依赖选配 X；当前选配状态及样品验证尚未确认。', plan: '确认选配清单，按客户材料安排样品验证并补充测试记录。', impact: '可能影响选配成本与样品确认日程。', reason: '', history: [{ time: '2026-10-20 14:20', actor: '销售负责人', action: '建立事项并分派技术确认人' }] },
     { id: 'DEV-002', requirementId: 'req-24', title: '复合材料信息与工艺依据缺失', type: '知识缺口', source: '知识库中没有可用依据', owner: '技术确认人', deadline: '2026-10-23', status: '待处理', description: '当前要求缺少材料成分与样品，三级检索完成后仍无可用依据。', plan: '', impact: '材料适用性尚不能形成对外承诺。', reason: '', history: [{ time: '2026-10-20 14:22', actor: '销售负责人', action: '登记缺口，等待客户澄清' }] },
     { id: 'DEV-003', requirementId: 'req-27', title: '交付周期商务偏离', type: '交期偏离', source: '客户 8 周要求与模拟 12 周排产差距', owner: '商务确认人', deadline: '2026-10-22', status: '待审批', description: '需向客户说明模拟交期偏离及可选分批交付方案。', plan: '提出 12 周交付方案，并同步澄清合同生效起算点。', impact: '客户交期及合同里程碑需要更新。', reason: '拟按 12 周模拟排产基线答复，等待独立专业批准。', history: [{ time: '2026-10-20 15:10', actor: '商务确认人', action: '提交方案，等待批准' }] },
   ];
   return {
-    projects, requirementsByProject, reviewsByProject,
-    snapshotsByProject: Object.fromEntries(projects.map((project) => [project.id, []])),
+    projects, requirementsByProject, reviewsByProject, documentsByProject,
+    snapshotsByProject, exportScopesByProject, demoProjectStagesVersion: 1,
     actorRole: '销售负责人',
     members: [
       { id: 'member-1', name: '林晓', role: '销售负责人', scope: '授权项目', status: '生效', canConfirm: false, canExport: true },
@@ -153,7 +181,7 @@ export function createDemoState() {
       { id: 'member-6', name: '赵明', role: '项目最终批准人', scope: '具体应答快照', status: '生效', canConfirm: false, canExport: false },
     ],
     audit: [
-      { id: 'BHEL-EVT-001', time: '2026-10-22', actor: '销售负责人', action: '载入真实RFQ演示', object: BHEL_ID, result: '成功', detail: 'BHEL IKCCAP0034原始PDF及40条精选要求已核对页码；供应商应答与评审为模拟。历史采购于2018年截止。' },
+      { id: 'BHEL-EVT-001', time: '2026-10-22', actor: '销售负责人', action: '上传真实RFQ演示', object: BHEL_ID, result: '成功', detail: 'BHEL IKCCAP0034原始PDF已登记，等待模拟解析；历史采购于2018年截止。' },
       { id: 'EVT-0003', time: '2026-10-20 15:10', actor: '商务确认人', action: '提交评审方案', object: 'DEV-003 · RFQ-001', result: '成功', detail: '交期偏离方案提交审批，尚未批准关闭。' },
       { id: 'EVT-0002', time: '2026-10-20 14:22', actor: '销售负责人', action: '完成分级匹配', object: 'RFQ-001 · 工作版本 V1', result: '成功', detail: '12 条模拟要求已匹配；自动填入及候选答复均等待内部确认。' },
       { id: 'EVT-0001', time: '2026-10-20 13:40', actor: '销售负责人', action: '创建模拟项目', object: 'RFQ-001', result: '成功', detail: '已选择演示机型与配置基线，选配 X 尚待确认。' },

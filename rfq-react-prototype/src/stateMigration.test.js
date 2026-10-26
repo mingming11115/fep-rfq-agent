@@ -5,6 +5,24 @@ import { upgradePrototypeState, getActor } from './stateMigration.js';
 import {reconcileTasks} from './taskDomain.js';
 import {makeDocumentDemo} from './documentMocks.js';
 import {requirementValidation} from './domain.js';
+import {getProjectSummary} from './projectSelectors.js';
+
+test('legacy demo board refreshes once, backs up edited samples and retains user projects',()=>{
+  const demo=createDemoState(),old=structuredClone(demo);
+  delete old.demoProjectStagesVersion;
+  old.projects=old.projects.filter(p=>p.id!=='RFQ-DEMO-UPLOAD');
+  old.requirementsByProject['RFQ-001'][0].draft='旧演示中的人工答复';
+  old.projects.push({id:'CUSTOM',name:'用户项目',customer:'用户客户'});
+  old.requirementsByProject.CUSTOM=[{id:'CUSTOM-R',draft:'保留用户答复'}];
+  old.documentsByProject={...old.documentsByProject,'RFQ-002':[{id:'old-file',purpose:'要求来源',status:'失败'}]};
+  const next=upgradePrototypeState(old,demo);
+  assert.equal(next.projects.length,6);
+  assert.equal(getProjectSummary(next,'RFQ-002','demo-sales').stage,'审批完成');
+  assert.equal(next.requirementsByProject.CUSTOM[0].draft,'保留用户答复');
+  assert.equal(next.demoProjectStagesBackup.requirementsByProject['RFQ-001'][0].draft,'旧演示中的人工答复');
+  next.requirementsByProject['RFQ-002'][0].draft='更新演示后的人工答复';
+  assert.deepEqual(upgradePrototypeState(next,demo),next);
+});
 
 test('Word status examples seed once with a real review task and preserve subsequent edits', () => {
   const demo = createDemoState();
