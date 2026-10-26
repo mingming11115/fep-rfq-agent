@@ -64,3 +64,37 @@ test('the same report is listed once while references to different pages stay di
  const pages=model.buildResponseAdvice(row,{...suggestion,evidence:'报告 V1；第4页'},{check:{...check,evidence:'报告 V1；第5页'}});
  assert.equal(pages.evidence,'报告 V1；第4页；报告 V1；第5页');
 });
+
+test('Comply has no recommended exception wording',()=>{
+ assert.equal(model.generateRecommendedWording({...row,conclusion:'Comply'}),'');
+});
+test('conditional wording retains the actual conditions and reason without changing the saved answer',()=>{
+ const input={...row,clause:'2.1',conclusion:'有条件 Comply',conditions:'客户提供样品并完成1.2 mm材料试切',reason:'选配X需双方确认',draft:'原人工答复'};
+ const before=structuredClone(input);
+ const text=model.generateRecommendedWording(input);
+ for(const value of ['2.1',row.title,input.conditions,input.reason])assert.ok(text.includes(value));
+ assert.ok(text.includes('有条件'));
+ assert.ok(!text.includes('已通过')&&!text.includes('无条件满足'));
+ assert.deepEqual(input,before);
+});
+test('noncompliant wording states the gap without inventing an accepted alternative',()=>{
+ const text=model.generateRecommendedWording({...row,conclusion:'不满足',reason:'当前排产为16周，客户要求12周'});
+ assert.ok(text.includes('无法满足'));
+ assert.ok(text.includes('当前排产为16周，客户要求12周'));
+ assert.ok(text.includes('替代方案'));
+ assert.ok(!text.includes('已批准')&&!text.includes('已接受'));
+});
+test('not-applicable wording includes its basis and keeps missing scope explicit',()=>{
+ const text=model.generateRecommendedWording({...row,conclusion:'不适用',reason:'本次仅供设备，不含厂房改造'});
+ assert.ok(text.includes('本次仅供设备，不含厂房改造'));
+ const incomplete=model.generateRecommendedWording({...row,conclusion:'不适用'});
+ assert.ok(incomplete.includes('不适用范围及依据尚待确认'));
+});
+test('pending and incomplete conditional wording do not invent a satisfied commitment',()=>{
+ const pending=model.generateRecommendedWording({...row,conclusion:'待确认',reason:'客户尚未提供最终图纸'});
+ assert.ok(pending.includes('尚待核实'));
+ assert.ok(pending.includes('客户尚未提供最终图纸'));
+ const conditional=model.generateRecommendedWording({...row,conclusion:'有条件 Comply'});
+ assert.ok(conditional.includes('适用条件尚待确认'));
+ assert.ok(!conditional.includes('已满足'));
+});

@@ -1,6 +1,7 @@
 import { BHEL_ID, BHEL_PROJECT, makeBhelRequirements, makeBhelDocument } from './bhelDemo.js';
 import { makeDocumentDemo } from './documentMocks.js';
-import { snapshotFingerprint } from './snapshotDomain.js';
+import {initializePersonnel,getProjectFinalReview,getRequiredFinalReviewers} from './personnelDomain.js';
+import { snapshotFingerprint,getFinalReviewScope } from './snapshotDomain.js';
 // BHEL customer requirements are sourced; other projects and all supplier claims / people are synthetic.
 export const NAV_ITEMS = [
   { key: 'tasks', label: '任务中心', section: '全局' },
@@ -18,7 +19,7 @@ export const NAV_ITEMS = [
   { key: 'audit', label: '审计记录', section: '管理' },
   { key: 'admin', label: '系统配置与运维', section: '管理' },
 ];
-export const PRIMARY_NAV=[{key:'dashboard',label:'工作台'},{key:'tasks',label:'任务中心'},{key:'projects',label:'我的 RFQ'},{key:'analysis',label:'AI 分析记录'},{key:'admin',label:'管理后台'}];
+export const PRIMARY_NAV=[{key:'dashboard',label:'工作台'},{key:'projects',label:'我的 RFQ'},{key:'tasks',label:'任务中心'},{key:'analysis',label:'AI 分析记录'},{key:'admin',label:'管理后台'}];
 
 const REQUIREMENT_TEMPLATES = [
   {
@@ -166,9 +167,9 @@ export function createDemoState() {
   reviewsByProject['RFQ-001'] = [
     { id: 'DEV-001', requirementId: 'req-22', title: '选配 X 与切缝宽度保证条件', type: '条件差异', source: '历史条件与本次配置不同', owner: '技术确认人', deadline: '2026-10-22', status: '处理中', description: '模拟历史案例依赖选配 X；当前选配状态及样品验证尚未确认。', plan: '确认选配清单，按客户材料安排样品验证并补充测试记录。', impact: '可能影响选配成本与样品确认日程。', reason: '', history: [{ time: '2026-10-20 14:20', actor: '销售负责人', action: '建立事项并分派技术确认人' }] },
     { id: 'DEV-002', requirementId: 'req-24', title: '复合材料信息与工艺依据缺失', type: '知识缺口', source: '知识库中没有可用依据', owner: '技术确认人', deadline: '2026-10-23', status: '待处理', description: '当前要求缺少材料成分与样品，三级检索完成后仍无可用依据。', plan: '', impact: '材料适用性尚不能形成对外承诺。', reason: '', history: [{ time: '2026-10-20 14:22', actor: '销售负责人', action: '登记缺口，等待客户澄清' }] },
-    { id: 'DEV-003', requirementId: 'req-27', title: '交付周期商务偏离', type: '交期偏离', source: '客户 8 周要求与模拟 12 周排产差距', owner: '商务确认人', deadline: '2026-10-22', status: '待审批', description: '需向客户说明模拟交期偏离及可选分批交付方案。', plan: '提出 12 周交付方案，并同步澄清合同生效起算点。', impact: '客户交期及合同里程碑需要更新。', reason: '拟按 12 周模拟排产基线答复，等待独立专业批准。', history: [{ time: '2026-10-20 15:10', actor: '商务确认人', action: '提交方案，等待批准' }] },
+    { id: 'DEV-003',submittedById:'demo-technical', requirementId: 'req-27', title: '交付周期商务偏离', type: '交期偏离', source: '客户 8 周要求与模拟 12 周排产差距', owner: '商务确认人', deadline: '2026-10-22', status: '待审批', description: '需向客户说明模拟交期偏离及可选分批交付方案。', plan: '提出 12 周交付方案，并同步澄清合同生效起算点。', impact: '客户交期及合同里程碑需要更新。', reason: '拟按 12 周模拟排产基线答复，等待独立专业批准。', history: [{ time: '2026-10-20 15:10', actor: '商务确认人', action: '提交方案，等待批准' }] },
   ];
-  return {
+  const state = {
     projects, requirementsByProject, reviewsByProject, documentsByProject,
     snapshotsByProject, exportScopesByProject, demoProjectStagesVersion: 1,
     actorRole: '销售负责人',
@@ -187,4 +188,19 @@ export function createDemoState() {
       { id: 'EVT-0001', time: '2026-10-20 13:40', actor: '销售负责人', action: '创建模拟项目', object: 'RFQ-001', result: '成功', detail: '已选择演示机型与配置基线，选配 X 尚待确认。' },
     ],
   };
+  for(const project of state.projects){project.ownerId='demo-sales';project.createdById='demo-sales';project.participantIds=['demo-sales','demo-technical','demo-approver'];}
+  initializePersonnel(state);
+  // These are newly generated, explicitly synthetic examples, never imported history.
+  for(const project of state.projects)for(const snap of state.snapshotsByProject[project.id]||[]){
+    snap.sample=true;snap.finalReview=getProjectFinalReview(state,project.id);
+    for(const r of getRequiredFinalReviewers(snap.finalReview)){
+      const vote={actorId:r.actorId,result:'approved',reason:'新建演示案例的模拟评审结果',at:'2026-10-24T02:00:00.000Z'};
+      if(r.side==='sr')snap.finalReview.decisions.sr=vote;else snap.finalReview.decisions.technicalByActorId[r.actorId]=vote;
+    }
+    snap.createdById='demo-sales';snap.createdBy='林晓';
+    snap.rows=structuredClone(state.requirementsByProject[project.id]);
+    snap.approvalScope={...snap.approvalScope,rows:structuredClone(snap.rows),configuration:{equipment:project.equipment,approvalConfig:structuredClone(project.approvalConfig),personnel:getFinalReviewScope(state,project.id)}};
+    snap.approvalFingerprint=snapshotFingerprint(snap.approvalScope);state.exportScopesByProject[project.id]=structuredClone(snap.approvalScope);
+  }
+  return state;
 }

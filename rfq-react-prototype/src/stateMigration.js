@@ -1,6 +1,7 @@
 import {normalizeTaskStatus} from './taskStatus.js';
 import {makeDocumentDemo} from './documentMocks.js';
-export const actorIdForRole = role => role === '销售负责人' ? 'demo-sales' : /最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
+import {initializePersonnel} from './personnelDomain.js';
+export const actorIdForRole = role => ['SR','销售负责人'].includes(role) ? 'demo-sales' : role==='BU管理员'?'demo-bu-admin':role==='后台管理'?'demo-system-admin':/最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo) {
   const state = structuredClone(Array.isArray(previous?.projects) ? previous : demo);
@@ -48,32 +49,17 @@ export function upgradePrototypeState(previous, demo) {
     }
     for(const row of state.requirementsByProject[project.id])if(row.pendingReviewProposal){const review=reviews.find(r=>r.legacyId===row.pendingReviewProposal.reviewId&&r.requirementId===row.id);if(review)row.pendingReviewProposal.reviewId=review.id;}
     state.membersByProject[project.id] ||= structuredClone(state.members);
-    project.createdById ||= 'demo-sales';
-    project.ownerId ||= 'demo-sales';
-    project.participantIds ||= ['demo-sales', 'demo-technical', 'demo-approver'];
+    const trustedDemo=demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer);
+    if(trustedDemo){project.createdById ||= 'demo-sales';project.ownerId ||= 'demo-sales';project.participantIds ||= ['demo-sales','demo-technical','demo-approver'];}
+    else project.participantIds ||= project.ownerId?[project.ownerId]:[];
     seedClauseStatusExamples(state, project);
   }
-  return state;
+  return initializePersonnel(state);
 }
 
-function seedProjectStageExamples(state, demo) {
-  if (!demo.demoProjectStagesVersion || state.demoProjectStagesVersion === demo.demoProjectStagesVersion) return;
-  if (!state.projects.some(p => p.id === 'RFQ-001' && p.customer === '华东新能源客户（模拟）')) return;
-  const examples = demo.projects.filter(example => !state.projects.some(p => p.id === example.id && p.customer !== example.customer));
-  const ids = new Set(examples.map(p => p.id));
-  const maps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByProject', 'documentsByProject', 'exportScopesByProject', 'commentsByProject', 'membersByProject'];
-  state.demoProjectStagesBackup = { projects: state.projects.filter(p => ids.has(p.id)), tasksById: Object.fromEntries(Object.entries(state.tasksById || {}).filter(([, task]) => ids.has(task.projectId))) };
-  for (const key of maps) {
-    state.demoProjectStagesBackup[key] = Object.fromEntries(Object.entries(state[key] || {}).filter(([id]) => ids.has(id)));
-    state[key] ||= {};
-    for (const project of examples) {
-      delete state[key][project.id];
-      if (demo[key]?.[project.id] !== undefined) state[key][project.id] = structuredClone(demo[key][project.id]);
-    }
-  }
-  state.projects = [...structuredClone(examples), ...state.projects.filter(p => !ids.has(p.id))];
-  state.tasksById = Object.fromEntries(Object.entries(state.tasksById || {}).filter(([, task]) => !ids.has(task.projectId)));
-  state.demoProjectStagesVersion = demo.demoProjectStagesVersion;
+function seedProjectStageExamples(state,demo) {
+  // Existing rows, files and signatures are never replaced by freshly generated examples.
+  state.demoProjectStagesVersion ||= demo.demoProjectStagesVersion;
 }
 
 function seedClauseStatusExamples(state, project) {
@@ -89,11 +75,11 @@ function seedClauseStatusExamples(state, project) {
   examples.forEach((example, index) => {
     const current = rows.find(row => row.id === example.id);
     if (current) return;
-    const seeded = { ...example, category: '技术', ...answers[index], demoStatusExample: true };
+    const seeded = { ...example, category: '技术', ...answers[index], demoStatusExample: true,confirmationAssigneeId: 'demo-technical' };
     rows.push(seeded);
     if (seeded.status === '评审中') reviews.push({
       id: `${project.id}-DEMO-REVIEW-CLAUSE-STATUS`, requirementId: seeded.id, kind: 'review', title: '公用设施接口参数核对', type: '条件差异', source: '示例流程',
-      status: '处理中', owner: '技术确认人', deadline: project.deadline, version: 1, round: 1, requirementVersion: seeded.version,
+      status: '处理中', owner: '技术确认人',ownerId:'demo-technical',approverId:'demo-approver', deadline: project.deadline, version: 1, round: 1, requirementVersion: seeded.version,
       description: '客户现场电力、冷却水和排风参数尚待核对，需要明确额定值及允许范围。',
       plan: '核对客户现场参数，完善接口表后提交独立专业批准。', evidence: seeded.evidence,
       proposedDraft: seeded.draft, proposedConclusion: seeded.conclusion, conditions: seeded.conditions,

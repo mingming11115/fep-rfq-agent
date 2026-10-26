@@ -1,3 +1,4 @@
+import {ProjectPersonnelPanel} from './BuAdminPage';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowRight, CheckCircle2, Clock3, Database, FileText, GitBranch, HardDrive, History, LockKeyhole, Plus, RefreshCw, Search, Server, Settings2, ShieldCheck, Users } from 'lucide-react';
 import { Modal, Drawer, StatusBadge, EmptyState, Pagination } from '../components/ui';
@@ -7,7 +8,7 @@ import { makeDocumentDemo } from '../documentMocks';
 
 const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5)}`;
-const roles = ['销售负责人', '技术确认人', '质量确认人', '商务确认人', '服务确认人', '最终审批人'];
+const roles = ['SR', '技术', '质量确认人', '商务确认人', '服务确认人', '最终审批人'];
 function useSaved(key, initial) {
   const [value, setValue] = useState(() => { try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; } });
   useEffect(() => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* In-memory editing remains available. */ } }, [key, value]);
@@ -23,13 +24,13 @@ function Errors({ error }) { return error ? <div className="error-notice" role="
 function record(logEvent, action, object, summary, before, after, reason) { logEvent?.(action, object, JSON.stringify({ summary, before, after, reason })); }
 function ImpactList({ requirements, selected, onChange, readOnly = false }) { return <div className="mg-impact-list">{requirements.length ? requirements.map((row) => <label key={row.id}><input type="checkbox" disabled={readOnly} checked={selected.includes(row.id)} onChange={() => onChange(selected.includes(row.id) ? selected.filter((id) => id !== row.id) : [...selected, row.id])}/><span><strong>{row.clause} · {row.title}</strong><small>{row.category} · {row.owner || '未分派'}</small></span><StatusBadge status={row.status}/></label>) : <EmptyState title="当前项目暂无要求条目" description="配置保存后，后续解析的条目将使用新基线。"/>}</div>; }
 
-export function SettingsPage({ project, requirements = [], members = [], actorRole, onProjectChange, onInvalidateRequirements, onMembersChange, toast, navigate, logEvent }) {
+export function SettingsPage({ project, requirements = [], members = [], actorRole, onProjectChange, onInvalidateRequirements, onMembersChange, toast, navigate, logEvent,appState,actorId,onPersonnelAction }) {
   const [tab, setTab] = useState('basic');
   const [form, setForm] = useState({ name: project.name, customer: project.customer, owner: project.owner, deadline: project.deadline, equipment: project.equipment });
   const [reason, setReason] = useState(''), [error, setError] = useState(''), [impact, setImpact] = useState(false), [memberForm, setMemberForm] = useState(null), [memberReason, setMemberReason] = useState('');
-  const [approval, setApproval] = useSaved(`fep-rfq-management-approval-${project.id}`, { technical: '技术确认人', quality: '质量确认人', business: '商务确认人', service: '服务确认人', professional: '技术确认人', final: '最终审批人', knowledge: '独立知识批准人' });
+  const [approval, setApproval] = useSaved(`fep-rfq-management-approval-${project.id}`, { technical: '技术', quality: '质量确认人', business: '商务确认人', service: '服务确认人', professional: '技术', final: '最终审批人', knowledge: '独立知识批准人' });
   const [approvalDraft, setApprovalDraft] = useState(approval);
-  const canEdit = actorRole === '销售负责人';
+  const canEdit = actorRole === 'SR';
   const technicalRows = requirements.filter((row) => row.category === '技术');
   const changed = Object.keys(form).some((key) => form[key] !== project[key]);
   const incomplete = Object.entries(approvalDraft).filter(([key, value]) => !value && key !== 'knowledge').length;
@@ -61,18 +62,19 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
   const saveApproval = () => {
     if (!canEdit) return setError('当前身份没有职责与审批链维护权限。');
     if (!reason.trim()) return setError('请填写职责或审批链调整原因。');
-    if (['销售负责人', '技术确认人', '系统管理员'].includes(approvalDraft.final)) return setError('最终批准须独立于本次编制及专业确认身份，请指定最终审批人。');
+    if (['SR', '技术', '系统管理员'].includes(approvalDraft.final)) return setError('最终批准须独立于本次编制及专业确认身份，请指定最终审批人。');
     setApproval(approvalDraft); record(logEvent, '更新责任与审批配置', project.id, incomplete ? `配置草稿已保存，仍有 ${incomplete} 项缺项` : '职责与独立审批配置已更新', approval, approvalDraft, reason);
     onProjectChange?.({ approvalConfig: approvalDraft, reason }); setReason(''); setError(''); toast?.(incomplete ? '已保存配置草稿，缺项仍会阻止对应确认和审批' : '责任与审批配置已保存');
   };
   const approvalField = (key, label, options = roles) => <Field key={key} label={label}><Select disabled={!canEdit} label={label} value={approvalDraft[key]} onChange={(value) => setApprovalDraft({ ...approvalDraft, [key]: value })} options={[{ value: '', label: '待配置（保存为草稿）' }, ...options]}/></Field>;
   return <div className="management-page"><Heading title="项目设置" description="明确项目范围、确认责任与审批关系，让每一次变更可追溯。" actions={<StatusBadge status={canEdit ? '项目管理权限' : '只读查看'}/>}/>
-    <section className="panel"><Tabs value={tab} onChange={(value) => { setTab(value); setError(''); }} items={[["basic", "基本信息"], ["members", "成员与数据范围"], ["responsibility", "确认责任"], ["approval", "审批配置"]]}/>
+    <section className="panel"><Tabs value={tab} onChange={(value) => { setTab(value); setError(''); }} items={[["basic", "基本信息"], ["personnel", "人员与最终评审"]]}/>
       <div className="panel-body">
+        {tab==='personnel'&&<ProjectPersonnelPanel appState={appState} project={project} requirements={requirements} actorId={actorId} onPersonnelAction={onPersonnelAction}/>}
         {tab === 'basic' && <><div className="mg-section-header"><div><h2>基本信息</h2><p>项目编号 {project.id} · 工作版本 V{project.version || 1}</p></div><Settings2 size={21}/></div><div className="form-grid mg-settings-form">{[['name', '项目名称'], ['customer', '客户名称'], ['owner', '项目负责人'], ['deadline', '应答截止日期']].map(([key, label]) => <Field key={key} label={label} required><input className="input" disabled={!canEdit} type={key === 'deadline' ? 'date' : 'text'} value={form[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })}/></Field>)}<Field label="设备项 · 机型版本与配置基线" full><textarea className="input" disabled={!canEdit} value={form.equipment || ''} placeholder="尚未选型可保存；依赖机型的条目不能确认。" onChange={(e) => setForm({ ...form, equipment: e.target.value })}/></Field></div><Notice warning>设备范围、机型版本或选配基线变更将影响 {technicalRows.length} 条技术要求。保存前列出影响范围，原确认失效后由责任人重新核对。</Notice><div className="mg-inline-actions"><button className="text-link" onClick={() => navigate?.('capabilities')}>查看机型能力边界 <ArrowRight size={14}/></button><button className="text-link" onClick={() => navigate?.('versions')}>查看版本与变更记录</button></div>{canEdit && <><Field label="变更原因" required><textarea className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="说明本次调整及原因"/></Field><Errors error={error}/><div className="form-actions"><button className="btn" onClick={() => { setForm({ name: project.name, customer: project.customer, owner: project.owner, deadline: project.deadline, equipment: project.equipment }); setReason(''); setError(''); }}>重置修改</button><button className="btn btn-primary" onClick={saveBasic}>保存项目设置</button></div></>}</>}
-        {tab === 'members' && <><div className="mg-section-header"><div><h2>项目成员 <span className="count-pill">{members.length}</span></h2><p>职责、数据范围与操作授权分别维护。</p></div><button className="btn btn-primary" disabled={!canEdit} onClick={() => { setMemberForm({ id: uid('member'), name: '', role: '技术确认人', scope: '当前授权项目', status: '生效', canConfirm: true, canExport: false }); setMemberReason(''); setError(''); }}><Plus size={15}/>添加成员</button></div><div className="table-wrap"><table className="data-table mg-table"><thead><tr><th>成员</th><th>职责身份</th><th>可访问范围</th><th>确认 / 导出授权</th><th>生效状态</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><span className="person-avatar">{member.name?.[0]}</span>{member.name}</td><td>{member.role}</td><td>{member.scope}</td><td>{member.canConfirm ? '专业确认' : '—'} / {member.canExport ? '文件导出' : '—'}</td><td><StatusBadge status={member.status}/></td><td><button className="text-link" disabled={!canEdit} onClick={() => { setMemberForm({ ...member }); setMemberReason(''); setError(''); }}>调整职责</button></td></tr>)}</tbody></table></div><Notice>授权收回后重新校验访问与任务；成员改派保留原确认记录，不能将原处理人改写为新责任人。</Notice></>}
+        {tab === 'members' && <><div className="mg-section-header"><div><h2>项目成员 <span className="count-pill">{members.length}</span></h2><p>职责、数据范围与操作授权分别维护。</p></div><button className="btn btn-primary" disabled={!canEdit} onClick={() => { setMemberForm({ id: uid('member'), name: '', role: '技术', scope: '当前授权项目', status: '生效', canConfirm: true, canExport: false }); setMemberReason(''); setError(''); }}><Plus size={15}/>添加成员</button></div><div className="table-wrap"><table className="data-table mg-table"><thead><tr><th>成员</th><th>职责身份</th><th>可访问范围</th><th>确认 / 导出授权</th><th>生效状态</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><span className="person-avatar">{member.name?.[0]}</span>{member.name}</td><td>{member.role}</td><td>{member.scope}</td><td>{member.canConfirm ? '专业确认' : '—'} / {member.canExport ? '文件导出' : '—'}</td><td><StatusBadge status={member.status}/></td><td><button className="text-link" disabled={!canEdit} onClick={() => { setMemberForm({ ...member }); setMemberReason(''); setError(''); }}>调整职责</button></td></tr>)}</tbody></table></div><Notice>授权收回后重新校验访问与任务；成员改派保留原确认记录，不能将原处理人改写为新责任人。</Notice></>}
         {tab === 'responsibility' && <><div className="mg-section-header"><div><h2>按专业分派确认责任</h2><p>缺少责任配置可保存草稿，对应条目保持待确认。</p></div><Users size={21}/></div><div className="form-grid">{approvalField('technical', '技术要求确认人')}{approvalField('quality', '质量与资料确认人')}{approvalField('business', '商务要求确认人')}{approvalField('service', '服务要求确认人')}</div><div className="mg-responsibility-summary">{['技术', '服务', '商务'].map((category) => <div key={category}><strong>{category}</strong><span>{requirements.filter((row) => row.category === category).length} 条要求</span><button className="text-link" onClick={() => navigate?.('response')}>查看条目</button></div>)}</div></>}
-        {tab === 'approval' && <><div className="mg-section-header"><div><h2>独立审批配置</h2><p>项目审批、专业批准和知识批准分别授权。</p></div><ShieldCheck size={21}/></div><div className="mg-approval-chain"><span><FileText size={18}/>销售编制</span><ArrowRight size={17}/><span><CheckCircle2 size={18}/>专业确认 / 批准</span><ArrowRight size={17}/><span><ShieldCheck size={18}/>独立最终批准</span></div><div className="form-grid">{approvalField('professional', '关键承诺专业批准人', ['技术确认人', '质量确认人', '商务确认人'])}{approvalField('final', '项目最终批准人', ['最终审批人'])}<Field label="知识批准关系"><input readOnly className="input" value={approvalDraft.knowledge}/></Field><Field label="同版本独立性"><input className="input" readOnly value="最终批准身份不得为本次编制 / 确认身份"/></Field></div><Notice>技术管理身份不获得业务批准权；项目批准身份不自动获得知识或能力发布批准权。修改审批链不替代具体版本的实际批准。</Notice></>}
+        {tab === 'approval' && <><div className="mg-section-header"><div><h2>独立审批配置</h2><p>项目审批、专业批准和知识批准分别授权。</p></div><ShieldCheck size={21}/></div><div className="mg-approval-chain"><span><FileText size={18}/>SR编制</span><ArrowRight size={17}/><span><CheckCircle2 size={18}/>专业确认 / 批准</span><ArrowRight size={17}/><span><ShieldCheck size={18}/>独立最终批准</span></div><div className="form-grid">{approvalField('professional', '关键承诺专业批准人', ['技术', '质量确认人', '商务确认人'])}{approvalField('final', '项目最终批准人', ['最终审批人'])}<Field label="知识批准关系"><input readOnly className="input" value={approvalDraft.knowledge}/></Field><Field label="同版本独立性"><input className="input" readOnly value="最终批准身份不得为本次编制 / 确认身份"/></Field></div><Notice>技术管理身份不获得业务批准权；项目批准身份不自动获得知识或能力发布批准权。修改审批链不替代具体版本的实际批准。</Notice></>}
         {['responsibility', 'approval'].includes(tab) && <>{canEdit && <><Field label="调整原因" required><textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="说明责任改派或审批配置调整原因"/></Field><Errors error={error}/><div className="form-actions"><button className="btn" onClick={() => { setApprovalDraft(approval); setReason(''); setError(''); }}>重置修改</button><button className="btn btn-primary" onClick={saveApproval}>保存配置{incomplete ? '草稿' : ''}</button></div></>}</>}
       </div>
     </section>
@@ -84,7 +86,7 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
 
 export function VersionsPage({ appState, project, requirements = [], snapshots = [], audit = [], actorRole, onInvalidateRequirements, onApplyRevision, toast, navigate, logEvent }) {
   const [tab, setTab] = useState('work'), [page, setPage] = useState(1), [query, setQuery] = useState(''), [detail, setDetail] = useState(null), [create, setCreate] = useState(false), [error, setError] = useState('');
-  const [versions, setVersions] = useSaved(`fep-rfq-management-versions-${project.id}`, [{ id: `${project.id}-V1`, number: 1, title: '初始工作版本', source: '客户 RFQ（模拟）.pdf', createdAt: '2026/10/20 13:40:00', createdBy: '销售负责人', reason: '创建模拟项目，载入示例资料。', impacted: [], rows: [], status: '已建立', unchecked: '初始范围按原始客户资料核对。' }]);
+  const [versions, setVersions] = useSaved(`fep-rfq-management-versions-${project.id}`, [{ id: `${project.id}-V1`, number: 1, title: '初始工作版本', source: '客户 RFQ（模拟）.pdf', createdAt: '2026/10/20 13:40:00', createdBy: 'SR', reason: '创建模拟项目，载入示例资料。', impacted: [], rows: [], status: '已建立', unchecked: '初始范围按原始客户资料核对。' }]);
   useEffect(() => {
     const number = project.version || 1;
     if (versions.some((version) => version.number === number)) return;
@@ -98,9 +100,9 @@ export function VersionsPage({ appState, project, requirements = [], snapshots =
     }, ...saved]);
   }, [project.version, project.id, project.equipment, project.reason, versions, audit, actorRole, requirements, setVersions]);
   const [form, setForm] = useState({ source: '', reason: '', unchecked: '', selected: [], before: '', after: '' });
-  const canCreate = actorRole === '销售负责人';
+  const canCreate = actorRole === 'SR';
   const sourceFiles = appState?.documentsByProject?.[project.id] ?? (requirements.length ? makeDocumentDemo(project.id, requirements).files : []);
-  const files = sourceFiles.map(file => ({ ...file, title: file.name, number: String(file.version || '1').replace(/^v/i, ''), source: file.purpose || '客户原始要求', createdBy: file.createdBy || '销售负责人', impacted: requirements.filter(row => row.sourceFileId === file.id).map(row => row.id) }));
+  const files = sourceFiles.map(file => ({ ...file, title: file.name, number: String(file.version || '1').replace(/^v/i, ''), source: file.purpose || '客户原始要求', createdBy: file.createdBy || 'SR', impacted: requirements.filter(row => row.sourceFileId === file.id).map(row => row.id) }));
   const source = tab === 'work' ? versions : tab === 'files' ? files : snapshots.map((snapshot) => ({ ...snapshot, title: '应答审批快照', number: snapshot.rows?.reduce((max, row) => Math.max(max, row.version || 1), 1), impacted: snapshot.rows?.map((row) => row.id) || [] }));
   const filtered = source.filter((row) => `${row.id} ${row.title} ${row.source || ''} ${row.createdBy}`.toLowerCase().includes(query.toLowerCase()));
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / 6)));
@@ -141,7 +143,7 @@ export function AuditPage({ project, audit = [], actorRole, navigate }) {
 }
 
 const INITIAL_ACCOUNTS = [
-  { id: 'u-linxiao', name: '林晓', identity: 'CORP\\linxiao', role: '项目业务用户', scope: '授权销售项目', status: '生效', businessApproval: false, knowledgeApproval: false },
+  { id: 'u-linxiao', name: '林晓', identity: 'CORP\\linxiao', role: '项目业务用户', scope: '授权SR项目', status: '生效', businessApproval: false, knowledgeApproval: false },
   { id: 'u-gu', name: '顾工', identity: 'CORP\\gugong', role: '专业业务用户', scope: '授权技术条目', status: '生效', businessApproval: false, knowledgeApproval: false },
   { id: 'u-zhao', name: '赵明', identity: 'CORP\\zhaoming', role: '业务批准用户', scope: '指定项目快照', status: '生效', businessApproval: true, knowledgeApproval: false },
   { id: 'u-admin', name: '运维管理员（模拟）', identity: 'CORP\\rfq-ops', role: '系统管理员', scope: '账号策略与技术配置', status: '生效', businessApproval: false, knowledgeApproval: false },

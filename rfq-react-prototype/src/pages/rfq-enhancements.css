@@ -17,3 +17,12 @@
 .response-processing .response-problem-menu>.btn{justify-content:flex-start;min-height:34px;border:0;background:#fff;text-align:left}
 .response-processing .response-problem-menu>.btn:hover{background:#eef4ff;color:#165dff}
 .response-processing .response-problem-actions>summary:focus-visible{outline:2px solid #165dff;outline-offset:2px}
+.response-wording{margin:18px 0;padding:14px;border:1px solid #d8e6fa;border-radius:6px;background:#f6f9ff}
+.response-wording-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.response-wording-heading h3{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;color:#315c96}
+.response-wording-heading>span{font-size:10px;color:#72839c}
+.response-wording>textarea.input{width:100%;min-height:170px;resize:vertical;background:#fff;font-size:12px;line-height:1.85;color:#425571}
+.response-wording-footer{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
+.response-wording-footer>small{flex:1;min-width:150px;font-size:10px;line-height:1.7;color:#8491a4}
+.response-wording-footer>div{display:flex;align-items:center;gap:12px;margin-left:auto}
+.response-wording-footer .text-link{display:inline-flex;align-items:center;gap:4px;font-size:11px}

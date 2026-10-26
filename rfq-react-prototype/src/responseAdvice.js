@@ -3,6 +3,37 @@ import {compareParameter} from './rfqWorkflow.js';
 const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','待确认':'待确认'};
 const operators={'<=':'≤','>=':'≥','=':'='};
 
+export function generateRecommendedWording(row = {}) {
+  const conclusion = String(row.conclusion || '').trim();
+  if (!['有条件 Comply', '不满足', '不适用', '待确认'].includes(conclusion)) return '';
+  const text = (value) => String(value || '').trim().replace(/[。；;]+$/, '');
+  const subject = `针对${row.clause ? `条款 ${row.clause} ` : ''}${row.title ? `“${row.title}”` : '本项要求'}`;
+  const conditions = text(row.conditions), reason = text(row.reason);
+  const context = [conditions && `适用条件：${conditions}。`, reason && `说明：${reason}。`];
+  if (conclusion === '有条件 Comply') return [
+    `${subject}，本项按有条件响应处理。`,
+    ...context,
+    !conditions && '具体适用条件尚待确认。',
+    '请双方确认上述条件及实施范围后，再确定最终应答。',
+  ].filter(Boolean).join('\n');
+  if (conclusion === '不满足') return [
+    `${subject}，当前方案无法满足本项要求。`,
+    ...context,
+    '建议双方进一步明确可接受的替代方案及其适用条件，以双方确认结果为准。',
+  ].filter(Boolean).join('\n');
+  if (conclusion === '不适用') return [
+    `${subject}，本项拟按不适用处理。`,
+    reason ? `不适用依据：${reason}。` : '具体不适用范围及依据尚待确认。',
+    conditions && `适用范围说明：${conditions}。`,
+    '如项目范围调整，需重新核对本项要求。',
+  ].filter(Boolean).join('\n');
+  return [
+    `${subject}，本项尚待核实，暂不作出满足性承诺。`,
+    ...context,
+    '待相关信息与依据确认后，再提供正式答复。',
+  ].filter(Boolean).join('\n');
+}
+
 // This is a display model. It never changes a person's saved answer or approval.
 export function buildResponseAdvice(row={},suggestion={}, {check=null,retrieval='normal'}={}) {
   const pending=(reference,checks)=>({conclusion:'待确认',reference,evidence:'',checks});

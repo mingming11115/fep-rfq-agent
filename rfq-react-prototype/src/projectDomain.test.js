@@ -24,7 +24,7 @@ test('deletion removes a project and its pending work while undo restores the fu
  assert.equal(restored.deletedProjectsById[pid],undefined);
 });
 test('deleting the last project stays empty after migration and can still be undone',()=>{
- const before={actorRole:'销售负责人',projects:[{id:'P',name:'唯一项目'}],requirementsByProject:{P:[{id:'R',draft:'人工应答'}]}};
+ const before={actorRole:'销售负责人',actorId:'demo-sales',projects:[{id:'P',name:'唯一项目',ownerId:'demo-sales',participantIds:['demo-sales']}],requirementsByProject:{P:[{id:'R',draft:'人工应答'}]}};
  const deleted=upgradePrototypeState(removeProject(before,'P'),createDemoState());
  assert.deepEqual(deleted.projects,[]);
  assert.equal(restoreProject(deleted,'P').requirementsByProject.P[0].draft,'人工应答');

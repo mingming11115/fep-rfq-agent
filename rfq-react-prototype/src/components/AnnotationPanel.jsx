@@ -27,7 +27,7 @@ export default function AnnotationPanel({ comments, anchor, rows, onChange, onPr
         <div><span className={`badge ${c.status === '已解决' ? 'success' : 'neutral'}`}>{c.status}</span><button className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => { onSelectComment?.(c.id); onLocate(c.anchor, c.id); }}>定位原文<ArrowUpRight size={12}/></button></div>
         <blockquote>{c.quote}</blockquote>
         {editing === c.id && canEdit && c.createdBy === actorId ? <div className="annotation-edit"><textarea className="input" aria-label="修改批注" value={editedText} onChange={e => setEditedText(e.target.value)}/><button className="text-link" onClick={() => setEditing(null)}>取消</button><button className="text-link" disabled={!editedText.trim()} onClick={() => { if (!canEdit || c.createdBy !== actorId) return; onChange(comments.map(v => v.id === c.id ? { ...v, text: editedText.trim(), editedAt: new Date().toISOString() } : v)); setEditing(null); }}>保存修改</button></div> : <p>{c.text}</p>}
-        <small>{({ 'demo-sales': '销售负责人', 'demo-technical': '技术确认人', 'demo-approver': '最终审批人' })[c.createdBy] || c.createdBy} · {new Date(c.createdAt).toLocaleString('zh-CN')}</small>
+        <small>{({ 'demo-sales': 'SR', 'demo-technical': '技术', 'demo-approver': '最终审批人' })[c.createdBy] || c.createdBy} · {new Date(c.createdAt).toLocaleString('zh-CN')}</small>
         {resolved.status !== 'resolved' && <p className="response-error">旧版本批注，原文定位需重新核对。</p>}
         <div className="workspace-row-actions">
           {canEdit && c.status !== '已解决' && <button className="text-link" onClick={() => onChange(comments.map(v => v.id === c.id ? resolveComment(v, actorId, new Date().toISOString()) : v))}><Check size={12}/>解决</button>}
@@ -37,7 +37,7 @@ export default function AnnotationPanel({ comments, anchor, rows, onChange, onPr
             const id = onPromote(issue); if (id) onChange(comments.map(v => v.id === c.id ? { ...v, linkedIssues: { ...v.linkedIssues, [kind]: id } } : v));
           }}>{c.linkedIssues?.[kind] ? '查看关联' : '转'}{kind === 'review' ? '评审' : '澄清'}</button>)}
         </div>
-        {(c.replies || []).map((r, i) => <div className="annotation-reply" key={i}>{r.text}<small>{({ 'demo-sales': '销售负责人', 'demo-technical': '技术确认人', 'demo-approver': '最终审批人' })[r.by] || r.by}</small></div>)}
+        {(c.replies || []).map((r, i) => <div className="annotation-reply" key={i}>{r.text}<small>{({ 'demo-sales': 'SR', 'demo-technical': '技术', 'demo-approver': '最终审批人' })[r.by] || r.by}</small></div>)}
         {canEdit && <div className="annotation-reply-form"><input className="input" aria-label={`回复批注 ${c.id}`} placeholder="回复这条批注…" value={reply[c.id] || ''} onChange={e => setReply({ ...reply, [c.id]: e.target.value })}/><button className="text-link" disabled={!reply[c.id]?.trim()} onClick={() => { onChange(comments.map(v => v.id === c.id ? { ...v, replies: [...(v.replies || []), { text: reply[c.id].trim(), by: actorId, at: new Date().toISOString() }] } : v)); setReply({ ...reply, [c.id]: '' }); }}>回复</button></div>}
       </article>;
     })}

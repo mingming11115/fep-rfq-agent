@@ -7,7 +7,7 @@ import {makeDocumentDemo} from './documentMocks.js';
 import {requirementValidation} from './domain.js';
 import {getProjectSummary} from './projectSelectors.js';
 
-test('legacy demo board refreshes once, backs up edited samples and retains user projects',()=>{
+test('legacy loading keeps edited examples, failed sources and user projects without replacing history',()=>{
   const demo=createDemoState(),old=structuredClone(demo);
   delete old.demoProjectStagesVersion;
   old.projects=old.projects.filter(p=>p.id!=='RFQ-DEMO-UPLOAD');
@@ -16,10 +16,10 @@ test('legacy demo board refreshes once, backs up edited samples and retains user
   old.requirementsByProject.CUSTOM=[{id:'CUSTOM-R',draft:'保留用户答复'}];
   old.documentsByProject={...old.documentsByProject,'RFQ-002':[{id:'old-file',purpose:'要求来源',status:'失败'}]};
   const next=upgradePrototypeState(old,demo);
-  assert.equal(next.projects.length,6);
-  assert.equal(getProjectSummary(next,'RFQ-002','demo-sales').stage,'审批完成');
+  assert.equal(next.projects.length,old.projects.length);
+  assert.equal(getProjectSummary(next,'RFQ-002','demo-sales').stage,'解析中');
   assert.equal(next.requirementsByProject.CUSTOM[0].draft,'保留用户答复');
-  assert.equal(next.demoProjectStagesBackup.requirementsByProject['RFQ-001'][0].draft,'旧演示中的人工答复');
+  assert.equal(next.requirementsByProject['RFQ-001'][0].draft,'旧演示中的人工答复');
   next.requirementsByProject['RFQ-002'][0].draft='更新演示后的人工答复';
   assert.deepEqual(upgradePrototypeState(next,demo),next);
 });
@@ -50,7 +50,7 @@ test('seeding old Word examples preserves user work, historical snapshots and un
   assert.deepEqual(next.requirementsByProject['RFQ-001'].find(row => row.id === rows[0].id), rows[0]);
   assert.deepEqual(next.requirementsByProject['RFQ-001'].filter(row => rows.some(original => original.id === row.id)), rows);
   assert.deepEqual(next.snapshotsByProject['RFQ-001'], old.snapshotsByProject['RFQ-001']);
-  assert.deepEqual(next.requirementsByProject['RFQ-002'], old.requirementsByProject['RFQ-002']);
+  assert.deepEqual(next.requirementsByProject['RFQ-002'], old.requirementsByProject['RFQ-002'].map(row=>({...row,confirmationAssigneeId:'demo-technical'})));
 });
 
 test('upgrade preserves edited replies, snapshots and independent storage references', () => {
@@ -64,7 +64,7 @@ test('upgrade preserves edited replies, snapshots and independent storage refere
   assert.deepEqual(upgraded.snapshotsByProject[pid], old.snapshotsByProject[pid]);
   assert.equal(upgraded.commentStorage, 'separate-existing-key');
   assert.equal(old.schemaVersion, undefined);
-  assert.deepEqual(getActor(upgraded), { id: 'demo-sales', role: '销售负责人' });
+  assert.deepEqual(getActor(upgraded), { id: 'demo-sales', role: 'SR' });
 });
 test('upgrade is idempotent and retains missing-map projects rather than replacing them', () => {
   const old = { projects: [{ id: 'P-custom', name: '用户项目' }], actorRole: '技术确认人' };
@@ -86,7 +86,7 @@ test('legacy task states migrate without changing ownership deadlines or history
  assert.deepEqual(upgradePrototypeState(next,{members:[]}),next);assert.equal(old.tasksById.T2.status,'办理中');
 });
 test('legacy duplicate review ids migrate without merging matters or reusing ambiguous tasks',()=>{
- const old={projects:[{id:'P'}],reviewsByProject:{P:[{id:'D',requirementId:'R1',status:'待处理',plan:'方案一'},{id:'D',requirementId:'R2',status:'待处理',plan:'方案二'}]},commentsByProject:{P:[{id:'C',anchor:{requirementId:'R2'},linkedIssues:{review:'D'}}]},snapshotsByProject:{P:[{id:'S',status:'已批准'}]}};
+ const old={projects:[{id:'P',ownerId:'demo-sales',participantIds:['demo-sales','demo-technical','demo-approver']}],reviewsByProject:{P:[{id:'D',requirementId:'R1',status:'待处理',plan:'方案一'},{id:'D',requirementId:'R2',status:'待处理',plan:'方案二'}]},commentsByProject:{P:[{id:'C',anchor:{requirementId:'R2'},linkedIssues:{review:'D'}}]},snapshotsByProject:{P:[{id:'S',status:'已批准'}]}};
  const before=reconcileTasks(old),next=reconcileTasks(upgradePrototypeState(before,{members:[]}));
  const rows=next.reviewsByProject.P;assert.equal(new Set(rows.map(r=>r.id)).size,2);
  assert.deepEqual(rows.map(r=>r.plan),['方案一','方案二']);
