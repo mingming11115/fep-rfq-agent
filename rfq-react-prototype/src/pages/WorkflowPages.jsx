@@ -15,6 +15,7 @@ import ApprovalRoute from '../components/ApprovalRoute';
 import { getReviewRoute } from '../rfqWorkflow';
 import DocumentWorkbench from '../components/DocumentWorkbench';
 import WordCommentsPrototype from '../components/WordCommentsPrototype';
+import SourceUploadDialog from '../components/SourceUploadDialog';
 
 const uid = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const now = () => new Date().toLocaleString('zh-CN', { hour12: false });
@@ -49,18 +50,11 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   const [activeId, setActiveId] = useState(focusedRequirementId || null);
   const [uploadOpen, setUploadOpen] = useState(()=>shouldOpenSourceUpload(route,actorRole));
   const [wordCommentsOpen, setWordCommentsOpen] = useState(false);
-  const [uploadFiles, setUploadFiles] = useState([]);
-  const [dragging, setDragging] = useState(false);
-  const [purpose, setPurpose] = useState('要求来源');
-  const [replacementReason, setReplacementReason] = useState('');
-  const [version, setVersion] = useState('V1.0');
-  const [visibility, setVisibility] = useState('项目成员可见');
   const [fileTab, setFileTab] = useState('文件清单');
   const [fileDetail, setFileDetail] = useState(null);
   const [editor, setEditor] = useState(null);
   const [editReason, setEditReason] = useState('');
   const [error, setError] = useState('');
-  const inputRef = useRef(null);
   const timers = useRef([]);
   const running = useRef(new Set());
   const parsedRef = useRef(parsed);
@@ -85,7 +79,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   useEffect(()=>{if(shouldOpenSourceUpload(route,actorRole))setUploadOpen(true);},[route?.action,actorRole]);
 
   function closeUpload(submitted=false) {
-    setUploadOpen(false);setUploadFiles([]);setReplacementReason('');setDragging(false);setError('');
+    setUploadOpen(false);setError('');
     if(route?.action==='upload'){
       const next=getSourceUploadExitRoute({...route,projectId:project.id},submitted);
       navigate(next.page,null,{...next,action:undefined,taskId:undefined});
@@ -142,19 +136,13 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
     setParsed((old) => old.map((item) => item.id === row.id ? { ...item, ...result } : item));
     return result;
   }
-  function selectFiles(incoming) {
-    setUploadFiles(Array.from(incoming || []).map((f) => ({ name: f.name, size: f.size, type: f.type, lastModified: f.lastModified })));
-    setError('');
-  }
-  function upload() {
+  function upload(incoming) {
     if(!canManage)return;
-    if (!uploadFiles.length) { setError('请选择至少一个文件'); return; }
-    if (!version.trim()) { setError('请填写文件版本'); return; }
-    const duplicates = uploadFiles.some((f) => files.some((old) => old.name === f.name));
-    if (duplicates && !replacementReason.trim()) { setError('存在同名文件，请填写替换原因；旧版本将继续保留。'); return; }
-    const incoming = uploadFiles.map((f) => ({ id: uid('FILE'), name: f.name, size: f.size, mime: f.type, lastModified: f.lastModified, purpose, version, visibility, reason: replacementReason.trim(), previousVersionId: files.find((old) => old.name === f.name)?.id, status: '排队中', createdAt: now() }));
-    setFiles((old) => [...old, ...incoming]); incoming.forEach(scheduleParse); closeUpload(true);
-    logEvent('上传资料元数据', project.id, `${incoming.length} 个文件；${purpose}；${version}`); toast('文件已进入模拟处理队列；只保存文件名、大小等元数据');
+    const nextFiles=[...files,...incoming];
+    setFiles(nextFiles);onFilesChange?.(project.id,nextFiles);
+    incoming.forEach(scheduleParse);closeUpload(true);
+    logEvent('上传资料元数据',project.id,`${incoming.length} 个文件；${incoming[0].purpose}；${incoming[0].version}`);
+    toast('文件已进入模拟处理队列；只保存文件名、大小等元数据');
   }
   function openEditor(sourceFile = null) {
     if(!canManage)return;
@@ -179,12 +167,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
     <details className="panel dw-file-records"><summary>文件与版本记录<span>{files.length} 份资料 · 查看历史版本和失败任务</span></summary><div className="tabs"><button className={fileTab === '文件清单' ? 'active' : ''} onClick={() => setFileTab('文件清单')}>文件清单 <span>{files.length}</span></button><button className={fileTab === '版本记录' ? 'active' : ''} onClick={() => setFileTab('版本记录')}>文件版本</button></div>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>文件名称 / 任务编号</th><th>用途</th><th>版本</th><th>处理状态</th><th>上传时间</th><th>操作</th></tr></thead><tbody>{files.map((file) => <tr key={file.id}><td><button className="text-link flow-file-name" onClick={() => setFileDetail(file)}><FileText size={16} />{file.name}</button><div className="muted flow-small">{fileTab === '版本记录' ? (file.previousVersionId ? `替代 ${file.previousVersionId} · ${file.reason}` : '初始版本') : `${file.id} · ${(file.size / 1024 / 1024).toFixed(2)} MB`}</div></td><td>{file.purpose}</td><td>{file.version}</td><td><Badge value={file.status} />{file.error && <div className="flow-error-inline">{file.error}</div>}</td><td className="flow-nowrap">{file.createdAt}</td><td><div className="flow-inline-actions"><button className="text-link" onClick={() => setFileDetail(file)}>详情</button>{canManage && file.status === '失败' && <button className="text-link" onClick={() => { reparse(file); }}>重试</button>}{canManage && file.status === '失败' && <button className="text-link" onClick={() => openEditor(file)}>手动补录</button>}{file.parsedCount > 0 && <button className="text-link" onClick={() => { const row = parsed.find((r) => r.sourceFileId === file.id) || parsed[0]; setActiveId(row?.id); document.querySelector('.dw-workbench')?.scrollIntoView({ behavior: 'smooth' }); }}>查看结果</button>}</div></td></tr>)}</tbody></table></div>{!files.length && <NoRows title="还没有项目资料">上传 RFQ 文档，或载入示例体验解析流程。</NoRows>}
     </details>
-    {uploadOpen && canManage && <Modal title="上传并智能解析" onClose={() => closeUpload(false)} footer={<><button className="btn" onClick={() => closeUpload(false)}>取消</button><button className="btn btn-primary" onClick={upload}>开始智能解析</button></>}>
-      <div className="dw-upload-steps"><span><b>1</b>选择文件</span><ChevronRight size={14}/><span><b>2</b>自动解析</span><ChevronRight size={14}/><span><b>3</b>查看结果</span></div><div className="dw-mode-note"><ShieldCheck size={19}/><div><strong>智能抽取 · 自动导入</strong><p>按文件用途抽取条款，完成后直接进入细则比对。本原型仅记录元数据，抽取内容使用模拟数据。</p></div></div><div className="form-grid"><Field label="文件用途" required><select className="select" value={purpose} onChange={(e) => setPurpose(e.target.value)}><option>要求来源</option><option>补充附件</option><option>应答模板</option></select></Field><Field label="文件版本" required><input className="input" value={version} onChange={(e) => setVersion(e.target.value)} /></Field><Field label="可见范围"><select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value)}><option>项目成员可见</option><option>项目负责人及专业人员</option></select></Field><Field label="关联项目"><input className="input" value={project.name} readOnly /></Field></div>
-      <button className={`flow-dropzone ${dragging ? 'dw-drop-active' : ''}`} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectFiles(e.dataTransfer.files); }} onClick={() => inputRef.current?.click()}><Upload size={28} /><strong>拖拽文件到这里，或点击选择</strong><span>DOC / DOCX（主要格式）· 兼容 PDF / Excel / CSV / TXT</span></button><input ref={inputRef} aria-label="选择 RFQ 文件" className="flow-hidden" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={(e) => selectFiles(e.target.files)} />
-      {uploadFiles.map((f, i) => <div className="flow-upload-item" key={`${f.name}-${i}`}><FileText size={16} /><span>{f.name}<small>{(f.size / 1024).toFixed(1)} KB</small></span>{files.some((old) => old.name === f.name) && <Badge value="同名文件 · 新版本" />}<button className="text-link" aria-label={`移除 ${f.name}`} onClick={() => setUploadFiles((old) => old.filter((_, n) => n !== i))}><X size={16} /></button></div>)}
-      {uploadFiles.some((f) => files.some((old) => old.name === f.name)) && <Field label="替换原因（保留原版本）" required wide><textarea className="input" value={replacementReason} onChange={(e) => setReplacementReason(e.target.value)} placeholder="说明版本变化及受影响范围" /></Field>}{purpose !== '要求来源' && <p className="muted">该用途仅登记资料，不触发要求解析。</p>}{error && <p className="flow-error-inline" role="alert">{error}</p>}
-    </Modal>}
+    {uploadOpen && canManage && <SourceUploadDialog project={project} files={files} onSubmit={upload} onClose={()=>closeUpload(false)}/>}
     {editor && canManage && <Drawer title="补录要求" onClose={() => setEditor(null)} width={600} footer={<><button className="btn" onClick={() => setEditor(null)}>取消</button><button className="btn btn-primary" onClick={saveEditor}>保存补录</button></>}><Notice>保存后自动进入RFQ细则比对。</Notice><div className="form-grid"><Field label="条款编号"><input className="input" value={editor.clause} onChange={(e) => setEditor({ ...editor, clause: e.target.value })} /></Field><Field label="原文章节路径"><input className="input" value={(editor.sectionPath || []).join(' / ')} onChange={(e) => setEditor({ ...editor, sectionPath: e.target.value.split('/').map(s => s.trim()).filter(Boolean) })} placeholder="按原文填写，例如：反应模块 / 温控" /></Field><Field label="条目标题" required wide><input className="input" value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} /></Field><Field label="客户要求原文" required wide><textarea className="input flow-textarea" value={editor.original} onChange={(e) => setEditor({ ...editor, original: e.target.value })} /></Field><Field label="必要条件" wide><textarea className="input" value={asText(editor.conditions)} onChange={(e) => setEditor({ ...editor, conditions: e.target.value })} /></Field><Field label="来源文件 / 多来源定位" required wide><textarea className="input" value={asText(editor.source)} onChange={(e) => setEditor({ ...editor, source: e.target.value })} /></Field><Field label="页码 / 工作表 / 单元格"><input className="input" value={editor.sourcePage || ''} onChange={(e) => setEditor({ ...editor, sourcePage: e.target.value })} /></Field><Field label="补录原因" required wide><textarea className="input" value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="说明补录原因" /></Field></div>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Drawer>}
     {fileDetail && <Drawer title="资料详情与版本" onClose={() => setFileDetail(null)} width={580}><div className="flow-detail-heading"><FileText size={24} /><div><h3>{fileDetail.name}</h3><Badge value={files.find((f) => f.id === fileDetail.id)?.status || fileDetail.status} /></div></div><dl className="flow-description"><dt>资料编号</dt><dd>{fileDetail.id}</dd><dt>用途 / 版本</dt><dd>{fileDetail.purpose} / {fileDetail.version}</dd><dt>可见范围</dt><dd>{fileDetail.visibility || '项目成员可见'}</dd><dt>来源定位</dt><dd>解析后条目保留文件名、页码及条款。</dd><dt>替代版本</dt><dd>{fileDetail.previousVersionId || '初始版本'}</dd><dt>替换原因</dt><dd>{fileDetail.reason || '—'}</dd><dt>原件状态</dt><dd>{fileDetail.realSource ? <a href={fileDetail.localUrl} target="_blank" rel="noreferrer">查看BHEL原始PDF（43页）</a> : '仅登记元数据，原文件请在本地查看。'}</dd></dl><Notice>{fileDetail.realSource ? '此文件是从BHEL官网下载的原始PDF。来源页码采用PDF实际页序；中文为演示译文，摘录仅覆盖精选条款。' : '原件预览为模拟视图，不会显示或上传真实文件内容。解析异常可重试或补录；条目问题在RFQ细则比对处理。'}</Notice>{fileDetail.error && <Notice type="error">{fileDetail.error}</Notice>}<h4>相关条目</h4>{parsed.filter((r) => r.sourceFileId === fileDetail.id).map((r) => <button className="flow-related-row" key={r.id} onClick={() => { setActiveId(r.id); setFileDetail(null); }}>{r.clause} {r.title}<ChevronRight size={15} /></button>)}</Drawer>}
   </div>;

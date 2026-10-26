@@ -4,6 +4,19 @@ import {snapshotFingerprint} from './snapshotDomain.js';
 import {createDemoState} from './data.js';
 import {upgradePrototypeState} from './stateMigration.js';
 import {getExportIssues} from './domain.js';
+import * as selectors from './projectSelectors.js';
+test('source detail distinguishes missing uploads from queued running failed and completed sources',()=>{
+ const state={documentsByProject:{P:[]}};
+ assert.equal(selectors.getProjectSourceSummary(state,'P').status,'empty');
+ const file={id:'F',purpose:'要求来源',name:'客户RFQ.pdf'};
+ for(const [status,want] of [['排队中','parsing'],['处理中','parsing'],['失败','failed'],['完成','ready']]){
+  state.documentsByProject.P=[{...file,status}];
+  assert.equal(selectors.getProjectSourceSummary(state,'P').status,want);
+ }
+ state.documentsByProject.P=[{...file,status:'失败'},{...file,id:'F2',previousVersionId:'F',status:'完成'}];
+ const result=selectors.getProjectSourceSummary(state,'P');
+ assert.equal(result.status,'ready');assert.deepEqual(result.files.map(f=>f.id),['F2']);
+});
 test('demo board covers every stage with usable approvals and bound export records',()=>{
  const demo=createDemoState(),state=reconcileTasks(upgradePrototypeState(demo,demo));
  assert.deepEqual(state.projects.map(p=>getProjectSummary(state,p.id,'demo-sales').stage).sort(),['待上传','解析中','评审中','审批完成','已导出'].sort());

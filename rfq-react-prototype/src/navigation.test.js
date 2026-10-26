@@ -14,10 +14,13 @@ test('return context keeps template mapping and selected issue without shared mu
  result.mapping.answer='changed';assert.equal(readReturnContext('export:P',storage).mapping.answer,'draft');
 });
 
-test('upload from RFQ detail carries a direct dialog action and its originating detail page',()=>{
- const route=navigation.getSourceUploadRoute({page:'settings',projectId:'P'},'销售负责人');
- assert.deepEqual(route,{page:'documents',projectId:'P',action:'upload',returnKey:'settings'});
+test('upload from RFQ detail keeps the background page and selected task context',()=>{
+ const origin={page:'settings',projectId:'P',requirementId:'R',taskId:'T',action:'view',returnKey:'tasks'};
+ const route=navigation.getSourceUploadRoute(origin,'销售负责人');
+ assert.deepEqual(route,{...origin,upload:'true'});
  assert.equal(navigation.shouldOpenSourceUpload(parseWorkRoute(buildWorkRoute(route)),'销售负责人'),true);
+ assert.deepEqual(navigation.getSourceUploadExitRoute(route,false),origin);
+ assert.deepEqual(navigation.getSourceUploadExitRoute(route,true),{page:'documents',projectId:'P',returnKey:'projects'});
 });
 test('read-only roles never receive the direct upload action even through an old upload link',()=>{
  for(const role of ['技术确认人','最终审批人']){

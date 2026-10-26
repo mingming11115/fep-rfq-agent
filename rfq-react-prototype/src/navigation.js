@@ -2,7 +2,7 @@ import {canPerform} from './permissions.js';
 export const PROJECT_PAGES=['documents','response','reviews','export','versions','settings'];
 export const ADMIN_PAGES=['admin','knowledge','capabilities','evidence','audit'];
 const pages=['dashboard','tasks','projects','analysis',...PROJECT_PAGES,...ADMIN_PAGES];
-const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action'];
+const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload'];
 export function parseWorkRoute(hash='') {
  const [path,query='']=hash.replace(/^#\/?/,'').split('?');const route={page:pages.includes(path)?path:'dashboard'};
  const params=new URLSearchParams(query);for(const key of fields)if(params.has(key))route[key]=params.get(key);
@@ -14,12 +14,14 @@ export function buildWorkRoute(route) {
 }
 export function getSourceUploadRoute(route, role) {
  const next={page:'documents',projectId:route.projectId};
- return canPerform(role,'source:manage') ? {...next,action:'upload',returnKey:['response','settings','reviews','versions'].includes(route.page)?route.page:'response'} : next;
+ if(!canPerform(role,'source:manage'))return next;
+ return ['response','settings','reviews','versions'].includes(route.page)?{...route,upload:'true'}:{...next,action:'upload'};
 }
 export function shouldOpenSourceUpload(route, role) {
- return route?.page==='documents'&&route.action==='upload'&&canPerform(role,'source:manage');
+ return canPerform(role,'source:manage')&&((['response','settings','reviews','versions'].includes(route?.page)&&route.upload==='true')||(route?.page==='documents'&&route.action==='upload'));
 }
 export function getSourceUploadExitRoute(route, submitted=false) {
+ if(route.upload==='true'&&!submitted){const next={...route};delete next.upload;return next;}
  const origin=['response','settings','reviews','versions'].includes(route.returnKey)?route.returnKey:'documents';
  return {page:submitted?'documents':origin,projectId:route.projectId,returnKey:'projects'};
 }

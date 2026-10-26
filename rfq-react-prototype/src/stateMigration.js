@@ -3,7 +3,7 @@ import {makeDocumentDemo} from './documentMocks.js';
 export const actorIdForRole = role => role === '销售负责人' ? 'demo-sales' : /最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo) {
-  const state = structuredClone(previous?.projects?.length ? previous : demo);
+  const state = structuredClone(Array.isArray(previous?.projects) ? previous : demo);
   seedProjectStageExamples(state, demo);
   state.schemaVersion = 3;
   state.actorRole ||= '销售负责人';
