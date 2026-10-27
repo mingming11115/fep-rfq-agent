@@ -5,6 +5,6 @@
 
 
 .dw-layout{display:grid;grid-template-columns:180px minmax(0,1fr)}.dw-outline{padding:18px 10px;background:#fafbfe;border-right:1px solid #e6eaf2;min-width:0}.dw-outline h2{font-size:12px;margin:0 10px 15px;color:#7b8798}.dw-outline button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;border:0;background:transparent;border-radius:5px;text-align:left;padding:11px 12px;color:#65728a;font:inherit;font-size:12px;cursor:pointer;overflow-wrap:anywhere}.dw-outline button.active{background:#eaf0ff;color:#315efb;font-weight:600}.dw-outline small{color:#929eb0}.dw-outline p{font-size:12px;color:#929eb0;line-height:1.8}.dw-result-title:disabled{cursor:wait;opacity:.6}.dw-result-tools .input{padding-right:6px}.dw-card-actions{flex-wrap:wrap}.dw-card-actions small{margin-right:auto}.dw-result-title:hover strong{text-decoration:underline;color:#315efb}
-.dw-layout .dw-split{grid-template-columns:minmax(0,1fr) minmax(300px,1fr)}
+.dw-layout .dw-split{grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr)}
 @media(max-width:1200px){.dw-layout{grid-template-columns:150px minmax(0,1fr)}.dw-layout .dw-split{grid-template-columns:minmax(0,1fr)}.dw-layout .dw-original{border-right:0;border-bottom:1px solid #e4e8ef}.dw-layout .dw-paper-scroll{max-height:360px}}
 @media(max-width:760px){.dw-layout{grid-template-columns:1fr}.dw-outline{display:flex;flex-wrap:wrap;gap:5px;border-right:0;border-bottom:1px solid #e4e8ef}.dw-outline h2{width:100%;margin-bottom:6px}.dw-outline button{width:auto;max-width:100%;gap:15px}}

@@ -3,6 +3,17 @@ import {compareParameter} from './rfqWorkflow.js';
 const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','待确认':'待确认'};
 const operators={'<=':'≤','>=':'≥','=':'='};
 
+export function buildSourceResponseAnnotation(row = {}, response = row) {
+  const current = { ...row, ...response };
+  const value = String(current.conclusion || '').trim();
+  const conclusion = Object.hasOwn(conclusionLabels, value) ? value : '待确认';
+  if (conclusion === 'Comply') return { kind: 'comply', label: 'Comply', conclusion, wording: '' };
+  return {
+    kind: 'recommendation', label: '推荐话术', conclusion,
+    wording: generateRecommendedWording({ ...current, conclusion }),
+  };
+}
+
 export function generateRecommendedWording(row = {}) {
   const conclusion = String(row.conclusion || '').trim();
   if (!['有条件 Comply', '不满足', '不适用', '待确认'].includes(conclusion)) return '';
