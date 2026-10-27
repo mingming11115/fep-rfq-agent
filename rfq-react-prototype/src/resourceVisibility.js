@@ -8,6 +8,7 @@ export function selectReadableResources(rows,context,kind='knowledge') {
  if(!c.enabled&&!c.managed)return [];
  return rows.filter(row=>{
   if((row.buId||'BU-DEMO')!==buId)return false;
+  if(kind==='catalog')return true;
   const origin=projectOrigin(row);
   if(row.scope==='仅当前项目')return !!origin&&canAccessProject(state,actorId,origin);
   const draft=['草稿','待审核','退回','候选'].includes(row.status);

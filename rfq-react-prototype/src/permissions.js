@@ -6,7 +6,7 @@ const modernPermissions={
  'review:process':['技术'],'review:clarify':['SR'],'review:communicate':['SR'],'review:approve':['SR','技术'],
  'snapshot:submit':['SR'],'snapshot:approve':['SR','技术'],'export:configure':['SR'],'export:download':['SR'],
  'analysis:view':['SR','技术'],'analysis:run':['SR','技术'],'resource:edit':['技术'],'evidence:manage':['技术'],
- 'resource:approve':['BU管理员'],'audit:view':['BU管理员','后台管理'],'system:manage':['后台管理'],'bu:manage':['BU管理员'],
+ 'resource:approve':['BU管理员'],'model:configure':['BU管理员'],'audit:view':['BU管理员','后台管理'],'system:manage':['后台管理'],'bu:manage':['BU管理员'],
 };
 function modernCan(role,action,context){
  if(!modernPermissions[action]?.includes(role))return false;

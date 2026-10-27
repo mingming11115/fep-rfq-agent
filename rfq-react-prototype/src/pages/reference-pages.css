@@ -167,6 +167,12 @@
 .ref-model-summary b { color: #7186a5; font-weight: 400; }
 .ref-side-note { font-size: 10px; color: #9ba9bd; line-height: 1.9; padding: 0 20px; }
 .ref-cap-main { min-width: 0; }
+.ref-process-tree { display: grid; gap: 5px; padding: 10px 14px; width: 100%; }
+.ref-process-tree-heading { display: flex; align-items: center; justify-content: space-between; color: #53657c; padding: 7px 4px; font-size: 12px; }
+.ref-process-tree > button { display: flex; justify-content: space-between; align-items: center; gap: 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; text-align: left; padding: 10px; color: #52647b; cursor: pointer; font: inherit; font-size: 12px; }
+.ref-process-tree > button:hover { background: #f0f4fb; }
+.ref-process-tree > button.active { border-color: #d6e4ff; background: #edf4ff; color: #2459c5; }
+.ref-process-tree small { display: block; color: #8693a4; font-size: 11px; margin-top: 5px; line-height: 1.5; }
 .ref-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 22px; flex-wrap: wrap; }
 .ref-section-heading h3 { font-size: 14px; margin: 0; font-weight: 600; }
 .ref-section-heading p { color: #99a5b7; font-size: 10px; margin: 9px 0 0; }
