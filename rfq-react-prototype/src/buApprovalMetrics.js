@@ -18,6 +18,20 @@ function summarize(records){
  return {count:records.length,approved:records.filter(r=>r.status==='已批准').length,rejected:records.filter(r=>r.status==='已退回').length,
   averageHours:mean(records.map(r=>r.hours)),datedCount:dated.length,onTimeRate:dated.length?Math.round(dated.filter(r=>r.end<=r.deadline).length/dated.length*100):null};
 }
+function chartData(currentRecords,previousRecords,{period,start,previousStart,current}){
+ const count=period===7?7:6,span=period*day/count;
+ const label=value=>new Date(value).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit'});
+ const trend=Array.from({length:count},(_,index)=>{
+  const from=start+index*span,to=from+span,previousFrom=previousStart+index*span,previousTo=previousFrom+span;
+  const inBucket=(records,a,b)=>records.filter(r=>r.end>=a&&(index===count-1?r.end<=b:r.end<b));
+  const recent=inBucket(currentRecords,from,to),prior=inBucket(previousRecords,previousFrom,previousTo);
+  return {label:label(to),rangeLabel:`${label(from)}–${label(to)}`,previousRangeLabel:`${label(previousFrom)}–${label(previousTo)}`,
+   count:recent.length,averageHours:mean(recent.map(r=>r.hours)),previousCount:prior.length,previousAverageHours:mean(prior.map(r=>r.hours))};
+ });
+ const durations=[{label:'≤4小时',min:-Infinity,max:4},{label:'4–8小时',min:4,max:8},{label:'8–24小时',min:8,max:24},{label:'>24小时',min:24,max:Infinity}]
+  .map(({label,min,max})=>({label,count:currentRecords.filter(r=>r.hours>min&&r.hours<=max).length}));
+ return {bucketDays:span/day,trend,durations,outcomes:[{key:'approved',label:'已通过',count:current.approved},{key:'rejected',label:'已退回',count:current.rejected}]};
+}
 
 // Called only after the dashboard selector authorizes and scopes the BU projects.
 // Return timing metadata, never response content or reviewers' written opinions.
@@ -72,6 +86,7 @@ export function getBuApprovalMetrics(state,projects,{now=new Date(),periodDays=3
  const improvementPercent=current.averageHours!==null&&previous.averageHours>0?Math.round((previous.averageHours-current.averageHours)/previous.averageHours*1000)/10:null;
  pending.sort((a,b)=>(b.hours??-1)-(a.hours??-1)||a.projectId.localeCompare(b.projectId));
  return {periodDays:period,mode,current,previous,improvementPercent,incompleteRecords,byProject,
+  charts:chartData(currentRecords,previousRecords,{period,start,previousStart,current}),
   pending:{count:pending.length,longestHours:pending.some(r=>r.hours!==null)?Math.max(...pending.filter(r=>r.hours!==null).map(r=>r.hours)):null,rows:pending},
   phases:[['sr','SR方评审','srHours'],['technical','技术组评审','technicalHours']].map(([key,label,field])=>{
    const durations=currentRecords.map(r=>r[field]).filter(value=>value!==null);return {key,label,count:durations.length,averageHours:mean(durations)};
