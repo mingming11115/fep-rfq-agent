@@ -52,7 +52,7 @@ test('restored administrators without a saved current BU can open their first ma
  s.actorId='demo-bu-admin';s.actorRole='BU管理员';delete s.activeBuId;
  const result=selectors.selectBuDashboard(s,{now});
  assert.ok(result,'a valid administrator must have an initial dashboard');
- assert.equal(result.bu.id,'BU-DEMO');assert.equal(result.stats.projects,5);
+ assert.equal(result.bu.id,'BU-DEMO');assert.equal(result.stats.projects,6);
  // An explicitly selected, unauthorized BU must still fail closed.
  s.activeBuId='FOREIGN';assert.equal(selectors.selectBuDashboard(s,{now}),null);
 });
@@ -85,11 +85,11 @@ test('current project stages use valid final review and exported projects leave 
  const demo=createDemoState(),s=reconcileTasks(upgradePrototypeState(demo,demo));
  s.actorId='demo-bu-admin';s.actorRole='BU管理员';
  const result=selectors.selectBuDashboard(s,{buId:'BU-DEMO',now});
- assert.deepEqual(result.stages.map(stage=>stage.count),[1,1,1,1,1]);
- assert.equal(result.stats.projects,5);assert.equal(result.stats.active,4);
+ assert.deepEqual(result.stages.map(stage=>stage.count),[1,2,1,1,1]);
+ assert.equal(result.stats.projects,6);assert.equal(result.stats.active,5);
  const exported=result.projects.find(p=>p.stage==='已导出');assert.equal(exported.overdue,false);
  s.requirementsByProject[exported.id][0].draft='应答变更';
  const changed=selectors.selectBuDashboard(s,{buId:'BU-DEMO',now});
  assert.equal(changed.projects.find(p=>p.id===exported.id).stage,'评审中');
- assert.equal(changed.stats.active,5);
+ assert.equal(changed.stats.active,6);
 });

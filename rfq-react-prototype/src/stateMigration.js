@@ -60,6 +60,19 @@ export function upgradePrototypeState(previous, demo) {
 function seedProjectStageExamples(state,demo) {
   // Existing rows, files and signatures are never replaced by freshly generated examples.
   state.demoProjectStagesVersion ||= demo.demoProjectStagesVersion;
+  if(state.demoParsingExampleVersion===1)return;
+  if(!state.projects.some(project=>demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer)))return;
+  const id='RFQ-DEMO-PARSING';
+  if(!state.projects.some(project=>project.id===id)&&!state.deletedProjectsById?.[id]){
+    state.projects.push({id,name:'解析中示例 · 智能应答对比',customer:'演示客户（模拟）',equipment:'DEMO-CUT 300 · V2.1',owner:'林晓',ownerId:'demo-sales',createdById:'demo-sales',participantIds:['demo-sales','demo-technical','demo-approver'],buId:'BU-DEMO',deadline:'2026-11-10',sample:true});
+    for(const key of ['requirementsByProject','reviewsByProject','snapshotsByProject']){
+      state[key] ||= {};
+      state[key][id]=[];
+    }
+    state.documentsByProject ||= {};
+    state.documentsByProject[id]=[{id:`${id}-FILE`,name:'智能应答对比_客户技术要求.docx',purpose:'要求来源',version:'V1.0',status:'处理中',parseStage:'comparing',demoParsePreview:true,sample:true,size:1482000,visibility:'项目成员可见',createdAt:'2026/10/27 09:00:00'}];
+  }
+  state.demoParsingExampleVersion=1;
 }
 
 function seedClauseStatusExamples(state, project) {

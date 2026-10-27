@@ -106,12 +106,18 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   }
   function scheduleParse(file) {
     if(!canManage)return;
+    if(file.demoParsePreview)return;
     if (running.current.has(file.id)) return;
     running.current.add(file.id);
     const runId=uid('RUN'),startedAt=new Date().toISOString();
     const finish=(status,counts={})=>onAnalysisRun({id:runId,fileId:file.id,sourceVersion:file.version,type:'parse',status,startedAt,endedAt:new Date().toISOString(),successCount:0,failedCount:0,needsHumanCount:0,previousRunId:file.lastRunId,...counts});
     const fail = !/\.(pdf|docx?|xlsx?|csv|txt)$/i.test(file.name);
-    timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '处理中', error: '' } : f)), 350));
+    timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '处理中', parseStage: 'extracting', error: '' } : f)), 350));
+    if (!fail && file.purpose === '要求来源') {
+      for (const [delay, parseStage] of [[1250, 'comparing'], [2250, 'generating']]) {
+        timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, parseStage } : f)), delay));
+      }
+    }
     timers.current.push(setTimeout(() => {
       running.current.delete(file.id);
       if (fail) { finish('失败',{failedCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '失败', lastRunId:runId, error: '演示解析器仅支持 PDF、Word、Excel、CSV、TXT；请转换格式或手动补录。' } : f)); logEvent('解析失败', file.id, '不支持的文件格式'); return; }
@@ -119,15 +125,15 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
       const previous = parsedRef.current.filter((row) => row.sourceFileId === file.id);
       const rows = previous.length ? previous : project.id === BHEL_ID && file.realSource ? makeDocumentDemo(project.id).parsed : makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourceOriginal: r.original, sourceVersion: file.version, sourcePage: index + 2, sourceFileId: file.id, sectionPath: [], confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果：未读取原文件，章节待识别', version: 1 }));
       setParsed((old) => old.some((r) => r.sourceFileId === file.id) ? old : [...old, ...rows]);
-      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parsedCount: rows.length, lastRunId:runId, parsedAt: now(), error: '' } : f));
+      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parseStage: 'completed', parsedCount: rows.length, lastRunId:runId, parsedAt: now(), error: '' } : f));
       finish('完成',{successCount:rows.length,needsHumanCount:rows.filter(r=>r.matchLevel==='none').length});
-      setActiveId(rows[0]?.id); logEvent('模拟解析完成', file.id, `${rows.length} 条要求，自动进入细则比对`);
-    }, 1250));
+      setActiveId(rows[0]?.id); logEvent('模拟解析完成', file.id, `${rows.length} 条要求已完成应答项对比，自动进入细则比对`);
+    }, !fail && file.purpose === '要求来源' ? 2600 : 1250));
   }
   function reparse(file) {
     if(!canManage)return;
     if (running.current.has(file.id)) return;
-    setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '排队中', error: '' } : f));
+    setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '排队中', parseStage: 'queued', error: '' } : f));
     scheduleParse(file); logEvent('重新解析资料', file.id, '保留已修改条款及已有应答，不重复导入');
     toast('已重新进入模拟解析队列，保留已修改字段与已有应答');
   }

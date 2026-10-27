@@ -5,7 +5,30 @@ import { upgradePrototypeState, getActor } from './stateMigration.js';
 import {reconcileTasks} from './taskDomain.js';
 import {makeDocumentDemo} from './documentMocks.js';
 import {requirementValidation} from './domain.js';
-import {getProjectSummary} from './projectSelectors.js';
+import {getProjectSummary,selectProjects,getProjectSourceSummary} from './projectSelectors.js';
+import {BHEL_ID,makeBhelRequirements} from './bhelDemo.js';
+
+test('previously parsed demo projects receive a persistent parsing preview without replacing existing work',()=>{
+  const demo=createDemoState(),old=upgradePrototypeState(demo,demo);
+  old.projects=old.projects.filter(project=>project.id!=='RFQ-DEMO-PARSING');
+  for(const key of ['requirementsByProject','reviewsByProject','snapshotsByProject','documentsByProject','commentsByProject','membersByProject'])delete old[key]?.['RFQ-DEMO-PARSING'];
+  delete old.demoParsingExampleVersion;
+  old.requirementsByProject[BHEL_ID]=makeBhelRequirements();
+  old.documentsByProject[BHEL_ID]=old.documentsByProject[BHEL_ID].map(file=>({...file,status:'完成'}));
+  old.requirementsByProject['RFQ-001'][0].draft='保留人工应答';
+  const next=upgradePrototypeState(old,demo),pid='RFQ-DEMO-PARSING';
+  assert.ok(selectProjects(next,{actorId:'demo-sales'}).some(project=>project.id===pid),'SR can find the parsing example in My RFQ');
+  assert.equal(getProjectSummary(next,pid,'demo-sales').stage,'解析中');
+  assert.equal(getProjectSourceSummary(next,pid).status,'parsing');
+  assert.equal(next.documentsByProject[pid][0].parseStage,'comparing');
+  assert.equal(next.documentsByProject[pid][0].demoParsePreview,true);
+  assert.deepEqual(next.requirementsByProject[pid],[]);
+  assert.equal(next.requirementsByProject['RFQ-001'][0].draft,'保留人工应答');
+  assert.deepEqual(next.requirementsByProject[BHEL_ID].map(row=>[row.id,row.draft,row.original]),old.requirementsByProject[BHEL_ID].map(row=>[row.id,row.draft,row.original]));
+  assert.deepEqual(next.documentsByProject[BHEL_ID],old.documentsByProject[BHEL_ID]);
+  assert.deepEqual(next.snapshotsByProject, {...old.snapshotsByProject,[pid]:[]});
+  assert.deepEqual(upgradePrototypeState(next,demo),next);
+});
 
 test('legacy loading keeps edited examples, failed sources and user projects without replacing history',()=>{
   const demo=createDemoState(),old=structuredClone(demo);
@@ -16,7 +39,7 @@ test('legacy loading keeps edited examples, failed sources and user projects wit
   old.requirementsByProject.CUSTOM=[{id:'CUSTOM-R',draft:'保留用户答复'}];
   old.documentsByProject={...old.documentsByProject,'RFQ-002':[{id:'old-file',purpose:'要求来源',status:'失败'}]};
   const next=upgradePrototypeState(old,demo);
-  assert.equal(next.projects.length,old.projects.length);
+  assert.equal(next.projects.length,old.projects.length+1);
   assert.equal(getProjectSummary(next,'RFQ-002','demo-sales').stage,'解析中');
   assert.equal(next.requirementsByProject.CUSTOM[0].draft,'保留用户答复');
   assert.equal(next.requirementsByProject['RFQ-001'][0].draft,'旧演示中的人工答复');
