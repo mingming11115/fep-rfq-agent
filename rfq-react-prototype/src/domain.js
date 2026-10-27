@@ -1,3 +1,5 @@
+import { canReviewWithoutManualConfirmation, captureSystemRecommendation, getUnconfirmedComplyRows } from './responseRecommendation.js';
+
 const FINAL_CONCLUSIONS = new Set(['Comply', '有条件 Comply', '不满足', '不适用']);
 const MATERIAL_FIELDS = ['original', 'conclusion', 'draft', 'conditions', 'evidence', 'reason', 'owner'];
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
@@ -6,7 +8,7 @@ export function importParsedRequirements(existing, parsed) {
   const rows = new Map(existing.map((row) => [row.id, row]));
   for (const row of parsed) {
     if (rows.has(row.id)) continue;
-    const added = { ...row, status: '待确认' };
+    const added = { ...row, systemRecommendation: structuredClone(row.systemRecommendation || captureSystemRecommendation(row)), status: '待确认' };
     delete added.confirmedAt;
     delete added.confirmedBy;
     rows.set(row.id, added);
@@ -64,13 +66,13 @@ export function confirmRequirement(row) {
   return { ...row, status: '已确认', needsReview:false,sourceRevision:false,sourceCorrected:false,confirmationReason:undefined,confirmedAt: new Date().toISOString() };
 }
 
-export function getExportIssues(requirements = [], reviews = []) {
+export function getExportIssues(requirements = [], reviews = [], projectId) {
   const issues = [];
   if (requirements.length === 0) issues.push({ id: 'empty-requirements', label: '应答矩阵', message: '尚无可提交的要求条目，请先解析并确认客户要求' });
   for (const row of requirements) {
     const messages = requirementValidation(row);
     if(row.pendingReviewProposal)messages.push('评审或澄清建议尚未核对');
-    if (row.status !== '已确认') messages.unshift('条目尚未完成内部确认');
+    if (row.status !== '已确认' && !canReviewWithoutManualConfirmation(row,projectId)) messages.unshift('条目尚未完成内部确认；系统未推荐 Comply 的条目须人工确认');
     if (messages.length) issues.push({ id: row.id,objectType:'requirement',objectId:row.id,route:{page:'response',requirementId:row.id,fileId:row.sourceFileId,sourceVersion:row.sourceVersion}, label: `${row.clause || ''} ${row.title || '要求条目'}`.trim(), message: messages.join('；') });
   }
   for (const review of reviews) {
@@ -85,6 +87,7 @@ export function makeSnapshot(projectId, requirements, actorRole) {
     id: `SNAP-${id}`, projectId, status: '审批中',
     createdAt: new Date().toISOString(), createdBy: actorRole,
     rows: structuredClone(requirements),
+    unconfirmedComplyIds: getUnconfirmedComplyRows(requirements,projectId).map(row=>row.id),
   };
 }
 

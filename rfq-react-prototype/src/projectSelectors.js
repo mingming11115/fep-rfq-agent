@@ -1,5 +1,6 @@
 import {canAccessProject} from './personnelDomain.js';
 import {isFinalReviewApproved} from './finalReviewDomain.js';
+import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
 export function selectAccessibleState(state,actorId){
  const projects=(state.projects||[]).filter(p=>canAccessProject(state,actorId,p.id)),ids=new Set(projects.map(p=>p.id)),next={...state,projects,analysisRuns:(state.analysisRuns||[]).filter(r=>ids.has(r.projectId))};
  for(const key of ['requirementsByProject','reviewsByProject','snapshotsByProject','documentsByProject','commentsByProject','membersByProject','exportScopesByProject'])next[key]=Object.fromEntries(Object.entries(state[key]||{}).filter(([id])=>ids.has(id)));
@@ -23,7 +24,7 @@ export function getProjectSummary(state,projectId,actorId) {
   const open=reviews.filter(r=>!['已关闭','已取消'].includes(r.status));
   const pending=selectMyTasks(state,{actorId,projectId,tab:'pending'}).length;
   const current=s=>checkSnapshotValidity(s,currentProjectScope(state,projectId,s)).valid;
-  const finished=rows.length>0&&rows.every(r=>r.status==='已确认'&&!r.needsReview&&!r.sourceRevision&&!r.sourceCorrected)&&!open.length;
+  const finished=rows.length>0&&rows.every(r=>r.status==='已确认'&&!r.needsReview&&!r.sourceRevision&&!r.sourceCorrected||canReviewWithoutManualConfirmation(r,projectId))&&!open.length;
   const {files:sources}=getProjectSourceSummary(state,projectId);
   const parsing=sources.some(f=>['排队中','处理中','失败'].includes(f.status));
   const snapshot=latestSnapshot(snapshots);

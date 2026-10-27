@@ -1,4 +1,5 @@
 import {confirmRequirement} from './domain.js';
+import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
 import {canAccessProject,getPersonnelContext,getEligiblePersonnel,getRequiredFinalReviewers,personName} from './personnelDomain.js';
 import {actorIdForRole} from './stateMigration.js';
 import {normalizeTaskStatus} from './taskStatus.js';
@@ -117,7 +118,7 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
   for(const project of state.projects||[]) {
     const reviews=state.reviewsByProject?.[project.id]||[];
     for(const row of state.requirementsByProject?.[project.id]||[]) {
-      if(row.status==='已确认')continue;
+      if(row.status==='已确认'||canReviewWithoutManualConfirmation(row,project.id))continue;
       if(reviews.some(r=>r.requirementId===row.id&&!['已关闭','已取消'].includes(r.status)))continue;
       const kind=row.needsReview||row.status==='待复核'?'recheck':row.readyForConfirmation?'confirm':'draft';
       ensure(project,row,'requirement',kind,state.accountsById?(kind==='draft'?(row.draftAssigneeId||project.ownerId):row.confirmationAssigneeId):kind==='draft'?'demo-sales':'demo-technical',{requirementId:row.id});

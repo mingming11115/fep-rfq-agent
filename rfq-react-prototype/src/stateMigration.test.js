@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDemoState } from './data.js';
 import { upgradePrototypeState, getActor } from './stateMigration.js';
-import {reconcileTasks} from './taskDomain.js';
+import {reconcileTasks,selectMyTasks,isTaskOverdue} from './taskDomain.js';
 import {makeDocumentDemo} from './documentMocks.js';
 import {requirementValidation} from './domain.js';
 import {getProjectSummary,selectProjects,getProjectSourceSummary} from './projectSelectors.js';
-import {BHEL_ID,makeBhelRequirements} from './bhelDemo.js';
+import {BHEL_ID,makeBhelRequirements,makeBhelReviews} from './bhelDemo.js';
 
 test('previously parsed demo projects receive a persistent parsing preview without replacing existing work',()=>{
   const demo=createDemoState(),old=upgradePrototypeState(demo,demo);
@@ -118,4 +118,66 @@ test('legacy duplicate review ids migrate without merging matters or reusing amb
  assert.equal(Object.values(next.tasksById).filter(t=>t.objectType==='review'&&t.status==='待处理').length,2);
  assert.deepEqual(upgradePrototypeState(next,{members:[]}),next);
  assert.deepEqual(next.snapshotsByProject.P,old.snapshotsByProject.P);
+});
+
+test('demo workbench includes overdue, today and future tasks using the Shanghai calendar',()=>{
+ const now=new Date('2026-10-27T16:30:00Z'),demo=createDemoState();
+ // Date fixtures have no usable system match; routine system Comply no longer creates mandatory tasks.
+ for(const id of ['req-21','req-26'])demo.requirementsByProject['RFQ-001'].find(r=>r.id===id).matchLevel='none';
+ const next=reconcileTasks(upgradePrototypeState(demo,demo,{now}));
+ const tasks=selectMyTasks(next,{actorId:'demo-sales'}).slice(0,5);
+ assert.equal(tasks.filter(t=>isTaskOverdue(t,now)).length,1);
+ assert.ok(tasks.some(t=>t.dueAt==='2026-10-28'));
+ assert.ok(tasks.some(t=>t.dueAt>'2026-10-28'));
+ for(const actorId of ['demo-technical','demo-approver'])assert.ok(selectMyTasks(next,{actorId}).some(t=>!isTaskOverdue(t,now)));
+ assert.deepEqual(upgradePrototypeState(next,demo,{now:new Date('2026-12-01T00:00:00Z')}),next);
+});
+
+test('existing demo tasks receive the same default schedule as their source objects without losing work',()=>{
+ const demo=createDemoState();
+ for(const id of ['req-21','req-26'])demo.requirementsByProject['RFQ-001'].find(r=>r.id===id).matchLevel='none';
+ const old=reconcileTasks(demo),history=[{action:'save',time:'2026-10-24'}];
+ const task=Object.values(old.tasksById).find(t=>t.objectId==='req-26');
+ task.status='处理中';task.history=history;
+ old.requirementsByProject['RFQ-001'].find(r=>r.id==='req-26').draft='保留人工答复';
+ const next=upgradePrototypeState(old,demo,{now:new Date('2026-10-27T00:00:00Z')});
+ assert.equal(next.tasksById[task.id].dueAt,'2026-10-27');
+ assert.equal(next.requirementsByProject['RFQ-001'].find(r=>r.id==='req-26').deadline,'2026-10-27');
+ assert.equal(next.tasksById[task.id].status,'处理中');
+ assert.deepEqual(next.tasksById[task.id].history,history);
+ assert.equal(next.tasksById[task.id].assigneeId,task.assigneeId);
+ assert.equal(next.requirementsByProject['RFQ-001'].find(r=>r.id==='req-26').draft,'保留人工答复');
+ for(const [id,snapshots]of Object.entries(old.snapshotsByProject))assert.deepEqual(next.snapshotsByProject[id],snapshots);
+ assert.equal(next.projects.find(p=>p.historicalDemo).deadline,'2018-01-31');
+});
+
+test('demo schedule migration preserves custom deadlines and completed task records',()=>{
+ const demo=createDemoState();
+ for(const id of ['req-21','req-26'])demo.requirementsByProject['RFQ-001'].find(r=>r.id===id).matchLevel='none';
+ const old=reconcileTasks(demo);
+ old.requirementsByProject['RFQ-001'].find(r=>r.id==='req-26').deadline='2027-01-12';
+ const task=Object.values(old.tasksById).find(t=>t.objectId==='req-26');task.dueAt='2027-01-12';
+ const done=Object.values(old.tasksById).find(t=>t.objectId==='req-21');done.status='已处理';done.completedAt='2026-10-24';
+ const review=old.reviewsByProject['RFQ-001'].find(r=>r.id==='DEV-002');review.deadline='2027-02-01';
+ const next=upgradePrototypeState(old,demo);
+ assert.deepEqual(next.tasksById[task.id],task);
+ assert.deepEqual(next.tasksById[done.id],done);
+ assert.equal(next.requirementsByProject['RFQ-001'].find(r=>r.id==='req-26').deadline,'2027-01-12');
+ assert.equal(next.reviewsByProject['RFQ-001'].find(r=>r.id==='DEV-002').deadline,'2027-02-01');
+ const custom=structuredClone(old);custom.projects[0].deadline='2027-03-01';
+ assert.equal(upgradePrototypeState(custom,demo).projects[0].deadline,'2027-03-01');
+});
+
+test('loaded historical RFQ tasks use internal demo deadlines without changing the original procurement date',()=>{
+ const demo=createDemoState(),old=upgradePrototypeState(demo,demo);
+ old.requirementsByProject[BHEL_ID]=makeBhelRequirements();
+ old.reviewsByProject[BHEL_ID]=makeBhelReviews();
+ const cached=reconcileTasks(old),now=new Date('2026-10-27T00:00:00Z');
+ const next=reconcileTasks(upgradePrototypeState(cached,demo,{now}));
+ const tasks=selectMyTasks(next,{actorId:'demo-sales'}).slice(0,5);
+ assert.ok(tasks.some(t=>!isTaskOverdue(t,now)));
+ assert.ok(Object.values(next.tasksById).filter(t=>t.projectId===BHEL_ID&&['待处理','处理中'].includes(t.status)).every(t=>!isTaskOverdue(t,now)));
+ assert.equal(next.projects.find(p=>p.id===BHEL_ID).deadline,'2018-01-31');
+ assert.equal(next.requirementsByProject[BHEL_ID][0].sourceVersion,'Rev.00 / 2018-01-10');
+ assert.deepEqual(upgradePrototypeState(next,demo,{now:new Date('2026-12-01T00:00:00Z')}),next);
 });

@@ -17,12 +17,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, Layers, BookOpen, History, AlertCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { confirmationValidation } from '../domain';
-import { makeRequirements } from '../data';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
 import AssessmentPanel from '../components/AssessmentPanel';
 import RecommendedWording from '../components/RecommendedWording';
 import { generateRecommendedWording } from '../responseAdvice';
+import { matchingSuggestion } from '../responseRecommendation';
 import ApprovalRoute from '../components/ApprovalRoute';
 import { ReviewsPage } from './WorkflowPages';
 import { getReviewRoute } from '../rfqWorkflow';
@@ -36,11 +36,6 @@ const formFields = ['original', 'conclusion', 'draft', 'conditions', 'reason', '
 function Notice({ children, warning = false }) { return <div className={`response-notice ${warning ? 'response-notice-warning' : ''}`}><AlertCircle size={15} /><div>{children}</div></div>; }
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
-function matchingSuggestion(row, projectId) {
-  if (row?.sourceRevision || row?.sourceCorrected) return { conclusion: '待确认', draft: '', conditions: '', evidence: '', version: '待重新匹配', confidence: 0 };
-  const template = makeRequirements(projectId).find((r) => r.title === row?.title);
-  return { conclusion: template?.conclusion || '待确认', draft: template?.draft || '当前无可直接采用的有效答复，请补充依据或转专业评审。', conditions: template?.conditions || '', evidence: template?.evidence || '', version: row?.matchLevel === 'history' ? 'V3' : 'V2', confidence: row?.score || 0 };
-}
 
 export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onConfirm, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun, logEvent = () => {} }) {
   const initialRow = requirements.find((row) => row.id === focusedRequirementId) || requirements.find(row => /\.docx?$/i.test(row.source || '')) || requirements[0];
