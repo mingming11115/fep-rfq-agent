@@ -72,3 +72,44 @@ test('changed source content invalidates a previously captured selection for a n
   assert.equal(draft?.anchor.locator.quote, '客户更新后的原文。');
   assert.equal(draft?.anchor.locator.textRange, undefined);
 });
+
+const numberedRow = { ...row, clause: '2.1', title: '安全联锁', original: '防护门打开时停止运动。' };
+const headingNote = { id: 'HEADING', quote: '2.1', anchor: { projectId: 'P', fileId: 'F', sourceVersion: 'V1', requirementId: 'R', locator: { textPart: 'heading', quote: '2.1', textRange: { start: 0, end: 3 } } } };
+
+test('a clause-number selection stays anchored to its heading rather than the body', () => {
+  const draft = annotations.makeCommentDraft(numberedRow, headingNote);
+  assert.equal(draft.quote, '2.1');
+  assert.equal(draft.anchor.locator.textPart, 'heading');
+  assert.deepEqual(draft.anchor.locator.textRange, { start: 0, end: 3 });
+  assert.deepEqual(commentTextRange(numberedRow, draft, 'heading'), { start: 0, end: 3 });
+  assert.equal(commentTextRange(numberedRow, draft), null);
+});
+
+test('saving a 2.1 heading comment highlights only that number, leaving body and next item unchanged', () => {
+  const heading = annotatedSegments(numberedRow, [headingNote], 'HEADING', 'heading');
+  assert.equal(heading.map(s => s.text).join(''), '2.1　安全联锁');
+  assert.equal(heading.filter(s => s.commentIds.length).map(s => s.text).join(''), '2.1');
+  assert.ok(annotatedSegments(numberedRow, [headingNote], 'HEADING').every(s => !s.commentIds.length));
+  const repeatedNumber = { ...numberedRow, original: '2.1 正文也出现了同样的编号。' };
+  assert.equal(commentTextRange(repeatedNumber, headingNote), null);
+  assert.ok(annotatedSegments(repeatedNumber, [headingNote], 'HEADING').every(s => !s.commentIds.length));
+  const next = { ...numberedRow, id: 'NEXT', clause: '2.2' };
+  assert.ok(annotatedSegments(next, [headingNote], 'HEADING', 'heading').every(s => !s.commentIds.length));
+});
+
+test('selected title text keeps its exact heading offsets', () => {
+  const selected = structuredClone(headingNote);
+  selected.quote = '安全联锁';
+  selected.anchor.locator = { textPart: 'heading', quote: selected.quote, textRange: { start: 4, end: 8 } };
+  assert.deepEqual(commentTextRange(numberedRow, selected, 'heading'), { start: 4, end: 8 });
+  assert.equal(annotations.makeCommentDraft(numberedRow, selected).quote, '安全联锁');
+});
+
+test('unknown source parts are rejected and existing body comments remain compatible', () => {
+  const invalid = structuredClone(headingNote);
+  invalid.quote = '防护门';
+  invalid.anchor.locator = { textPart: 'unknown', quote: invalid.quote, textRange: { start: 0, end: 3 } };
+  assert.equal(commentTextRange(numberedRow, invalid, 'unknown'), null);
+  assert.equal(annotations.makeCommentDraft(numberedRow, invalid).quote, numberedRow.original);
+  assert.deepEqual(commentTextRange(row, note('OLD', 7, 11)), { start: 7, end: 11 });
+});
