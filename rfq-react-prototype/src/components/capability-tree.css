@@ -15,11 +15,11 @@
 .cap-tree-row { display:flex; align-items:center; min-height:40px; border-radius:5px; margin:3px 0; position:relative; }
 .cap-tree-children > li > .cap-tree-row:before { content:''; position:absolute; left:-10px; top:21px; width:9px; height:1px; background:#e1e7f0; }
 .cap-tree-row.selected { background:#edf3ff; color:#165dff; }
-.ref-page .cap-tree-toggle { flex:none; background:transparent; border:0; color:#8794a7; width:22px; min-height:36px; padding:0; }
+.cap-tree .cap-tree-toggle { display:grid; place-items:center; flex:none; background:transparent; border:0; color:#8794a7; width:22px; min-height:36px; padding:0; }
 .cap-tree-toggle svg { transition:transform .15s; }
 .cap-tree-toggle[aria-expanded="true"] svg { transform:rotate(90deg); }
-.ref-page .cap-tree-node { flex:1; min-width:0; justify-content:flex-start; gap:7px; padding:8px 7px 8px 1px; border:0; background:transparent; color:inherit; text-align:left; font:inherit; }
-.ref-page .cap-tree-node.leaf { padding-left:10px; }
+.cap-tree .cap-tree-node { display:flex; align-items:center; flex:1; min-width:0; justify-content:flex-start; gap:7px; padding:8px 7px 8px 1px; border:0; background:transparent; color:inherit; text-align:left; font:inherit; }
+.cap-tree .cap-tree-node.leaf { padding-left:10px; }
 .cap-tree-node > svg { flex:none; align-self:flex-start; margin-top:3px; color:#8696ad; }
 .cap-tree-node > span { min-width:0; }
 .cap-tree-node strong { display:block; font-size:12px; font-weight:500; overflow-wrap:anywhere; }
@@ -61,5 +61,5 @@
 @media(max-width:1180px) { .ref-cap-panel .cap-workspace { grid-template-columns:260px minmax(0,1fr); } .cap-node-detail { padding:20px; } }
 @media(max-width:850px) { .ref-cap-panel .cap-workspace { grid-template-columns:1fr; } .cap-directory { border-right:0; border-bottom:1px solid #e8edf3; } .cap-directory .cap-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .cap-node-detail { padding:17px 14px; } .cap-node-detail .ref-kv > div { grid-template-columns:68px minmax(0,1fr); } .cap-model-context { padding:12px; } .capability-value { font-size:24px; } .cap-node-detail .table-wrap { max-width:100%; } }
-@media(pointer:coarse) { .ref-page .cap-tree-toggle { width:30px; min-height:44px; } .ref-page .cap-tree-node { min-height:44px; } }
+@media(pointer:coarse) { .cap-tree .cap-tree-toggle { width:30px; min-height:44px; } .cap-tree .cap-tree-node { min-height:44px; } }
 @media(prefers-reduced-motion:reduce) { .cap-tree-toggle svg { transition:none; } }
