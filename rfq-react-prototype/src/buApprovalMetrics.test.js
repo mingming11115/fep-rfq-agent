@@ -113,3 +113,44 @@ test('slower approvals produce a negative improvement and repeated snapshot IDs 
  const data=selectBuDashboard(s,{now}).approval;
  assert.equal(data.current.count,1);assert.equal(data.previous.count,1);assert.equal(data.improvementPercent,-100);
 });
+
+test('trend buckets align equal periods and keep days without approvals empty',()=>{
+ const data=selectBuDashboard(fixture(),{now}).approval;
+ assert.ok(data.charts,'chart data must accompany approval metrics');
+ assert.equal(data.charts.trend.length,6);
+ assert.deepEqual(data.charts.trend.map(p=>[p.count,p.averageHours,p.previousCount,p.previousAverageHours]),[[0,null,0,null],[0,null,0,null],[0,null,0,null],[0,null,0,null],[1,6,2,16],[1,10,0,null]]);
+ const week=selectBuDashboard(fixture(),{now,approvalPeriodDays:7}).approval;
+ assert.equal(week.charts.trend.length,7);
+ assert.equal(week.charts.trend[0].count,1);assert.equal(week.charts.trend[0].averageHours,6);
+ assert.equal(week.charts.trend[5].count,1);assert.equal(week.charts.trend[5].averageHours,10);
+ assert.equal(week.charts.trend.reduce((sum,p)=>sum+p.count,0),2);
+ const quarter=selectBuDashboard(fixture(),{now,approvalPeriodDays:90}).approval;
+ assert.equal(quarter.charts.trend.length,6);assert.equal(quarter.charts.trend.reduce((sum,p)=>sum+p.count,0),4);
+});
+
+test('duration histogram counts each boundary once and the outcome ring excludes live pending rounds',()=>{
+ const s=fixture();
+ s.snapshotsByProject={P:[0,4,4.5,8,8.5,24,25].map((hours,index)=>{
+  const record=round(`duration${index}`,'2026-10-20T00:00:00Z',{hours,srHours:Math.min(2,hours)});
+  record.finalReview.decisions.technicalByActorId.t1.at=addHours(record.createdAt,Math.min(4,hours));return record;
+ })};
+ const distribution=selectBuDashboard(s,{now}).approval.charts.durations;
+ assert.deepEqual(distribution.map(bin=>bin.count),[2,2,2,1]);
+ const rejected=round('reject','2026-10-21T00:00:00Z',{status:'已退回'});
+ rejected.finalReview.decisions.sr.result='rejected';
+ const pending=round('pending','2026-10-26T00:00:00Z',{status:'审批中'});delete pending.finalReview.decisions.technicalByActorId.t2;
+ s.snapshotsByProject.P.push(rejected,pending);
+ const data=selectBuDashboard(s,{now}).approval;
+ assert.deepEqual(data.charts.outcomes.map(part=>[part.key,part.count]),[['approved',7],['rejected',1]]);
+ assert.equal(data.pending.count,1);
+});
+
+test('chart data follows BU and sample filters without turning an empty series into zeros',()=>{
+ const s=fixture();s.snapshotsByProject.P.push(round('demo','2026-10-20T00:00:00Z',{sample:true,hours:100}));
+ const sample=selectBuDashboard(s,{now,approvalDataMode:'sample'}).approval.charts;
+ assert.equal(sample.trend.reduce((sum,p)=>sum+p.count,0),1);
+ assert.deepEqual(sample.durations.map(b=>b.count),[0,0,0,1]);
+ const empty=selectBuDashboard(s,{now,buId:'B'}).approval.charts;
+ assert.equal(empty.trend.every(p=>p.averageHours===null&&p.previousAverageHours===null),true);
+ assert.deepEqual(empty.outcomes.map(p=>p.count),[0,0]);
+});
