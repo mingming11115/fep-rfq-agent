@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commentTextRange, annotatedSegments } from './documentAnnotations.js';
+import * as annotations from './documentAnnotations.js';
 
 const row = { id: 'R', projectId: 'P', sourceFileId: 'F', sourceVersion: 'V1', original: '确认条件；再次确认条件。' };
 const note = (id, start, end) => ({ id, quote: row.original.slice(start, end), anchor: { projectId: 'P', fileId: 'F', sourceVersion: 'V1', requirementId: 'R', locator: { textRange: { start, end } } } });
@@ -32,4 +33,42 @@ test('overlapping notes preserve source text and all note identities, preferring
   assert.deepEqual(overlap.commentIds, ['A', 'B']);
   assert.equal(overlap.activeId, 'B');
   assert.deepEqual(annotatedSegments({ ...row, original: '' }, []), []);
+});
+
+test('new comment keeps the selected second occurrence and its exact offsets', () => {
+  const selected = note('C', 7, 11);
+  const before = structuredClone(selected);
+  const draft = annotations.makeCommentDraft?.(row, selected);
+  assert.equal(draft?.quote, '确认条件');
+  assert.deepEqual(draft?.anchor.locator.textRange, { start: 7, end: 11 });
+  assert.equal(draft?.anchor.locator.quote, '确认条件');
+  assert.deepEqual(selected, before);
+});
+
+test('new comment without a selection targets the complete current source', () => {
+  const draft = annotations.makeCommentDraft?.(row);
+  assert.equal(draft?.quote, row.original);
+  assert.equal(draft?.anchor.requirementId, 'R');
+  assert.equal(draft?.anchor.fileId, 'F');
+  assert.equal(draft?.anchor.sourceVersion, 'V1');
+});
+
+test('new comment cannot reuse a selection from another clause, file, project or source version', () => {
+  for (const [key, value] of [['projectId', 'OTHER'], ['fileId', 'OTHER'], ['requirementId', 'OTHER'], ['sourceVersion', 'V2']]) {
+    const selected = note('C', 7, 11);
+    selected.anchor[key] = value;
+    const draft = annotations.makeCommentDraft?.(row, selected);
+    assert.equal(draft?.quote, row.original, key);
+    assert.equal(draft?.anchor.requirementId, 'R');
+    assert.equal(draft?.anchor.sourceVersion, 'V1');
+    assert.equal(draft?.anchor.locator.textRange, undefined);
+  }
+});
+
+test('changed source content invalidates a previously captured selection for a new comment', () => {
+  const current = { ...row, sourceOriginal: '客户更新后的原文。' };
+  const draft = annotations.makeCommentDraft?.(current, note('C', 7, 11));
+  assert.equal(draft?.quote, '客户更新后的原文。');
+  assert.equal(draft?.anchor.locator.quote, '客户更新后的原文。');
+  assert.equal(draft?.anchor.locator.textRange, undefined);
 });

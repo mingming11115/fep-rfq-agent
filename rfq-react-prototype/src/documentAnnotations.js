@@ -1,3 +1,14 @@
+import { makeSourceAnchor } from './documentAnchors.js';
+
+export function makeCommentDraft(row, selectedDraft) {
+  const range = selectedDraft && commentTextRange(row, selectedDraft);
+  if (range) return {
+    quote: selectedDraft.quote || selectedDraft.anchor.locator.quote,
+    anchor: { ...selectedDraft.anchor, locator: { ...selectedDraft.anchor.locator, quote: selectedDraft.quote || selectedDraft.anchor.locator.quote, textRange: range } },
+  };
+  return { quote: row.sourceOriginal ?? row.original ?? '', anchor: makeSourceAnchor(row) };
+}
+
 export function commentTextRange(row, comment) {
   const anchor = comment.anchor;
   if (!anchor || anchor.projectId !== row.projectId || anchor.fileId !== (row.sourceFileId || row.source || 'manual') || anchor.requirementId !== row.id || String(anchor.sourceVersion) !== String(row.sourceVersion || '1')) return null;

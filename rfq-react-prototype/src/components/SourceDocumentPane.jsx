@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MessageSquarePlus, Minus, Plus, ExternalLink } from 'lucide-react';
 import { makeSourceAnchor, resolveSourceAnchor } from '../documentAnchors';
-import { annotatedSegments } from '../documentAnnotations';
+import { annotatedSegments, makeCommentDraft } from '../documentAnnotations';
 import { sectionLabel } from '../documentStructure';
 import WordAnnotationCanvas from './WordAnnotationCanvas';
 
-export default function SourceDocumentPane({ file, rows, selectedAnchor, showResponses = true, responsePreview, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
+export default function SourceDocumentPane({ file, rows, selectedAnchor, showResponses = true, responsePreview, quoteDraft, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
   const resolved = resolveSourceAnchor(rows, selectedAnchor), active = resolved.row, container = useRef();
   const previousAnchor = useRef(null);
   const [pdf, setPdf] = useState(false), [zoom, setZoom] = useState(100);
@@ -25,18 +25,30 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
     if (target && container.current) container.current.scrollTo({ top: container.current.scrollTop + target.getBoundingClientRect().top - container.current.getBoundingClientRect().top - container.current.clientHeight / 2, behavior: 'smooth' });
   }, [activeCommentId]);
 
-  function captureSelection(row) {
-    if (!onQuote || resolved.status !== 'resolved') return;
+  function readSelectionDraft(row) {
+    if (!row || resolved.status !== 'resolved') return null;
     const selection = window.getSelection();
-    if (!selection?.rangeCount || selection.isCollapsed) return;
+    if (!selection?.rangeCount || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0), article = container.current?.querySelector(`[data-source-id="${CSS.escape(row.id)}"]`), textElement = article?.querySelector('[data-source-text]');
-    if (!textElement?.contains(range.startContainer) || !textElement.contains(range.endContainer)) return;
+    if (!textElement?.contains(range.startContainer) || !textElement.contains(range.endContainer)) return null;
     const quote = range.toString();
-    if (!quote.trim() || quote.length > 2000) return;
+    if (!quote.trim() || quote.length > 2000) return null;
     const prefix = range.cloneRange(); prefix.selectNodeContents(textElement); prefix.setEnd(range.startContainer, range.startOffset);
     const start = prefix.toString().length;
     const anchor = makeSourceAnchor(row);
-    onQuote(quote, { ...anchor, locator: { ...anchor.locator, quote, textRange: { start, end: start + quote.length } } });
+    return { quote, anchor: { ...anchor, locator: { ...anchor.locator, quote, textRange: { start, end: start + quote.length } } } };
+  }
+
+  function captureSelection(row) {
+    if (!onQuote) return;
+    const draft = readSelectionDraft(row);
+    if (draft) onQuote(draft.quote, draft.anchor);
+  }
+
+  function startNewComment() {
+    if (!onQuote || !active || resolved.status !== 'resolved') return;
+    const draft = makeCommentDraft(active, readSelectionDraft(active) || quoteDraft);
+    onQuote(draft.quote, draft.anchor);
   }
 
   return <section className="source-document detail-source" aria-label="来源原文">
@@ -52,6 +64,7 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
         footer={real ? '原文节选 · 完整内容以客户原件为准' : '当前为项目条款摘录，未读取上传 Word 的完整排版'}
         showAnnotations={showResponses} zoom={zoom}
         onSelectRow={row => onSelectAnchor(makeSourceAnchor(row))}
+        onNewComment={onQuote ? startNewComment : undefined}
         onDiscuss={onQuote ? row => onQuote(row.sourceOriginal ?? row.original, makeSourceAnchor(row)) : undefined}
       >{anchorProps => rows.map((row, i) => <React.Fragment key={row.id}>
         {(i === 0 || sectionLabel(rows[i - 1]) !== sectionLabel(row)) && <h2 className="word-section-heading">{sectionLabel(row) === '未识别章节' ? '客户要求' : sectionLabel(row)}<span className="wc-format" aria-hidden="true"> ↵</span></h2>}

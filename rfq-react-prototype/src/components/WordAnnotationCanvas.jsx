@@ -11,7 +11,7 @@ const palette = [
 ];
 const noResponses = [];
 
-export default function WordAnnotationCanvas({ rows, responseRows = noResponses, responsePreview, activeId, title, version, subtitle, footer, showAnnotations = true, zoom = 100, onSelectRow, onDiscuss, onOpen, children }) {
+export default function WordAnnotationCanvas({ rows, responseRows = noResponses, responsePreview, activeId, title, version, subtitle, footer, showAnnotations = true, zoom = 100, onSelectRow, onNewComment, onDiscuss, onOpen, children }) {
   const root = useRef(null);
   const [formatting, setFormatting] = useState(true), [paths, setPaths] = useState([]);
   const notes = useMemo(() => {
@@ -89,7 +89,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="word-annotations"/>
     <div className="wc-tools" aria-label="原文应答批注工具栏">
       <span className="wc-file">应答批注 · {rows.length} 条</span>
-      {onDiscuss && <button type="button" className="wc-button" disabled={!current} onClick={() => onDiscuss(current)}><MessageSquarePlus size={14}/>新建批注</button>}
+      {onNewComment && <button type="button" className="wc-button" disabled={!current} onMouseDown={event => event.preventDefault()} onClick={onNewComment}><MessageSquarePlus size={14}/>新建批注</button>}
       <button type="button" className="wc-button" aria-label="上一条应答标注" disabled={currentIndex <= 0} onClick={() => select(rows[currentIndex - 1])}><ChevronUp size={14}/></button>
       <button type="button" className="wc-button" aria-label="下一条应答标注" disabled={currentIndex < 0 || currentIndex >= rows.length - 1} onClick={() => select(rows[currentIndex + 1])}><ChevronDown size={14}/></button>
       <button type="button" className="wc-button" aria-label="显示编辑标记" aria-pressed={formatting} onClick={() => setFormatting(!formatting)}>¶</button>
