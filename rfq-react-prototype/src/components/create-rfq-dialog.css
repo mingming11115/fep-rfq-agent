@@ -1,0 +1,11 @@
+.rfq-process-fields { margin-top:18px; padding-top:18px; border-top:1px solid #e8edf3; }
+.rfq-catalog-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.rfq-catalog-heading strong { font-size:13px; font-weight:500; }
+.rfq-catalog-heading span { color:#86909c; font-size:12px; }
+.rfq-catalog-field { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:10px; margin-bottom:16px; }
+.rfq-catalog-field .field { margin-bottom:0; min-width:0; }
+.rfq-catalog-field .select { width:100%; min-width:0; }
+.rfq-catalog-field > .btn { margin-bottom:1px; height:34px; }
+.rfq-create-hint { color:#7c8b9e; font-size:12px; margin:0 0 18px; }
+.project-process-binding { font-size:12px; color:#6b7e98; margin-top:7px; overflow-wrap:anywhere; }
+@media(max-width:420px){ .rfq-catalog-field { grid-template-columns:1fr; gap:8px; } .rfq-catalog-field > .btn { justify-self:start; } }

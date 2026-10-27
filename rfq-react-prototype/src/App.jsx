@@ -8,6 +8,7 @@ import {reconcileTasks,selectMyTasks,applyTaskAction,assertBusinessAction,getTas
 import {getProjectSummary,selectAccessibleState} from './projectSelectors';
 import {parseWorkRoute,buildWorkRoute,PROJECT_PAGES,ADMIN_PAGES,shouldOpenSourceUpload,getSourceUploadExitRoute} from './navigation';
 import {removeProject,restoreProject,addProjectSources,handoverProject} from './projectDomain';
+import {readRfqCatalog,resolveRfqProcessBinding} from './rfqProcessBinding';
 import SourceUploadDialog from './components/SourceUploadDialog';
 import ProjectWorkspace from './components/ProjectWorkspace';
 import AdminWorkspace from './components/AdminWorkspace';
@@ -89,7 +90,18 @@ export default function App(){
  function transferProject(id,to,reason){try{update(st=>event(handoverProject(st,{projectId:id,to,reason}),'移交项目负责人',id,reason));return true;}catch(e){toast(e.message,'error');return false;}}
  function analysisRun(run){update(s=>({...s,analysisRuns:appendAnalysisRun(s.analysisRuns,{...run,projectId:project.id})}));}
  const logEvent=(action,object='',detail='')=>update(s=>event(s,action,object,detail));
- function createProject(form){if(!allow('project:create'))return false;const id=`RFQ-${String(Math.max(0,...[...stateRef.current.projects,...Object.values(stateRef.current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number(p.id.match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;const p={...form,id,createdById:stateRef.current.actorId,ownerId:stateRef.current.actorId,buId:stateRef.current.activeBuId||getPersonnelBu(stateRef.current),participantIds:[stateRef.current.actorId],approvalConfig:{finalReviewers:{srId:stateRef.current.actorId,technicalIds:[],technicalRepresentativeId:null}},createdAt:new Date().toISOString(),name:form.name.trim(),equipment:form.equipment.trim(),owner:form.owner.trim(),version:1};update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,p.name));toast('项目已创建，请上传资料或载入示例 RFQ');rawNavigate('documents');}
+ function createProject(form){
+  const current=stateRef.current,buId=current.activeBuId||getPersonnelBu(current),context={state:current,actorId:current.actorId,buId};
+  try{
+   assertPermission(current.actorRole,'project:create',context);
+   if(['name','equipment','owner','deadline'].some(key=>!form[key]?.trim()))throw new Error('请填写项目名称、设备范围、负责人和截止时间');
+   const catalog=readRfqCatalog(localStorage,context),binding=resolveRfqProcessBinding({...catalog,buId,modelId:form.modelId,processId:form.processId});
+   const id=`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number(p.id.match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
+   const p={...form,...binding,id,createdById:current.actorId,ownerId:current.actorId,buId,participantIds:[current.actorId],approvalConfig:{finalReviewers:{srId:current.actorId,technicalIds:[],technicalRepresentativeId:null}},createdAt:new Date().toISOString(),name:form.name.trim(),equipment:form.equipment.trim(),owner:form.owner.trim(),version:1};
+   update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.modelName} ${p.modelRevision} / ${p.processCode} ${p.processName}`));
+   toast('项目已关联工艺，请上传资料或载入示例 RFQ');rawNavigate('documents');return true;
+  }catch(error){toast(error.message,'error');return false;}
+ }
  function businessAllowed(objectType,objectId,action='save',expectedVersion,expectedRound){try{assertBusinessAction(stateRef.current,{projectId:stateRef.current.activeProjectId,objectType,objectId,action,route:routeRef.current,expectedVersion,expectedRound});return true;}catch(e){toast(e.message,'error');return false;}}
  function followOwnTask(objectType,objectId){const current=routeRef.current;if(!current.taskId)return;const t=Object.values(stateRef.current.tasksById).find(t=>t.projectId===current.projectId&&t.objectType===objectType&&t.objectId===objectId&&t.assigneeId===stateRef.current.actorId&&isTaskPending(t));if(t&&t.id!==current.taskId)rawNavigate(current.page,{...current,taskId:t.id});}
  function markSaved(s,objectType,objectId){return startTaskForObject(s,{projectId:s.activeProjectId,objectType,objectId,actorId:s.actorId});}
