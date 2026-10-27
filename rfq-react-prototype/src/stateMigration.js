@@ -3,7 +3,7 @@ import {makeDocumentDemo} from './documentMocks.js';
 import {initializePersonnel} from './personnelDomain.js';
 export const actorIdForRole = role => ['SR','销售负责人'].includes(role) ? 'demo-sales' : role==='BU管理员'?'demo-bu-admin':role==='后台管理'?'demo-system-admin':/最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
-export function upgradePrototypeState(previous, demo) {
+export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
   const state = structuredClone(Array.isArray(previous?.projects) ? previous : demo);
   seedProjectStageExamples(state, demo);
   state.schemaVersion = 3;
@@ -53,13 +53,64 @@ export function upgradePrototypeState(previous, demo) {
     if(trustedDemo){project.createdById ||= 'demo-sales';project.ownerId ||= 'demo-sales';project.participantIds ||= ['demo-sales','demo-technical','demo-approver'];}
     else project.participantIds ||= project.ownerId?[project.ownerId]:[];
     seedClauseStatusExamples(state, project);
+    seedTaskDeadlineExamples(state, project, now);
   }
   return initializePersonnel(state);
+}
+
+function seedTaskDeadlineExamples(state, project, now) {
+  // Refresh only untouched synthetic dates once; later loads must let tasks age normally.
+  const today=new Date(now.getTime()+8*60*60*1000).toISOString().slice(0,10);
+  const dateAfter=days=>new Date(Date.parse(`${today}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
+  function scheduleObject(type,id,legacyDate,days){
+    const objects=type==='requirement'?state.requirementsByProject[project.id]:state.reviewsByProject[project.id];
+    const object=objects.find(o=>o.id===id);
+    if(!object||object.demoTaskDeadlinesVersion===1||(object.version||1)!==1||(object.round||1)!==1||object.deadline&&object.deadline!==legacyDate)return;
+    object.deadline=dateAfter(days);object.demoTaskDeadlinesVersion=1;
+    for(const task of Object.values(state.tasksById)){
+      if(task.projectId===project.id&&task.objectType===type&&task.objectId===id&&task.objectVersion===1&&task.round===1&&task.dueAt===legacyDate&&['待处理','处理中'].includes(normalizeTaskStatus(task.status)))task.dueAt=object.deadline;
+    }
+  }
+  if(project.id==='RFQ-BHEL-2018'&&project.historicalDemo&&project.customer==='BHEL Electronics Division · Bangalore'&&project.deadline==='2018-01-31'){
+    // The sourced procurement date stays historical; these are internal demo work deadlines.
+    for(const [index,row]of state.requirementsByProject[project.id].entries())if(row.realSource&&/^BHEL-REQ-\d{3}$/.test(row.id))scheduleObject('requirement',row.id,'2018-01-31',2+index%5);
+    for(const [index,review]of state.reviewsByProject[project.id].entries())if(/^BHEL-DEV-0[1-4]$/.test(review.id))scheduleObject('review',review.id,'2026-10-25',2+index);
+    return;
+  }
+  if(project.id!=='RFQ-001'||project.customer!=='华东新能源客户（模拟）'||project.demoTaskDeadlinesVersion===1||project.deadline!=='2026-10-25')return;
+  const schedule=[
+    ['requirement','req-21','2026-10-25',-1],
+    ['requirement','req-26','2026-10-25',0],
+    ['requirement','req-28','2026-10-25',1],
+    ['requirement','req-30','2026-10-25',3],
+    ['requirement','req-32','2026-10-25',5],
+    ['requirement','RFQ-001-DOC-EXAMPLE-6','2026-10-25',1],
+    ['review','DEV-001','2026-10-22',-1],
+    ['review','DEV-002','2026-10-23',0],
+    ['review','DEV-003','2026-10-22',1],
+    ['review','RFQ-001-DEMO-REVIEW-CLAUSE-STATUS','2026-10-25',3],
+  ];
+  for(const [type,id,legacyDate,days]of schedule)scheduleObject(type,id,legacyDate,days);
+  project.deadline=dateAfter(7);
+  project.demoTaskDeadlinesVersion=1;
 }
 
 function seedProjectStageExamples(state,demo) {
   // Existing rows, files and signatures are never replaced by freshly generated examples.
   state.demoProjectStagesVersion ||= demo.demoProjectStagesVersion;
+  if(state.demoParsingExampleVersion===1)return;
+  if(!state.projects.some(project=>demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer)))return;
+  const id='RFQ-DEMO-PARSING';
+  if(!state.projects.some(project=>project.id===id)&&!state.deletedProjectsById?.[id]){
+    state.projects.push({id,name:'解析中示例 · 智能应答对比',customer:'演示客户（模拟）',equipment:'DEMO-CUT 300 · V2.1',owner:'林晓',ownerId:'demo-sales',createdById:'demo-sales',participantIds:['demo-sales','demo-technical','demo-approver'],buId:'BU-DEMO',deadline:'2026-11-10',sample:true});
+    for(const key of ['requirementsByProject','reviewsByProject','snapshotsByProject']){
+      state[key] ||= {};
+      state[key][id]=[];
+    }
+    state.documentsByProject ||= {};
+    state.documentsByProject[id]=[{id:`${id}-FILE`,name:'智能应答对比_客户技术要求.docx',purpose:'要求来源',version:'V1.0',status:'处理中',parseStage:'comparing',demoParsePreview:true,sample:true,size:1482000,visibility:'项目成员可见',createdAt:'2026/10/27 09:00:00'}];
+  }
+  state.demoParsingExampleVersion=1;
 }
 
 function seedClauseStatusExamples(state, project) {

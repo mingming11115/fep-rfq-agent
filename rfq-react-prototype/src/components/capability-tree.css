@@ -1,0 +1,65 @@
+.ref-cap-panel .cap-workspace { display:grid; grid-template-columns:292px minmax(0,1fr); min-height:640px; }
+.cap-directory { min-width:0; border-right:1px solid #e8edf3; padding:18px 12px; background:#fcfdff; }
+.cap-directory-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:0 8px 15px; }
+.cap-directory-head h2 { font-size:13px; font-weight:500; margin:0; }
+.cap-directory > .ref-search { min-width:0; width:100%; margin-bottom:10px; }
+.cap-directory > .ref-search input { width:100%; }
+.cap-directory-filters { margin:0 7px 14px; font-size:12px; color:#77859b; }
+.cap-directory-filters summary { cursor:pointer; width:fit-content; padding:4px 0; }
+.cap-filter-fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 0 5px; }
+.cap-filter-fields .field { margin:0; min-width:0; font-size:11px; }
+.cap-filter-fields .field > span { display:block; margin-bottom:5px; }
+.cap-filter-fields .select { width:100%; min-width:0; font-size:11px; padding:0 5px; }
+.cap-tree ul { list-style:none; margin:0; padding:0; }
+.cap-tree .cap-tree-children { margin-left:11px; padding-left:10px; border-left:1px solid #e1e7f0; }
+.cap-tree-row { display:flex; align-items:center; min-height:40px; border-radius:5px; margin:3px 0; position:relative; }
+.cap-tree-children > li > .cap-tree-row:before { content:''; position:absolute; left:-10px; top:21px; width:9px; height:1px; background:#e1e7f0; }
+.cap-tree-row.selected { background:#edf3ff; color:#165dff; }
+.cap-tree .cap-tree-toggle { display:grid; place-items:center; flex:none; background:transparent; border:0; color:#8794a7; width:22px; min-height:36px; padding:0; }
+.cap-tree-toggle svg { transition:transform .15s; }
+.cap-tree-toggle[aria-expanded="true"] svg { transform:rotate(90deg); }
+.cap-tree .cap-tree-node { display:flex; align-items:center; flex:1; min-width:0; justify-content:flex-start; gap:7px; padding:8px 7px 8px 1px; border:0; background:transparent; color:inherit; text-align:left; font:inherit; }
+.cap-tree .cap-tree-node.leaf { padding-left:10px; }
+.cap-tree-node > svg { flex:none; align-self:flex-start; margin-top:3px; color:#8696ad; }
+.cap-tree-node > span { min-width:0; }
+.cap-tree-node strong { display:block; font-size:12px; font-weight:500; overflow-wrap:anywhere; }
+.cap-tree-node small { display:block; color:#8693a7; font-size:11px; line-height:1.7; margin-top:2px; overflow-wrap:anywhere; }
+.cap-tree-row.pending .cap-tree-node > svg,.cap-tree-row.pending strong { color:#a87430; }
+.cap-tree-empty { padding:9px 8px; font-size:11px; color:#98a4b4; }
+.cap-node-detail { padding:24px; min-width:0; }
+.cap-node-path { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:0 0 20px; font-size:11px; color:#8996a8; }
+.cap-node-path span,.cap-node-path button { overflow-wrap:anywhere; }
+.cap-model-context { padding:14px 16px; margin-bottom:24px; background:#f8faff; border:1px solid #e5ecf6; border-radius:4px; }
+.cap-model-context > div { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.cap-model-context strong { font-size:13px; font-weight:500; }
+.cap-model-context p { font-size:12px; color:#8190a5; margin:8px 0 0; overflow-wrap:anywhere; }
+.cap-node-title { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:12px; margin:0 0 22px; }
+.cap-node-title h2 { font-size:18px; font-weight:500; }
+.cap-node-title small { display:block; color:#8996a8; margin-top:6px; font-size:11px; }
+.cap-model-version { display:flex; align-items:center; gap:8px; font-size:11px; color:#8996a8; }
+.cap-model-version .select { font-size:11px; }
+.cap-node-detail .ref-kv { gap:0; margin-bottom:22px; }
+.cap-node-detail .ref-kv > div { padding:11px 0; border-bottom:1px solid #edf0f5; grid-template-columns:82px minmax(0,1fr); }
+.cap-node-detail .ref-detail-title { margin-bottom:14px; }
+.cap-node-detail .ref-detail-title h3 { font-size:19px; font-weight:500; }
+.capability-value { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:18px 0 22px; font-size:28px; font-weight:500; color:#2e3f58; overflow-wrap:anywhere; }
+.capability-value > span { font-size:12px; font-weight:400; color:#8996a8; }
+.cap-evidence { padding:13px 15px; margin:20px 0; border:1px solid #e4ebf4; border-radius:4px; font-size:12px; color:#536780; }
+.cap-evidence summary { cursor:pointer; overflow-wrap:anywhere; }
+.cap-evidence .ref-kv { margin:14px 0 0; }
+.cap-node-detail .ref-action-row { border-top:1px solid #edf0f5; padding-top:18px; }
+.cap-subheading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin:24px 0 15px; }
+.cap-subheading h3 { font-size:13px; margin:0; }
+.cap-node-detail .data-table th,.cap-node-detail .data-table td { padding:12px 10px; }
+.cap-node-detail .data-table td:first-child .text-link { overflow-wrap:anywhere; }
+.cap-node-detail .ref-pagination { padding:15px 0; flex-wrap:wrap; }
+.cap-node-detail .toolbar { padding:0 0 14px; margin-top:15px; background:transparent; border-top:0; }
+.cap-node-detail .ref-search { min-width:0; }
+.cap-node-detail .ref-search input { width:100%; }
+.cap-context-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.cap-no-results { padding:20px 8px; font-size:12px; color:#8d9aaf; text-align:center; }
+@media(max-width:1180px) { .ref-cap-panel .cap-workspace { grid-template-columns:260px minmax(0,1fr); } .cap-node-detail { padding:20px; } }
+@media(max-width:850px) { .ref-cap-panel .cap-workspace { grid-template-columns:1fr; } .cap-directory { border-right:0; border-bottom:1px solid #e8edf3; } .cap-directory .cap-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .cap-node-detail { padding:17px 14px; } .cap-node-detail .ref-kv > div { grid-template-columns:68px minmax(0,1fr); } .cap-model-context { padding:12px; } .capability-value { font-size:24px; } .cap-node-detail .table-wrap { max-width:100%; } }
+@media(pointer:coarse) { .cap-tree .cap-tree-toggle { width:30px; min-height:44px; } .cap-tree .cap-tree-node { min-height:44px; } }
+@media(prefers-reduced-motion:reduce) { .cap-tree-toggle svg { transition:none; } }

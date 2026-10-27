@@ -13,9 +13,23 @@ test('only the administrator of this BU can configure its models and processes',
  assert.equal(canPerform('BU管理员','model:configure',context),true);
  for(const [actorId,role,buId] of [['tech','技术','A'],['sr','SR','A'],['admin','BU管理员','B']]){
   assert.equal(canPerform(role,'model:configure',{...context,actorId,buId}),false);
-  assert.throws(()=>domain.saveModelProcess([],{context:{...context,actorId,buId},models:[model],record:process}),/权限|BU/);
+  assert.throws(()=>domain.saveModelProcess([process],{context:{...context,actorId,buId},models:[model],record:process}),/权限|BU/);
  }
  assert.throws(()=>domain.saveModelMetadata([],{context,record:other}),/BU/);
+});
+
+test('an enabled SR may create BU catalog entries but cannot overwrite or disable existing records',()=>{
+ const srContext={...context,actorId:'sr',state:{...state,actorRole:'SR'}};
+ assert.equal(canPerform('SR','catalog:create',srContext),true);
+ const created=domain.saveModelMetadata([],{context:srContext,record:model});
+ assert.equal(created[0].buId,'A');assert.equal(created[0].updatedById,'sr');
+ const nextProcesses=domain.saveModelProcess([],{context:srContext,models:created,record:process});
+ assert.equal(nextProcesses[0].modelId,'M1');
+ assert.throws(()=>domain.saveModelMetadata(created,{context:srContext,record:{...model,name:'覆盖'}}),/权限/);
+ assert.throws(()=>domain.saveModelProcess(nextProcesses,{context:srContext,models:created,record:{...process,enabled:false}}),/权限/);
+ for(const otherContext of [{...srContext,buId:'B'},{...srContext,actorId:'tech',state:{...state,actorRole:'技术'}},{...srContext,state:{...state,actorRole:'SR',accountsById:{...state.accountsById,sr:{...state.accountsById.sr,enabled:false}}}}]){
+  assert.throws(()=>domain.saveModelMetadata([],{context:otherContext,record:model}),/权限|BU/);
+ }
 });
 
 test('model configuration revisions preserve earlier metadata and reject duplicate hardware versions',()=>{
