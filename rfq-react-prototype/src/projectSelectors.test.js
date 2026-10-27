@@ -19,7 +19,7 @@ test('source detail distinguishes missing uploads from queued running failed and
 });
 test('demo board covers every stage with usable approvals and bound export records',()=>{
  const demo=createDemoState(),state=reconcileTasks(upgradePrototypeState(demo,demo));
- assert.deepEqual(state.projects.map(p=>getProjectSummary(state,p.id,'demo-sales').stage).sort(),['待上传','解析中','评审中','审批完成','已导出'].sort());
+ assert.deepEqual(state.projects.map(p=>getProjectSummary(state,p.id,'demo-sales').stage).sort(),['待上传','解析中','解析中','评审中','审批完成','已导出'].sort());
  for(const project of state.projects){
   const stage=getProjectSummary(state,project.id,'demo-sales').stage;
   if(!['审批完成','已导出'].includes(stage))continue;
