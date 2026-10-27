@@ -98,3 +98,55 @@ test('pending and incomplete conditional wording do not invent a satisfied commi
  assert.ok(conditional.includes('适用条件尚待确认'));
  assert.ok(!conditional.includes('已满足'));
 });
+
+test('source margin shows only Comply for a compliant clause, without its saved draft',()=>{
+ const input={...row,conclusion:'Comply',draft:'保留的人工答复'};
+ const before=structuredClone(input);
+ const annotation=model.buildSourceResponseAnnotation?.(input);
+ assert.equal(annotation?.kind,'comply');
+ assert.equal(annotation?.label,'Comply');
+ assert.equal(annotation?.wording,'');
+ assert.deepEqual(input,before);
+});
+
+test('every non-Comply conclusion shows its corresponding recommendation in the source margin',()=>{
+ for(const [conclusion,phrase] of [
+  ['有条件 Comply','有条件响应'],['不满足','无法满足'],
+  ['不适用','不适用'],['待确认','尚待核实'],
+ ]){
+  const annotation=model.buildSourceResponseAnnotation?.({...row,clause:'2.1',conclusion,conditions:'采用选配 X',reason:'需核对最终范围'});
+  assert.equal(annotation?.kind,'recommendation',conclusion);
+  assert.equal(annotation?.label,'推荐话术');
+  assert.equal(annotation?.conclusion,conclusion);
+  assert.ok(annotation?.wording.includes(phrase),conclusion);
+  assert.ok(annotation?.wording.includes('2.1'));
+  assert.ok(annotation?.wording.includes('采用选配 X'));
+  assert.ok(annotation?.wording.includes('需核对最终范围'));
+ }
+});
+
+test('source margin uses the latest saved response rather than an old parsed conclusion',()=>{
+ const parsed={...row,conclusion:'Comply',conditions:'旧条件',draft:'解析时的草稿'};
+ const response={conclusion:'不满足',conditions:'当前排产16周',reason:'客户要求12周',draft:'当前人工答复'};
+ const before=structuredClone({parsed,response});
+ const annotation=model.buildSourceResponseAnnotation?.(parsed,response);
+ assert.equal(annotation?.kind,'recommendation');
+ assert.equal(annotation?.conclusion,'不满足');
+ assert.ok(annotation?.wording.includes('当前排产16周'));
+ assert.ok(annotation?.wording.includes('客户要求12周'));
+ assert.ok(!annotation?.wording.includes('旧条件'));
+ assert.deepEqual({parsed,response},before);
+ const compliant=model.buildSourceResponseAnnotation?.({...parsed,conclusion:'不满足'},{conclusion:'Comply'});
+ assert.equal(compliant?.label,'Comply');
+ assert.equal(compliant?.wording,'');
+});
+
+test('missing or unrecognized source conclusions produce pending wording instead of a Comply marker',()=>{
+ for(const conclusion of [undefined,'','未评估']){
+  const annotation=model.buildSourceResponseAnnotation?.({...row,conclusion});
+  assert.equal(annotation?.kind,'recommendation');
+  assert.equal(annotation?.conclusion,'待确认');
+  assert.ok(annotation?.wording.includes('尚待核实'));
+  assert.ok(annotation?.wording.includes('暂不作出满足性承诺'));
+ }
+});

@@ -1,0 +1,31 @@
+/* The project view and historical Word demo share public/word-comments.css. */
+.word-classic-document.project-word-document{container-name:rfq-word;min-width:0;border:1px solid #dfe2e7;box-shadow:0 2px 8px #20325210}
+.project-word-document .wc-tools{padding-right:12px}
+.project-word-document .wc-canvas.wc-without-annotations{display:block}
+.project-word-document .wc-page.source-paper{min-height:858px;max-width:none;margin:0;padding:48px 38px 69px;border:0;border-right:1px solid #bdbdbd;box-shadow:none;container-type:normal}
+.project-word-document .wc-page.source-paper:before,.project-word-document .wc-page.source-paper:after{top:29px;width:22px;height:22px;border-bottom:2px solid #b2b2b2}
+.project-word-document .wc-page.source-paper:before{left:16px;border-right:2px solid #b2b2b2}
+.project-word-document .wc-page.source-paper:after{right:28px;border-left:2px solid #b2b2b2}
+.project-word-document .wc-page h1{font-size:calc(27px * var(--document-zoom,1));overflow-wrap:anywhere}
+.project-word-document .wc-page .source-paragraph{margin:0 0 23px;padding:0;border:0;border-radius:0;background:none;box-shadow:none;min-width:0;overflow-wrap:anywhere}
+.project-word-document .wc-page .source-paragraph.active,.project-word-document .wc-page .source-paragraph:hover{background:none;border:0;box-shadow:none}
+.project-word-document .wc-page .source-paragraph>div{display:flex;align-items:baseline;gap:8px;margin:28px 0 20px}
+.project-word-document .wc-page .source-paragraph b{font-family:'Songti SC',SimSun,serif;font-size:calc(15px * var(--document-zoom,1));color:#111}
+.project-word-document .wc-page .source-paragraph p{font-family:'Songti SC',SimSun,'Times New Roman',serif;font-size:calc(14px * var(--document-zoom,1));line-height:2;color:#111;margin:0;letter-spacing:0}
+.project-word-document .wc-page .source-paragraph small{font-size:9px;color:#777;white-space:nowrap}
+.project-word-document .wc-page .word-section-heading{margin:33px 0 28px;font-size:calc(18px * var(--document-zoom,1));font-family:'Songti SC',SimSun,serif;color:#111}
+.project-word-document .wc-project-footer{border-top:1px solid #c9c9c9;margin-top:32px;padding-top:12px;font:10px/1.8 'Segoe UI','PingFang SC',sans-serif;color:#707070}
+.project-word-document .dw-source-block,.project-word-document .dw-source-block.active{border:0;border-radius:0;background:none;box-shadow:none;padding:0;margin:0 0 23px;font-family:'Songti SC',SimSun,serif;color:#111}
+.project-word-document .dw-source-block>span{display:block;font-size:15px;font-weight:700;color:#111;margin:28px 0 20px}
+.project-word-document .dw-source-block p{font-size:14px;line-height:2;margin:0 0 12px}
+.project-word-document .dw-source-block small{font:10px/1.5 'Segoe UI','PingFang SC',sans-serif;color:#707070}
+.project-word-document .wc-note.source-response-annotation{cursor:pointer}
+@container rfq-word (max-width:430px){
+ .project-word-document .wc-canvas{grid-template-columns:minmax(0,1fr)}
+ .project-word-document .wc-page.source-paper{min-height:0;border-right:0;padding:43px 30px 40px}
+ .project-word-document .wc-page h1{font-size:calc(24px * var(--document-zoom,1))}
+ .project-word-document .wc-margin{border-top:1px solid #c9c9c9;padding:12px 20px;min-height:0!important}
+ .project-word-document .wc-note{position:relative;top:auto!important;left:auto;right:auto;margin:0 0 13px;padding:8px 10px;font-size:13px}
+ .project-word-document .wc-mobile-quote{display:block}
+ .project-word-document .wc-connectors{display:none}
+}

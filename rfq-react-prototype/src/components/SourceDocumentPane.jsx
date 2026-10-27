@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FileText, MessageSquarePlus, Minus, Plus, ExternalLink } from 'lucide-react';
+import { MessageSquarePlus, Minus, Plus, ExternalLink } from 'lucide-react';
 import { makeSourceAnchor, resolveSourceAnchor } from '../documentAnchors';
 import { annotatedSegments } from '../documentAnnotations';
 import { sectionLabel } from '../documentStructure';
+import WordAnnotationCanvas from './WordAnnotationCanvas';
 
-export default function SourceDocumentPane({ file, rows, selectedAnchor, showResponses, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
+export default function SourceDocumentPane({ file, rows, selectedAnchor, showResponses = true, responsePreview, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
   const resolved = resolveSourceAnchor(rows, selectedAnchor), active = resolved.row, container = useRef();
   const previousAnchor = useRef(null);
   const [pdf, setPdf] = useState(false), [zoom, setZoom] = useState(100);
@@ -45,19 +46,20 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
     </div></div>
     {resolved.status !== 'resolved' && <div className="response-notice response-notice-warning">{resolved.status === 'stale' ? '当前定位属于旧文件版本，请核对新版本后重新定位。' : '找不到该条款原文，请核对来源文件。'}</div>}
     {pdf && real ? <iframe className="source-pdf" title="原始 RFQ PDF" src={active?.sourceUrl || file?.localUrl}/> : <div className="source-document-scroll" ref={container}>
-      <article className="source-paper word-paper" style={{ '--document-zoom': zoom / 100 }}>
-        <div className="word-paper-meta"><span>客户 RFQ · {word ? '技术要求' : '要求来源'}</span><span>{selectedAnchor.sourceVersion}</span></div>
-        <header className="source-paper-header"><h2>{(file?.name || active?.source || '客户要求').replace(/\.[^.]+$/, '')}</h2><small>{real ? '原始英文摘录 · 中文应答见右侧' : '示例原文 · 按文件章节与顺序展示'}</small></header>
-        {rows.map((row, i) => <React.Fragment key={row.id}>
-          {(i === 0 || sectionLabel(rows[i - 1]) !== sectionLabel(row)) && <h3 className="word-section-heading">{sectionLabel(row) === '未识别章节' ? '客户要求' : sectionLabel(row)}</h3>}
-          <section data-source-id={row.id} className={`source-paragraph ${row.id === active?.id && resolved.status === 'resolved' ? 'active' : ''}`} onClick={() => { if (!window.getSelection()?.toString()) onSelectAnchor(makeSourceAnchor(row)); }} onMouseUp={() => captureSelection(row)}>
-            <div><b>{row.clause || '无编号'}　{row.title}</b><small>第 {row.sourcePage || '—'} 页</small></div>
-            <p data-source-text>{annotatedSegments(row, comments, activeCommentId).map(segment => segment.commentIds.length ? <mark key={segment.start} data-comment-ids={segment.commentIds.join(' ')} className={`word-comment-highlight ${segment.commentIds.includes(activeCommentId) ? 'selected' : ''}`} onClick={event => { event.stopPropagation(); if (window.getSelection()?.toString()) return; onSelectComment?.(segment.activeId, makeSourceAnchor(row)); }}>{segment.text}</mark> : <React.Fragment key={segment.start}>{segment.text}</React.Fragment>)}</p>
-            {showResponses && <div className="source-inline-response"><b>应答 · {row.conclusion}</b><p>{row.draft || '尚未填写'}</p></div>}
-          </section>
-        </React.Fragment>)}
-        <footer className="word-paper-footer"><span>{real ? '原文节选 · 完整内容以客户原件为准' : '当前为项目条款摘录，未读取上传 Word 的完整排版'}</span><FileText size={13}/></footer>
-      </article>
+      <WordAnnotationCanvas rows={rows} responsePreview={responsePreview} activeId={active?.id}
+        title={(file?.name || active?.source || '客户要求').replace(/\.[^.]+$/, '')}
+        version={selectedAnchor.sourceVersion} subtitle={`客户 RFQ · ${word ? '技术要求' : '要求来源'}`}
+        footer={real ? '原文节选 · 完整内容以客户原件为准' : '当前为项目条款摘录，未读取上传 Word 的完整排版'}
+        showAnnotations={showResponses} zoom={zoom}
+        onSelectRow={row => onSelectAnchor(makeSourceAnchor(row))}
+        onDiscuss={onQuote ? row => onQuote(row.sourceOriginal ?? row.original, makeSourceAnchor(row)) : undefined}
+      >{anchorProps => rows.map((row, i) => <React.Fragment key={row.id}>
+        {(i === 0 || sectionLabel(rows[i - 1]) !== sectionLabel(row)) && <h2 className="word-section-heading">{sectionLabel(row) === '未识别章节' ? '客户要求' : sectionLabel(row)}<span className="wc-format" aria-hidden="true"> ↵</span></h2>}
+        <section data-source-id={row.id} className={`source-paragraph ${row.id === active?.id && resolved.status === 'resolved' ? 'active' : ''}`} onClick={() => { if (!window.getSelection()?.toString()) onSelectAnchor(makeSourceAnchor(row)); }} onMouseUp={() => captureSelection(row)}>
+          <div><b>{row.clause || '无编号'}　{row.title}<span className="wc-format" aria-hidden="true"> ↵</span></b><small>第 {row.sourcePage || '—'} 页</small></div>
+          <p><span data-source-text {...anchorProps(row)}>{annotatedSegments(row, comments, activeCommentId).map(segment => segment.commentIds.length ? <mark key={segment.start} data-comment-ids={segment.commentIds.join(' ')} className={`word-comment-highlight ${segment.commentIds.includes(activeCommentId) ? 'selected' : ''}`} onClick={event => { event.stopPropagation(); if (window.getSelection()?.toString()) return; onSelectComment?.(segment.activeId, makeSourceAnchor(row)); }}>{segment.text}</mark> : <React.Fragment key={segment.start}>{segment.text}</React.Fragment>)}</span><span className="wc-format" aria-hidden="true"> ↵</span></p>
+        </section>
+      </React.Fragment>)}</WordAnnotationCanvas>
     </div>}
     <div className="source-quote-toolbar"><span>{rows.length} 条要求 · {comments.filter(c => c.anchor?.fileId === selectedAnchor.fileId && String(c.anchor.sourceVersion) === String(selectedAnchor.sourceVersion)).length} 条批注</span>{onQuote && <button className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => onQuote(active?.sourceOriginal || active?.original, selectedAnchor)}><MessageSquarePlus size={14}/>批注当前条款</button>}<span>选中文字可添加批注</span></div>
   </section>;
