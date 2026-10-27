@@ -46,7 +46,7 @@ const permissions = {
   'resource:edit': [technical], 'evidence:manage': [technical], 'resource:approve': [approver],
   'audit:view': [approver], 'system:manage': [],
 };
-const sharedPages = ['dashboard','tasks','projects','documents','response','reviews','export','versions','settings','knowledge','capabilities','evidence'];
+const sharedPages = ['dashboard','tasks','projects','documents','response','reviews','export','versions','settings','knowledge','capabilities'];
 export function canPerform(role, action,context) { return modernRoles.includes(role)?modernCan(role,action,context):!context&&roles.includes(role) && (permissions[action]?.includes(role) ?? false); }
 export function assertPermission(role, action,context) { if (!canPerform(role, action,context)) throw new Error('当前身份无此操作权限，请由具备对应职责的人员处理'); return true; }
 export function assertRequirementPatch(role, current, patch,context) {
@@ -58,7 +58,7 @@ export function assertRequirementPatch(role, current, patch,context) {
 export function canAccessPage(role, page,context) {
   if(modernRoles.includes(role)){
    if(role==='后台管理')return ['dashboard','admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
-   if(role==='BU管理员')return ['dashboard','bu-admin','knowledge','capabilities','evidence','audit'].includes(page)&&(!context||modernCan(role,'bu:manage',context));
+   if(role==='BU管理员')return ['dashboard','bu-admin','knowledge','capabilities','audit'].includes(page)&&(!context||modernCan(role,'bu:manage',context));
    return [...sharedPages,'analysis'].includes(page)&&(!context||modernCan(role,'analysis:view',context));
   }
   if (!roles.includes(role)) return false;

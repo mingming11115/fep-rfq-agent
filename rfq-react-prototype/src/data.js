@@ -15,7 +15,6 @@ export const NAV_ITEMS = [
   { key: 'versions', label: '项目版本、变更与快照记录', section: '项目' },
   { key: 'settings', label: '项目设置、成员与审批配置', section: '项目' },
   { key: 'knowledge', label: '知识与结果维护', section: '全局' },
-  { key: 'evidence', label: '资料与证据管理', section: '全局' },
   { key: 'audit', label: '审计记录', section: '管理' },
   { key: 'admin', label: '系统配置与运维', section: '管理' },
 ];
