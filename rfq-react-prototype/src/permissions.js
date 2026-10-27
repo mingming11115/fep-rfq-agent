@@ -67,7 +67,7 @@ export function canAccessPage(role, page,context) {
 }
 export function getRoleNavigation(role,context) {
   if(modernRoles.includes(role)){
-   const base=[{key:'dashboard',page:'dashboard',label:'工作台'}];
+   const base=[{key:'dashboard',page:'dashboard',label:role==='BU管理员'?'BU看板':'工作台'}];
    const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'业务资料审核'},{key:'audit',page:'audit',label:'BU审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:role==='技术'?'业务资料维护':'业务资料'}];
    return [...base,...items].filter(n=>canAccessPage(role,n.page,context));
   }

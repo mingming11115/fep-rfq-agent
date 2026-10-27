@@ -24,10 +24,10 @@ export function ProjectPersonnelPanel({appState,project,requirements=[],actorId,
  </div></section>;
 }
 
-export default function BuAdminPage({appState:state,actorId,onPersonnelAction,onSelectBu}){
+export default function BuAdminPage({appState:state,actorId,onPersonnelAction,onSelectBu,route}){
  const bus=state.businessUnits.filter(b=>canManageBu(state,actorId,b.id));
  const [buId,setBuId]=useState(bus.some(b=>b.id===state.activeBuId)?state.activeBuId:bus[0]?.id||''),[query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[edit,setEdit]=useState(null),[reason,setReason]=useState(''),[error,setError]=useState(''),[mode,setMode]=useState(state.buReviewSettingsByBuId?.[buId]?.technicalMode||'all'),[projectId,setProjectId]=useState('');
- useEffect(()=>{setMode(state.buReviewSettingsByBuId?.[buId]?.technicalMode||'all');setProjectId('');},[buId]);
+ useEffect(()=>{setMode(state.buReviewSettingsByBuId?.[buId]?.technicalMode||'all');setProjectId(state.projects.some(p=>p.id===route?.projectId&&p.buId===buId)?route.projectId:'');},[buId,route?.projectId]);
  const members=state.buPersonnelByBuId[buId]||[],projects=state.projects.filter(p=>p.buId===buId),project=projects.find(p=>p.id===projectId);
  const open=m=>{setEdit(m?{...m,projectIds:projects.filter(p=>p.participantIds?.includes(m.userId)).map(p=>p.id)}:{userId:'',roles:['技术'],enabled:true,canConfirm:true,canFinalReview:true,resourceQualifications:[],projectIds:[]});setReason('');setError('');};
  const run=fn=>{try{if(onPersonnelAction(fn)!==false){setError('');return true;}}catch(e){setError(e.message);}return false;};
