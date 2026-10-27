@@ -9,46 +9,67 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
   const resolved = resolveSourceAnchor(rows, selectedAnchor), active = resolved.row, container = useRef();
   const previousAnchor = useRef(null);
   const [pdf, setPdf] = useState(false), [zoom, setZoom] = useState(100);
+  const [selectionError, setSelectionError] = useState('');
   const real = file?.realSource || active?.realSource;
   const word = /\.docx?$/i.test(file?.name || active?.source || '');
   useEffect(() => {
-    if (previousAnchor.current === selectedAnchor.requirementId) return;
+    const key = JSON.stringify([selectedAnchor.projectId, selectedAnchor.fileId, selectedAnchor.sourceVersion, selectedAnchor.requirementId]);
+    if (previousAnchor.current === key) return;
     const initial = previousAnchor.current === null;
-    previousAnchor.current = selectedAnchor.requirementId;
+    previousAnchor.current = key;
+    const selection = window.getSelection(), node = selection?.anchorNode;
+    const element = node?.nodeType === 1 ? node : node?.parentElement;
+    const selectedSection = element?.closest('[data-source-id]');
+    if (selectedSection && container.current?.contains(selectedSection) && selectedSection.dataset.sourceId !== selectedAnchor.requirementId) selection.removeAllRanges();
+    setSelectionError('');
     if (initial && !focusOnMount) return;
     const target = container.current?.querySelector(`[data-source-id="${CSS.escape(selectedAnchor.requirementId)}"]`);
     if (target && container.current) container.current.scrollTo({ top: container.current.scrollTop + target.getBoundingClientRect().top - container.current.getBoundingClientRect().top - 50, behavior: 'smooth' });
-  }, [selectedAnchor.requirementId, selectedAnchor.sourceVersion]);
+  }, [selectedAnchor.projectId, selectedAnchor.fileId, selectedAnchor.requirementId, selectedAnchor.sourceVersion]);
   useEffect(() => { setPdf(false); }, [file?.id, selectedAnchor.fileId]);
   useEffect(() => {
     const target = activeCommentId && container.current?.querySelector(`[data-comment-ids~="${CSS.escape(activeCommentId)}"]`);
     if (target && container.current) container.current.scrollTo({ top: container.current.scrollTop + target.getBoundingClientRect().top - container.current.getBoundingClientRect().top - container.current.clientHeight / 2, behavior: 'smooth' });
   }, [activeCommentId]);
 
-  function readSelectionDraft(row) {
-    if (!row || resolved.status !== 'resolved') return null;
+  function readSelectionDraft() {
+    if (resolved.status !== 'resolved') return null;
     const selection = window.getSelection();
     if (!selection?.rangeCount || selection.isCollapsed) return null;
-    const range = selection.getRangeAt(0), article = container.current?.querySelector(`[data-source-id="${CSS.escape(row.id)}"]`), textElement = article?.querySelector('[data-source-text]');
-    if (!textElement?.contains(range.startContainer) || !textElement.contains(range.endContainer)) return null;
+    const range = selection.getRangeAt(0), root = container.current;
+    if (!root?.contains(range.startContainer) && !root?.contains(range.endContainer)) return null;
+    const element = node => node.nodeType === 1 ? node : node.parentElement;
+    const textElement = element(range.startContainer)?.closest('[data-source-part]');
+    if (!textElement || !root.contains(textElement) || !textElement.contains(range.endContainer)) return { invalid: true };
+    const rowId = textElement.closest('[data-source-id]')?.dataset.sourceId;
+    const row = rows.find(item => item.id === rowId);
+    if (!row) return { invalid: true };
     const quote = range.toString();
-    if (!quote.trim() || quote.length > 2000) return null;
+    if (!quote.trim() || quote.length > 2000) return { invalid: true };
     const prefix = range.cloneRange(); prefix.selectNodeContents(textElement); prefix.setEnd(range.startContainer, range.startOffset);
     const start = prefix.toString().length;
     const anchor = makeSourceAnchor(row);
-    return { quote, anchor: { ...anchor, locator: { ...anchor.locator, quote, textRange: { start, end: start + quote.length } } } };
+    return { row, draft: { quote, anchor: { ...anchor, locator: { ...anchor.locator, quote, textPart: textElement.dataset.sourcePart, textRange: { start, end: start + quote.length } } } } };
   }
 
-  function captureSelection(row) {
+  function captureSelection() {
     if (!onQuote) return;
-    const draft = readSelectionDraft(row);
-    if (draft) onQuote(draft.quote, draft.anchor);
+    const selected = readSelectionDraft();
+    setSelectionError(selected?.invalid ? '请在同一条款的编号、标题或正文内选择文字。' : '');
+    if (selected?.draft) onQuote(selected.draft.quote, selected.draft.anchor);
   }
 
   function startNewComment() {
     if (!onQuote || !active || resolved.status !== 'resolved') return;
-    const draft = makeCommentDraft(active, readSelectionDraft(active) || quoteDraft);
+    const selected = readSelectionDraft();
+    if (selected?.invalid) { setSelectionError('请在同一条款的编号、标题或正文内选择文字。'); return; }
+    setSelectionError('');
+    const draft = makeCommentDraft(selected?.row || active, selected?.draft || quoteDraft);
     onQuote(draft.quote, draft.anchor);
+  }
+
+  function renderSourcePart(row, part) {
+    return annotatedSegments(row, comments, activeCommentId, part).map(segment => segment.commentIds.length ? <mark key={segment.start} data-comment-ids={segment.commentIds.join(' ')} className={`word-comment-highlight ${segment.commentIds.includes(activeCommentId) ? 'selected' : ''}`} onClick={event => { event.stopPropagation(); if (window.getSelection()?.toString()) return; onSelectComment?.(segment.activeId, makeSourceAnchor(row)); }}>{segment.text}</mark> : <React.Fragment key={segment.start}>{segment.text}</React.Fragment>);
   }
 
   return <section className="source-document detail-source" aria-label="来源原文">
@@ -68,12 +89,12 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
         onDiscuss={onQuote ? row => onQuote(row.sourceOriginal ?? row.original, makeSourceAnchor(row)) : undefined}
       >{anchorProps => rows.map((row, i) => <React.Fragment key={row.id}>
         {(i === 0 || sectionLabel(rows[i - 1]) !== sectionLabel(row)) && <h2 className="word-section-heading">{sectionLabel(row) === '未识别章节' ? '客户要求' : sectionLabel(row)}<span className="wc-format" aria-hidden="true"> ↵</span></h2>}
-        <section data-source-id={row.id} className={`source-paragraph ${row.id === active?.id && resolved.status === 'resolved' ? 'active' : ''}`} onClick={() => { if (!window.getSelection()?.toString()) onSelectAnchor(makeSourceAnchor(row)); }} onMouseUp={() => captureSelection(row)}>
-          <div><b>{row.clause || '无编号'}　{row.title}<span className="wc-format" aria-hidden="true"> ↵</span></b><small>第 {row.sourcePage || '—'} 页</small></div>
-          <p><span data-source-text {...anchorProps(row)}>{annotatedSegments(row, comments, activeCommentId).map(segment => segment.commentIds.length ? <mark key={segment.start} data-comment-ids={segment.commentIds.join(' ')} className={`word-comment-highlight ${segment.commentIds.includes(activeCommentId) ? 'selected' : ''}`} onClick={event => { event.stopPropagation(); if (window.getSelection()?.toString()) return; onSelectComment?.(segment.activeId, makeSourceAnchor(row)); }}>{segment.text}</mark> : <React.Fragment key={segment.start}>{segment.text}</React.Fragment>)}</span><span className="wc-format" aria-hidden="true"> ↵</span></p>
+        <section data-source-id={row.id} className={`source-paragraph ${row.id === active?.id && resolved.status === 'resolved' ? 'active' : ''}`} onClick={() => { if (!window.getSelection()?.toString()) onSelectAnchor(makeSourceAnchor(row)); }} onMouseUp={captureSelection}>
+          <div><b><span data-source-part="heading">{renderSourcePart(row, 'heading')}</span><span className="wc-format" aria-hidden="true"> ↵</span></b><small>第 {row.sourcePage || '—'} 页</small></div>
+          <p><span data-source-text data-source-part="body" {...anchorProps(row)}>{renderSourcePart(row, 'body')}</span><span className="wc-format" aria-hidden="true"> ↵</span></p>
         </section>
       </React.Fragment>)}</WordAnnotationCanvas>
     </div>}
-    <div className="source-quote-toolbar"><span>{rows.length} 条要求 · {comments.filter(c => c.anchor?.fileId === selectedAnchor.fileId && String(c.anchor.sourceVersion) === String(selectedAnchor.sourceVersion)).length} 条批注</span>{onQuote && <button className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => onQuote(active?.sourceOriginal || active?.original, selectedAnchor)}><MessageSquarePlus size={14}/>批注当前条款</button>}<span>选中文字可添加批注</span></div>
+    <div className="source-quote-toolbar"><span>{rows.length} 条要求 · {comments.filter(c => c.anchor?.fileId === selectedAnchor.fileId && String(c.anchor.sourceVersion) === String(selectedAnchor.sourceVersion)).length} 条批注</span>{onQuote && <button className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => onQuote(active?.sourceOriginal || active?.original, selectedAnchor)}><MessageSquarePlus size={14}/>批注当前条款</button>}<span role={selectionError ? 'status' : undefined}>{selectionError || '选中文字可添加批注'}</span></div>
   </section>;
 }
