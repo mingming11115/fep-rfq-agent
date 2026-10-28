@@ -183,7 +183,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   </div>;
 }
 
-export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, actorId, appState,canBusinessAction, logEvent = () => {}, embedded = false, initialReviewId = null, initialAction = null, onCloseEmbedded,onSelectReview }) {
+export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, actorId, appState,canBusinessAction, logEvent = () => {}, embedded = false, initialReviewId = null, initialAction = null, onCloseEmbedded }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('总应答项');
   const reviewGroups = [
@@ -228,7 +228,6 @@ export function ReviewsPage({ project, requirements = [], reviews = [], onUpdate
   useEffect(() => { setPage(1); }, [query, status, type, source, mine]);
   useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
   function openReview(review) {
-    if(onSelectReview){const next=()=>onSelectReview(review);if(guardLeave(next))next();return;}
     const next = () => { const req = requirements.find((r) => r.id === review.requirementId); setActiveId(review.id); reviewBaseline.current={version:review.version||1,round:review.round||1};setDetailTab('处理方案'); clearDirty(); setError(''); setForm({ plan: review.plan || '', impact: asText(review.impact), evidence: asText(review.evidence), conclusion: review.proposedConclusion || req?.conclusion || '待确认', draft: review.proposedDraft || req?.draft || '', customerCommunication: review.customerCommunication || '未沟通', acceptanceResult: review.acceptanceResult || '未验收' }); };
     if (guardLeave(next)) next();
   }
