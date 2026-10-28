@@ -32,7 +32,7 @@ test('BU overview aggregates current BU progress and excludes terminal tasks and
  assert.deepEqual(result.projects.map(p=>p.id),['P','Q']);
  assert.deepEqual(result.stages.map(s=>[s.label,s.count]),[['待上传',1],['解析中',0],['评审中',1],['审批完成',0],['已导出',0]]);
  assert.deepEqual(result.workload.map(m=>[m.userId,m.pending,m.overdue]),[['tech',2,0],['sr',1,1]]);
- assert.deepEqual(result.taskGroups.map(g=>g.count),[1,2,0,0]);
+ assert.deepEqual(result.taskGroups.map(g=>g.count),[1,2,0]);
  const serialized=JSON.stringify(result);
  for(const hidden of ['禁止泄漏项目','禁止泄漏原文','禁止泄漏应答','SECRET','REMOVED'])assert.equal(serialized.includes(hidden),false);
 });

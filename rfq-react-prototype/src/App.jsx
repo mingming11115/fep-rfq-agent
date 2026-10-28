@@ -124,15 +124,16 @@ export default function App(){
   }catch(error){return error.message;}
  }
  function createReview(value){
+  value={...value,kind:'review'};
   if(!businessAllowed('requirement',value.requirementId,'save',value.requirementVersion))return false;
   const current=stateRef.current,pid=project.id;
-  const existing=(current.reviewsByProject[pid]||[]).find(r=>r.requirementId===value.requirementId&&(r.kind||'review')===(value.kind||'review')&&!['已关闭','已取消'].includes(r.status));
+  const existing=(current.reviewsByProject[pid]||[]).find(r=>r.requirementId===value.requirementId&&!['已关闭','已取消'].includes(r.status));
   if(existing){toast(`该条已有未关闭事项 ${existing.id}，请继续处理原事项`);return existing.id;}
   const requirement=current.requirementsByProject[pid]?.find(r=>r.id===value.requirementId);
   let reviewerIds=[];
   try{if(value.kind!=='clarification')reviewerIds=validateResponseReviewers(current,pid,value.reviewerIds);}catch(e){toast(e.message,'error');return false;}
   const started=beginReview(requirement,{...value,version:1,round:1,id:value.id||`DEV-${crypto.randomUUID()}`,status:'待处理',history:[{time:now(),actor:personName(current,current.actorId),actorId:current.actorId,action:value.kind==='clarification'?'建立客户澄清':'发起评审'}]});
-  const review={...started.review,createdById:current.actorId,owner:value.kind==='clarification'?personName(current,project.ownerId):reviewerIds.map(id=>personName(current,id)).join('、'),ownerId:value.kind==='clarification'?project.ownerId:reviewerIds[0],...(value.kind!=='clarification'?{reviewerIds,confirmations:{},proposedDraft:requirement.draft,proposedConclusion:requirement.conclusion,evidence:requirement.evidence,conditions:requirement.conditions,reason:requirement.reason}:{} )};
+  const review={...started.review,createdById:current.actorId,requestEvidenceLink:value.evidence||'',owner:value.kind==='clarification'?personName(current,project.ownerId):reviewerIds.map(id=>personName(current,id)).join('、'),ownerId:value.kind==='clarification'?project.ownerId:reviewerIds[0],...(value.kind!=='clarification'?{reviewerIds,confirmations:{},proposedDraft:requirement.draft,proposedConclusion:requirement.conclusion,evidence:requirement.evidence,conditions:requirement.conditions,reason:requirement.reason}:{} )};
   update(s=>event({...s,reviewsByProject:{...s.reviewsByProject,[pid]:[review,...(s.reviewsByProject[pid]||[])]},requirementsByProject:{...s.requirementsByProject,[pid]:s.requirementsByProject[pid].map(r=>r.id===review.requirementId?started.requirement:r)},...(value.commentId?{commentsByProject:{...s.commentsByProject,[pid]:(s.commentsByProject[pid]||[]).map(c=>c.id===value.commentId?{...c,linkedIssues:{...c.linkedIssues,[value.kind||'review']:review.id}}:c)}}:{})},value.kind==='clarification'?'发起客户澄清':'发起专项评审',review.id,review.title));
   toast(value.kind==='clarification'?'已创建客户澄清事项':'已分派评审，全部评审人确认后完成');return review.id;
  }
@@ -141,8 +142,8 @@ export default function App(){
   if(review.kind!=='clarification'&&Array.isArray(review.reviewerIds)){try{const next=updateResponseReview(s,{projectId:pid,reviewId:id,patch,expectedVersion,expectedRound,route:routeRef.current});update(()=>event(next,'更新应答评审',id,patch.action==='confirm'?'记录本人确认':'保存评审内容'));return next.reviewsByProject[pid].find(r=>r.id===id);}catch(e){toast(e.message,'error');return false;}}
   if(patch.ownerId){const c=getPersonnelContext(s,patch.ownerId,project.buId);if(!c.enabled||!c.member.roles.includes(review.kind==='clarification'?'SR':'技术')||!canAccessProject(s,patch.ownerId,pid)){toast('接收人没有对应业务资格或项目授权','error');return false;}}
   const communicationOnly=Object.keys(patch).some(key=>['customerCommunication','acceptanceResult'].includes(key))&&Object.keys(patch).every(key=>['customerCommunication','acceptanceResult','history'].includes(key));
-  const action=communicationOnly?'communicate':review.status==='已关闭'&&patch.status&&!['已关闭','已取消'].includes(patch.status)?'reopen':patch.status==='已关闭'&&review.kind!=='clarification'?'approve':patch.status==='已退回'?'reject':'save';if(!businessAllowed('review',id,action,expectedVersion,expectedRound))return false;
-  if(patch.status==='已关闭'&&review.kind!=='clarification'){try{assertIndependentApproval(review,{id:s.actorId,role:s.actorRole},{state:s,actorId:s.actorId,projectId:pid});}catch(e){toast(e.message,'error');return false;}}
+  const action=communicationOnly?'communicate':review.status==='已关闭'&&patch.status&&!['已关闭','已取消'].includes(patch.status)?'reopen':patch.status==='已关闭'?'approve':patch.status==='已退回'?'reject':'save';if(!businessAllowed('review',id,action,expectedVersion,expectedRound))return false;
+  if(patch.status==='已关闭'){try{assertIndependentApproval(review,{id:s.actorId,role:s.actorRole},{state:s,actorId:s.actorId,projectId:pid});}catch(e){toast(e.message,'error');return false;}}
   let next={...review,...patch};
   if(review.status==='已关闭'&&!['已关闭','已取消'].includes(next.status)){
     if(s.reviewsByProject[pid].some(r=>r.id!==id&&r.requirementId===review.requirementId&&(r.kind||'review')===(review.kind||'review')&&!['已关闭','已取消'].includes(r.status))){toast('该条款已有进行中的评审，请先处理当前事项','error');return false;}

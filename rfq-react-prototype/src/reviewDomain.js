@@ -99,7 +99,7 @@ export function reopenReview(review, { reason, owner, deadline, actor, at = new 
 }
 
 export function requirementAfterReview(requirement, previous, next) {
-  if (next.status === '已关闭' && previous.status !== '已关闭') return { ...requirement, status: '待确认', needsReview: true, readyForConfirmation: true, confirmedAt: undefined, confirmedBy: undefined, pendingReviewProposal: prepareReviewProposal(requirement, next), confirmationReason: `${next.kind === 'clarification' ? '客户澄清' : '专业评审'}已完成，请核对结果并确认应答。` };
+  if (next.status === '已关闭' && previous.status !== '已关闭') return { ...requirement, status: '待确认', needsReview: true, readyForConfirmation: true, confirmedAt: undefined, confirmedBy: undefined, pendingReviewProposal: prepareReviewProposal(requirement, next), confirmationReason: `评审已完成，请核对结果并确认应答。` };
   if (previous.status === '已关闭' && !['已关闭', '已取消'].includes(next.status)) return { ...requirement, version: (requirement.version || 1) + 1, status: '评审中', needsReview: true, readyForConfirmation: false, confirmedAt: undefined, confirmedBy: undefined, pendingReviewProposal: null, confirmationReason: `已发起重新评审：${next.reason}` };
   return requirement;
 }
