@@ -22,7 +22,7 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
     <h3>应答建议</h3>
     <dl>
       <dt>建议结论</dt><dd><strong>{advice.conclusion}</strong></dd>
-      <dt>建议来源</dt><dd><div>{advice.reference}</div>{advice.evidence&&<button className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</button>}</dd>
+      <dt>建议来源</dt><dd><div>{advice.reference}</div>{advice.evidence&&onOpenReference&&<button className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</button>}</dd>
       {supportingEvidence&&<><dt>核实资料</dt><dd>{supportingEvidence}</dd></>}
       {advice.checks.length>0&&<><dt>待核实</dt><dd><ul>{advice.checks.map(item=><li key={item}>{item}</li>)}</ul></dd></>}
     </dl>
