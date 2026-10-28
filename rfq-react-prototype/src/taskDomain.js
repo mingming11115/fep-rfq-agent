@@ -1,3 +1,5 @@
+import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError} from './confirmationPolicy.js';
+import {updateResponseReview} from './reviewDomain.js';
 import {confirmRequirement} from './domain.js';
 import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
 import {canAccessProject,getPersonnelContext,getEligiblePersonnel,getRequiredFinalReviewers,personName} from './personnelDomain.js';
@@ -5,7 +7,7 @@ import {actorIdForRole} from './stateMigration.js';
 import {normalizeTaskStatus} from './taskStatus.js';
 import {latestSnapshot} from './snapshotDomain.js';
 import {assertPermission} from './permissions.js';
-export const taskLabels={draft:'应答起草',confirm:'条款确认',recheck:'条款重新确认','review-process':'专业处理','review-approve':'专业批准',clarify:'客户澄清跟进','response-revise':'应答修改','final-approve':'最终审批'};
+export const taskLabels={draft:'应答起草',confirm:'条款确认',recheck:'条款重新确认','review-process':'应答评审','review-approve':'专业批准',clarify:'客户澄清跟进','response-revise':'应答修改','final-approve':'最终审批'};
 export const isTaskPending=task=>['待处理','处理中'].includes(normalizeTaskStatus(task.status));
 export function isTaskOverdue(task,now=new Date()){
   const dueAt=/^\d{4}-\d{2}-\d{2}$/.test(task.dueAt)?`${task.dueAt}T23:59:59.999+08:00`:task.dueAt;
@@ -15,9 +17,9 @@ export function isQualifiedTaskActor(task,actorId,state) {
   if(state?.accountsById){
     if(!canAccessProject(state,actorId,task.projectId))return false;
     const project=state.projects.find(p=>p.id===task.projectId),c=getPersonnelContext(state,actorId,project.buId),roles=c.member.roles;
-    if(['confirm','recheck'].includes(task.kind))return !!c.member.canConfirm;
+    if(['confirm','recheck'].includes(task.kind))return roles.includes('SR')||!!c.member.canConfirm;
     if(['draft','clarify','response-revise'].includes(task.kind))return roles.includes('SR');
-    if(task.kind==='review-process')return roles.includes('技术');
+    if(task.kind==='review-process')return roles.includes('SR')||roles.includes('技术')&&!!c.member.canConfirm;
     if(task.kind==='review-approve'){const review=state.reviewsByProject?.[task.projectId]?.find(r=>r.id===task.objectId);return !!(review?.submittedById&&review.submittedById!==actorId&&c.member.canConfirm&&c.member.canFinalReview&&roles.some(r=>['SR','技术'].includes(r)));}
     if(task.kind==='final-approve'){
       const snap=state.snapshotsByProject?.[task.projectId]?.find(o=>o.id===task.objectId);
@@ -39,16 +41,18 @@ export function getTaskContextError(state,route={}) {
   if(task.projectId!==route.projectId||!object||(object.version||1)!==task.objectVersion||(object.round||1)!==task.round)return '任务对象版本已变化，当前为只读';
   if(task.assigneeId!==state.actorId)return '当前身份不是此任务的处理人，当前为只读';
   if(!isQualifiedTaskActor(task,state.actorId,state))return '当前身份不具备该节点的处理资格，请转回具备资格的人员';
-  if(route.action==='view')return '当前为任务查看模式，请开始处理或进入最新工作上下文';
+  if(route.action==='view'&&(!state.accountsById||task.objectType==='snapshot'))return '当前为任务查看模式，请开始处理或进入最新工作上下文';
   return '';
 }
 export function assertBusinessAction(state,{projectId,objectType,objectId,action='save',route={},expectedVersion,expectedRound}={}) {
-  const contextError=getTaskContextError(state,route);if(contextError)throw new Error(contextError);
-  const contextTask=state.tasksById?.[route.taskId];
+  const entryIndependent=!!state.accountsById&&['requirement','review'].includes(objectType);
+  const contextError=entryIndependent?'':getTaskContextError(state,route);if(contextError)throw new Error(contextError);
+  const contextTask=entryIndependent?undefined:state.tasksById?.[route.taskId];
   const revisionContext=contextTask?.kind==='response-revise'&&contextTask.projectId===projectId&&['requirement','review'].includes(objectType);
   if(contextTask&&(contextTask.projectId!==projectId||!revisionContext&&(contextTask.objectType!==objectType||contextTask.objectId!==objectId)))throw new Error('当前任务不属于此业务对象，请进入最新工作上下文');
   const object=taskObject(state,{projectId,objectType,objectId});
   if(!object)throw new Error('业务对象已不存在，请刷新后查看');
+  const sourceError=getSourceContextError(objectType==='requirement'?object:objectType==='review'?state.requirementsByProject?.[projectId]?.find(r=>r.id===object.requirementId):undefined,route);if(sourceError)throw new Error(sourceError);
   if(objectType==='snapshot'&&['approve','reject'].includes(action)&&latestSnapshot(state.snapshotsByProject?.[projectId])?.id!==objectId)throw new Error('审批轮次已变化，请处理最新快照');
   if(expectedVersion!==undefined&&(object.version||1)!==expectedVersion||expectedRound!==undefined&&(object.round||1)!==expectedRound)throw new Error('对象版本或处理轮次已变化，请重新打开');
   const permission = objectType === 'snapshot' ? 'snapshot:approve'
@@ -73,6 +77,7 @@ export function assertBusinessAction(state,{projectId,objectType,objectId,action
   // Sales communication is independent of the technical proposal task. It may
   // only change communication fields; the App mutation boundary enforces that.
   if(action==='communicate'&&objectType==='review')return true;
+  if(entryIndependent)return true;
   const tasks=Object.values(state.tasksById||{}).filter(t=>t.projectId===projectId&&t.objectType===objectType&&t.objectId===objectId&&isTaskPending(t));
   if(tasks.length&&!tasks.some(t=>t.assigneeId===state.actorId))throw new Error('当前身份不是该业务节点的处理人，请由当前处理人处理');
   if(tasks.length&&!tasks.some(t=>t.assigneeId===state.actorId&&isQualifiedTaskActor(t,state.actorId,state)))throw new Error('当前身份不具备该节点的处理资格');
@@ -120,11 +125,17 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
     for(const row of state.requirementsByProject?.[project.id]||[]) {
       if(row.status==='已确认'||canReviewWithoutManualConfirmation(row,project.id))continue;
       if(reviews.some(r=>r.requirementId===row.id&&!['已关闭','已取消'].includes(r.status)))continue;
-      const kind=row.needsReview||row.status==='待复核'?'recheck':row.readyForConfirmation?'confirm':'draft';
-      ensure(project,row,'requirement',kind,state.accountsById?(kind==='draft'?(row.draftAssigneeId||project.ownerId):row.confirmationAssigneeId):kind==='draft'?'demo-sales':'demo-technical',{requirementId:row.id});
+      const kind=row.needsReview||row.status==='待复核'?'recheck':state.accountsById||row.readyForConfirmation?'confirm':'draft';
+      const assignees=state.accountsById?getConfirmationActorIds(state,project.id,row):[kind==='draft'?'demo-sales':'demo-technical'];
+      for(const assignee of assignees)ensure(project,row,'requirement',kind,assignee,{requirementId:row.id});
     }
     for(const review of reviews) {
       if(['已关闭','已取消'].includes(review.status))continue;
+      if(state.accountsById&&Array.isArray(review.reviewerIds)&&review.kind!=='clarification'){
+        const row=state.requirementsByProject[project.id]?.find(r=>r.id===review.requirementId);
+        for(const assignee of getReviewActorIds(review))if(!hasReviewConfirmation(review,row,assignee))ensure(project,review,'review','review-process',assignee,{requirementId:review.requirementId,reviewId:review.id});
+        continue;
+      }
       const approval=['待审批','待批准'].includes(review.status);
       const kind=review.kind==='clarification'?'clarify':approval?'review-approve':'review-process';
       const assignee=state.accountsById?(approval?review.approverId:review.ownerId):approval?'demo-approver':kind==='clarify'?'demo-sales':'demo-technical';
@@ -158,6 +169,10 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
       const vote=task.reviewSide==='sr'?object?.finalReview?.decisions?.sr:object?.finalReview?.decisions?.technicalByActorId?.[task.assigneeId];
       result=vote?.actorId===task.assigneeId?(vote.result==='approved'?'批准':'退回'):undefined;
     }
+    if(sameVersion&&task.kind==='review-process'&&Array.isArray(object?.reviewerIds)){
+      const row=state.requirementsByProject[task.projectId]?.find(r=>r.id===object.requirementId);
+      result=hasReviewConfirmation(object,row,task.assigneeId)?'已确认':undefined;
+    }
     const cancelled=object?.status==='已取消'||state.accountsById&&task.kind==='final-approve'&&object?.status==='已退回'&&!result;
     const status=result?'已处理':cancelled?'已取消':'已失效';
     tasks[id]={...task,status,...(status==='已失效'&&state.accountsById&&!isQualifiedTaskActor(task,task.assigneeId,state)?{needsReassignment:true}:{}),...(result?{result,completedAt:at}:{}),history:[...(task.history||[]),{action:result?'业务节点已完成':status==='已取消'?'业务事项已取消':'对象或版本已变化',result,time:at}]};
@@ -176,8 +191,9 @@ export function selectMyTasks(state,{actorId,projectId,tab='pending'}={}) {
 
 export function transferBusinessTask(state,{taskId,to,reason,at=new Date().toISOString()}) {
  const task=state.tasksById?.[taskId],nextTask=applyTaskAction(task,{type:'transfer',actorId:state.actorId,to,reason,at,objectVersion:task?.objectVersion},state);
+ if(task.objectType==='review'){const review=state.reviewsByProject[task.projectId]?.find(r=>r.id===task.objectId);if(Array.isArray(review?.reviewerIds)){const next=updateResponseReview(state,{projectId:task.projectId,reviewId:review.id,expectedVersion:review.version||1,patch:{action:'assign',reviewerIds:getReviewActorIds(review).map(id=>id===state.actorId?to:id),reason}});return reconcileTasks(next,{at});}}
  const next={...state,tasksById:{...state.tasksById,[taskId]:{...nextTask,requiredActorId:to}}};
- if(task.objectType==='requirement')next.requirementsByProject={...state.requirementsByProject,[task.projectId]:state.requirementsByProject[task.projectId].map(row=>row.id===task.objectId?{...row,[task.kind==='draft'?'draftAssigneeId':'confirmationAssigneeId']:to}:row)};
+ if(task.objectType==='requirement')next.requirementsByProject={...state.requirementsByProject,[task.projectId]:state.requirementsByProject[task.projectId].map(row=>row.id===task.objectId?{...row,[task.kind==='draft'?'draftAssigneeId':'confirmationAssigneeId']:to,confirmationAssignmentSource:'explicit'}:row)};
  else if(task.objectType==='review')next.reviewsByProject={...state.reviewsByProject,[task.projectId]:state.reviewsByProject[task.projectId].map(review=>review.id===task.objectId?{...review,[task.kind==='review-approve'?'approverId':'ownerId']:to}:review)};
  else if(task.kind==='response-revise')next.snapshotsByProject={...state.snapshotsByProject,[task.projectId]:state.snapshotsByProject[task.projectId].map(s=>s.id===task.objectId?{...s,revisionAssigneeId:to}:s)};
  return reconcileTasks(next,{at});
@@ -185,6 +201,11 @@ export function transferBusinessTask(state,{taskId,to,reason,at=new Date().toISO
 export function confirmProjectRequirement(state,{projectId,requirementId,expectedVersion,route={}}) {
  assertBusinessAction(state,{projectId,objectType:'requirement',objectId:requirementId,action:'confirm',expectedVersion,route});
  const row=state.requirementsByProject[projectId].find(r=>r.id===requirementId);
+ const review=getResponseReview(state,projectId,requirementId);
+ if(review&&review.status!=='已取消'){
+  if(review.status==='已关闭'&&row.status==='已确认')return state;
+  return updateResponseReview(state,{projectId,reviewId:review.id,expectedVersion:review.version||1,expectedRound:review.round||1,patch:{action:'confirm'}});
+ }
  if(row.pendingReviewProposal)throw new Error('请先核对评审建议');
  if(state.reviewsByProject?.[projectId]?.some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status)))throw new Error('请先关闭关联事项');
  const updated={...confirmRequirement(row),confirmedBy:personName(state,state.actorId),confirmedById:state.actorId};

@@ -55,7 +55,37 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     seedClauseStatusExamples(state, project);
     seedTaskDeadlineExamples(state, project, now);
   }
-  return initializePersonnel(state);
+  return migrateResponseReviews(initializePersonnel(state));
+}
+
+function migrateResponseReviews(state){
+ if(state.responseReviewSchemaVersion&&state.projects.every(p=>p.responseReviewSchemaVersion))return state;
+ state.implicitConfirmationIdsByProject ||= {};
+ for(const project of state.projects){
+  if(state.responseReviewSchemaVersion&&project.responseReviewSchemaVersion)continue;
+  for(const row of state.requirementsByProject[project.id]||[]){
+   const ambiguousLegacyAudit=(state.audit||[]).some(e=>e.action==='分派条款确认人'&&!e.projectId&&!e.requirementId&&(e.buId===project.buId||e.object===project.buId)&&e.after===row.confirmationAssigneeId);
+   const explicit=ambiguousLegacyAudit||row.confirmationAssignmentSource==='explicit'||Object.values(state.tasksById||{}).some(t=>t.projectId===project.id&&t.objectType==='requirement'&&t.objectId===row.id&&(t.history||[]).some(h=>h.action==='transfer'&&h.to===row.confirmationAssigneeId))||(state.audit||[]).some(e=>e.action==='分派条款确认人'&&e.projectId===project.id&&e.requirementId===row.id&&e.after===row.confirmationAssigneeId);
+   if(ambiguousLegacyAudit&&row.confirmationAssignmentSource!=='explicit'){state.confirmationMigrationNotesByProject ||= {};state.confirmationMigrationNotesByProject[project.id] ||= {};state.confirmationMigrationNotesByProject[project.id][row.id]='旧分派记录未包含具体条款，已保留现有确认人；可选择默认SR恢复默认分工。';}
+   if(row.confirmationAssigneeId==='demo-technical'&&!explicit){
+    if(row.status==='已确认'){state.implicitConfirmationIdsByProject[project.id] ||= [];if(!state.implicitConfirmationIdsByProject[project.id].includes(row.id))state.implicitConfirmationIdsByProject[project.id].push(row.id);}
+    else delete row.confirmationAssigneeId;
+   }
+  }
+  for(const review of state.reviewsByProject[project.id]||[]){
+   if(review.kind==='clarification')continue;
+   review.reviewerIds ||= review.ownerId?[review.ownerId]:[];
+   review.confirmations ||= {};
+   review.legacyApproval ||= review.approverId?{approverId:review.approverId,status:review.status,approvedById:review.approvedById}:undefined;
+   delete review.approverId;
+   if(['待审批','待批准'].includes(review.status)){review.status='待处理';review.version=(review.version||1)+1;}
+   review.owner=review.reviewerIds.map(id=>state.accountsById[id]?.name||id).join('、');
+   const row=state.requirementsByProject[project.id]?.find(r=>r.id===review.requirementId);
+   if(row&&review.status!=='已取消'&&(row.pendingReviewProposal?.reviewId===review.id||row.status!=='已确认'&&review.status==='已关闭')){row.status='评审中';review.status='待处理';}
+  }
+  project.responseReviewSchemaVersion=1;
+ }
+ state.responseReviewSchemaVersion=1;return state;
 }
 
 function seedTaskDeadlineExamples(state, project, now) {
@@ -126,13 +156,13 @@ function seedClauseStatusExamples(state, project) {
   examples.forEach((example, index) => {
     const current = rows.find(row => row.id === example.id);
     if (current) return;
-    const seeded = { ...example, category: '技术', ...answers[index], demoStatusExample: true,confirmationAssigneeId: 'demo-technical' };
+    const seeded = { ...example, category: '技术', ...answers[index], demoStatusExample: true };
     rows.push(seeded);
     if (seeded.status === '评审中') reviews.push({
       id: `${project.id}-DEMO-REVIEW-CLAUSE-STATUS`, requirementId: seeded.id, kind: 'review', title: '公用设施接口参数核对', type: '条件差异', source: '示例流程',
       status: '处理中', owner: '技术确认人',ownerId:'demo-technical',approverId:'demo-approver', deadline: project.deadline, version: 1, round: 1, requirementVersion: seeded.version,
       description: '客户现场电力、冷却水和排风参数尚待核对，需要明确额定值及允许范围。',
-      plan: '核对客户现场参数，完善接口表后提交独立专业批准。', evidence: seeded.evidence,
+      plan: '核对客户现场参数，完善接口表后确认最终应答。', evidence: seeded.evidence,
       proposedDraft: seeded.draft, proposedConclusion: seeded.conclusion, conditions: seeded.conditions,
       history: [{ time: '2026/10/24 09:00:00', actor: '销售负责人', action: '建立示例评审并分派技术确认人' }],
     });

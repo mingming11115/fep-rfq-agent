@@ -1,9 +1,10 @@
 import {getPersonnelContext,canAccessProject,getEligiblePersonnel,canManageBu} from './personnelDomain.js';
+import {getConfirmationActorIds,getResponseReview,getReviewActorIds} from './confirmationPolicy.js';
 const modernRoles=['后台管理','BU管理员','SR','技术'];
 const modernPermissions={
  'project:create':['SR'],'project:manage':['SR'],'project:handover':['SR'],'source:manage':['SR'],
  'response:edit':['SR','技术'],'response:submit':['SR'],'response:confirm':['SR','技术'],
- 'review:process':['技术'],'review:clarify':['SR'],'review:communicate':['SR'],'review:approve':['SR','技术'],
+ 'review:process':['SR','技术'],'review:clarify':['SR'],'review:communicate':['SR'],'review:approve':['SR','技术'],
  'snapshot:submit':['SR'],'snapshot:approve':['SR','技术'],'export:configure':['SR'],'export:download':['SR'],
  'analysis:view':['SR','技术'],'analysis:run':['SR','技术'],'resource:edit':['技术'],'evidence:manage':['技术'],
  'resource:approve':['BU管理员'],'model:configure':['BU管理员'],'catalog:create':['SR','BU管理员'],'audit:view':['BU管理员','后台管理'],'system:manage':['后台管理'],'bu:manage':['BU管理员'],
@@ -23,10 +24,15 @@ function modernCan(role,action,context){
  const c=getPersonnelContext(state,actorId,buId);if(!c.enabled||!c.member.roles.includes(role))return false;
  if(projectId&&!canAccessProject(state,actorId,projectId))return false;
  if(['project:manage','project:handover'].includes(action)&&state.projects.find(p=>p.id===projectId)?.ownerId!==actorId)return false;
- if(action==='response:edit'&&role==='技术'&&requirementId&&state.requirementsByProject?.[projectId]?.find(r=>r.id===requirementId)?.confirmationAssigneeId!==actorId)return false;
+ const row=state.requirementsByProject?.[projectId]?.find(r=>r.id===requirementId);
+ const responseReview=getResponseReview(state,projectId,requirementId);
+ if(action==='response:edit'&&requirementId){
+  if(responseReview)return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm);
+  if(role==='技术')return getConfirmationActorIds(state,projectId,row).includes(actorId);
+ }
+ if(action==='review:process'&&responseReview)return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm);
  if(action==='response:confirm'){
-  const row=state.requirementsByProject?.[projectId]?.find(r=>r.id===requirementId);
-  return !!(row?.confirmationAssigneeId===actorId&&c.member.canConfirm);
+  return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
  }
  if(['snapshot:approve','review:approve'].includes(action))return getEligiblePersonnel(state,{buId,projectId,duty:'final-review',side:role==='SR'?'sr':'technical'}).some(m=>m.userId===actorId);
  return true;

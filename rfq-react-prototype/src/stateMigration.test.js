@@ -73,7 +73,7 @@ test('seeding old Word examples preserves user work, historical snapshots and un
   assert.deepEqual(next.requirementsByProject['RFQ-001'].find(row => row.id === rows[0].id), rows[0]);
   assert.deepEqual(next.requirementsByProject['RFQ-001'].filter(row => rows.some(original => original.id === row.id)), rows);
   assert.deepEqual(next.snapshotsByProject['RFQ-001'], old.snapshotsByProject['RFQ-001']);
-  assert.deepEqual(next.requirementsByProject['RFQ-002'], old.requirementsByProject['RFQ-002'].map(row=>({...row,confirmationAssigneeId:'demo-technical'})));
+  assert.deepEqual(next.requirementsByProject['RFQ-002'], old.requirementsByProject['RFQ-002']);
 });
 
 test('upgrade preserves edited replies, snapshots and independent storage references', () => {
@@ -129,7 +129,8 @@ test('demo workbench includes overdue, today and future tasks using the Shanghai
  assert.equal(tasks.filter(t=>isTaskOverdue(t,now)).length,1);
  assert.ok(tasks.some(t=>t.dueAt==='2026-10-28'));
  assert.ok(tasks.some(t=>t.dueAt>'2026-10-28'));
- for(const actorId of ['demo-technical','demo-approver'])assert.ok(selectMyTasks(next,{actorId}).some(t=>!isTaskOverdue(t,now)));
+ assert.ok(selectMyTasks(next,{actorId:'demo-technical'}).some(t=>!isTaskOverdue(t,now)));
+ assert.equal(selectMyTasks(next,{actorId:'demo-approver'}).filter(t=>t.kind==='review-approve').length,0);
  assert.deepEqual(upgradePrototypeState(next,demo,{now:new Date('2026-12-01T00:00:00Z')}),next);
 });
 

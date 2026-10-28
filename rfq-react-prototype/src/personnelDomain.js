@@ -16,7 +16,7 @@ export function getEligiblePersonnel(state,{buId,projectId,duty,side}) {
  if(!['confirm','final-review'].includes(duty)||duty==='final-review'&&!['sr','technical'].includes(side))return [];
  return (state.buPersonnelByBuId?.[buId]||[]).filter(m=>{
   const c=getPersonnelContext(state,m.userId,buId);
-  return c.enabled&&m.canConfirm&&(duty!=='final-review'||m.canFinalReview&&m.roles.includes(side==='sr'?'SR':'技术'))&&(!projectId||state.projects?.find(p=>p.id===projectId)?.buId===buId&&canAccessProject(state,m.userId,projectId));
+  return c.enabled&&(m.canConfirm||duty==='confirm'&&m.roles.includes('SR'))&&(duty!=='final-review'||m.canFinalReview&&m.roles.includes(side==='sr'?'SR':'技术'))&&(!projectId||state.projects?.find(p=>p.id===projectId)?.buId===buId&&canAccessProject(state,m.userId,projectId));
  }).map(m=>({...m,name:personName(state,m.userId)}));
 }
 export function getRequiredFinalReviewers(review) {
@@ -53,12 +53,12 @@ export function assertProjectAssignment(state,{actorId,projectId,userId,duty,sid
  return true;
 }
 export function assignProjectDuty(state,{actorId,projectId,userId,duty,side,requirementId,reason}) {
- reasonRequired(reason);assertProjectAssignment(state,{actorId,projectId,userId,duty,side});
+ reasonRequired(reason);if(userId)assertProjectAssignment(state,{actorId,projectId,userId,duty,side});else projectManager(state,actorId,projectId);
  const project=state.projects.find(p=>p.id===projectId);
  if(duty!=='confirm')throw new Error('请使用项目评审组配置分派最终评审');
  const row=state.requirementsByProject?.[projectId]?.find(r=>r.id===requirementId);if(!row)throw new Error('条款不存在');
- const rows=state.requirementsByProject[projectId].map(r=>r.id===requirementId?{...r,confirmationAssigneeId:userId}:r);
- return audited({...state,requirementsByProject:{...state.requirementsByProject,[projectId]:rows}},actorId,project.buId,'分派条款确认人',row.confirmationAssigneeId,userId,reason);
+ const rows=state.requirementsByProject[projectId].map(r=>r.id===requirementId?{...r,confirmationAssigneeId:userId,confirmationAssignmentSource:'explicit'}:r);
+ const next=audited({...state,requirementsByProject:{...state.requirementsByProject,[projectId]:rows}},actorId,project.buId,'分派条款确认人',row.confirmationAssigneeId,userId,reason);next.audit[0]={...next.audit[0],projectId,requirementId};return next;
 }
 export function configureProjectFinalReviewers(state,{actorId,projectId,srId,technicalIds,technicalRepresentativeId=null,reason}) {
  reasonRequired(reason);const project=projectManager(state,actorId,projectId),settings=state.buReviewSettingsByBuId?.[project.buId];
@@ -129,7 +129,6 @@ export function initializePersonnel(state) {
   if(sample)project.participantIds=[...new Set([...(project.participantIds||[]),'demo-technical-2','demo-technical-3'])];
   const technicalIds=(project.participantIds||[]).filter(id=>['demo-technical','demo-technical-2','demo-technical-3'].includes(id));
   project.approvalConfig={...project.approvalConfig,finalReviewers:project.approvalConfig?.finalReviewers||{srId:project.ownerId==='demo-sales'?'demo-sales':null,technicalIds,technicalRepresentativeId:technicalIds[0]||null}};
-  for(const row of state.requirementsByProject?.[project.id]||[])row.confirmationAssigneeId ||= 'demo-technical';
   for(const review of state.reviewsByProject?.[project.id]||[]){review.ownerId ||= review.kind==='clarification'?project.ownerId:'demo-technical';review.approverId ||= 'demo-approver';
    if(['待审批','待批准'].includes(review.status)&&!review.submittedById){review.roundHistory=[...(review.roundHistory||[]),structuredClone(review)];review.status='已退回';review.version=(review.version||1)+1;review.round=(review.round||1)+1;review.history=[...(review.history||[]),{action:'旧方案缺少提交人标识，请重新提交',actor:'系统迁移',time:new Date().toISOString()}];}
   }

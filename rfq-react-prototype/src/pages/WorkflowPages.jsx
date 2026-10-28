@@ -1,12 +1,13 @@
+import ResponseReviewPanel from '../components/ResponseReviewPanel';
+import {getReviewActorIds,hasReviewConfirmation} from '../confirmationPolicy';
 import InlineReviewSurface from '../components/InlineReviewSurface';
 import { guardCardNavigation } from '../responseCardQueue';
-import {getProjectFinalReview,getRequiredFinalReviewers,personName,canAccessProject,getPersonnelContext} from '../personnelDomain';
+import {getProjectFinalReview,getRequiredFinalReviewers,personName} from '../personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from '../finalReviewDomain';
 import {canPerform} from '../permissions';
 import {shouldOpenSourceUpload,getSourceUploadExitRoute} from '../navigation';
 import {snapshotFingerprint,latestSnapshot,checkSnapshotValidity,getFinalReviewScope} from '../snapshotDomain';
 import ClarificationPanel from '../components/ClarificationPanel';
-import {assertIndependentApproval} from '../reviewDomain';
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, FileText, Check, AlertCircle, ArrowRight, Download, Plus, Search, RefreshCw, X, ShieldCheck, ChevronRight, ListChecks } from 'lucide-react';
 import { Modal, Drawer } from '../components/ui';
@@ -17,8 +18,6 @@ import { getExportIssues, makeSnapshot, toCsv } from '../domain';
 import {getUnconfirmedComplyRows} from '../responseRecommendation';
 import UnconfirmedComplyList from '../components/UnconfirmedComplyList';
 import './workflow-pages.css';
-import ApprovalRoute from '../components/ApprovalRoute';
-import { getReviewRoute } from '../rfqWorkflow';
 import DocumentWorkbench from '../components/DocumentWorkbench';
 import WordCommentsPrototype from '../components/WordCommentsPrototype';
 import SourceUploadDialog from '../components/SourceUploadDialog';
@@ -185,119 +184,23 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   </div>;
 }
 
-export function ReviewsPage({ project, requirements = [], reviews = [], onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, actorId, appState,canBusinessAction, logEvent = () => {}, embedded = false, inline = false, registerNavigationGuard, initialReviewId = null, initialAction = null, onCloseEmbedded }) {
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('总应答项');
-  const reviewGroups = [
-    { label: '总应答项', matches: () => true },
-    { label: '未处理', matches: (review) => !isClosed(review) && !isPendingReview(review) },
-    { label: '已审核', matches: isClosed },
-    { label: '待确认', matches: isPendingReview },
-  ];
-  const [type, setType] = useState('全部类型');
-  const [source, setSource] = useState('全部来源');
-  const [mine, setMine] = useState(false);
-  const [page, setPage] = useState(1);
-  const [activeId, setActiveId] = useState(initialReviewId);
-  const [detailTab, setDetailTab] = useState('处理方案');
-  const [form, setForm] = useState({ plan: '', impact: '', evidence: '', conclusion: '', draft: '', customerCommunication: '未沟通', acceptanceResult: '未验收' });
-  const [dirty, setDirty] = useState(false);
-  const dirtyRef = useRef(false);
-  const leaveNext = useRef(null);
-  const [leaveOpen, setLeaveOpen] = useState(false);
-  const [action, setAction] = useState(null);
-  const [actionReason, setActionReason] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [deadline, setDeadline] = useState('');
-  const [error, setError] = useState('');
-  const reviewBaseline=useRef({});
-  const active = reviews.find((r) => r.id === activeId);
-  const canReviewEdit=!!active&&canBusinessAction('review',active.id);
-  const canReopen=!!active&&canBusinessAction('review',active.id,'reopen');
-  const canCommunicate=!!active&&canBusinessAction('review',active.id,'communicate');
-  const canReviewApprove=!!active&&canBusinessAction('review',active.id,'approve');
-  const requirement = requirements.find((r) => r.id === active?.requirementId);
-  const filtered = reviews.filter((r) => `${r.id} ${r.title} ${r.owner} ${r.description}`.toLowerCase().includes(query.toLowerCase()) && reviewGroups.find((group) => group.label === status).matches(r) && (type === '全部类型' || r.type === type) && (source === '全部来源' || asText(r.source).includes(source)) && (!mine || r.owner === actorRole || (actorRole === 'SR' && r.owner === project.owner) || (actorRole === '最终审批人' && isPendingReview(r))));
-  const shown = filtered.slice((page - 1) * 6, page * 6);
-  const change = (field, value) => { setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); };
-  function clearDirty() { dirtyRef.current = false; setDirty(false); }
-  function guardLeave(next) { if (dirtyRef.current) { leaveNext.current = next; setLeaveOpen(true); return false; } return true; }
-  function finishLeave(save) { if (save && !savePlan()) return; clearDirty(); const next = leaveNext.current || (() => setActiveId(null)); leaveNext.current = null; setLeaveOpen(false); next(); }
-  useUnsavedWarning(dirty);
-  useEffect(() => { const previous = registerNavigationGuard ? null : window.__rfqRequestNavigation; const hook = next => guardCardNavigation({ dirty: dirtyRef.current, onBlock: action => { leaveNext.current = action; setLeaveOpen(true); }, previous }, next); if (registerNavigationGuard) return registerNavigationGuard(hook); window.__rfqRequestNavigation = hook; return () => { if (window.__rfqRequestNavigation === hook) { if (previous) window.__rfqRequestNavigation = previous; else delete window.__rfqRequestNavigation; } }; }, [registerNavigationGuard]);
-  useEffect(() => { if (initialReviewId) { const review = reviews.find((item) => item.id === initialReviewId); if (review) { openReview(review); if(initialAction==='reopen'&&isClosed(review)){setAction('reopen');setActionReason('');setAssignee(review.ownerId||'');setDeadline(review.deadline||project.deadline||'');} } } }, []);
-  useEffect(() => { if (embedded && !activeId) onCloseEmbedded?.(); }, [embedded, activeId]);
-  useEffect(() => { setPage(1); }, [query, status, type, source, mine]);
-  useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
-  function openReview(review) {
-    const next = () => { const req = requirements.find((r) => r.id === review.requirementId); setActiveId(review.id); reviewBaseline.current={version:review.version||1,round:review.round||1};setDetailTab('处理方案'); clearDirty(); setError(''); setForm({ plan: review.plan || '', impact: asText(review.impact), evidence: asText(review.evidence), conclusion: review.proposedConclusion || req?.conclusion || '待确认', draft: review.proposedDraft || req?.draft || '', customerCommunication: review.customerCommunication || '未沟通', acceptanceResult: review.acceptanceResult || '未验收' }); };
-    if (guardLeave(next)) next();
-  }
-  function historyEntry(label, reason) { return { id: uid('EVENT'), action: label, actor: actorRole, time: now(), reason }; }
-  function savePlan(closeAfter = false) {
-    if (!active || !canReviewEdit || isClosed(active) || isPendingReview(active)) { toast('已关闭或待批准事项为只读，请返回核对当前状态'); return false; }
-    const patch = { plan: form.plan, impact: form.impact, evidence: form.evidence, proposedConclusion: form.conclusion, proposedDraft: form.draft, ...(actorRole === 'SR' ? { customerCommunication: form.customerCommunication, acceptanceResult: form.acceptanceResult } : {}), history: [...(active.history || []), historyEntry('保存处理方案', '保存草稿，尚未批准')] };
-    if (onUpdateReview(active.id, patch,reviewBaseline.current.version,reviewBaseline.current.round) === false) return false; logEvent('保存评审方案', active.id, '保存方案、影响及证据'); clearDirty(); toast('处理方案已保存'); if (closeAfter) { setActiveId(null); setLeaveOpen(false); } return true;
-  }
-  function saveCommunication() {
-    if(!active||!canCommunicate)return;
-    const updated=onUpdateReview(active.id,{customerCommunication:form.customerCommunication,acceptanceResult:form.acceptanceResult,history:[...(active.history||[]),historyEntry('登记沟通与验收','SR登记，专业方案保持不变')]},reviewBaseline.current.version,reviewBaseline.current.round);
-    if(updated===false)return;clearDirty();toast('沟通与验收记录已保存，专业方案和任务归属保持不变');
-  }
-  function startAction(kind) {
-    setAction(kind); setActionReason(''); setAssignee(active?.ownerId || ''); setDeadline(active?.deadline || '2026-10-28'); setError('');
-  }
-  function performAction() {
-    if (!active) return;
-    const route = getReviewRoute(requirement, project.approvalConfig);
-    if (['submit','approve'].includes(action) && (!active.ownerId || !active.approverId)) { setError('请在项目人员配置中补齐专业处理人与指定批准人。'); return; }
-    if (['assign', 'reject', 'reopen'].includes(action) && !actionReason.trim()) { setError('请填写本次操作原因，记录将保留在事项历史中。'); return; }
-    if (['approve', 'reject'].includes(action) && !canBusinessAction('review',active.id,action)) { setError('当前人员不是本事项的有效专业批准人。'); return; }
-    if (['approve', 'reject'].includes(action) && !isPendingReview(active)) { setError('事项状态已变化，只有待批准事项可以批准或退回。'); return; }
-    if (action === 'submit' && (isClosed(active) || isPendingReview(active))) { setError('事项状态已变化，请返回核对后再提交。'); return; }
-    if (action === 'submit' && (!form.plan.trim() || !active.owner || !active.deadline)) { setError('提交前请填写处理方案，并完成责任人与截止时间分派。'); return; }
-    if (['assign', 'reopen'].includes(action) && (!assignee.trim() || !deadline)) { setError('请填写责任人及截止时间。'); return; }
-    if (action === 'reopen' && !isClosed(active)) { setError('只有已关闭事项可以重新评审。'); return; }
-    if(action==='approve'){try{assertIndependentApproval(active,{id:actorId,role:actorRole},{state:appState,actorId,projectId:project.id});}catch(e){setError(e.message);return;}}
-    if (action === 'approve' && !form.plan.trim()) { setError('处理方案为空，不能批准关闭。'); return; }
-    const labels = { assign: '重新分派', submit: '提交专业批准', approve: '批准关闭', reject: '退回修改', reopen: '重新评审' };
-    const statuses = { assign: active.status, submit: '待审批', approve: '已关闭', reject: '已退回', reopen: '待处理' };
-    const reason = actionReason.trim() || (action === 'approve' ? '方案及必要条件核对通过，相关应答仍需确认。' : '处理方案已就绪，提交专业批准。');
-    const patch = { status: statuses[action], history: [...(active.history || []), historyEntry(labels[action], action === 'assign' ? `${active.owner} → ${assignee}；${reason}` : reason)] };
-    if (action === 'assign') Object.assign(patch, { owner: personName(appState,assignee.trim()),ownerId:assignee.trim(), deadline, reason });
-    if (action === 'submit') Object.assign(patch, { plan: form.plan, impact: form.impact, evidence: form.evidence, proposedConclusion: form.conclusion, proposedDraft: form.draft, submittedBy: actorRole, submittedById:actorId,requirementVersion:requirement?.version||1,requirementAtSubmission:structuredClone(requirement),submittedAt: now(), ...(actorRole === 'SR' ? { customerCommunication: form.customerCommunication, acceptanceResult: form.acceptanceResult } : {}) });
-    if (action === 'approve') Object.assign(patch, { approvedBy: actorRole,approvedById:actorId, approvedAt: now(), approvalReason: reason });
-    if(['reopen','reject'].includes(action))patch.round=(active.round||1)+1;
-    if (action === 'reopen') Object.assign(patch, { reason, owner: personName(appState,assignee.trim()) || active.owner,ownerId:assignee.trim()||active.ownerId, deadline: deadline || active.deadline });
-    const updated=onUpdateReview(active.id, patch,reviewBaseline.current.version,reviewBaseline.current.round);if(updated===false)return;
-    if(updated&&typeof updated==='object')reviewBaseline.current={version:updated.version||1,round:updated.round||1};
-    logEvent(labels[action], active.id, reason); toast(action === 'approve' ? '事项已批准关闭；请核对差异并采用建议，人工答复已保留' : `${labels[action]}成功`); setAction(null); if (action === 'submit') clearDirty();
-  }
-  const closed = active && isClosed(active);
-  const actions = { assign: '分派 / 改派事项', submit: '提交专业批准', approve: '批准并关闭事项', reject: '退回处理方案', reopen: '重新评审' };
-  const ReviewSurface = inline ? InlineReviewSurface : Drawer;
-  return <div className={`flow-page ${inline ? 'response-inline-review' : ''}`}>
-    {!embedded && <><div className="workbench-view-heading"><p className="muted">集中处理关联条目的差距、待澄清事项与专业评审。</p></div>
-    <div className="flow-stat-strip">{reviewGroups.map((group) => <div key={group.label}><span>{group.label}</span><strong>{reviews.filter(group.matches).length}</strong></div>)}</div>
-    <section className="panel"><div className="flow-filterbar flow-review-filters"><Field label="搜索事项"><input className="input" placeholder="事项编号、名称、责任人" value={query} onChange={(e) => setQuery(e.target.value)} /></Field><Field label="事项类型"><select className="select" value={type} onChange={(e) => setType(e.target.value)}><option>全部类型</option>{[...new Set(reviews.map((r) => r.type))].filter(Boolean).map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="处理状态"><select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>{reviewGroups.map((group) => <option key={group.label}>{group.label}</option>)}</select></Field><Field label="偏离来源"><select className="select" value={source} onChange={(e) => setSource(e.target.value)}><option>全部来源</option>{[...new Set(reviews.flatMap((r) => asText(r.source).split(/[；、]/)))].filter(Boolean).map((v) => <option key={v}>{v}</option>)}</select></Field><div className="flow-filter-buttons"><button className="btn btn-primary" onClick={() => { setPage(1); toast(`已查询到 ${filtered.length} 个事项`); }}>查询</button><button className="btn" onClick={() => { setQuery(''); setStatus('总应答项'); setType('全部类型'); setSource('全部来源'); setMine(false); }}>重置</button></div></div>
-      <div className="panel-header flow-table-heading"><h2>偏离及待确认事项</h2><label className="flow-checkbox-label"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />仅看本人待办</label></div>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>事项 / 关联条目</th><th>来源与类别</th><th>影响</th><th>责任人</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead><tbody>{shown.map((review) => <tr key={review.id}><td><button className="text-link" onClick={() => openReview(review)}>{review.title}</button><div className="muted flow-small">{review.id} · {requirements.find((r) => r.id === review.requirementId)?.clause || review.requirementId}</div></td><td><span>{review.type}</span><div className="muted flow-small">{asText(review.source)}</div></td><td><div className="flow-table-impact">{asText(review.impact) || '待评估'}</div></td><td>{review.owner || <span className="flow-red">未分派</span>}</td><td className="flow-nowrap">{review.deadline || '未设置'}</td><td><Badge value={review.status} /></td><td><button className="text-link" onClick={() => openReview(review)}>{isClosed(review) ? '查看 / 重新评审' : '处理事项'}</button></td></tr>)}</tbody></table></div>{!shown.length && <NoRows title={reviews.length ? '没有符合条件的事项' : '暂无偏离或待评审事项'}>{reviews.length ? '调整查询条件或清除筛选。' : '在细则比对页签将需要专业判断的条目转入评审。'}{!reviews.length && <button className="btn btn-primary" onClick={() => navigate('response', requirement?.id)}>查看细则比对</button>}</NoRows>}<Pager count={filtered.length} page={page} onChange={setPage} />
-    </section>
-    <Notice>“用户未接受”表示内部使用者未接受匹配结果。客户沟通接受与实际验收分别记录；批准事项不会自动确认关联应答。</Notice>
-    </>}
-    {active?.kind==='clarification'&&<ReviewSurface title="客户澄清跟进" width={680} onClose={()=>{const next=()=>setActiveId(null);if(guardLeave(next))next();}}><ClarificationPanel key={active.id} issue={active} onDirtyChange={value=>{dirtyRef.current=value;setDirty(value);}} onChange={(id,patch)=>onUpdateReview(id,patch,reviewBaseline.current.version,reviewBaseline.current.round)} actorId={actorId} actorRole={actorRole} canEdit={canReviewEdit} toast={toast}/>{!inline && <button className="text-link" onClick={()=>navigate('response',active.requirementId)}>返回关联条款 →</button>}</ReviewSurface>}
-    {active && active.kind!=='clarification' && <ReviewSurface title="事项详情与处理" width={720} onClose={() => { const next = () => setActiveId(null); if (guardLeave(next)) next(); }} footer={<>{closed ? <button className="btn" disabled={!canReopen} onClick={() => startAction('reopen')}><RefreshCw size={15} />重新评审</button> : <><button className="btn" disabled={!canReviewEdit} onClick={() => startAction('assign')}>分派 / 改派</button><button className="btn" disabled={!canReviewEdit||isPendingReview(active)} onClick={() => savePlan()}>保存方案</button>{!isPendingReview(active) && <button className="btn btn-primary" disabled={!canReviewEdit} onClick={() => startAction('submit')}>提交专业批准</button>}{isPendingReview(active) && <><button className="btn btn-danger" disabled={!canReviewApprove} onClick={() => startAction('reject')}>退回</button><button className="btn btn-primary" disabled={!canReviewApprove} onClick={() => startAction('approve')}>批准关闭</button></>}</>}</>}>
-      <ApprovalRoute requirement={requirement} config={project.approvalConfig} review={active}/><div className="flow-detail-top"><div><span className="muted flow-small">{active.id}</span><h3>{active.title}</h3></div><Badge value={active.status} /></div><dl className="flow-description"><dt>事项类型 / 来源</dt><dd>{active.type} · {asText(active.source)}</dd><dt>责任人 / 截止</dt><dd>{active.owner || '未分派'} / {active.deadline || '未设置'}</dd><dt>要求与差距</dt><dd>{active.description || active.reason || '待补充问题说明'}</dd></dl>
-      {!inline && <div className="flow-requirement-card"><div><strong>{requirement?.clause} {requirement?.title || '关联要求'}</strong><button className="text-link" onClick={() => navigate('response', requirement?.id)}>定位要求<ArrowRight size={13} /></button></div><p>{requirement?.original || '关联条目已不可用，请联系项目负责人核对。'}</p><small>来源：{asText(requirement?.source)} · 第 {requirement?.sourcePage || '—'} 页</small></div>}
-      {closed && <Notice>已关闭结果与处理记录保留为只读。可重新评审并保留上一轮记录，关联条款将进入评审中。</Notice>}{isPendingReview(active) && <Notice>正在等待专业批准。当前职责：{actorRole}。由本事项指定的专业批准人处理。</Notice>}
-      <div className="tabs flow-inner-tabs">{['处理方案', '沟通与验收', '处理记录'].map((tab) => <button className={detailTab === tab ? 'active' : ''} key={tab} onClick={() => setDetailTab(tab)}>{tab}</button>)}</div>
-      {detailTab === '处理方案' && <div className="form-grid"><Field label="处理方案" required wide><textarea className="input flow-textarea" value={form.plan} readOnly={!canReviewEdit||closed||isPendingReview(active)} onChange={(e) => change('plan', e.target.value)} placeholder="说明可执行方案、必要条件、差距弥补措施及证据" /></Field><Field label="成本 / 交期 / 质量影响" wide><textarea className="input" value={form.impact} readOnly={!canReviewEdit||closed||isPendingReview(active)} onChange={(e) => change('impact', e.target.value)} placeholder="分别说明影响；无影响也请明确记录" /></Field><Field label="证据与依据" wide><textarea className="input" value={form.evidence} readOnly={!canReviewEdit||closed||isPendingReview(active)} onChange={(e) => change('evidence', e.target.value)} placeholder="资料编号、版本、适用条件及证据定位" /></Field><Field label="评审建议结论"><select className="select" disabled={!canReviewEdit||closed||isPendingReview(active)} value={form.conclusion} onChange={(e) => change('conclusion', e.target.value)}>{[...new Set([form.conclusion, 'Comply', '有条件 Comply', '不满足', '不适用', '待确认'])].map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="关联应答处理"><input className="input" readOnly value="批准后回到待确认" /></Field><Field label="评审建议答复" wide><textarea className="input flow-textarea" value={form.draft} readOnly={!canReviewEdit||closed||isPendingReview(active)} onChange={(e) => change('draft', e.target.value)} /></Field><span className="muted flow-small">{dirty ? '● 存在未保存修改' : '方案已保存 / 只读核对'}</span></div>}
-      {detailTab === '沟通与验收' && <><Notice>客户沟通与验收结果由SR独立登记，不改变技术方案或审批结果。</Notice><div className="form-grid flow-spaced"><Field label="客户沟通结果"><select className="select" value={form.customerCommunication} disabled={!canCommunicate} onChange={(e) => change('customerCommunication', e.target.value)}><option>未沟通</option><option>待客户澄清</option><option>客户已接受</option><option>客户未接受</option></select></Field><Field label="实际验收结果"><select className="select" value={form.acceptanceResult} disabled={!canCommunicate} onChange={(e) => change('acceptanceResult', e.target.value)}><option>未验收</option><option>验收通过</option><option>验收不通过</option></select></Field></div>{canCommunicate&&<button className="btn btn-primary" onClick={saveCommunication}>保存沟通与验收记录</button>}</>}
-      {detailTab === '处理记录' && <div className="flow-timeline">{(active.history || []).length ? (active.history || []).map((entry, index) => <div className="flow-timeline-item" key={entry?.id || index}><i /><strong>{typeof entry === 'string' ? entry : entry.action || entry.title || '事项更新'}</strong>{typeof entry === 'object' && <><small>{entry.time || entry.createdAt || '—'} · {entry.actor || entry.by || '系统'}</small><p>{entry.reason || entry.detail || entry.description || '—'}</p></>}</div>) : <NoRows title="暂无历史操作">后续分派、方案、批准、退回和重新评审记录将保留在此。</NoRows>}</div>}
-    </ReviewSurface>}
-    {action && active && <Modal title={actions[action]} onClose={() => setAction(null)} footer={<><button className="btn" onClick={() => setAction(null)}>取消</button><button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} onClick={performAction}>确认{actions[action].replace('事项', '')}</button></>}><div className="flow-modal-object"><strong>{active.title}</strong><span>{active.id} · <Badge value={active.status} /></span></div>{action === 'approve' && <Notice>请核对方案、证据及承诺条件。批准关闭后，关联应答仍须由责任人在细则比对页签确认。</Notice>}{action === 'submit' && <><Notice>将当前处理方案提交专业批准；提交后待批准内容以只读方式展示。</Notice><div className="flow-preview-text">{form.plan || '尚未填写处理方案'}</div></>}{['assign', 'reopen'].includes(action) && <div className="form-grid flow-spaced"><Field label="责任人" required><select className="select" aria-label="专业事项处理人" value={assignee} onChange={e=>setAssignee(e.target.value)}><option value="">请选择有项目权限的技术人员</option>{Object.values(appState?.accountsById||{}).filter(a=>canAccessProject(appState,a.id,project.id)&&getPersonnelContext(appState,a.id,project.buId).member?.roles.includes(active.kind==='clarification'?'SR':'技术')).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field><Field label="截止时间" required><input className="input" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></Field></div>}<Field label={action === 'reopen' ? '重新评审原因' : action === 'assign' ? '分派 / 改派原因' : action === 'reject' ? '退回原因' : '处理意见'} required={['assign', 'reject', 'reopen'].includes(action)} wide><textarea className="input flow-textarea" value={actionReason} onChange={(e) => setActionReason(e.target.value)} placeholder="记录具体意见，便于后续追溯" /></Field>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Modal>}
-    {leaveOpen && <Modal title="处理方案尚未保存" onClose={() => { setLeaveOpen(false); leaveNext.current = null; }} footer={<><button className="btn" onClick={() => { setLeaveOpen(false); leaveNext.current = null; }}>取消离开</button><button className="btn" onClick={() => finishLeave(false)}>放弃修改</button>{active?.kind!=='clarification'&&<button className="btn btn-primary" onClick={() => finishLeave(true)}>保存后离开</button>}</>}><p>{active?.kind==='clarification'?'客户回复尚未登记，取消离开后可继续填写并登记；放弃修改将丢弃本次输入。':'当前编辑尚未保存。保存成功后继续跳转，或放弃本次修改；取消会保留当前输入。'}</p></Modal>}
-  </div>;
+export function ReviewsPage({project,requirements=[],reviews=[],onUpdateReview,onAdoptReview,toast,navigate,actorRole,actorId,appState,canBusinessAction,embedded=false,inline=false,registerNavigationGuard,initialReviewId=null,initialAction=null,onCloseEmbedded}){
+ const [query,setQuery]=useState(''),[status,setStatus]=useState('全部'),[type,setType]=useState('全部类别'),[mine,setMine]=useState(false),[activeId,setActiveId]=useState(initialReviewId),[leave,setLeave]=useState(null);
+ const normalGuard=useRef(null),clarificationDirty=useRef(false),clarificationBaseline=useRef({});
+ const active=reviews.find(r=>r.id===activeId),row=requirements.find(r=>r.id===active?.requirementId),Surface=inline?InlineReviewSurface:Drawer;
+ const guard=next=>{if(normalGuard.current)return normalGuard.current(next);if(clarificationDirty.current){setLeave(()=>next);return false;}return true;};
+ useEffect(()=>{const previous=registerNavigationGuard?null:window.__rfqRequestNavigation;const hook=next=>guard(next)&&(!previous||previous(next));if(registerNavigationGuard)return registerNavigationGuard(hook);window.__rfqRequestNavigation=hook;return()=>{if(window.__rfqRequestNavigation===hook)window.__rfqRequestNavigation=previous;};},[registerNavigationGuard]);
+ useEffect(()=>{if(initialReviewId){setActiveId(initialReviewId);const r=reviews.find(r=>r.id===initialReviewId);clarificationBaseline.current={version:r?.version||1,round:r?.round||1};}},[initialReviewId]);
+ useEffect(()=>{if(embedded&&!activeId)onCloseEmbedded?.();},[embedded,activeId]);
+ const open=r=>{const next=()=>{setActiveId(r.id);clarificationDirty.current=false;clarificationBaseline.current={version:r.version||1,round:r.round||1};};if(guard(next))next();};
+ const close=()=>setActiveId(null);
+ const filtered=reviews.filter(r=>`${r.title} ${r.id} ${r.description||''} ${r.owner||''}`.toLowerCase().includes(query.toLowerCase())&&(status==='全部'||status==='已完成'?status==='全部'||isClosed(r):!isClosed(r))&&(type==='全部类别'||r.type===type)&&(!mine||(r.kind==='clarification'?r.ownerId===actorId:getReviewActorIds(r).includes(actorId))));
+ return <div className={`flow-page ${inline?'response-inline-review':''}`}>
+  {!embedded&&<><div className="workbench-view-heading"><p className="muted">查看评审进度；全部评审人确认同一版应答后完成。</p></div><section className="panel"><div className="flow-filterbar flow-review-filters"><Field label="搜索事项"><input className="input" placeholder="事项编号、名称或评审人" value={query} onChange={e=>setQuery(e.target.value)}/></Field><Field label="评审类别"><select className="select" value={type} onChange={e=>setType(e.target.value)}><option>全部类别</option>{[...new Set(reviews.map(r=>r.type).filter(Boolean))].map(t=><option key={t}>{t}</option>)}</select></Field><Field label="处理状态"><select className="select" value={status} onChange={e=>setStatus(e.target.value)}>{['全部','未完成','已完成'].map(s=><option key={s}>{s}</option>)}</select></Field><label className="flow-checkbox-label"><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)}/>仅看本人评审</label></div><div className="table-wrap"><table className="data-table"><thead><tr><th>事项 / 关联应答</th><th>评审类别</th><th>评审人 / 跟进人</th><th>确认进度</th><th>截止时间</th><th>操作</th></tr></thead><tbody>{filtered.map(r=>{const req=requirements.find(v=>v.id===r.requirementId),ids=getReviewActorIds(r);return <tr key={r.id}><td><button className="text-link" onClick={()=>open(r)}>{r.title}</button><small>{req?.clause} · {r.id}</small></td><td>{r.type||'—'}</td><td>{r.kind==='clarification'?personName(appState,r.ownerId):ids.map(id=>personName(appState,id)).join('、')||'待选择'}</td><td>{r.kind==='clarification'?r.status:isClosed(r)?'全部已确认':`${ids.filter(id=>hasReviewConfirmation(r,req,id)).length} / ${ids.length} 人已确认`}</td><td>{r.deadline||'未设置'}</td><td><button className="text-link" onClick={()=>open(r)}>{isClosed(r)?'查看结果':'处理评审'}</button></td></tr>;})}</tbody></table>{!filtered.length&&<NoRows title="暂无符合条件的事项">可从应答项发起评审或客户澄清。</NoRows>}</div></section></>}
+  {active?.kind==='clarification'&&<Surface title="客户澄清跟进" width={680} onClose={()=>{if(guard(close))close();}}><ClarificationPanel key={active.id} issue={active} onDirtyChange={value=>{clarificationDirty.current=value;}} onChange={(id,patch)=>{const next=onUpdateReview(id,patch,clarificationBaseline.current.version,clarificationBaseline.current.round);if(next!==false)clarificationBaseline.current={version:next.version||1,round:next.round||1};return next;}} actorId={actorId} actorRole={actorRole} canEdit={canBusinessAction('review',active.id)} toast={toast}/></Surface>}
+  {active&&active.kind!=='clarification'&&row&&<ResponseReviewPanel key={active.id} review={active} row={row} project={project} state={appState} actorId={actorId} onUpdateReview={onUpdateReview} onAdoptReview={onAdoptReview} canEdit={canBusinessAction('review',active.id)} Surface={Surface} onClose={close} initialAction={initialAction} registerGuard={fn=>{normalGuard.current=fn;return()=>{normalGuard.current=null;};}}/>}
+  {leave&&<Modal title="客户回复尚未登记" onClose={()=>setLeave(null)} footer={<><button className="btn" onClick={()=>setLeave(null)}>继续填写</button><button className="btn" onClick={()=>{const next=leave;clarificationDirty.current=false;setLeave(null);next();}}>放弃修改</button></>}><p>当前客户回复尚未登记，离开后将丢弃本次输入。</p></Modal>}
+ </div>;
 }
 
 export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], appState, onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, launchOnly = false, onClose, onSubmitted, logEvent = () => {} }) {
