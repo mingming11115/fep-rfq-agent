@@ -20,7 +20,7 @@ export function getReviewRoute(row, config = {}) {
   const key = ({ 商务: 'business', 质量: 'quality', 服务: 'service' })[category] || 'technical';
   const defaults = { business: '商务确认人', quality: '质量确认人', service: '服务确认人', technical: '技术确认人' };
   const owner = Object.hasOwn(config, key) ? config[key] : defaults[key];
-  return { owner, approver: Object.hasOwn(config, 'final') ? config.final : '最终审批人', rule: `${category}类要求分派`, reasons: [`要求类别：${category}`, ...(row?.conclusion === '不满足' ? ['存在明确能力或交付偏离'] : row?.conclusion === '有条件 Comply' ? ['承诺依赖附加条件'] : row?.matchLevel === 'none' ? ['缺少可用依据，需补证'] : ['专项评审事项'])] };
+  return { owner, approver: Object.hasOwn(config, 'final') ? config.final : '最终审批人', rule: `${category}类要求分派`, reasons: [`要求类别：${category}`, ...(row?.conclusion === '不满足' ? ['存在明确能力或交付偏离'] : row?.conclusion === '有条件 Comply' ? ['承诺依赖附加条件'] : row?.matchLevel === 'none' ? ['缺少可用依据，需补证'] : ['评审事项'])] };
 }
 function indexRows(rows) {
   const index = new Map();

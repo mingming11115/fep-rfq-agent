@@ -20,7 +20,7 @@ export default function AnnotationPanel({ comments, anchor, rows, onChange, onPr
   }
   return <div className="annotation-panel" ref={panel}>
     <div className="detail-section-intro"><MessageSquare size={17}/><div><strong>围绕原文讨论</strong><span>批注与对外应答分别保存</span></div><span className="count-pill">{current.length}</span></div>
-    {canEdit && <div className="annotation-compose"><blockquote>{quoteDraft?.quote || anchor.locator?.quote}</blockquote><textarea className="input" aria-label="新增批注内容" placeholder="写下问题或意见，可继续转评审、发起客户澄清…" value={text} onChange={e => setText(e.target.value)}/><div><span className="muted">{quoteDraft ? '已关联所选原文' : '关联当前条款'}</span><button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={add}><Send size={13}/>保存批注</button></div></div>}
+    {canEdit && <div className="annotation-compose"><blockquote>{quoteDraft?.quote || anchor.locator?.quote}</blockquote><textarea className="input" aria-label="新增批注内容" placeholder="写下问题或意见，可继续转评审…" value={text} onChange={e => setText(e.target.value)}/><div><span className="muted">{quoteDraft ? '已关联所选原文' : '关联当前条款'}</span><button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={add}><Send size={13}/>保存批注</button></div></div>}
     {current.map(c => {
       const resolved = resolveSourceAnchor(rows, c.anchor), selected = activeCommentId === c.id;
       return <article key={c.id} className={`annotation-card ${selected ? 'active' : ''}`} data-comment-active={selected} data-comment-card-id={c.id} onClick={() => onSelectComment?.(c.id)}>
@@ -32,7 +32,7 @@ export default function AnnotationPanel({ comments, anchor, rows, onChange, onPr
         <div className="workspace-row-actions">
           {canEdit && c.status !== '已解决' && <button className="text-link" onClick={() => onChange(comments.map(v => v.id === c.id ? resolveComment(v, actorId, new Date().toISOString()) : v))}><Check size={12}/>解决</button>}
           {canEdit && c.createdBy === actorId && <button className="text-link" onClick={() => { setEditing(c.id); setEditedText(c.text); }}>编辑</button>}
-          {['review', 'clarification'].map(kind => <button className="text-link" disabled={!c.linkedIssues?.[kind] && (!canEdit || resolved.status !== 'resolved')} key={kind} onClick={() => {
+          {['review'].map(kind => <button className="text-link" disabled={!c.linkedIssues?.[kind] && (!canEdit || resolved.status !== 'resolved')} key={kind} onClick={() => {
             const issue = promoteCommentToIssue(c, { kind, actor: actorId, at: new Date().toISOString() });
             const id = onPromote(issue); if (id) onChange(comments.map(v => v.id === c.id ? { ...v, linkedIssues: { ...v.linkedIssues, [kind]: id } } : v));
           }}>{c.linkedIssues?.[kind] ? '查看关联' : '转'}{kind === 'review' ? '评审' : '澄清'}</button>)}
