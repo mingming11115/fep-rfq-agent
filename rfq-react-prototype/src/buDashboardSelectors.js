@@ -8,7 +8,6 @@ const taskGroups=[
  {label:'起草与修改',kinds:['draft','response-revise']},
  {label:'条款确认',kinds:['confirm','recheck']},
  {label:'评审处理',kinds:['review-process','review-approve','final-approve']},
- {label:'客户澄清',kinds:['clarify']},
 ];
 
 // BU management grants access to this overview, not project source or response text.
