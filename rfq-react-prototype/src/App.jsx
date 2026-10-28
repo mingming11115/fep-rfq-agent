@@ -123,12 +123,25 @@ export default function App(){
    toast('字段已同步，原答复保留，条款需重新复核');return next;
   }catch(error){return error.message;}
  }
- function createReview(value){if(!businessAllowed('requirement',value.requirementId,'save',value.requirementVersion))return false;const pid=project.id;const existing=(stateRef.current.reviewsByProject[pid]||[]).find(r=>r.requirementId===value.requirementId&&(r.kind||'review')===(value.kind||'review')&&!['已关闭','已取消'].includes(r.status));if(existing){toast(`该条已有未关闭事项 ${existing.id}，请继续处理原事项`);return existing.id;}const requirement=stateRef.current.requirementsByProject[pid]?.find(r=>r.id===value.requirementId);let personnel={};try{if(value.kind!=='clarification')personnel=getReviewPersonnel(stateRef.current,pid,requirement.id);}catch(e){toast(e.message,'error');return false;}const routing=getReviewRoute(requirement,project.approvalConfig);const started=beginReview(requirement,{...value,routing,version:1,round:1,id:value.id||`DEV-${crypto.randomUUID()}`,status:'待处理',history:[{time:now(),actor:stateRef.current.actorRole,action:value.kind==='clarification'?'建立客户澄清并分派SR跟进':'建立评审并分派技术处理'}]});const review={...started.review,owner:value.kind==='clarification'?'SR':'技术',ownerId:value.kind==='clarification'?project.ownerId:personnel.ownerId,approverId:personnel.approverId};update(s=>event({...s,reviewsByProject:{...s.reviewsByProject,[pid]:[review,...(s.reviewsByProject[pid]||[])]},requirementsByProject:{...s.requirementsByProject,[pid]:(s.requirementsByProject[pid]||[]).map(r=>r.id===review.requirementId?started.requirement:r)}},value.kind==='clarification'?'发起客户澄清':'发起评审',review.id,review.title));toast(value.kind==='clarification'?'已创建客户澄清事项':'已创建评审事项');return review.id;}
+ function createReview(value){
+  value={...value,kind:'review'};
+  if(!businessAllowed('requirement',value.requirementId,'save',value.requirementVersion))return false;
+  const pid=project.id,existing=(stateRef.current.reviewsByProject[pid]||[]).find(r=>r.requirementId===value.requirementId&&!['已关闭','已取消'].includes(r.status));
+  if(existing){toast(`该条已有未关闭事项 ${existing.id}，请继续处理原事项`);return existing.id;}
+  const requirement=stateRef.current.requirementsByProject[pid]?.find(r=>r.id===value.requirementId);
+  let personnel;
+  try{personnel=getReviewPersonnel(stateRef.current,pid,requirement.id);}catch(e){toast(e.message,'error');return false;}
+  const routing=getReviewRoute(requirement,project.approvalConfig);
+  const started=beginReview(requirement,{...value,routing,version:1,round:1,id:value.id||`DEV-${crypto.randomUUID()}`,status:'待处理',history:[{time:now(),actor:stateRef.current.actorRole,action:'建立评审并分派技术处理'}]});
+  const review={...started.review,owner:'技术',...personnel};
+  update(s=>event({...s,reviewsByProject:{...s.reviewsByProject,[pid]:[review,...(s.reviewsByProject[pid]||[])]},requirementsByProject:{...s.requirementsByProject,[pid]:(s.requirementsByProject[pid]||[]).map(r=>r.id===review.requirementId?started.requirement:r)}},'发起评审',review.id,review.title));
+  toast('已创建评审事项');return review.id;
+ }
  function updateReview(id,patch,expectedVersion,expectedRound){const s=stateRef.current,pid=project.id,review=s.reviewsByProject[pid]?.find(r=>r.id===id);if(!review)return false;
-  if(patch.ownerId){const c=getPersonnelContext(s,patch.ownerId,project.buId);if(!c.enabled||!c.member.roles.includes(review.kind==='clarification'?'SR':'技术')||!canAccessProject(s,patch.ownerId,pid)){toast('接收人没有对应业务资格或项目授权','error');return false;}}
+  if(patch.ownerId){const c=getPersonnelContext(s,patch.ownerId,project.buId);if(!c.enabled||!c.member.roles.includes('技术')||!canAccessProject(s,patch.ownerId,pid)){toast('接收人没有对应业务资格或项目授权','error');return false;}}
   const communicationOnly=Object.keys(patch).some(key=>['customerCommunication','acceptanceResult'].includes(key))&&Object.keys(patch).every(key=>['customerCommunication','acceptanceResult','history'].includes(key));
-  const action=communicationOnly?'communicate':review.status==='已关闭'&&patch.status&&!['已关闭','已取消'].includes(patch.status)?'reopen':patch.status==='已关闭'&&review.kind!=='clarification'?'approve':patch.status==='已退回'?'reject':'save';if(!businessAllowed('review',id,action,expectedVersion,expectedRound))return false;
-  if(patch.status==='已关闭'&&review.kind!=='clarification'){try{assertIndependentApproval(review,{id:s.actorId,role:s.actorRole},{state:s,actorId:s.actorId,projectId:pid});}catch(e){toast(e.message,'error');return false;}}
+  const action=communicationOnly?'communicate':review.status==='已关闭'&&patch.status&&!['已关闭','已取消'].includes(patch.status)?'reopen':patch.status==='已关闭'?'approve':patch.status==='已退回'?'reject':'save';if(!businessAllowed('review',id,action,expectedVersion,expectedRound))return false;
+  if(patch.status==='已关闭'){try{assertIndependentApproval(review,{id:s.actorId,role:s.actorRole},{state:s,actorId:s.actorId,projectId:pid});}catch(e){toast(e.message,'error');return false;}}
   let next={...review,...patch};
   if(review.status==='已关闭'&&!['已关闭','已取消'].includes(next.status)){
     if(s.reviewsByProject[pid].some(r=>r.id!==id&&r.requirementId===review.requirementId&&(r.kind||'review')===(review.kind||'review')&&!['已关闭','已取消'].includes(r.status))){toast('该条款已有进行中的评审，请先处理当前事项','error');return false;}

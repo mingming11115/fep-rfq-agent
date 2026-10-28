@@ -1,6 +1,6 @@
 import {normalizeTaskStatus} from './taskStatus.js';
 import {makeDocumentDemo} from './documentMocks.js';
-import {initializePersonnel} from './personnelDomain.js';
+import {initializePersonnel,getReviewPersonnel} from './personnelDomain.js';
 export const actorIdForRole = role => ['SR','销售负责人'].includes(role) ? 'demo-sales' : role==='BU管理员'?'demo-bu-admin':role==='后台管理'?'demo-system-admin':/最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
@@ -55,7 +55,30 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     seedClauseStatusExamples(state, project);
     seedTaskDeadlineExamples(state, project, now);
   }
-  return initializePersonnel(state);
+  initializePersonnel(state);
+  for(const project of state.projects){
+    for(const review of state.reviewsByProject[project.id]){
+      if(review.customerCommunication==='待客户澄清')review.customerCommunication='待客户反馈';
+      if(review.type==='客户澄清')review.type='条件待核对';
+      if(review.kind!=='clarification')continue;
+      review.legacyKind=review.kind;
+      review.kind='review';
+      if(review.status==='跟进中')review.status='处理中';
+      const previousOwnerId=review.ownerId;
+      try{Object.assign(review,getReviewPersonnel(state,project.id,review.requirementId));}
+      catch{review.ownerId=null;review.approverId=null;}
+      review.owner=review.ownerId?'技术':'待分派';
+      review.history=[...(review.history||[]),{action:'并入评审',actor:'系统',previousOwnerId,time:now.toISOString(),reason:'统一按评审流程处理，原有回复和处理记录保留。'}];
+    }
+    for(const comment of state.commentsByProject[project.id]){
+      if(comment.linkedIssues?.clarification&&!comment.linkedIssues.review)comment.linkedIssues.review=comment.linkedIssues.clarification;
+    }
+    for(const row of state.requirementsByProject[project.id]){
+      if(row.pendingReviewProposal?.kind==='clarification')row.pendingReviewProposal.kind='review';
+      if(row.confirmationReason?.startsWith('客户澄清已完成'))row.confirmationReason='评审已完成，请核对结果并确认应答。';
+    }
+  }
+  return state;
 }
 
 function seedTaskDeadlineExamples(state, project, now) {

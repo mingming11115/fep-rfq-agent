@@ -8,6 +8,37 @@ import {requirementValidation} from './domain.js';
 import {getProjectSummary,selectProjects,getProjectSourceSummary} from './projectSelectors.js';
 import {BHEL_ID,makeBhelRequirements,makeBhelReviews} from './bhelDemo.js';
 
+test('legacy clarification work continues as a review with technical ownership and no duplicate follow-up task',()=>{
+ const demo=createDemoState(),old=upgradePrototypeState(demo,demo),pid='RFQ-001',row=old.requirementsByProject[pid][0];
+ const replies=[{reply:'已补充现场参数',assessment:'仍需核对',by:'demo-sales',at:'2026-10-27T00:00:00Z'}];
+ old.reviewsByProject[pid].push({id:'LEGACY-FOLLOWUP',requirementId:row.id,kind:'clarification',type:'客户澄清',status:'跟进中',owner:'SR',ownerId:'demo-sales',deadline:'2026-11-01',version:1,round:1,description:'核对现场参数',replies,history:[{action:'登记回复'}]});
+ old.commentsByProject[pid]=[{id:'C',anchor:{requirementId:row.id},linkedIssues:{clarification:'LEGACY-FOLLOWUP'}}];
+ const before=reconcileTasks(old),next=reconcileTasks(upgradePrototypeState(before,demo));
+ const review=next.reviewsByProject[pid].find(r=>r.id==='LEGACY-FOLLOWUP');
+ assert.equal(review.kind,'review');assert.equal(review.status,'处理中');
+ assert.equal(review.ownerId,'demo-technical');assert.equal(review.approverId,'demo-approver');
+ assert.deepEqual(review.replies,replies);assert.equal(review.description,'核对现场参数');
+ assert.equal(next.commentsByProject[pid][0].linkedIssues.review,review.id);
+ const tasks=Object.values(next.tasksById).filter(t=>t.objectId===review.id);
+ assert.equal(tasks.filter(t=>t.kind==='clarify'&&['待处理','处理中'].includes(t.status)).length,0);
+ assert.equal(tasks.filter(t=>t.kind==='review-process'&&t.assigneeId==='demo-technical'&&['待处理','处理中'].includes(t.status)).length,1);
+ assert.deepEqual(next.requirementsByProject[pid],before.requirementsByProject[pid]);
+ assert.deepEqual(next.snapshotsByProject,before.snapshotsByProject);
+ assert.deepEqual(upgradePrototypeState(next,demo),next);
+});
+
+test('consolidating closed follow-ups keeps their outcome and frozen history without assigning unauthorized personnel',()=>{
+ const old={projects:[{id:'P',buId:'CUSTOM'}],personnelSchemaVersion:1,accountsById:{},buPersonnelByBuId:{CUSTOM:[]},requirementsByProject:{P:[{id:'R',draft:'人工答复',pendingReviewProposal:{kind:'clarification',reviewId:'D',proposal:{draft:'原建议'}}}]},reviewsByProject:{P:[{id:'D',kind:'clarification',requirementId:'R',status:'已关闭',version:4,round:2,closedAt:'2026-10-27',replies:[{reply:'已确认'}]}]},snapshotsByProject:{P:[{id:'S',status:'已批准',rows:[{draft:'冻结答复'}]}]}};
+ const next=upgradePrototypeState(old,{members:[]}),review=next.reviewsByProject.P[0];
+ assert.equal(review.kind,'review');assert.equal(review.status,'已关闭');
+ assert.equal(review.version,4);assert.equal(review.round,2);assert.equal(review.closedAt,'2026-10-27');
+ assert.equal(review.ownerId,null);assert.equal(review.approverId,null);
+ assert.deepEqual(review.replies,[{reply:'已确认'}]);
+ assert.deepEqual(next.requirementsByProject.P[0],{id:'R',draft:'人工答复',pendingReviewProposal:{kind:'review',reviewId:'D',proposal:{draft:'原建议'}}});
+ assert.deepEqual(next.snapshotsByProject.P,old.snapshotsByProject.P);
+ assert.deepEqual(upgradePrototypeState(next,{members:[]}),next);
+});
+
 test('previously parsed demo projects receive a persistent parsing preview without replacing existing work',()=>{
   const demo=createDemoState(),old=upgradePrototypeState(demo,demo);
   old.projects=old.projects.filter(project=>project.id!=='RFQ-DEMO-PARSING');

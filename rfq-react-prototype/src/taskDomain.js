@@ -5,7 +5,7 @@ import {actorIdForRole} from './stateMigration.js';
 import {normalizeTaskStatus} from './taskStatus.js';
 import {latestSnapshot} from './snapshotDomain.js';
 import {assertPermission} from './permissions.js';
-export const taskLabels={draft:'应答起草',confirm:'条款确认',recheck:'条款重新确认','review-process':'专业处理','review-approve':'专业批准',clarify:'客户澄清跟进','response-revise':'应答修改','final-approve':'最终审批'};
+export const taskLabels={draft:'应答起草',confirm:'条款确认',recheck:'条款重新确认','review-process':'专业处理','review-approve':'专业批准',clarify:'评审处理','response-revise':'应答修改','final-approve':'最终审批'};
 export const isTaskPending=task=>['待处理','处理中'].includes(normalizeTaskStatus(task.status));
 export function isTaskOverdue(task,now=new Date()){
   const dueAt=/^\d{4}-\d{2}-\d{2}$/.test(task.dueAt)?`${task.dueAt}T23:59:59.999+08:00`:task.dueAt;
