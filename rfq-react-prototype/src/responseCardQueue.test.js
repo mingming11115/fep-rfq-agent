@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectResponseCards, responseCardStats, nextResponseCard, transitionConfirmedCard, guardCardNavigation } from './responseCardQueue.js';
+import * as responseQueue from './responseCardQueue.js';
 
 const rows = [
   { id: 'a', clause: '1.1', title: '安全联锁', owner: '顾工', status: '待确认' },
@@ -18,6 +19,15 @@ const reviews = [
 test('statistics count each response once and keep open matters and unapplied proposals waiting', () => {
   assert.deepEqual(responseCardStats(rows, reviews), { all: 5, pending: 1, confirmed: 1, waiting: 3 });
   assert.deepEqual(responseCardStats([], []), { all: 0, pending: 0, confirmed: 0, waiting: 0 });
+});
+
+test('response status wording follows the same review-aware grouping as the filters', () => {
+  assert.equal(typeof responseQueue.responseStatusLabel, 'function');
+  assert.deepEqual(rows.map(row => responseQueue.responseStatusLabel(row, reviews)),
+    ['待处理', '评审中', '评审中', '已确认', '评审中']);
+  const row = {id: 'pending-conclusion', status: '待确认', conclusion: '待确认'};
+  assert.equal(responseQueue.responseStatusLabel(row, []), '待处理');
+  assert.equal(row.conclusion, '待确认');
 });
 
 test('combined search type status and deviation filters select linked response cards', () => {

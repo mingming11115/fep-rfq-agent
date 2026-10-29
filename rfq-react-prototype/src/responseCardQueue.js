@@ -1,9 +1,14 @@
 const isOpen = review => !['已关闭', '已取消'].includes(review.status);
 const linkedTo = (row, reviews) => reviews.filter(review => review.requirementId === row.id);
+export const RESPONSE_STATUS_LABELS = {pending: '待处理', waiting: '评审中', confirmed: '已确认'};
 
 function cardStatus(row, reviews) {
   if (row.status === '已确认') return 'confirmed';
   return row.pendingReviewProposal || linkedTo(row, reviews).some(isOpen) ? 'waiting' : 'pending';
+}
+
+export function responseStatusLabel(row, reviews = []) {
+  return RESPONSE_STATUS_LABELS[cardStatus(row, reviews)];
 }
 
 export function responseCardStats(requirements = [], reviews = []) {

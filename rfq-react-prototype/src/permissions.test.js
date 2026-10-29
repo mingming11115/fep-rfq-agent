@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import * as policy from './permissions.js';
 const sales = '销售负责人', tech = '技术确认人', approver = '最终审批人';
 
+test('BU administrators can browse their RFQ pages without gaining response or approval operations',()=>{
+ const state={actorId:'bu',accountsById:{bu:{enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'},{id:'B'}],projects:[{id:'P',buId:'A',participantIds:[]},{id:'OTHER',buId:'B',participantIds:[]}],buPersonnelByBuId:{A:[],B:[]}};
+ const context={state,actorId:'bu',buId:'A',projectId:'P'};
+ for(const page of ['projects','documents','response','reviews','versions','settings','export']){
+  assert.equal(policy.canAccessPage('BU管理员',page,context),true,page);
+  if(page!=='projects')assert.equal(policy.canAccessPage('BU管理员',page,{...context,projectId:'OTHER'}),false,page);
+ }
+ for(const action of ['response:edit','response:confirm','snapshot:approve','snapshot:submit','export:download','source:manage'])assert.equal(policy.canPerform('BU管理员',action,context),false,action);
+ assert.equal(policy.getRoleNavigation('BU管理员',context).some(item=>item.page==='projects'),true);
+ assert.equal(policy.canAccessPage('BU管理员','response',{}),false);
+ assert.equal(policy.canAccessPage('BU管理员','response',{...context,projectId:'missing'}),false);
+ state.accountsById.bu.enabled=false;
+ assert.equal(policy.canAccessPage('BU管理员','response',context),false);
+});
+
 test('customer sources and project ownership can only be changed by sales', () => {
   for (const action of ['project:create','project:manage','project:handover','source:manage']) {
     assert.equal(policy.canPerform(sales, action), true);

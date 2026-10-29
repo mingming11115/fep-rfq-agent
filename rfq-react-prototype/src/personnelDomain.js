@@ -16,8 +16,8 @@ export function getPersonnelContext(state,actorId,buId) {
 export const canManageBu=(state,actorId,buId)=>getPersonnelContext(state,actorId,buId).managed;
 export function canAccessProject(state,actorId,projectId) {
  const project=state.projects?.find(p=>p.id===projectId);if(!project)return false;
- const {enabled}=getPersonnelContext(state,actorId,project.buId);
- return enabled&&!!project.participantIds?.includes(actorId);
+ const {enabled,managed}=getPersonnelContext(state,actorId,project.buId);
+ return managed||enabled&&!!project.participantIds?.includes(actorId);
 }
 export function getEligiblePersonnel(state,{buId,projectId,duty,side}) {
  if(!['confirm','final-review'].includes(duty)||duty==='final-review'&&!['sr','technical'].includes(side))return [];

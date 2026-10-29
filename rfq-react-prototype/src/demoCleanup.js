@@ -1,9 +1,12 @@
 import {getProjectSummary} from './projectSelectors.js';
 import {createDemoState} from './data.js';
 import {upgradePrototypeState} from './stateMigration.js';
+import {selectResponseCards, RESPONSE_STATUS_LABELS} from './responseCardQueue.js';
+import {getEligiblePersonnel, personName} from './personnelDomain.js';
 
-const cleanupVersion = 2;
+const cleanupVersion = 4;
 const conclusions = ['Comply', '有条件 Comply', '不满足', '不适用', '待确认'];
+const processingStates = [['pending', RESPONSE_STATUS_LABELS.pending, 'P'], ['waiting', RESPONSE_STATUS_LABELS.waiting, 'R'], ['confirmed', RESPONSE_STATUS_LABELS.confirmed, 'C']];
 const preferredProjects = {
   待上传: 'RFQ-DEMO-UPLOAD', 解析中: 'RFQ-DEMO-PARSING',
   评审中: 'RFQ-001', 审批完成: 'RFQ-002', 已导出: 'RFQ-003',
@@ -16,6 +19,23 @@ const projectMaps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByPr
 export function tidyDemoState(previous) {
   if (previous.demoCleanupVersion >= cleanupVersion || !previous.projects.some(p => p.buId === 'BU-DEMO')) return previous;
   const state = structuredClone(previous);
+  if (previous.demoCleanupVersion >= 3) {
+    // This revision changes presentation wording only; later user work stays intact.
+    const labels = {'未处理': '待处理', '待确认': '评审中', '已审核': '已确认'};
+    for (const project of state.projects.filter(p => p.buId === 'BU-DEMO')) {
+      for (const row of state.requirementsByProject[project.id] || []) {
+        if (!row.demoMatrixExample) continue;
+        for (const [before, after] of Object.entries(labels)) {
+          if (row.title?.endsWith(`（${before}示例）`)) row.title = row.title.slice(0, -`（${before}示例）`.length) + `（${after}示例）`;
+          if (row.sectionPath?.length === 1 && row.sectionPath[0] === before) row.sectionPath = [after];
+        }
+      }
+      for (const review of state.reviewsByProject[project.id] || [])
+        if (review.sample && review.description === '模拟评审事项，用于演示待确认状态下的本种应答结论。') review.description = '模拟评审事项，用于演示评审中状态下的本种应答结论。';
+    }
+    state.demoCleanupVersion = cleanupVersion;
+    return state;
+  }
   const examples = state.projects.filter(p => p.buId === 'BU-DEMO');
   const removedProjects = new Set();
   for (const [stage, preferredId] of Object.entries(preferredProjects)) {
@@ -48,27 +68,48 @@ export function tidyDemoState(previous) {
     const files = [...(state.documentsByProject[project.id] || [])];
     const exampleId = fallback.requirementsByProject[project.id]?.length ? project.id : 'RFQ-001';
     const copy = value => JSON.parse(JSON.stringify(value, (_, item) => typeof item === 'string' ? item.replaceAll(exampleId, project.id) : item));
-    // The previous compact demo has only two conclusions. Restore missing synthetic
-    // examples together with their source files and review assignments.
-    for (const conclusion of conclusions) {
-      if (rows.some(row => row.conclusion === conclusion)) continue;
-      const example = fallback.requirementsByProject[exampleId].find(row => row.conclusion === conclusion);
-      const added = copy(example);
-      while (rows.some(row => row.id === added.id)) added.id += '-DEMO';
-      rows.push(added);
-      for (const exampleReview of fallback.reviewsByProject[exampleId].filter(review => review.requirementId === example.id)) {
-        const review = {...copy(exampleReview), requirementId: added.id};
-        while (reviews.some(current => current.id === review.id)) review.id += '-DEMO';
-        reviews.push(review);
+    const matrixFileId = `${project.id}-DEMO-FILE-RESPONSE-MATRIX`, at = new Date().toISOString();
+    const reviewerId = getEligiblePersonnel(state, {buId: project.buId, projectId: project.id, duty: 'confirm'})
+      .find(person => person.roles.includes('技术'))?.userId;
+    const selected = [];
+    // Retain existing answers in their exact cells; fill only missing combinations.
+    for (const [processingStatus, label, prefix] of processingStates) for (const [index, conclusion] of conclusions.entries()) {
+      const candidates = selectResponseCards(rows, reviews, {status: processingStatus}).filter(row => row.conclusion === conclusion);
+      const current = candidates.find(row => row.demoStatusExample) || candidates[0];
+      if (current) { selected.push(current); continue; }
+      const base = rows.find(row => row.conclusion === conclusion) || copy(fallback.requirementsByProject[exampleId].find(row => row.conclusion === conclusion));
+      let id = `${project.id}-DEMO-MATRIX-${processingStatus}-${index + 1}`;
+      while (rows.some(row => row.id === id) || selected.some(row => row.id === id)) id += '-DEMO';
+      const row = {
+        id, clause: `${prefix}${index + 1}`, title: `${base.title}（${label}示例）`, category: base.category,
+        original: base.original, sourceOriginal: base.original, conclusion, draft: base.draft,
+        conditions: base.conditions || (conclusion === '有条件 Comply' ? '以双方确认的配置、材料及验收方案为准。' : ''),
+        reason: base.reason || '', evidence: base.evidence || '', version: 1,
+        source: '应答状态与结论矩阵示例.docx', sourceFileId: matrixFileId, sourceVersion: 'V1.0',
+        sourcePage: 1, sourceOrder: selected.length, sourceAnchor: `matrix-${processingStatus}-${index + 1}`, sectionPath: [label],
+        status: processingStatus === 'confirmed' ? '已确认' : processingStatus === 'waiting' ? '评审中' : '待确认',
+        owner: personName(state, project.ownerId), confirmationAssigneeId: project.ownerId,
+        readyForConfirmation: processingStatus === 'pending', matchLevel: 'none', score: 0,
+        sample: true, demoMatrixExample: true, deadline: project.deadline,
+      };
+      if (processingStatus === 'confirmed') {
+        row.confirmedAt = at; row.confirmedBy = '模拟审核'; row.confirmedById = project.ownerId;
+        // This display-only cell keeps the normal final-conclusion/export gate.
+        if (conclusion === '待确认') row.confirmationReason = '矩阵展示样例：内容已审核，结论仍待确认，不能作为最终处置。';
       }
-      const file = fallback.documentsByProject[exampleId].find(file => file.id === example.sourceFileId);
-      if (file && !files.some(current => current.id === added.sourceFileId)) files.push(copy(file));
+      if (processingStatus === 'waiting') reviews.push({
+        id: `${id}-REVIEW`, requirementId: id, kind: 'review', title: `${base.title} · ${conclusion}评审示例`,
+        type: '应答评审', source: '状态与结论矩阵演示', status: '待处理', version: 1, round: 1, requirementVersion: 1,
+        ownerId: reviewerId || null, owner: reviewerId ? personName(state, reviewerId) : '待分派', reviewerIds: reviewerId ? [reviewerId] : [],
+        confirmations: {}, deadline: project.deadline, description: '模拟评审事项，用于演示评审中状态下的本种应答结论。',
+        plan: '核对客户要求、结论和应答内容，再完成本人评审。', proposedDraft: row.draft, proposedConclusion: conclusion,
+        conditions: row.conditions, evidence: row.evidence, reason: row.reason, sample: true,
+        history: [{time: at, actor: '系统演示', action: '创建状态与结论矩阵示例'}],
+      });
+      selected.push(row);
     }
-    const selected = conclusions.flatMap(conclusion => {
-      const candidates = rows.filter(row => row.conclusion === conclusion);
-      const row = candidates.find(r => r.demoStatusExample) || candidates[0];
-      return row ? [row] : [];
-    });
+    if (selected.some(row => row.sourceFileId === matrixFileId) && !files.some(file => file.id === matrixFileId))
+      files.push({id: matrixFileId, name: '应答状态与结论矩阵示例.docx', purpose: '要求来源', version: 'V1.0', status: '完成', createdAt: at, sample: true, size: 1482000, visibility: '项目成员可见'});
     const rowIds = new Set(selected.map(r => r.id));
     state.requirementsByProject[project.id] = selected;
     state.reviewsByProject[project.id] = reviews.filter(r => rowIds.has(r.requirementId));

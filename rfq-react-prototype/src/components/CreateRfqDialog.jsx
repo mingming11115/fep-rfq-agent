@@ -75,7 +75,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
    <div className="rfq-process-fields">
     <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><button className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</button><button className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</button></div></div>
     <div className="rfq-catalog-tree"><CapabilityTree root={tree} selectedKey={selectedKey} onSelect={selectProcessNode} terminalKinds={['process']} ariaLabel="选择RFQ关联工艺" emptyLabels={{bu:'暂无机型，请先新建机型',model:'暂无启用工艺，可新建工艺'}} revealSelection/></div>
-    <div className="rfq-tree-selection" role="status" aria-label="已选工艺">{selectedProcess?<>已选工艺：<strong>{selectedModel?.name} {selectedModel?.revision} / {selectedProcess.code} · {selectedProcess.name}</strong></>:selectedModel?<>已选机型：{selectedModel.name} {selectedModel.revision} · 请继续选择具体工艺</>:'请展开机型，选择具体工艺'}</div>
+    {(selectedProcess||selectedModel)&&<div className="rfq-tree-selection" role="status" aria-label="已选工艺">{selectedProcess?<>已选工艺：<strong>{selectedModel?.name} {selectedModel?.revision} / {selectedProcess.code} · {selectedProcess.name}</strong></>:<>已选机型：{selectedModel.name} {selectedModel.revision} · 请继续选择具体工艺</>}</div>}
    </div>
    {(error||catalog.error)&&<p className="flow-error-inline" role="alert">{error||catalog.error}</p>}
   </Modal>

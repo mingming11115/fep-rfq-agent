@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import { Search, SlidersHorizontal } from 'lucide-react';
+import {RESPONSE_STATUS_LABELS} from '../responseCardQueue';
 
 export const EMPTY_CARD_FILTERS = { query: '', status: 'all', source: 'all' };
-const groups = [['all', '总应答项'], ['pending', '未处理'], ['confirmed', '已审核'], ['waiting', '待确认']];
+const groups = [['all', '总应答项'], ...Object.entries(RESPONSE_STATUS_LABELS)];
 
 export default function ResponseCardFilters({ stats, filters, draft, sources, disabled, onDraftChange, onApply, onReset }) {
   const filterPanel = useRef(null);

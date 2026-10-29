@@ -64,7 +64,15 @@ export function assertRequirementPatch(role, current, patch,context) {
 export function canAccessPage(role, page,context) {
   if(modernRoles.includes(role)){
    if(role==='后台管理')return ['admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
-   if(role==='BU管理员')return ['dashboard','bu-admin','knowledge','history','capabilities','audit'].includes(page)&&(!context||modernCan(role,'bu:manage',context));
+   if(role==='BU管理员'){
+    const rfqPages=['documents','response','reviews','versions','settings','export'];
+    if(rfqPages.includes(page)){
+     if(!context)return true;
+     const project=context.state?.projects?.find(p=>p.id===context.projectId);
+     return !!project&&modernCan(role,'bu:manage',{...context,buId:project.buId});
+    }
+    return ['dashboard','projects','bu-admin','knowledge','history','capabilities','audit'].includes(page)&&(!context||modernCan(role,'bu:manage',context));
+   }
    return [...sharedPages,'analysis'].includes(page)&&(!context||modernCan(role,'analysis:view',context));
   }
   if (!roles.includes(role)) return false;
@@ -74,7 +82,7 @@ export function canAccessPage(role, page,context) {
 export function getRoleNavigation(role,context) {
   if(modernRoles.includes(role)){
    const base=[{key:'dashboard',page:'dashboard',label:role==='BU管理员'?'BU看板':'工作台'}];
-   const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:role==='技术'?'知识库维护':'知识库'}];
+   const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'projects',page:'projects',label:'BU RFQ'},{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:role==='技术'?'知识库维护':'知识库'}];
    return [...base,...items].filter(n=>canAccessPage(role,n.page,context));
   }
   if (!roles.includes(role)) return [];

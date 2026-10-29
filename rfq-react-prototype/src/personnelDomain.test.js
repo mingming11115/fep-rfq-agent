@@ -13,7 +13,23 @@ test('eligible reviewers must belong to the BU, project, role and active confirm
  const s=fixture();s.buPersonnelByBuId.A.find(m=>m.userId==='t2').canConfirm=false;s.projects[0].participantIds=s.projects[0].participantIds.filter(id=>id!=='t3');
  assert.deepEqual(p.getEligiblePersonnel(s,{buId:'A',projectId:'P',duty:'final-review',side:'technical'}).map(m=>m.userId),['t1']);
  s.accountsById.t1.enabled=false;assert.deepEqual(p.getEligiblePersonnel(s,{buId:'A',projectId:'P',duty:'confirm'}).map(m=>m.userId),['sr']);
- assert.equal(p.canAccessProject(s,'unknown','P'),false);assert.equal(p.canAccessProject(s,'bu','P'),false);
+ assert.equal(p.canAccessProject(s,'unknown','P'),false);assert.equal(p.canAccessProject(s,'bu','P'),true);
+});
+test('BU administrators can access every RFQ in their managed BU without business membership or project grants',()=>{
+ const s=fixture();
+ s.projects.push({id:'P2',buId:'A',participantIds:[]},{id:'FOREIGN',buId:'B',participantIds:[]});
+ assert.equal(p.canAccessProject(s,'bu','P'),true);
+ assert.equal(p.canAccessProject(s,'bu','P2'),true);
+ assert.equal(p.canAccessProject(s,'bu','FOREIGN'),false);
+ assert.equal(p.canAccessProject(s,'other','P'),false);
+ assert.equal(p.canAccessProject(s,'bu','missing'),false);
+ s.buPersonnelByBuId.A.push({userId:'bu',roles:[],enabled:false});
+ assert.equal(p.canAccessProject(s,'bu','P2'),true);
+ s.accountsById.bu.enabled=false;
+ assert.equal(p.canAccessProject(s,'bu','P'),false);
+ s.accountsById.bu.enabled=true;s.accountsById.bu.managedBuIds=[];
+ assert.equal(p.canAccessProject(s,'bu','P'),false);
+ assert.equal(p.canAccessProject(s,'t1','P2'),false);
 });
 test('only the assigned BU administrator can change membership and cannot grant platform rights',()=>{
  const s=fixture();assert.equal(p.canManageBu(s,'bu','A'),true);assert.equal(p.canManageBu(s,'other','A'),false);
