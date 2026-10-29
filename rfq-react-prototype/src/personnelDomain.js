@@ -26,6 +26,12 @@ export function getEligiblePersonnel(state,{buId,projectId,duty,side}) {
   return c.enabled&&(m.canConfirm||duty==='confirm'&&m.roles.includes('SR'))&&(duty!=='final-review'||m.canFinalReview&&m.roles.includes(side==='sr'?'SR':'技术'))&&(!projectId||state.projects?.find(p=>p.id===projectId)?.buId===buId&&canAccessProject(state,m.userId,projectId));
  }).map(m=>({...m,name:personName(state,m.userId)}));
 }
+export function getProjectOwnerCandidates(state,{buId,projectId}) {
+ return (state.buPersonnelByBuId?.[buId]||[]).filter(member=>
+  member.roles?.includes('SR')&&getPersonnelContext(state,member.userId,buId).enabled&&
+  (!projectId||state.projects?.find(p=>p.id===projectId)?.buId===buId&&canAccessProject(state,member.userId,projectId))
+ ).map(member=>({...member,name:personName(state,member.userId)}));
+}
 export function getRequiredFinalReviewers(review) {
  const {srId,technicalIds,technicalRepresentativeId}=review?.reviewers||{};
  if(review?.policy!=='sr-and-technical'||!['all','representative'].includes(review.technicalMode)||!srId||!Array.isArray(technicalIds)||!technicalIds.length||technicalIds.some(id=>!id||id===srId)||new Set(technicalIds).size!==technicalIds.length)throw new Error('请配置有效的SR和不重复的技术组成员');

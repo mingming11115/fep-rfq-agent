@@ -1,0 +1,25 @@
+.person-picker { width:100%; min-width:0; }
+.person-picker-control { display:flex; align-items:center; flex-wrap:wrap; gap:5px; min-height:36px; padding:5px 9px; border:1px solid #dce2eb; border-radius:5px; background:white; cursor:text; }
+.person-picker-control:focus-within { border-color:#3877df; box-shadow:0 0 0 2px #3478eb14; }
+.person-picker-icon { flex-shrink:0; color:#8b99ab; }
+.person-picker .person-picker-control input { flex:1; width:80px; min-width:80px; padding:2px 0; margin:0; border:0; outline:0; box-shadow:none; background:transparent; font:inherit; font-size:12px; height:22px; color:#29384b; }
+.person-picker-control input::placeholder { color:#94a0af; }
+.person-picker-chip { display:inline-flex; align-items:center; gap:3px; max-width:100%; overflow-wrap:anywhere; border-radius:3px; padding:2px 5px; font-size:12px; line-height:20px; color:#2c65ba; background:#edf4ff; }
+.person-picker-chip button { display:inline-flex; align-items:center; justify-content:center; padding:2px; border:0; background:transparent; color:inherit; cursor:pointer; }
+.person-picker-chip button:focus-visible { outline:2px solid #3877df; }
+.person-picker-chip.is-invalid { color:#b34e39; background:#fff1ed; }
+.person-picker-chip small { font-size:11px; }
+.person-picker.is-disabled .person-picker-control { background:#f5f7fa; cursor:default; }
+.person-picker-popup { position:fixed; z-index:2000; display:flex; flex-direction:column; overflow:hidden; background:white; border:1px solid #dce4ef; border-radius:6px; box-shadow:0 8px 24px #172c4926; text-align:left; color:#29384b; font-size:12px; }
+.person-picker-heading { display:flex; flex-shrink:0; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; border-bottom:1px solid #edf0f5; color:#64748b; font-size:11px; }
+.person-picker-heading span { color:#95a0af; }
+.person-picker-popup [role="listbox"] { overflow:auto; min-height:0; padding:4px; }
+.person-picker-popup [role="option"] { display:flex; align-items:center; gap:9px; width:100%; text-align:left; padding:8px; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; }
+.person-picker-popup [role="option"][data-active="true"] { background:#f0f5fd; }
+.person-picker-popup [role="option"][aria-selected="true"] { color:#2864ba; }
+.person-picker-avatar { display:grid; place-items:center; flex-shrink:0; width:29px; height:29px; border-radius:50%; background:#eaf1fb; color:#4a6b9c; font-size:12px; }
+.person-picker-info { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; overflow-wrap:anywhere; }
+.person-picker-info strong { font-size:12px; font-weight:500; }
+.person-picker-info small { color:#8190a3; font-size:10px; }
+.person-picker-empty { padding:12px 8px; color:#8190a3; line-height:1.6; }
+.person-picker-clear { flex-shrink:0; padding:8px 12px; text-align:left; border:0; border-top:1px solid #edf0f5; background:white; color:#64748b; font-size:11px; cursor:pointer; }

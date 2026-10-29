@@ -2,15 +2,16 @@ import React,{useState} from 'react';
 import {Plus} from 'lucide-react';
 import {Modal} from './ui';
 import {canPerform} from '../permissions';
-import {getPersonnelContext} from '../personnelDomain';
+import {getPersonnelContext,getProjectOwnerCandidates,personName} from '../personnelDomain';
 import {readRfqCatalog,saveRfqCatalogRecord,resolveRfqProcessBinding} from '../rfqProcessBinding';
 import {buildCapabilityTree} from '../capabilityTree';
 import CapabilityTree from './CapabilityTree';
+import PersonPicker from './PersonPicker';
 import './create-rfq-dialog.css';
 
 const uid=prefix=>`${prefix}-${crypto.randomUUID()}`;
-const empty={name:'',customer:'',owner:'',deadline:'',modelId:'',processId:'',technicalMode:'all'};
-function Field({label,children,required=false}){return <label className="field"><span>{label}{required&&' *'}</span>{children}</label>;}
+const empty={name:'',customer:'',owner:'',ownerId:'',deadline:'',modelId:'',processId:'',technicalMode:'all'};
+function Field({label,children,required=false,as:Tag='label'}){return <Tag className="field"><span>{label}{required&&' *'}</span>{children}</Tag>;}
 
 export default function CreateRfqDialog({appState,onClose,onCreateProject,onCatalogChange}){
  const buId=appState.activeBuId||appState.businessUnits?.find(b=>getPersonnelContext(appState,appState.actorId,b.id).enabled)?.id;
@@ -47,7 +48,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  }
  function create(){
   if(!canPerform(appState.actorRole,'project:create',context))return setError('当前身份没有本BU的RFQ创建权限');
-  if(!form.name.trim()||!form.owner.trim()||!form.deadline)return setError('请填写项目名称、负责人和截止时间');
+  if(!form.name.trim()||!form.ownerId||!form.deadline)return setError('请填写项目名称、负责人和截止时间');
   if(!form.processId){newProcess();return;}
   try{
    const latest=readRfqCatalog(localStorage,context);setCatalog(latest);
@@ -57,7 +58,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  }
  return <>
   <Modal title="新建 RFQ 项目" onClose={onClose} footer={<><button className="btn" onClick={onClose}>取消</button><button className="btn btn-primary" onClick={create}>创建并上传资料</button></>}>
-   <div className="form-grid">{Object.entries({name:'项目名称',customer:'客户名称',owner:'负责人',deadline:'客户截止日期'}).map(([key,label])=><Field key={key} label={label} required={key!=='customer'}><input className="input" type={key==='deadline'?'date':'text'} value={form[key]} onChange={e=>change(key,e.target.value)}/></Field>)}</div>
+   <div className="form-grid">{Object.entries({name:'项目名称',customer:'客户名称',owner:'负责人',deadline:'客户截止日期'}).map(([key,label])=><Field key={key} label={label} required={key!=='customer'} as={key==='owner'?'div':'label'}><>{key==='owner'?<PersonPicker label="负责人" people={getProjectOwnerCandidates(appState,{buId})} value={form.ownerId} resolveName={id=>personName(appState,id)} onChange={ownerId=>{setForm(current=>({...current,ownerId,owner:ownerId?personName(appState,ownerId):''}));setError('');}} emptyLabel="本BU暂无有效SR，请联系BU管理员添加"/>:<input className="input" aria-label={label} type={key==='deadline'?'date':'text'} value={form[key]} onChange={e=>change(key,e.target.value)}/>}</></Field>)}</div>
    <Field label="技术组最终评审规则" required><select className="select" aria-label="技术组最终评审规则" value={form.technicalMode} onChange={e=>change('technicalMode',e.target.value)}><option value="all">所有指定技术成员均通过</option><option value="representative">指定技术负责人代表通过</option></select></Field>
    <div className="rfq-process-fields">
     <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><button className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</button><button className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</button></div></div>

@@ -10,11 +10,11 @@ const stageColors=['#9aabc1','#e8ae4f','#5888e7','#47a7a2','#69ab81'];
 
 export default function BuDashboardPage({appState:state,onSelectBu,navigate}){
  const [query,setQuery]=useState(''),[stage,setStage]=useState('all'),[focus,setFocus]=useState('all');
- const [approvalPeriodDays,setApprovalPeriodDays]=useState(30),[approvalDataMode,setApprovalDataMode]=useState('auto');
+ const [approvalPeriodDays,setApprovalPeriodDays]=useState(30);
  const [,setMetricRefresh]=useState(0);
  useEffect(()=>{const timer=setInterval(()=>setMetricRefresh(value=>value+1),60000);return()=>clearInterval(timer);},[]);
  const bus=state.businessUnits.filter(b=>canManageBu(state,state.actorId,b.id));
- const data=selectBuDashboard(state,{approvalPeriodDays,approvalDataMode});
+ const data=selectBuDashboard(state,{approvalPeriodDays});
  if(!data)return <div className="panel workspace-empty">当前账号没有此 BU 的看板权限。</div>;
  const {stats,projects,workload,stages,taskGroups,bu,approval}=data;
  const rows=projects.filter(p=>`${p.id} ${p.name} ${p.customer} ${p.ownerName}`.toLowerCase().includes(query.trim().toLowerCase())
@@ -32,11 +32,11 @@ export default function BuDashboardPage({appState:state,onSelectBu,navigate}){
  const workloadMax=Math.max(1,...workload.map(m=>m.pending));
 
  return <div className="workspace-page bu-dashboard">
-  <div className="page-heading bu-dashboard-heading"><div><span className="workspace-eyebrow">BUSINESS UNIT OVERVIEW</span><h1>BU看板</h1><p>查看 {bu.name} 的审批效率、RFQ 进展与交付风险。</p></div>
+  <div className="page-heading bu-dashboard-heading"><div><span className="workspace-eyebrow">BUSINESS UNIT OVERVIEW</span><h1>BU看板</h1></div>
    <div className="bu-dashboard-actions"><label className="bu-dashboard-bu"><span>当前 BU</span><select className="select" aria-label="看板BU" value={bu.id} onChange={e=>{reset();onSelectBu(e.target.value);}}>{bus.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><button className="btn btn-primary" onClick={()=>navigate('bu-admin')}><SlidersHorizontal size={15}/>BU人员与规则</button></div>
   </div>
 
-  <BuApprovalPanel data={approval} onPeriodChange={setApprovalPeriodDays} onModeChange={setApprovalDataMode} onConfigureProject={configureProject}/>
+  <BuApprovalPanel data={approval} onPeriodChange={setApprovalPeriodDays} onConfigureProject={configureProject}/>
 
   <div className="bu-business-heading"><h2>业务规模与交付风险</h2><span>项目进度、有效待办与团队负荷</span></div>
   <div className="workspace-stat-grid bu-dashboard-stats">{statsCards.map(({label,value,unit,note,Icon,filter,tone})=><button key={filter} className={`panel bu-stat bu-stat-${tone} ${focus===filter?'is-selected':''}`} aria-pressed={focus===filter} onClick={()=>setProjectFilter(filter)}><div className="bu-stat-top"><span>{label}</span><span className="bu-stat-icon"><Icon size={19}/></span></div><strong>{value}<small>{unit}</small></strong><div className="bu-stat-bottom"><span>{note}</span><ArrowUpRight size={15}/></div></button>)}</div>

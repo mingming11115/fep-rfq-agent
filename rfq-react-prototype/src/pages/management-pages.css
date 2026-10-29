@@ -19,3 +19,5 @@
 .platform-account-switch[aria-checked="true"] .platform-account-switch-track{background:#165dff}
 .platform-account-switch[aria-checked="true"] .platform-account-switch-track:after{transform:translateX(12px)}
 .platform-account-switch:disabled{cursor:not-allowed;opacity:.5}
+
+.bu-admin-page>.page-heading>div{flex-shrink:0}.bu-admin-page>.page-heading>.select{width:240px;max-width:100%}

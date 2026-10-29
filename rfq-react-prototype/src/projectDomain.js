@@ -1,7 +1,12 @@
 import {assertPermission} from './permissions.js';
-import {getPersonnelContext,canAccessProject,personName} from './personnelDomain.js';
+import {getPersonnelContext,canAccessProject,personName,getProjectOwnerCandidates} from './personnelDomain.js';
 
 const projectMaps=['requirementsByProject','reviewsByProject','snapshotsByProject','documentsByProject','exportScopesByProject','commentsByProject','membersByProject'];
+
+export function createProjectPersonnel(state,{buId,ownerId}) {
+ if(!getProjectOwnerCandidates(state,{buId}).some(p=>p.userId===ownerId))throw new Error('请通过 @ 选择本BU有效SR作为负责人');
+ return {ownerId,owner:personName(state,ownerId),participantIds:[...new Set([state.actorId,ownerId])],approvalConfig:{finalReviewers:{srId:ownerId,technicalIds:[],technicalRepresentativeId:null}}};
+}
 
 export function createProjectReviewSettings(technicalMode='all') {
  if(!['all','representative'].includes(technicalMode))throw new Error('无效的技术组评审方式');

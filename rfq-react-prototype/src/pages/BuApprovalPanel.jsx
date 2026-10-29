@@ -8,7 +8,7 @@ export function approvalHours(value){
 }
 const dateLabel=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'未记录提交时间';
 
-export default function BuApprovalPanel({data,onPeriodChange,onModeChange,onConfigureProject}){
+export default function BuApprovalPanel({data,onPeriodChange,onConfigureProject}){
  const [showAll,setShowAll]=useState(false);
  const {current,previous,improvementPercent,pending,phases,periodDays,mode,incompleteRecords}=data;
  const comparable=improvementPercent!==null,slower=comparable&&improvementPercent<0;
@@ -21,8 +21,7 @@ export default function BuApprovalPanel({data,onPeriodChange,onModeChange,onConf
  ];
  const comparisonMax=Math.max(1,current.averageHours||0,previous.averageHours||0),phaseMax=Math.max(1,...phases.map(p=>p.averageHours||0));
  return <section className="bu-approval-section" aria-label="审批时效与提效">
-  <div className="bu-approval-heading"><div><span className="workspace-eyebrow">APPROVAL EFFICIENCY</span><h2>审批时效与提效</h2><p>按整份应答的最终评审轮次统计，跟踪审批周期与会签等待。</p></div><div className="bu-approval-controls"><select className="select" aria-label="审批统计周期" value={periodDays} onChange={e=>onPeriodChange(Number(e.target.value))}>{[7,30,90].map(days=><option key={days} value={days}>近 {days} 天</option>)}</select><select className="select" aria-label="审批数据口径" value={mode} onChange={e=>onModeChange(e.target.value)}><option value="actual">真实记录</option><option value="sample">演示记录</option></select></div></div>
-  {mode==='sample'&&<div className="bu-approval-sample">当前为演示记录，仅用于展示计算结果，不代表实际业务提效。</div>}
+  <div className="bu-approval-heading"><div><span className="workspace-eyebrow">APPROVAL EFFICIENCY</span><h2>审批时效与提效</h2></div><div className="bu-approval-controls"><select className="select" aria-label="审批统计周期" value={periodDays} onChange={e=>onPeriodChange(Number(e.target.value))}>{[7,30,90].map(days=><option key={days} value={days}>近 {days} 天</option>)}</select></div></div>
   <div className="workspace-stat-grid bu-approval-stats">{cards.map(({label,value,unit,note,Icon,tone})=><article key={label} className={`panel bu-stat bu-stat-${tone}`}><div className="bu-stat-top"><span>{label}</span><span className="bu-stat-icon"><Icon size={19}/></span></div><strong className={value==='暂不可比'?'bu-metric-unavailable':''}>{value}<small>{unit}</small></strong><div className="bu-stat-bottom"><span>{note}</span></div></article>)}</div>
 
   <BuApprovalCharts key={`${periodDays}-${mode}`} data={data} formatHours={approvalHours}/>

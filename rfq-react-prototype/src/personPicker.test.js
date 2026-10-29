@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as picker from './personPicker.js';
+import * as personnel from './personnelDomain.js';
+import * as project from './projectDomain.js';
+
+const people=[{userId:'sr-a',name:'林晓',roles:['SR']},{id:'sr-b',name:'林晓'},{userId:'tech',name:'顾工',roles:['技术']}];
+test('mention search matches names and account IDs with optional @ and preserves duplicate names',()=>{
+ assert.equal(typeof picker.filterPeople,'function');
+ assert.deepEqual(picker.filterPeople(people,'@林晓').map(p=>p.id),['sr-a','sr-b']);
+ assert.deepEqual(picker.filterPeople(people,' ＠SR-B ').map(p=>p.id),['sr-b']);
+ assert.equal(picker.filterPeople(people,'@').length,3);
+ assert.deepEqual(picker.filterPeople(people,'不存在'),[]);
+});
+const state=()=>({actorId:'creator',actorRole:'SR',businessUnits:[{id:'BU'}],accountsById:Object.fromEntries(['creator','other','tech','disabled','outside'].map(id=>[id,{id,name:id==='other'?'另一个SR':id,enabled:id!=='disabled'}])),buPersonnelByBuId:{BU:['creator','other','tech','disabled'].map(userId=>({userId,roles:[userId==='tech'?'技术':'SR'],enabled:true}))},projects:[{id:'P',buId:'BU',ownerId:'creator',participantIds:['creator','tech']}]});
+test('owner mentions use active BU SR accounts and honor existing project access',()=>{
+ assert.equal(typeof personnel.getProjectOwnerCandidates,'function');
+ const s=state();
+ assert.deepEqual(personnel.getProjectOwnerCandidates(s,{buId:'BU'}).map(p=>p.userId),['creator','other']);
+ assert.deepEqual(personnel.getProjectOwnerCandidates(s,{buId:'BU',projectId:'P'}).map(p=>p.userId),['creator']);
+ s.buPersonnelByBuId.BU[1].enabled=false;
+ assert.deepEqual(personnel.getProjectOwnerCandidates(s,{buId:'BU'}).map(p=>p.userId),['creator']);
+});
+test('creating a project stores the selected owner identity and grants creator and owner access',()=>{
+ assert.equal(typeof project.createProjectPersonnel,'function');
+ const s=state(),result=project.createProjectPersonnel(s,{buId:'BU',ownerId:'other'});
+ assert.equal(result.ownerId,'other');assert.equal(result.owner,'另一个SR');
+ assert.deepEqual(result.participantIds,['creator','other']);
+ assert.equal(result.approvalConfig.finalReviewers.srId,'other');
+ assert.deepEqual(project.createProjectPersonnel(s,{buId:'BU',ownerId:'creator'}).participantIds,['creator']);
+ for(const ownerId of ['', 'tech','disabled','outside','另一个SR'])assert.throws(()=>project.createProjectPersonnel(s,{buId:'BU',ownerId}),/负责人/);
+});
