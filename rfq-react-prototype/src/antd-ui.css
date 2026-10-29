@@ -56,3 +56,5 @@
 .rfq-layout-detail .project-detail-workspace{height:calc(100dvh - 130px);min-height:480px}
 @media(max-width:900px){.rfq-layout-content{padding-inline:16px}.rfq-pro-shell .ant-page-header{padding-inline:16px}.rfq-demo-tag{display:none}}
 @media(max-width:767px){.rfq-layout-content{padding-inline:12px}.rfq-layout-detail .project-detail-workspace{height:auto;min-height:0}.rfq-layout-identity .ant-select{width:125px!important}}
+
+.rfq-pro-shell .brand-mark{display:inline-flex!important;align-items:center;justify-content:center;line-height:1!important}

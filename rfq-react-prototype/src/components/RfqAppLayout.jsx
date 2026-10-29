@@ -7,7 +7,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
   onSearch, onHelp, pending, identity, identities, actorName, onIdentityChange, pageTitle, isDetail,
   contentKey, body, footer, children }) {
   const menu = navigation.map(item => {
-    const Icon = icons[item.key] || icons[item.page];
+    const Icon = item.page === 'knowledge' ? icons.knowledge : icons[item.key] || icons[item.page];
     return { path: '/' + item.key, key: item.key, name: item.label, targetPage: item.page,
       icon: Icon ? <Icon size={18}/> : undefined };
   });
@@ -26,7 +26,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
         <Tooltip key="tasks" title="待办事项"><Badge count={pending} size="small"><Button type="text" aria-label="待办事项" icon={<Bell size={18}/>} onClick={() => onNavigate('tasks')}/></Badge></Tooltip>,
         <Space key="identity" size={6} className="rfq-layout-identity"><Avatar size="small" style={{ background: '#e8f0ff', color: '#165dff' }}>{actorName?.[0]}</Avatar><Select aria-label="演示身份" value={identity} options={identities} onChange={onIdentityChange} variant="borderless" popupMatchSelectWidth={false} style={{ width: 155 }}/></Space>,
       ]} footerRender={() => footer}
-      token={{ bgLayout: '#f5f7fa', pageContainer: { paddingInlinePageContainerContent: 0, paddingBlockPageContainerContent: 0 } }}>
+      token={{ bgLayout: '#f5f7fa', sider: { colorMenuBackground: '#ffffff', colorBgMenuItemSelected: '#e8f0ff', colorTextMenuSelected: '#165dff' }, pageContainer: { paddingInlinePageContainerContent: 0, paddingBlockPageContainerContent: 0 } }}>
       {isDetail ? <div key={contentKey} className="rfq-layout-content rfq-layout-detail">{body}</div> :
         <PageContainer className="rfq-page-container" title={false} breadcrumb={{ items: [{ title: '工作空间' }, { title: pageTitle }] }}>
           <div key={contentKey} className="rfq-layout-content">{body}</div>

@@ -1,8 +1,8 @@
 import React,{useState} from 'react';
-import { Alert, Button, Form, Input, Select, Steps, Upload as AntUpload } from 'antd';
+import { Alert, Input, Select, Steps, Upload as AntUpload } from 'antd';
 import { InboxOutlined } from '@ant-design/icons';
 import { uploadMetadata } from '../antdAdapters';
-import {Upload,FileText,ShieldCheck,ChevronRight,X} from 'lucide-react';
+import {ShieldCheck} from 'lucide-react';
 import {Modal,StatusBadge} from './ui';
 
 function Field({label,children,required=false,wide=false}){return <label className={`field ${wide?'flow-field-wide':''}`}><span>{required&&<i className="flow-required">*</i>}{label}</span>{children}</label>;}
@@ -10,7 +10,6 @@ function Field({label,children,required=false,wide=false}){return <label classNa
 export default function SourceUploadDialog({project,files=[],onSubmit,onClose}){
  const [selected,setSelected]=useState([]),[purpose,setPurpose]=useState('要求来源'),[version,setVersion]=useState('V1.0'),[visibility,setVisibility]=useState('项目成员可见'),[reason,setReason]=useState(''),[error,setError]=useState(''),[fileList,setFileList]=useState([]);
  const duplicates=selected.some(file=>files.some(old=>old.name===file.name));
- function selectFiles(incoming){setSelected(Array.from(incoming||[]).map(({name,size,type,lastModified})=>({name,size,type,lastModified})));setError('');}
  function submit(){
   if(!selected.length)return setError('请选择至少一个文件');
   if(!version.trim())return setError('请填写文件版本');
