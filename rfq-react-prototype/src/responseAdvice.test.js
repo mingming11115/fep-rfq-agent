@@ -150,3 +150,41 @@ test('missing or unrecognized source conclusions produce pending wording instead
   assert.ok(annotation?.wording.includes('暂不作出满足性承诺'));
  }
 });
+
+test('source annotation filters match each conclusion exactly and allow all or no types',()=>{
+ const rows=[
+  {id:'yes',conclusion:'Comply'},
+  {id:'conditional',conclusion:'有条件 Comply'},
+  {id:'no',conclusion:'不满足'},
+  {id:'na',conclusion:'不适用'},
+  {id:'pending',conclusion:'待确认'},
+ ];
+ const before=structuredClone(rows);
+ const ids=options=>model.selectSourceResponseAnnotations(rows,options).map(note=>note.row.id);
+ assert.deepEqual(ids(),['yes','conditional','no','na','pending']);
+ assert.deepEqual(ids({conclusions:['有条件 Comply','不满足','不适用','待确认']}),['conditional','no','na','pending']);
+ assert.deepEqual(ids({conclusions:['Comply']}),['yes']);
+ assert.deepEqual(ids({conclusions:['不满足','不适用']}),['no','na']);
+ assert.deepEqual(ids({conclusions:[]}),[]);
+ assert.deepEqual(rows,before);
+});
+
+test('source annotation filters follow current saved and edited conclusions without altering source rows',()=>{
+ const rows=[{id:'one',conclusion:'Comply'},{id:'two',conclusion:'不满足'}];
+ const responseRows=[{id:'one',conclusion:'不适用'}];
+ const before=structuredClone({rows,responseRows});
+ assert.deepEqual(model.selectSourceResponseAnnotations(rows,{responseRows,conclusions:['Comply']}),[]);
+ const visible=model.selectSourceResponseAnnotations(rows,{
+  responseRows,responsePreview:{id:'one',conclusion:'有条件 Comply',conditions:'采用选配 X'},conclusions:['有条件 Comply'],
+ });
+ assert.deepEqual(visible.map(note=>note.row.id),['one']);
+ assert.equal(visible[0].annotation.conclusion,'有条件 Comply');
+ assert.ok(visible[0].annotation.wording.includes('采用选配 X'));
+ assert.deepEqual({rows,responseRows},before);
+});
+
+test('unrecognized conclusions remain available under pending annotations',()=>{
+ const notes=model.selectSourceResponseAnnotations([{id:'unknown',conclusion:'未评估'},{id:'missing'}],{conclusions:['待确认']});
+ assert.deepEqual(notes.map(note=>note.row.id),['unknown','missing']);
+ assert.ok(notes.every(note=>note.annotation.conclusion==='待确认'));
+});

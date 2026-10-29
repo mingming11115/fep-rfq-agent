@@ -11,7 +11,6 @@ export default function SourceResponseAnnotation({ row, annotation, color, activ
     onClick={event => { if (!event.target.closest('button') && !window.getSelection()?.toString()) select(); }}
   >
     <div className="wc-note-head">
-      <span className="wc-author">{annotation.kind === 'comply' ? '应答' : '推荐话术'}</span>
       {onDiscuss && <button type="button" className="wc-icon" aria-label={`讨论条款 ${row.clause || row.title}`} onClick={() => onDiscuss(row)}><CornerUpLeft size={14}/></button>}
       <button type="button" className="wc-icon" aria-label={`标注操作 ${row.clause || row.title}`} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><Ellipsis size={14}/></button>
     </div>

@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown, MessageSquarePlus } from 'lucide-react';
-import { buildSourceResponseAnnotation } from '../responseAdvice';
+import { selectSourceResponseAnnotations, SOURCE_ANNOTATION_CONCLUSIONS } from '../responseAdvice';
 import SourceResponseAnnotation from './SourceResponseAnnotation';
 import './source-response-annotation.css';
 
@@ -14,27 +14,27 @@ const noResponses = [];
 export default function WordAnnotationCanvas({ rows, responseRows = noResponses, responsePreview, activeId, title, version, subtitle, footer, showAnnotations = true, zoom = 100, onSelectRow, onNewComment, onDiscuss, onOpen, children }) {
   const root = useRef(null);
   const [formatting, setFormatting] = useState(true), [paths, setPaths] = useState([]);
+  const [visibleConclusions, setVisibleConclusions] = useState(SOURCE_ANNOTATION_CONCLUSIONS);
   const notes = useMemo(() => {
-    const responses = new Map(responseRows.map(row => [row.id, row]));
-    return rows.map((row, index) => ({
-      row, color: palette[index % palette.length],
-      annotation: buildSourceResponseAnnotation(row, responsePreview?.id === row.id ? responsePreview : responses.get(row.id)),
-    }));
-  }, [rows, responseRows, responsePreview]);
+    const colors = new Map(rows.map((row, index) => [row.id, palette[index % palette.length]]));
+    return selectSourceResponseAnnotations(rows, { responseRows, responsePreview, conclusions: visibleConclusions })
+      .map(note => ({ ...note, color: colors.get(note.row.id) }));
+  }, [rows, responseRows, responsePreview, visibleConclusions]);
+  const annotationsVisible = showAnnotations && notes.length > 0;
   const byId = new Map(notes.map(note => [note.row.id, note]));
   const current = rows.find(row => row.id === activeId) || rows[0];
-  const currentIndex = rows.indexOf(current);
+  const currentIndex = notes.findIndex(note => note.row.id === current?.id);
   const select = row => { if (row && row.id !== activeId) onSelectRow?.(row); };
   const anchorProps = row => ({
     'data-response-anchor': row.id,
-    className: showAnnotations ? `wc-anchor${row.id === current?.id ? ' wc-anchor-active' : ''}` : undefined,
-    style: byId.get(row.id)?.color,
+    className: showAnnotations && byId.has(row.id) ? `wc-anchor${row.id === current?.id ? ' wc-anchor-active' : ''}` : undefined,
+    style: showAnnotations ? byId.get(row.id)?.color : undefined,
   });
 
   useLayoutEffect(() => {
     const element = root.current;
     if (!element) return;
-    if (!showAnnotations) { setPaths([]); return; }
+    if (!annotationsVisible) { setPaths([]); return; }
     let frame, disposed = false;
     const layout = () => {
       const canvas = element.querySelector('.wc-canvas'), page = element.querySelector('.wc-page'), margin = element.querySelector('.wc-margin');
@@ -83,18 +83,27 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
     document.fonts?.ready.then(schedule);
     schedule();
     return () => { disposed = true; cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', schedule); };
-  }, [notes, current?.id, showAnnotations, formatting, zoom]);
+  }, [notes, current?.id, annotationsVisible, formatting, zoom]);
 
   return <div ref={root} className={`word-classic-document project-word-document${formatting ? '' : ' wc-hide-format'}`}>
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="word-annotations"/>
+    <div className="wc-annotation-filters" role="group" aria-label="按应答结论显示标注">
+      <span>显示标注：</span>
+      {SOURCE_ANNOTATION_CONCLUSIONS.map(conclusion => <label key={conclusion}>
+        <input type="checkbox" aria-label={`显示 ${conclusion} 标注`} disabled={!showAnnotations}
+          checked={visibleConclusions.includes(conclusion)}
+          onChange={event => setVisibleConclusions(previous => event.target.checked ? [...previous, conclusion] : previous.filter(value => value !== conclusion))}/>
+        {conclusion}
+      </label>)}
+    </div>
     <div className="wc-tools" aria-label="原文应答批注工具栏">
-      <span className="wc-file">应答批注 · {rows.length} 条</span>
+      <span className="wc-file">应答批注 · {showAnnotations ? notes.length : 0} / {rows.length} 条</span>
       {onNewComment && <button type="button" className="wc-button" disabled={!current} onMouseDown={event => event.preventDefault()} onClick={onNewComment}><MessageSquarePlus size={14}/>新建批注</button>}
-      <button type="button" className="wc-button" aria-label="上一条应答标注" disabled={currentIndex <= 0} onClick={() => select(rows[currentIndex - 1])}><ChevronUp size={14}/></button>
-      <button type="button" className="wc-button" aria-label="下一条应答标注" disabled={currentIndex < 0 || currentIndex >= rows.length - 1} onClick={() => select(rows[currentIndex + 1])}><ChevronDown size={14}/></button>
+      <button type="button" className="wc-button" aria-label="上一条应答标注" disabled={!showAnnotations || currentIndex <= 0} onClick={() => select(notes[currentIndex - 1]?.row)}><ChevronUp size={14}/></button>
+      <button type="button" className="wc-button" aria-label="下一条应答标注" disabled={!showAnnotations || !notes.length || currentIndex >= notes.length - 1} onClick={() => select(notes[currentIndex + 1]?.row)}><ChevronDown size={14}/></button>
       <button type="button" className="wc-button" aria-label="显示编辑标记" aria-pressed={formatting} onClick={() => setFormatting(!formatting)}>¶</button>
     </div>
-    <div className={`wc-canvas${showAnnotations ? '' : ' wc-without-annotations'}`}>
+    <div className={`wc-canvas${annotationsVisible ? '' : ' wc-without-annotations'}`}>
       <article className="wc-page source-paper word-paper" style={{ '--document-zoom': zoom / 100 }}>
         <div data-word-page-content>
           <header className="wc-doc-head"><span>{subtitle}</span><span>{version}<span className="wc-format" aria-hidden="true"> ↵</span></span></header>
@@ -103,7 +112,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
           {footer && <footer className="wc-project-footer">{footer}</footer>}
         </div>
       </article>
-      {showAnnotations && <>
+      {annotationsVisible && <>
         <aside className="wc-margin" aria-label="与原文对应的应答批注">
           {notes.map(note => <SourceResponseAnnotation key={note.row.id} {...note} active={note.row.id === current?.id} onSelect={select} onDiscuss={onDiscuss} onOpen={onOpen}/>)}
         </aside>

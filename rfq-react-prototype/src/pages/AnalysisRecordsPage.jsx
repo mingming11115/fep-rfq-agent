@@ -1,6 +1,31 @@
-import React,{useState} from 'react';import {EmptyState,StatusBadge} from '../components/ui';
-export default function AnalysisRecordsPage({appState,onOpenProject}){
- const [projectId,setProjectId]=useState(''),[detail,setDetail]=useState(null);
- const runs=appState.analysisRuns.filter(r=>!projectId||r.projectId===projectId);
- return <div className="workspace-page"><div className="page-heading"><div><span className="workspace-eyebrow">ANALYSIS HISTORY</span><h1>AI 分析记录</h1><p>逐次保留来源版本、解析和匹配结果；当前原型执行模拟分析。</p></div></div><section className="panel"><div className="workspace-filters"><select className="select" aria-label="分析记录项目" value={projectId} onChange={e=>setProjectId(e.target.value)}><option value="">全部项目</option>{appState.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div><div className="table-wrap"><table className="data-table"><thead><tr><th>项目 / 批次</th><th>文件版本</th><th>分析类型</th><th>时间</th><th>状态 / 结果</th><th>操作</th></tr></thead><tbody>{runs.map(run=><tr key={run.id}><td>{appState.projects.find(p=>p.id===run.projectId)?.name}<small className="workspace-block">{run.id}</small></td><td>{run.fileName||run.fileId}<small className="workspace-block">{run.sourceVersion||'未记录'}</small></td><td>{run.type==='parse'?'条款解析':'三级匹配'}</td><td>{new Date(run.endedAt||run.startedAt).toLocaleString('zh-CN')}</td><td><StatusBadge status={run.status}/><small className="workspace-block">成功 {run.successCount||0} · 失败 {run.failedCount||0} · 需核对 {run.needsHumanCount||0}</small></td><td><button className="text-link" onClick={()=>setDetail(detail===run.id?null:run.id)}>查看本次</button><button className="text-link" onClick={()=>onOpenProject(run.projectId,'documents',{fileId:run.fileId,sourceVersion:run.sourceVersion})}>回到文件</button></td></tr>)}</tbody></table>{!runs.length&&<EmptyState title="暂无本轮分析记录" description="重新解析文件或载入示例后会记录本次运行，不补造旧执行历史。"/>}</div>{detail&&<div className="workspace-panel-footer">本次分析只读 · {runs.find(r=>r.id===detail)?.detail||'来源及执行结果见记录。重新解析从当前文件发起，原记录保留。'}</div>}</section></div>;
+import React, { useState } from 'react';
+import { Button, Select, Space } from 'antd';
+import { ProDescriptions, ProTable } from '@ant-design/pro-components';
+import { Drawer, StatusBadge } from '../components/ui';
+
+export default function AnalysisRecordsPage({ appState, onOpenProject }) {
+  const [projectId, setProjectId] = useState(''), [detail, setDetail] = useState(null);
+  const runs = appState.analysisRuns.filter(run => !projectId || run.projectId === projectId);
+  const projectName = id => appState.projects.find(project => project.id === id)?.name || id;
+  const columns = [
+    { title: '项目 / 批次', key: 'project', width: 240, render: (_, run) => <>{projectName(run.projectId)}<small className="rfq-table-meta">{run.id}</small></> },
+    { title: '文件版本', key: 'source', width: 220, render: (_, run) => <>{run.fileName || run.fileId}<small className="rfq-table-meta">{run.sourceVersion || '未记录'}</small></> },
+    { title: '分析类型', dataIndex: 'type', width: 110, render: (_, run) => run.type === 'parse' ? '条款解析' : '三级匹配' },
+    { title: '时间', key: 'time', width: 190, sorter: (a, b) => new Date(a.endedAt || a.startedAt) - new Date(b.endedAt || b.startedAt), render: (_, run) => new Date(run.endedAt || run.startedAt).toLocaleString('zh-CN') },
+    { title: '状态 / 结果', dataIndex: 'status', width: 230, render: (_, run) => <><StatusBadge status={run.status}/><small className="rfq-table-meta">成功 {run.successCount || 0} · 失败 {run.failedCount || 0} · 需核对 {run.needsHumanCount || 0}</small></> },
+    { title: '操作', key: 'actions', fixed: 'right', width: 170, render: (_, run) => <Space><Button type="link" onClick={() => setDetail(run)}>查看本次</Button><Button type="link" onClick={() => onOpenProject(run.projectId, 'documents', { fileId: run.fileId, sourceVersion: run.sourceVersion })}>回到文件</Button></Space> },
+  ];
+  return <div className="workspace-page">
+    <div className="page-heading"><div><span className="workspace-eyebrow">ANALYSIS HISTORY</span><h1>AI 分析记录</h1><p>逐次保留来源版本、解析和匹配结果；当前原型执行模拟分析。</p></div></div>
+    <section className="panel"><div className="workspace-filters"><Select aria-label="分析记录项目" style={{ width: 280, maxWidth: '100%' }} value={projectId} onChange={setProjectId} options={[{ value: '', label: '全部项目' }, ...appState.projects.map(p => ({ value: p.id, label: p.name }))]}/></div>
+      <ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={runs} search={false} headerTitle="分析运行记录"
+        options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1160 }} pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无本轮分析记录，解析文件后会保留运行结果' }}/>
+    </section>
+    {detail && <Drawer title="本次分析详情" onClose={() => setDetail(null)}><ProDescriptions column={1} dataSource={detail} columns={[
+      { title: '批次', dataIndex: 'id' }, { title: '项目', render: () => projectName(detail.projectId) },
+      { title: '来源文件', render: () => detail.fileName || detail.fileId }, { title: '来源版本', dataIndex: 'sourceVersion' },
+      { title: '状态', render: () => <StatusBadge status={detail.status}/> },
+      { title: '执行说明', render: () => detail.detail || '来源及执行结果见记录。重新解析从当前文件发起，原记录保留。' },
+    ]}/></Drawer>}
+  </div>;
 }

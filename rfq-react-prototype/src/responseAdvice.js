@@ -1,7 +1,14 @@
 import {compareParameter} from './rfqWorkflow.js';
 
 const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','待确认':'待确认'};
+export const SOURCE_ANNOTATION_CONCLUSIONS=Object.keys(conclusionLabels);
 const operators={'<=':'≤','>=':'≥','=':'='};
+
+export function selectSourceResponseAnnotations(rows=[], {responseRows=[],responsePreview,conclusions=SOURCE_ANNOTATION_CONCLUSIONS}={}) {
+  const responses=new Map(responseRows.map(row=>[row.id,row]));
+  return rows.map(row=>({row,annotation:buildSourceResponseAnnotation(row,responsePreview?.id===row.id?responsePreview:responses.get(row.id))}))
+    .filter(note=>conclusions.includes(note.annotation.conclusion));
+}
 
 export function buildSourceResponseAnnotation(row = {}, response = row) {
   const current = { ...row, ...response };

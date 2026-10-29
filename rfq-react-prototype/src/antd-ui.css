@@ -1,0 +1,58 @@
+.badge-ant .ant-badge-status-text{font-size:12px;color:inherit;margin-inline-start:5px}
+.rfq-ant-modal .ant-modal-footer,.rfq-ant-drawer .ant-drawer-footer{display:flex;justify-content:flex-end;gap:8px}
+.rfq-ant-modal .ant-modal-body>.field:last-child{margin-bottom:0}
+.ant-app .ant-select,.rfq-ant-modal .ant-select,.rfq-ant-drawer .ant-select{min-width:0}
+.rfq-ant-table .ant-pro-card-body{padding:0}
+.rfq-ant-table .ant-table-cell{vertical-align:top}
+.rfq-table-meta{display:block;margin-top:4px;color:#86909c;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.rfq-ant-table .ant-btn-link{height:auto;padding:0;white-space:normal;text-align:left}
+.rfq-ant-table .ant-pro-table-list-toolbar-container{padding:12px 20px}
+.rfq-ant-table .ant-table-pagination{padding-inline:16px}
+.rfq-person-select{width:100%;min-width:0}
+.rfq-person-select .ant-select-selection-item{font-size:13px}
+.rfq-upload .ant-upload-drag{background:#f8faff}
+.rfq-upload .ant-upload-text{font-size:14px!important}
+.rfq-upload .ant-upload-list-item-name{overflow-wrap:anywhere}
+.rfq-form-error{margin:12px 0}
+.rfq-create-form .ant-form-item{margin-bottom:18px}
+.rfq-create-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}
+.rfq-create-grid>.ant-form-item{min-width:0}
+.rfq-create-form .rfq-catalog-tree{margin-bottom:12px}
+.rfq-mentions.ant-mentions{font-size:14px;line-height:1.7}
+@media(max-width:600px){.rfq-create-grid{grid-template-columns:1fr}.rfq-ant-modal .ant-modal-body{max-height:72dvh!important}.rfq-ant-table .ant-table-cell{font-size:13px}}
+
+.rfq-panel-tabs{padding:0 20px}.rfq-panel-tabs .ant-tabs-nav{margin-bottom:0}
+.rfq-ant-filters{flex-wrap:wrap}
+.rfq-detail .rfq-splitter-layout{display:block;position:relative;min-width:0}
+.rfq-workbench-splitter>.ant-splitter-panel{min-height:0;overflow:hidden}
+.rfq-workbench-splitter .detail-document-column{height:100%;min-height:0;padding-right:10px}
+.rfq-workbench-splitter .detail-business{height:100%;min-height:0;margin-left:10px}
+.rfq-workbench-splitter .ant-splitter-bar{z-index:5}
+.rfq-detail .detail-business .response-editor-body{font-size:14px;line-height:1.7;padding:18px}
+.rfq-detail .detail-business .response-editor-body .field>span,.rfq-detail .detail-business .response-advice{font-size:13px}
+.rfq-detail .detail-business .response-card-title-row h2{font-size:17px}
+.rfq-detail .detail-business .response-confirmation-owner,.rfq-detail .detail-business .response-permission-tip{font-size:12px}
+.rfq-detail .detail-business .response-editor-body textarea{font-size:14px;line-height:1.7}
+.rfq-detail .rfq-conclusion-radio{display:flex;flex-wrap:wrap;gap:10px 4px}
+.rfq-detail .rfq-conclusion-radio .ant-radio-wrapper{font-size:13px;margin-inline-end:10px}
+.rfq-detail .detail-business .annotation-compose textarea,.rfq-detail .detail-business .annotation-reply-form textarea{font-size:14px}
+.rfq-detail .detail-business .annotation-reply-form{align-items:flex-start}
+.rfq-detail .detail-business .annotation-reply-form .ant-mentions{flex:1;min-width:0}
+@media(max-width:767px){.rfq-workbench-splitter .detail-document-column{padding-right:0;padding-bottom:10px}.rfq-workbench-splitter .detail-business{margin-left:0;margin-top:10px}.rfq-detail .rfq-splitter-layout{height:auto!important}.rfq-ant-filters>.ant-select{width:100%!important}}
+
+.rfq-pro-shell{min-height:100dvh}.rfq-pro-shell .ant-pro-layout{min-height:100dvh}
+.rfq-pro-shell .ant-layout-content.ant-pro-layout-content{padding:0;min-width:0}
+.rfq-pro-shell .ant-pro-page-container-children-container{margin:0!important;padding:0!important}
+.rfq-pro-shell .ant-pro-page-container-warp-page-header{background:transparent;padding:0}
+.rfq-pro-shell .ant-page-header{padding:18px 26px}
+.rfq-layout-content{padding:0 26px 20px;min-width:0}
+.rfq-layout-detail{padding-top:18px}
+.rfq-layout-menu-button{border:0;background:transparent;text-align:left;color:inherit;padding:0;width:100%;font:inherit;cursor:pointer}
+.rfq-layout-menu-footer{display:block;font-size:12px;color:#86909c;padding:8px 16px}
+.rfq-pro-shell .ant-pro-global-header-logo .brand-mark{font-size:25px}
+.rfq-pro-shell .ant-pro-global-header-logo h1{font-size:20px!important}
+.rfq-pro-shell .ant-pro-sider-logo h1{font-size:20px!important}
+.rfq-pro-shell .app-footer{padding:12px 20px 16px}
+.rfq-layout-detail .project-detail-workspace{height:calc(100dvh - 130px);min-height:480px}
+@media(max-width:900px){.rfq-layout-content{padding-inline:16px}.rfq-pro-shell .ant-page-header{padding-inline:16px}.rfq-demo-tag{display:none}}
+@media(max-width:767px){.rfq-layout-content{padding-inline:12px}.rfq-layout-detail .project-detail-workspace{height:auto;min-height:0}.rfq-layout-identity .ant-select{width:125px!important}}

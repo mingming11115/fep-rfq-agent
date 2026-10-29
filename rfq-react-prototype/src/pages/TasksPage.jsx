@@ -1,18 +1,58 @@
-import {personName} from '../personnelDomain';
-import React,{useState,useEffect} from 'react';
-import {Search,ArrowUpRight,Clock3} from 'lucide-react';
-import {Modal,EmptyState,StatusBadge} from '../components/ui';
-import {selectMyTasks,taskLabels,isTaskPending,isTaskOverdue,isQualifiedTaskActor} from '../taskDomain';
-import './workspace-pages.css';
+import React, { useEffect, useState } from 'react';
+import { Button, Checkbox, Form, Input, Select, Space, Tabs } from 'antd';
+import { DrawerForm, ProFormTextArea, ProTable } from '@ant-design/pro-components';
+import { StatusBadge } from '../components/ui';
 import PersonPicker from '../components/PersonPicker';
-const names={'demo-sales':'SR','demo-technical':'技术','demo-approver':'最终审批人'};
-function load(){try{return JSON.parse(sessionStorage.getItem('rfq.tasks.filters'))||{};}catch{return {};}}
-export default function TasksPage({appState,onOpenTask,onTaskAction,toast}){
- const [filters,setFilters]=useState(()=>({tab:'pending',query:'',projectId:'',kind:'',overdue:false,...load()})),[transfer,setTransfer]=useState(null),[to,setTo]=useState(''),[reason,setReason]=useState('');
- useEffect(()=>{sessionStorage.setItem('rfq.tasks.filters',JSON.stringify(filters));},[filters]);
- const change=(key,value)=>setFilters(f=>({...f,[key]:value}));
- const names=Object.fromEntries(Object.values(appState.accountsById||{}).map(a=>[a.id,a.name]));
- const all=selectMyTasks(appState,{actorId:appState.actorId,tab:filters.tab});
- const rows=all.filter(t=>(!filters.projectId||t.projectId===filters.projectId)&&(!filters.kind||t.kind===filters.kind)&&(!filters.overdue||isTaskOverdue(t))&&`${t.title} ${t.objectId} ${t.projectId}`.toLowerCase().includes(filters.query.toLowerCase()));
- return <div className="workspace-page"><div className="page-heading"><div><span className="workspace-eyebrow">MY TASKS</span><h1>任务中心</h1><p>每一项待办都关联具体条款、评审或审批版本。</p></div></div><div className="panel"><div className="tabs workspace-tabs">{[['pending','待办'],['done','已处理'],['all','全部']].map(([key,label])=><button key={key} className={filters.tab===key?'active':''} onClick={()=>change('tab',key)}>{label} <b>{selectMyTasks(appState,{actorId:appState.actorId,tab:key}).length}</b></button>)}</div><div className="workspace-filters"><label className="workspace-search"><Search size={16}/><input className="input" aria-label="搜索任务" placeholder="项目、条款或任务关键词" value={filters.query} onChange={e=>change('query',e.target.value)}/></label><select className="select" aria-label="任务项目" value={filters.projectId} onChange={e=>change('projectId',e.target.value)}><option value="">全部项目</option>{appState.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><select className="select" aria-label="任务类型" value={filters.kind} onChange={e=>change('kind',e.target.value)}><option value="">全部类型</option>{Object.entries(taskLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><label className="workspace-check"><input type="checkbox" checked={filters.overdue} onChange={e=>change('overdue',e.target.checked)}/>仅逾期</label></div><div className="table-wrap"><table className="data-table workspace-task-table"><thead><tr><th>任务 / 关联对象</th><th>任务类型</th><th>任务状态</th><th>处理结果</th><th>处理人</th><th>到达 / 截止</th><th>操作</th></tr></thead><tbody>{rows.map(t=><tr key={t.id}><td><button className="text-link" onClick={()=>onOpenTask(t,'view')}>{t.title}</button><small>{appState.projects.find(p=>p.id===t.projectId)?.name} · {t.objectId} · V{t.objectVersion}</small></td><td>{taskLabels[t.kind]}{t.reviewSide&&<small>{t.reviewSide==='sr'?'SR方':'技术方'}</small>}</td><td><StatusBadge status={t.status}/>{isTaskOverdue(t)&&<small><StatusBadge status="逾期" tone="danger"/></small>}</td><td>{t.result||'—'}</td><td>{names[t.assigneeId]||t.assigneeId}</td><td><span>{t.dueAt||'未设置截止'}</span><small><Clock3 size={12}/> 到达 {new Date(t.arrivedAt).toLocaleDateString('zh-CN')}{t.completedAt?` · 完成 ${new Date(t.completedAt).toLocaleDateString('zh-CN')}`:''}</small></td><td><div className="workspace-row-actions"><button className="text-link" onClick={()=>onOpenTask(t,isTaskPending(t)?'start':'view')}>{isTaskPending(t)?t.status==='处理中'?'继续处理':'开始处理':'查看'}<ArrowUpRight size={12}/></button>{isTaskPending(t)&&t.kind!=='final-approve'&&<button className="text-link" onClick={()=>{setTransfer(t);setReason('');setTo('');}}>转办</button>}</div></td></tr>)}</tbody></table>{!rows.length&&<EmptyState title="暂无符合条件的任务" description="可调整筛选，或进入项目查看当前工作。"/>}</div><div className="workspace-panel-footer">共 {rows.length} 项 · 查看不接手，保存草稿不会完成任务</div></div>{transfer&&<Modal title="任务转办" onClose={()=>setTransfer(null)} footer={<><button className="btn" onClick={()=>setTransfer(null)}>取消</button><button className="btn btn-primary" onClick={()=>{if(!to||!reason.trim()){toast('请选择接收人并填写转办原因','error');return;}if(onTaskAction(transfer.id,{type:'transfer',to,reason}))setTransfer(null);}}>确认转办</button></>}><p>{transfer.title}</p><div className="form-grid"><div className="field"><span>新处理人</span><PersonPicker label="新处理人" people={Object.values(appState.accountsById||{}).filter(a=>a.id!==appState.actorId&&isQualifiedTaskActor(transfer,a.id,appState))} value={to} onChange={setTo} emptyLabel="暂无具有本节点处理资格的其他人员"/></div><label className="field"><span>截止时间</span><input className="input" readOnly value={transfer.dueAt||'未设置'}/></label><label className="field response-wide"><span>转办原因</span><textarea className="input" value={reason} onChange={e=>setReason(e.target.value)}/></label></div><p className="muted">仅可转给具备节点资格的身份；最终评审人员变更须重新提交评审快照。保留原到达时间、期限和处理历史。</p></Modal>}</div>;
+import { selectMyTasks, taskLabels, isTaskPending, isTaskOverdue, isQualifiedTaskActor } from '../taskDomain';
+import './workspace-pages.css';
+
+function load() { try { return JSON.parse(sessionStorage.getItem('rfq.tasks.filters')) || {}; } catch { return {}; } }
+export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
+  const [filters, setFilters] = useState(() => ({ tab: 'pending', query: '', projectId: '', kind: '', overdue: false, ...load() }));
+  const [transfer, setTransfer] = useState(null);
+  useEffect(() => { sessionStorage.setItem('rfq.tasks.filters', JSON.stringify(filters)); }, [filters]);
+  const change = (key, value) => setFilters(current => ({ ...current, [key]: value }));
+  const names = Object.fromEntries(Object.values(appState.accountsById || {}).map(account => [account.id, account.name]));
+  const all = selectMyTasks(appState, { actorId: appState.actorId, tab: filters.tab });
+  const rows = all.filter(task => (!filters.projectId || task.projectId === filters.projectId)
+    && (!filters.kind || task.kind === filters.kind) && (!filters.overdue || isTaskOverdue(task))
+    && (task.title + ' ' + task.objectId + ' ' + task.projectId).toLowerCase().includes(filters.query.toLowerCase()));
+  const columns = [
+    { title: '任务 / 关联对象', dataIndex: 'title', width: 280, render: (_, task) => <><Button type="link" onClick={() => onOpenTask(task, 'view')}>{task.title}</Button><small className="rfq-table-meta">{appState.projects.find(p => p.id === task.projectId)?.name} · {task.objectId} · V{task.objectVersion}</small></> },
+    { title: '任务类型', dataIndex: 'kind', width: 120, render: (_, task) => <>{taskLabels[task.kind]}{task.reviewSide && <small className="rfq-table-meta">{task.reviewSide === 'sr' ? 'SR方' : '技术方'}</small>}</> },
+    { title: '任务状态', dataIndex: 'status', width: 130, render: (_, task) => <Space direction="vertical" size={4}><StatusBadge status={task.status}/>{isTaskOverdue(task) && <StatusBadge status="逾期" tone="danger"/>}</Space> },
+    { title: '处理结果', dataIndex: 'result', width: 100 },
+    { title: '处理人', dataIndex: 'assigneeId', width: 100, render: (_, task) => names[task.assigneeId] || task.assigneeId },
+    { title: '到达 / 截止', dataIndex: 'dueAt', width: 200, sorter: (a, b) => String(a.dueAt || '').localeCompare(String(b.dueAt || '')), render: (_, task) => <><span>{task.dueAt || '未设置截止'}</span><small className="rfq-table-meta">到达 {new Date(task.arrivedAt).toLocaleDateString('zh-CN')}{task.completedAt ? ' · 完成 ' + new Date(task.completedAt).toLocaleDateString('zh-CN') : ''}</small></> },
+    { title: '操作', key: 'actions', width: 160, fixed: 'right', render: (_, task) => <Space wrap>
+      <Button type="link" onClick={() => onOpenTask(task, isTaskPending(task) ? 'start' : 'view')}>{isTaskPending(task) ? task.status === '处理中' ? '继续处理' : '开始处理' : '查看'}</Button>
+      {isTaskPending(task) && task.kind !== 'final-approve' && <Button type="link" onClick={() => setTransfer(task)}>转办</Button>}
+    </Space> },
+  ];
+  return <div className="workspace-page">
+    <div className="page-heading"><div><span className="workspace-eyebrow">MY TASKS</span><h1>任务中心</h1><p>每一项待办都关联具体条款、评审或审批版本。</p></div></div>
+    <section className="panel">
+      <Tabs className="rfq-panel-tabs" activeKey={filters.tab} onChange={key => change('tab', key)} items={[
+        ['pending', '待办'], ['done', '已处理'], ['all', '全部'],
+      ].map(([key, label]) => ({ key, label: label + ' ' + selectMyTasks(appState, { actorId: appState.actorId, tab: key }).length }))}/>
+      <div className="workspace-filters rfq-ant-filters">
+        <Input.Search aria-label="搜索任务" placeholder="项目、条款或任务关键词" allowClear value={filters.query} onChange={event => change('query', event.target.value)} style={{ width: 300, maxWidth: '100%' }}/>
+        <Select aria-label="任务项目" value={filters.projectId} onChange={value => change('projectId', value)} style={{ width: 220 }} options={[{ value: '', label: '全部项目' }, ...appState.projects.map(p => ({ value: p.id, label: p.name }))]}/>
+        <Select aria-label="任务类型" value={filters.kind} onChange={value => change('kind', value)} style={{ width: 160 }} options={[{ value: '', label: '全部类型' }, ...Object.entries(taskLabels).map(([value, label]) => ({ value, label }))]}/>
+        <Checkbox checked={filters.overdue} onChange={event => change('overdue', event.target.checked)}>仅逾期</Checkbox>
+      </div>
+      <ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false} headerTitle="我的任务"
+        options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1140 }}
+        pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>
+      <div className="workspace-panel-footer">共 {rows.length} 项 · 查看不接手，保存草稿不会完成任务</div>
+    </section>
+    {transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) setTransfer(null); }}
+      initialValues={{ to: undefined, reason: '' }} submitter={{ searchConfig: { submitText: '确认转办', resetText: '取消' } }}
+      onFinish={values => !!onTaskAction(transfer.id, { type: 'transfer', to: values.to, reason: values.reason.trim() })}>
+      <p style={{ marginBottom: 20 }}>{transfer.title} · 截止 {transfer.dueAt || '未设置'}</p>
+      <Form.Item name="to" label="新处理人" rules={[{ required: true, message: '请选择接收人' }]}><PersonPicker label="新处理人" people={Object.values(appState.accountsById || {}).filter(a => a.id !== appState.actorId && isQualifiedTaskActor(transfer, a.id, appState))} emptyLabel="暂无具有本节点处理资格的其他人员"/></Form.Item>
+      <ProFormTextArea name="reason" label="转办原因" rules={[{ required: true, whitespace: true, message: '请填写转办原因' }]} fieldProps={{ autoSize: { minRows: 3, maxRows: 6 } }}/>
+      <p className="muted">仅可转给具备节点资格的人员；保留原到达时间、期限和处理历史。</p>
+    </DrawerForm>}
+  </div>;
 }
