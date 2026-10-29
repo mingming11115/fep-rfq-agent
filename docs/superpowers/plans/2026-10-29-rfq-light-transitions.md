@@ -1,6 +1,6 @@
 # RFQ Light Transitions Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement the light transitions approved in chat without delaying interaction or resetting form state.
 
@@ -26,13 +26,13 @@
 ### Task 1: Integrate scoped motion
 **Files:** new `src/components/useContentTransition.js`; `RfqAppLayout.jsx`; `ProjectsPage.jsx`; `TasksPage.jsx`; small integration in `ResponsePage.jsx`; `antd-ui.css`.
 **Interfaces:** `useContentTransition(ref, transitionKey, { duration=150, enabled=true })` applies a cancellable opacity animation to the existing DOM element when its key changes.
-- [ ] Confirm the existing direct content replacement and manual card wait.
-- [ ] Add the hook and wire page/list/tab/card boundaries; shorten manual browsing without changing confirmation actions.
-- [ ] Verify continuous input and reduced-motion fallback by inspection and browser interaction.
+- [x] Confirm the existing direct content replacement and manual card wait.
+- [x] Add the hook and wire page/list/tab/card boundaries; shorten manual browsing without changing confirmation actions.
+- [x] Verify continuous input and reduced-motion fallback by inspection and browser interaction.
 
 ### Task 2: Verify and review
 **Files:** current scoped diff and verification record.
-- [ ] Run full tests, build and whitespace check.
-- [ ] Browser-check page/list/tab/card switching, rapid actions and dirty-form guard.
-- [ ] Run one independent scoped review and address material findings.
-- [ ] Record results and provide the updated local preview.
+- [x] Run full tests, build and whitespace check.
+- [x] Browser-check page/list/tab/card switching, rapid actions and dirty-form guard.
+- [x] Run one independent scoped review and address material findings.
+- [x] Record results and provide the updated local preview.

@@ -1,5 +1,7 @@
 ## Ant Design / ProComponents 界面升级（2026-10-29）
 
+补充轻过渡：页面主体 150ms 淡入，项目视图、任务标签及详情分区／条款 120ms 淡入，选中颜色 100ms 变化。手动上一张／下一张即时响应；连续切换取消上一段过渡，输入时不重复播放，遵循系统“减少动态效果”设置。验证详见[轻过渡记录](../docs/superpowers/specs/2026-10-29-rfq-light-transitions-design.md)。
+
 应用框架使用 ProLayout；项目列表、任务中心和 AI 分析记录使用 ProTable；新建 RFQ 使用 ModalForm；文件选择使用 Upload.Dragger；人员选择使用 Select；批注编辑与回复支持按姓名搜索的 @ 提及。原文与应答可拖动分隔栏调整宽度，也支持方向键调整；手机宽度下上下排列。
 
 保留现有业务权限、浏览器数据、未保存提示与最终评审规则。上传仍只保存元数据，@ 提及记录人员 ID，尚未接入真实上传与消息通知。使用与 React 19 兼容的 Ant Design 5、ProComponents 2 和官方兼容补丁。
