@@ -8,7 +8,7 @@ import {canPerform,assertPermission,assertRequirementPatch,canAccessPage,getRole
 import {reconcileTasks,selectMyTasks,applyTaskAction,assertBusinessAction,getTaskContextError,isTaskPending,startTaskForObject,transferBusinessTask,confirmProjectRequirement} from './taskDomain';
 import {getProjectSummary,selectAccessibleState} from './projectSelectors';
 import {parseWorkRoute,buildWorkRoute,PROJECT_PAGES,ADMIN_PAGES,shouldOpenSourceUpload,getSourceUploadExitRoute} from './navigation';
-import {removeProject,restoreProject,addProjectSources,handoverProject,createProjectReviewSettings,createProjectPersonnel} from './projectDomain';
+import {removeProject,restoreProject,addProjectSources,handoverProject,createProjectReviewSettings,createProjectPersonnel,updateProjectSettings} from './projectDomain';
 import {readRfqCatalog,resolveRfqProcessBinding} from './rfqProcessBinding';
 import SourceUploadDialog from './components/SourceUploadDialog';
 import ProjectWorkspace from './components/ProjectWorkspace';
@@ -192,7 +192,7 @@ export default function App(){
    update(st=>event({...st,snapshotsByProject:{...st.snapshotsByProject,[pid]:[snapshot,...(st.snapshotsByProject[pid]||[]).filter(t=>t.id!==snapshot.id)]}},'更新应答快照',snapshot.id,snapshot.status));return true;
   }catch(e){toast(e.message,'error');return false;}
  }
- function changeProject(patch){if(!allow('project:manage'))return false;if(Object.keys(patch).some(k=>!['name','customer','owner','ownerId','deadline','equipment','reason'].includes(k))){toast('人员与评审配置请使用项目人员分派入口','error');return false;}try{update(s=>{const current=s.projects.find(p=>p.id===project.id);const next=patch.ownerId&&patch.ownerId!==current.ownerId?handoverProject(s,{projectId:project.id,to:patch.ownerId,reason:patch.reason}):s;const ownerId=patch.ownerId||current.ownerId;return event({...next,projects:next.projects.map(p=>p.id===project.id?{...p,...patch,ownerId,owner:personName(next,ownerId)}:p)},'更新项目设置',project.id,patch.reason||'项目资料已保存');});return true;}catch(error){toast(error.message,'error');return false;}}
+ function changeProject(patch,options={}){if(!allow('project:manage'))return false;try{update(s=>event(updateProjectSettings(s,{projectId:project.id,patch,invalidateTechnical:options.invalidateTechnical}),'更新项目设置',project.id,patch.reason||'项目资料已保存'));return true;}catch(error){toast(error.message,'error');return false;}}
  function invalidate(ids,reason){if(!allow('project:manage'))return false;const pid=project.id;update(s=>event({...s,projects:s.projects.map(p=>p.id===pid?{...p,version:(p.version||1)+1}:p),requirementsByProject:{...s.requirementsByProject,[pid]:(s.requirementsByProject[pid]||[]).map(r=>ids.includes(r.id)?{...r,status:'待确认',version:(r.version||1)+1,reason,confirmedAt:undefined,confirmedBy:undefined}:r)}},'新版本影响核对',pid,`${ids.length} 条要求需重新确认；${reason}`));}
  function applyRevision(incoming,source,reason){
   const current=stateRef.current,pid=project.id;

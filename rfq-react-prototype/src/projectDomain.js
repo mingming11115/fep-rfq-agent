@@ -21,6 +21,18 @@ export function handoverProject(state,{projectId,to,reason}) {
  return {...state,projects:state.projects.map(p=>p.id===projectId?{...p,ownerId:to,owner:personName(state,to),handoverHistory:[...(p.handoverHistory||[]),{from:state.actorId,to,reason,at:new Date().toISOString()}]}:p)};
 }
 
+export function updateProjectSettings(state,{projectId,patch,invalidateTechnical=false}) {
+ assertPermission(state.actorRole,'project:manage',{state,actorId:state.actorId,projectId});
+ if(Object.keys(patch).some(key=>!['name','customer','owner','ownerId','deadline','equipment','reason'].includes(key)))throw new Error('人员与评审配置请使用项目人员分派入口');
+ const project=state.projects.find(p=>p.id===projectId),ownerId=patch.ownerId||project.ownerId;
+ const next=ownerId!==project.ownerId?handoverProject(state,{projectId,to:ownerId,reason:patch.reason}):state;
+ const rows=state.requirementsByProject?.[projectId]||[];
+ const invalidate=invalidateTechnical&&patch.equipment!==undefined&&patch.equipment!==project.equipment&&rows.some(row=>row.category==='技术');
+ return {...next,projects:next.projects.map(p=>p.id===projectId?{...p,...patch,ownerId,owner:personName(next,ownerId),version:(p.version||1)+(invalidate?1:0)}:p),
+  ...(invalidate?{requirementsByProject:{...next.requirementsByProject,[projectId]:rows.map(row=>row.category==='技术'?{...row,status:'待确认',version:(row.version||1)+1,reason:`设备配置基线变化：${patch.reason}`,confirmedAt:undefined,confirmedBy:undefined}:row)}}:{}),
+ };
+}
+
 export function addProjectSources(state,projectId,files) {
  if(!state.projects.some(p=>p.id===projectId))throw new Error('项目不存在或已删除，无法上传资料');
  assertPermission(state.actorRole,'source:manage',state.accountsById?{state,actorId:state.actorId,projectId}:undefined);

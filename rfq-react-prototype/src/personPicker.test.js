@@ -30,3 +30,18 @@ test('creating a project stores the selected owner identity and grants creator a
  assert.deepEqual(project.createProjectPersonnel(s,{buId:'BU',ownerId:'creator'}).participantIds,['creator']);
  for(const ownerId of ['', 'tech','disabled','outside','另一个SR'])assert.throws(()=>project.createProjectPersonnel(s,{buId:'BU',ownerId}),/负责人/);
 });
+
+test('saving an owner handover and equipment change invalidates technical confirmations atomically',()=>{
+ assert.equal(typeof project.updateProjectSettings,'function');
+ const s=state();s.projects[0]={...s.projects[0],equipment:'旧基线',version:2,participantIds:['creator','other','tech']};
+ s.requirementsByProject={P:[{id:'T',category:'技术',status:'已确认',version:9,confirmedBy:'tech',confirmedAt:'2026-10-28'},{id:'B',category:'商务',status:'已确认',version:3}]};
+ const next=project.updateProjectSettings(s,{projectId:'P',patch:{ownerId:'other',equipment:'新基线',reason:'基线与人员调整'},invalidateTechnical:true});
+ assert.equal(next.projects[0].ownerId,'other');assert.equal(next.projects[0].equipment,'新基线');assert.equal(next.projects[0].version,3);
+ assert.equal(next.requirementsByProject.P[0].status,'待确认');assert.equal(next.requirementsByProject.P[0].version,10);
+ assert.equal(next.requirementsByProject.P[0].confirmedBy,undefined);assert.equal(next.requirementsByProject.P[0].confirmedAt,undefined);
+ assert.deepEqual(next.requirementsByProject.P[1],s.requirementsByProject.P[1]);
+ assert.equal(s.projects[0].ownerId,'creator');assert.equal(s.requirementsByProject.P[0].status,'已确认');
+ const before=structuredClone(s);
+ assert.throws(()=>project.updateProjectSettings(s,{projectId:'P',patch:{ownerId:'disabled',equipment:'新基线',reason:'无效接收人'},invalidateTechnical:true}),/SR/);
+ assert.deepEqual(s,before);
+});

@@ -13,8 +13,9 @@ export default function PersonPicker({people=[],value='',onChange,multiple=false
   if(!expanded)return;
   const place=()=>{const rect=root.current.getBoundingClientRect(),below=window.innerHeight-rect.bottom-8,above=rect.top-8,up=below<180&&above>below;
    setPosition({left:Math.max(8,Math.min(rect.left,window.innerWidth-Math.min(rect.width,window.innerWidth-16)-8)),width:Math.min(rect.width,window.innerWidth-16),maxHeight:Math.min(260,Math.max(80,up?above:below)),...(up?{bottom:window.innerHeight-rect.top+4}:{top:rect.bottom+4})});};
+  const observer=new ResizeObserver(place);observer.observe(root.current);
   place();window.addEventListener('resize',place);window.addEventListener('scroll',place,true);
-  return()=>{window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);};
+  return()=>{observer.disconnect();window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);};
  },[expanded]);
  useLayoutEffect(()=>{list.current?.querySelector('[data-active="true"]')?.scrollIntoView({block:'nearest'});},[active]);
  function choose(person){

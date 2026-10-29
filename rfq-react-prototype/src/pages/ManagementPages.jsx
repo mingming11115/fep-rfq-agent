@@ -48,8 +48,7 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
   const commitBasic = (invalidate) => {
     if (!canEdit) return toast?.('当前身份没有项目设置维护权限', 'error');
     const next = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value.trim()]));
-    if(onProjectChange?.({ ...next, reason })===false)return;
-    if (invalidate && technicalRows.length) onInvalidateRequirements?.(technicalRows.map((row) => row.id), `设备配置基线变化：${reason}`);
+    if(onProjectChange?.({ ...next, reason },{invalidateTechnical:invalidate})===false)return;
     record(logEvent, '保存项目设置', project.id, invalidate ? `设备基线更新，${technicalRows.length} 条技术要求需复核` : '基本信息已更新', project, next, reason);
     setImpact(false); setReason(''); toast?.(invalidate ? '设备基线已更新，相关技术条目需重新确认' : '项目设置已保存');
   };

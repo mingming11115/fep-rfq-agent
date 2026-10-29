@@ -77,12 +77,15 @@ export function assignProjectDuty(state,{actorId,projectId,userId,duty,side,requ
  const rows=state.requirementsByProject[projectId].map(r=>r.id===requirementId?{...r,confirmationAssigneeId:userId,confirmationAssignmentSource:'explicit'}:r);
  const next=audited({...state,requirementsByProject:{...state.requirementsByProject,[projectId]:rows}},actorId,project.buId,'分派条款确认人',row.confirmationAssigneeId,userId,reason);next.audit[0]={...next.audit[0],projectId,requirementId};return next;
 }
-export function configureProjectFinalReviewers(state,{actorId,projectId,srId,technicalIds,technicalRepresentativeId=null,reason}) {
+export function configureProjectFinalReviewers(state,{actorId,projectId,srId,technicalIds,technicalRepresentativeId=null,technicalMode,reason}) {
  reasonRequired(reason);const project=projectManager(state,actorId,projectId),settings=getProjectReviewSettings(state,projectId);
- const reviewers={srId,technicalIds,technicalRepresentativeId};getRequiredFinalReviewers({policy:'sr-and-technical',technicalMode:settings?.technicalMode,reviewers});
+ const nextMode=technicalMode??settings?.technicalMode;
+ if(!['all','representative'].includes(nextMode))throw new Error('无效的技术组评审方式');
+ const nextSettings={technicalMode:nextMode,version:(settings?.version||1)+(nextMode!==settings?.technicalMode?1:0)};
+ const reviewers={srId,technicalIds,technicalRepresentativeId};getRequiredFinalReviewers({policy:'sr-and-technical',technicalMode:nextMode,reviewers});
  assertProjectAssignment(state,{actorId,projectId,userId:srId,duty:'final-review',side:'sr'});
  for(const userId of technicalIds)assertProjectAssignment(state,{actorId,projectId,userId,duty:'final-review',side:'technical'});
- return audited({...state,projects:state.projects.map(p=>p.id===projectId?{...p,approvalConfig:{...p.approvalConfig,finalReviewers:structuredClone(reviewers)}}:p)},actorId,project.buId,'配置项目最终评审组',project.approvalConfig?.finalReviewers,reviewers,reason);
+ return audited({...state,projects:state.projects.map(p=>p.id===projectId?{...p,technicalReviewSettings:nextSettings,approvalConfig:{...p.approvalConfig,finalReviewers:structuredClone(reviewers)}}:p)},actorId,project.buId,'配置项目最终评审组',{reviewers:project.approvalConfig?.finalReviewers,settings},{reviewers,settings:nextSettings},reason);
 }
 export function assignReviewApprover(state,{actorId,projectId,reviewId,userId,reason}) {
  reasonRequired(reason);const project=projectManager(state,actorId,projectId),review=state.reviewsByProject?.[projectId]?.find(r=>r.id===reviewId);

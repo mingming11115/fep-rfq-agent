@@ -39,3 +39,31 @@ test('inline catalog creation persists the new entry and preserves unrelated BU 
  assert.equal(JSON.parse(records.get('rfq.reference.processes.v1:A')).find(p=>p.id==='NEW-P').modelId,'NEW');
  assert.throws(()=>binding.saveRfqCatalogRecord(storage,context,'model',{...next.models.find(m=>m.id==='NEW'),name:'覆盖'}),/权限/);
 });
+
+function deletionStorage(){
+ const records=new Map([
+  ['rfq.reference.models.v1:A',JSON.stringify(models)],
+  ['rfq.reference.processes.v1:A',JSON.stringify(processes)],
+  ['rfq.reference.capabilities.v1:A',JSON.stringify([{id:'C',version:1,modelId:'M',processId:'P',buId:'A'},{id:'KEEP',version:1,modelId:'M',processId:'P',buId:'B'}])],
+ ]);
+ const state={actorRole:'BU管理员',accountsById:{admin:{enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'},{id:'B'}],projects:[{id:'RFQ',buId:'A',modelId:'M',processId:'P',modelName:'机型'}]};
+ return {records,context:{state,actorId:'admin',buId:'A'},storage:{getItem:key=>records.get(key)??null,setItem:(key,value)=>records.set(key,value),removeItem:key=>records.delete(key)}};
+}
+test('catalog deletion reads latest child records and persists empty catalogs without reseeding',()=>{
+ const {storage,context,records}=deletionStorage();
+ const caps=JSON.parse(records.get('rfq.reference.capabilities.v1:A'));
+ storage.setItem('rfq.reference.capabilities.v1:A',JSON.stringify([...caps,{id:'RECENT',version:1,buId:'A',modelId:'M',processId:'OFF'}]));
+ const next=binding.deleteRfqCatalogRecord(storage,context,'model',{id:'M'});
+ assert.deepEqual(next.models,[]);
+ assert.deepEqual(binding.readRfqCatalog(storage,context).models,[]);
+ assert.deepEqual(JSON.parse(records.get('rfq.reference.capabilities.v1:A')).map(c=>c.id),['KEEP']);
+ assert.deepEqual(JSON.parse(records.get('rfq.reference.processes.v1:A')).map(p=>p.id),['FOREIGN','WRONG']);
+ assert.equal(context.state.projects[0].modelName,'机型');
+});
+test('catalog deletion rolls back earlier writes if an affected storage write fails',()=>{
+ const {storage,context,records}=deletionStorage(),before=new Map(records);
+ let writes=0;
+ const failing={...storage,setItem:(key,value)=>{if(++writes===2)throw new Error('存储空间不足');storage.setItem(key,value);}};
+ assert.throws(()=>binding.deleteRfqCatalogRecord(failing,context,'model',{id:'M'}),/存储空间/);
+ assert.deepEqual(records,before);
+});

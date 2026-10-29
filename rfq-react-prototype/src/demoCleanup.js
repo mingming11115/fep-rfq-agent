@@ -13,7 +13,7 @@ const projectMaps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByPr
 
 // A one-time edit of the synthetic BU's presentation data, not a limit on future work.
 export function tidyDemoState(previous) {
-  if (previous.demoCleanupVersion === 1) return previous;
+  if (previous.demoCleanupVersion === 1 || !previous.projects.some(p => p.buId === 'BU-DEMO')) return previous;
   const state = structuredClone(previous);
   const examples = state.projects.filter(p => p.buId === 'BU-DEMO');
   const removedProjects = new Set();
@@ -80,13 +80,15 @@ export function tidyDemoState(previous) {
 export function tidyStoredDemo(storage, previous) {
   if (previous.demoCleanupVersion === 1) return previous;
   const next = tidyDemoState(previous), related = {};
+  if (next === previous) return previous;
   for (const project of previous.projects) {
     const key = `fep-rfq-documents:${project.id}`;
     related[key] = storage.getItem(key);
   }
   storage.setItem('fep-rfq-demo-before-cleanup-v1', JSON.stringify({savedAt: new Date().toISOString(), state: previous, related}));
   for (const project of next.projects) {
-    if (JSON.stringify(previous.requirementsByProject[project.id]) === JSON.stringify(next.requirementsByProject[project.id])) continue;
+    const reviewDemo = project.buId === 'BU-DEMO' && getProjectSummary(next, project.id, 'demo-sales').stage === '评审中';
+    if (!reviewDemo && JSON.stringify(previous.requirementsByProject[project.id]) === JSON.stringify(next.requirementsByProject[project.id])) continue;
     storage.setItem(`fep-rfq-documents:${project.id}`, JSON.stringify({
       files: next.documentsByProject[project.id], parsed: next.requirementsByProject[project.id],
     }));

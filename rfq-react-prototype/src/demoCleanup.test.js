@@ -51,6 +51,11 @@ test('cleanup fills stages absent from an older browser demo with valid syntheti
     ['待上传', '解析中', '评审中', '审批完成', '已导出'].sort());
 });
 
+test('a workspace containing only another BU does not receive demo projects', () => {
+  const before = {projects: [{id: 'OTHER', buId: 'OTHER-BU'}], requirementsByProject: {OTHER: [{id: 'R', draft: '人工应答'}]}};
+  assert.deepEqual(cleanup.tidyDemoState(before), before);
+});
+
 test('stored cleanup backs up previous data and synchronizes parsed cache before reload', () => {
   const before = legacy();
   const data = new Map([['fep-rfq-app-v1', JSON.stringify(before)],
@@ -65,4 +70,13 @@ test('stored cleanup backs up previous data and synchronizes parsed cache before
   const failingStorage = {...storage, setItem: () => {throw new Error('quota');}};
   assert.throws(() => cleanup.tidyStoredDemo(failingStorage, before), /quota/);
   assert.equal(before.projects.length, 6);
+});
+
+test('an old parsed cache cannot restore extra rows when the working responses are already compact', () => {
+  const old = legacy(), before = cleanup.tidyDemoState(old);
+  delete before.demoCleanupVersion;
+  const data = new Map([['fep-rfq-documents:RFQ-001', JSON.stringify({files: old.documentsByProject['RFQ-001'], parsed: old.requirementsByProject['RFQ-001']})]]);
+  const storage = {getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value)};
+  cleanup.tidyStoredDemo(storage, before);
+  assert.equal(JSON.parse(data.get('fep-rfq-documents:RFQ-001')).parsed.length, 3);
 });

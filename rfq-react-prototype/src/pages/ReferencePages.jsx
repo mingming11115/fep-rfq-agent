@@ -4,10 +4,10 @@ import {saveModelMetadata,saveModelProcess,assertCapabilityProcess,prepareCapabi
 import {MODELS,CAPABILITIES,PROCESSES} from '../modelProcessSeeds';
 import {buildCapabilityTree,findCapabilityTreeNode,resolveCapabilityTreeSelection} from '../capabilityTree';
 import CapabilityTree from '../components/CapabilityTree';
-import {readRfqCatalog,saveRfqCatalogRecord} from '../rfqProcessBinding';
+import {readRfqCatalog,saveRfqCatalogRecord,deleteRfqCatalogRecord} from '../rfqProcessBinding';
 import {canPerform} from '../permissions';
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Database, FileText, Upload, Download, Plus, Search, X, ShieldCheck, History, AlertCircle, CheckCircle2, ExternalLink, Layers, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
+import { BookOpen, Database, FileText, Upload, Download, Plus, Search, X, ShieldCheck, History, AlertCircle, CheckCircle2, ExternalLink, Layers, SlidersHorizontal, ArrowUpRight, Pencil, Trash2 } from 'lucide-react';
 import './reference-pages.css';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -18,7 +18,8 @@ function useSaved(baseKey, initial, writable=true,context,kind='knowledge') {
   const value=selectReadableResources(raw,context,kind);
   const setValue=updater=>{if(!writable)return;const visible=selectReadableResources(raw,context,kind),ids=new Set(visible.map(r=>`${r.id}:${r.version}`)),next=typeof updater==='function'?updater(visible):updater;setRaw([...raw.filter(r=>!ids.has(`${r.id}:${r.version}`)),...next.map(r=>({...r,buId:r.buId||context.buId,...(r.scope==='仅当前项目'&&!r.projectId?{projectId:context.projectId}: {})}))]);};
   useEffect(()=>{if(writable)localStorage.setItem(key,JSON.stringify(raw));},[key,raw,writable]);
-  return [value,setValue];
+  const reload=()=>setRaw(JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]));
+  return [value,setValue,reload];
 }
 function Tag({ children }) {
   const type = ['已发布', '有效', '已验收', '已接受', '量产'].includes(children) ? 'success' : ['已撤销', '已过期', '已停用', '退回', '被替代'].includes(children) ? 'danger' : ['待审核', '待核对', '候选', '部分接受'].includes(children) ? 'warning' : 'neutral';
@@ -37,7 +38,7 @@ function Empty({ children = '没有符合筛选条件的记录' }) { return <div
 function Paginator({ total, page, setPage, pageSize, setPageSize }) { const pages = Math.max(1,Math.ceil(total/pageSize)); const currentPage = Math.min(page,pages); return <div className="ref-pagination"><span>显示 {total ? (currentPage-1)*pageSize+1 : 0}–{Math.min(currentPage*pageSize,total)} 条，共 {total} 条</span><div><Select label="每页条数" value={String(pageSize)} onChange={(v) => {setPageSize(Number(v));setPage(1);}} options={[{value:'5',label:'5 条 / 页'},{value:'10',label:'10 条 / 页'},{value:'20',label:'20 条 / 页'}]}/><button className="btn btn-sm" disabled={currentPage === 1} onClick={() => setPage(currentPage-1)}>‹</button><button className="btn btn-sm ref-page-number" disabled>{currentPage}</button><button className="btn btn-sm" disabled={currentPage === pages} onClick={() => setPage(currentPage+1)}>›</button></div></div>; }
 function KeyValues({ entries }) { return <dl className="ref-kv">{entries.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value || '—'}</dd></div>)}</dl>; }
 function csvDownload(name, rows) { const a = document.createElement('a'); const url = URL.createObjectURL(new Blob(['\uFEFF' + rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\r\n')], {type:'text/csv;charset=utf-8;'})); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500); }
-function Heading({ eyebrow, title, description, actions }) { return <div className="page-heading"><div><div className="ref-eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div><div className="page-actions">{actions}</div></div>; }
+function Heading({ eyebrow, title, description, actions }) { return <div className="page-heading"><div><div className="ref-eyebrow">{eyebrow}</div><h1>{title}</h1>{description&&<p>{description}</p>}</div><div className="page-actions">{actions}</div></div>; }
 function ReviewDialog({ item, action, onClose, onConfirm, impact = 0 }) {
   const [reason, setReason] = useState(''); const [error, setError] = useState('');
   const needReason = ['退回', '撤销', '停用', '替代'].includes(action);
@@ -95,7 +96,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
   const buId=permissionContext?.buId;
   const canConfigure=canPerform(actorRole,'model:configure',permissionContext);
   const canCreate=canPerform(actorRole,'catalog:create',permissionContext);
-  const canEdit=canPerform(actorRole,'resource:edit',permissionContext);
+  const canEdit=canConfigure||canPerform(actorRole,'resource:edit',permissionContext);
   const canApprove=canPerform(actorRole,'resource:approve',{...permissionContext,resourceKind:'capability'});
   const loadCatalog=()=>{try{return readRfqCatalog(localStorage,permissionContext);}catch(e){return {models:[],processes:[],error:e.message};}};
   const [catalog,setCatalog]=useState(loadCatalog);
@@ -105,13 +106,14 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
     const changed=e=>{if(!e.key||['rfq.reference.models.v1','rfq.reference.processes.v1'].some(base=>e.key===resourceStorageKey(base,buId)))refresh();};
     refresh();window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);
   },[buId,actorId,permissionContext?.state]);
-  const [items,setItems]=useSaved('rfq.reference.capabilities.v1',CAPABILITIES,canEdit||canApprove,permissionContext,'capability');
+  const [items,setItems,reloadItems]=useSaved('rfq.reference.capabilities.v1',CAPABILITIES,canEdit||canApprove,permissionContext,'capability');
   const [selection,setSelection]=useState(''),[modelVersion,setModelVersion]=useState('');
   const [series,setSeries]=useState('全部产品系列'),[lifecycle,setLifecycle]=useState('全部生命周期');
   const [query,setQuery]=useState(''),[source,setSource]=useState('全部来源'),[status,setStatus]=useState('全部状态');
   const [drawer,setDrawer]=useState(null),[drawerSection,setDrawerSection]=useState('detail');
   const [form,setForm]=useState(null),[formType,setFormType]=useState('capability'),[error,setError]=useState('');
   const [processForm,setProcessForm]=useState(null),[review,setReview]=useState(null),[importType,setImportType]=useState(null);
+  const [deleteTarget,setDeleteTarget]=useState(null),[deleteError,setDeleteError]=useState('');
   const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(10);
   const businessUnits=(appState?.businessUnits||[]).filter(b=>canManageBu(appState,actorId,b.id)||getPersonnelContext(appState,actorId,b.id).enabled);
   const buName=businessUnits.find(b=>b.id===buId)?.name||buId;
@@ -140,7 +142,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
   const chooseNode=node=>{setSelection(node.key);setModelVersion('');setPage(1);};
   const selectKey=key=>{const node=findCapabilityTreeNode(tree,key);if(node)chooseNode(node);};
   const openForm=(item,type='capability')=>{
-    if(!(type==='model'?(item?canConfigure:canCreate):canEdit)||type==='capability'&&!model)return;
+    if(!(type==='model'?(item?canConfigure:canCreate):canEdit)||type==='capability'&&!item?.modelId&&!model)return;
     setDrawer(null);
     setFormType(type);setError('');
     if(type==='model')setForm(item?{...item}: {id:uid('MOD'),buId,code:'',name:'',series:'精密加工系列',revision:'R1',version:1,lifecycle:'研发',standard:'',options:'',config:'',source:'BU配置',scope:'FEP 授权项目',history:[]});
@@ -164,9 +166,24 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
       setForm(null);setDrawer(null);
     }catch(e){setError(e.message);}
   };
-  const openProcess=item=>{if(!(item?canConfigure:canCreate)||!model)return;setError('');setProcessForm(item?{...item}:{id:uid('PROC'),buId,modelId:model.id,code:'',name:'',conditions:'',enabled:true});};
+  const openProcess=item=>{if(!(item?canConfigure:canCreate)||!item&&!model)return;setError('');setProcessForm(item?{...item}:{id:uid('PROC'),buId,modelId:model.id,code:'',name:'',conditions:'',enabled:true});};
   const saveProcess=()=>{
     try{if(!(processes.some(p=>p.id===processForm.id)?canConfigure:canCreate))return;setCatalog(saveRfqCatalogRecord(localStorage,permissionContext,'process',processForm));setSelection(`process:${processForm.id}`);setModelVersion('');clearFilters();notify('已保存工艺配置',processForm.name,processForm.enabled?'启用':'停用；历史能力关系保留');setProcessForm(null);}catch(e){setError(e.message);}
+  };
+  const directoryActions=node=>{
+    if(!['model','process','capability'].includes(node.kind))return null;
+    const editable=node.kind==='capability'?canEdit:canConfigure;
+    if(!editable&&!canConfigure)return null;
+    return <div className="cap-tree-actions">{editable&&<button className="cap-tree-action" title={`编辑${node.label}`} aria-label={`编辑${node.label}`} onClick={()=>{chooseNode(node);if(node.kind==='process')openProcess(node.record);else openForm(node.record,node.kind);}}><Pencil size={13}/></button>}{canConfigure&&<button className="cap-tree-action danger" title={`删除${node.label}`} aria-label={`删除${node.label}`} onClick={()=>{setDeleteTarget(node);setDeleteError('');}}><Trash2 size={13}/></button>}</div>;
+  };
+  const confirmDelete=()=>{
+    try{
+      if(!canConfigure)throw new Error('没有本BU的目录管理权限');
+      setCatalog(deleteRfqCatalogRecord(localStorage,permissionContext,deleteTarget.kind,deleteTarget.record));
+      reloadItems();
+      setSelection(deleteTarget.kind==='model'?tree.key:deleteTarget.kind==='process'?`model:${deleteTarget.modelId}`:deleteTarget.processId==='unassigned'?`unassigned:${deleteTarget.modelId}`:`process:${deleteTarget.processId}`);
+      setModelVersion('');setPage(1);setDeleteTarget(null);setDrawer(null);notify('已删除目录条目',deleteTarget.label);
+    }catch(e){setDeleteError(e.message);}
   };
   const problems=item=>{
     const missing=[['实际能力值',item.value],['配置要求',item.config],['适用条件',item.conditions],['有效证据',evidenceIsValid(item.evidence)],['指定批准人',item.approver==='BU管理员']].filter(([,v])=>typeof v==='string'?!v.trim():!v).map(([k])=>k);
@@ -209,7 +226,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
     {pageItems.length?<><div className="table-wrap"><table className="data-table cap-node-table"><thead><tr><th>能力指标 / 版本</th><th>能力值</th><th>值类型</th><th>状态</th></tr></thead><tbody>{pageItems.map(item=><tr key={`${item.id}:${item.version}`}><td><button className="text-link" onClick={()=>selectKey(`capability:${item.id}:${item.version}`)}>{item.metric}</button><small>{item.id} · v{item.version}{item.validity==='被替代'?' · 历史版本':''}</small></td><td>{item.value||'待补充'}</td><td>{item.valueType}</td><td><Tag>{item.status}</Tag></td></tr>)}</tbody></table></div><Paginator total={filtered.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/></>:<Empty>当前工艺下暂无符合条件的能力</Empty>}
   </>;
   return <div className="ref-page">
-    <Heading eyebrow="MODEL CAPABILITY LIBRARY" title="机型与能力边界" description="BU → 机型 / 硬件版本 → 工艺 → 能力条目" actions={<>{businessUnits.length>1?<Select label="机型所属BU" value={buId} onChange={onSelectBu} options={businessUnits.map(b=>({value:b.id,label:b.name}))}/>:<Tag>{buName}</Tag>}{['SR','技术'].includes(actorRole)&&<button className="btn" onClick={()=>navigate?.('settings')}><SlidersHorizontal size={16}/>项目机型配置</button>}</>}/>
+    <Heading eyebrow="MODEL CAPABILITY LIBRARY" title="机型与能力边界" actions={<>{businessUnits.length>1?<Select label="机型所属BU" value={buId} onChange={onSelectBu} options={businessUnits.map(b=>({value:b.id,label:b.name}))}/>:<Tag>{buName}</Tag>}{['SR','技术'].includes(actorRole)&&<button className="btn" onClick={()=>navigate?.('settings')}><SlidersHorizontal size={16}/>项目机型配置</button>}</>}/>
     {catalog.error&&<Notice warning>{catalog.error}</Notice>}
     <section className="panel ref-cap-panel"><div className="cap-workspace">
       <aside className="cap-directory">
@@ -221,7 +238,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
           <Field label="能力来源"><Select label="能力来源" value={source} onChange={setSource} options={['全部来源','Excel','历史 RFQ','手动补充']}/></Field>
           <Field label="能力状态"><Select label="能力状态" value={status} onChange={setStatus} options={['全部状态','草稿','待审核','已发布','退回','已撤销']}/></Field>
         </div><button className="text-link" onClick={clearFilters}>清除筛选</button></details>
-        <CapabilityTree root={tree} selectedKey={activeNode.key} onSelect={chooseNode}/>
+        <CapabilityTree root={tree} selectedKey={activeNode.key} onSelect={chooseNode} renderActions={directoryActions}/>
         {!tree.children.length&&latestModels.length>0&&<div className="cap-no-results"><button className="text-link" onClick={clearFilters}>清除筛选并查看全部</button></div>}
       </aside>
       <section className="cap-node-detail" aria-label="选中节点详情">
@@ -246,19 +263,20 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
       </section>
     </div></section>
     <p className="ref-footnote">演示数据 · BU独立机型与工艺 · 能力由技术维护并独立审核发布</p>
-    {form&&<Dialog title={formType==='model'?`配置机型元数据 · ${buName}`:`${form.newVersion?'修订新版本':'补充能力候选'} · ${form.id}`} onClose={()=>setForm(null)} wide footer={<><button className="btn" onClick={()=>setForm(null)}>取消</button><button className="btn btn-primary" onClick={save}>{formType==='model'?'保存机型配置':'保存候选草稿'}</button></>}>
+    {form&&<Dialog title={formType==='model'?(models.some(m=>m.id===form.id)?`编辑机型 · ${buName}`:'新建机型'):`${form.newVersion?'修订新版本':'补充能力候选'} · ${form.id}`} onClose={()=>setForm(null)} wide footer={<><button className="btn" onClick={()=>setForm(null)}>取消</button><button className="btn btn-primary" onClick={save}>{formType==='model'?'保存机型配置':'保存候选草稿'}</button></>}>
       <div className="form-grid">{formType==='model'?<>
-        <Field label="所属BU"><input className="input" readOnly value={buName}/></Field><Field label="机型编码" required><Input value={form.code} onChange={v=>setForm({...form,code:v})}/></Field><Field label="机型名称" required><Input value={form.name} onChange={v=>setForm({...form,name:v})}/></Field><Field label="系列"><Input value={form.series} onChange={v=>setForm({...form,series:v})}/></Field><Field label="硬件版本" required><Input value={form.revision} readOnly={models.some(m=>m.id===form.id)} onChange={v=>setForm({...form,revision:v})}/></Field><Field label="生命周期"><Select value={form.lifecycle} onChange={v=>setForm({...form,lifecycle:v})} options={['研发','量产','停产']}/></Field><Field label="配置定义" required full><Input value={form.config} onChange={v=>setForm({...form,config:v})}/></Field><Field label="标配定义" full><Area value={form.standard} onChange={v=>setForm({...form,standard:v})}/></Field><Field label="选配及适用关系" full><Area value={form.options} onChange={v=>setForm({...form,options:v})}/></Field><Field label="来源" full><Input value={form.source} onChange={v=>setForm({...form,source:v})}/></Field>
+        <Field label="所属BU"><input className="input" readOnly value={buName}/></Field><Field label="机型编码" required><Input value={form.code} onChange={v=>setForm({...form,code:v})}/></Field><Field label="机型名称" required><Input value={form.name} onChange={v=>setForm({...form,name:v})}/></Field><Field label="系列"><Input value={form.series} onChange={v=>setForm({...form,series:v})}/></Field><Field label="硬件版本" required><Input value={form.revision} readOnly={models.some(m=>m.id===form.id)} onChange={v=>setForm({...form,revision:v})}/></Field><Field label="生命周期"><Select value={form.lifecycle} onChange={v=>setForm({...form,lifecycle:v})} options={['研发','量产','停产']}/></Field><Field label="配置定义" required full><Input value={form.config} onChange={v=>setForm({...form,config:v})}/></Field><Field label="标配定义" full><Area value={form.standard} onChange={v=>setForm({...form,standard:v})}/></Field><Field label="选配及适用关系" full><Area value={form.options} onChange={v=>setForm({...form,options:v})}/></Field>
       </>:<>
         <Field label="关联机型"><Select value={form.modelId} onChange={v=>setForm({...form,modelId:v,processId:'',config:latestModels.find(m=>m.id===v)?.config||''})} options={latestModels.map(m=>({value:m.id,label:`${m.name} ${m.revision}`}))}/></Field><Field label="关联工艺" required><Select label="关联工艺" value={form.processId} onChange={v=>setForm({...form,processId:v})} options={[{value:'',label:'待关联工艺（提交审核前必选）'},...processes.filter(p=>p.modelId===form.modelId&&(p.enabled!==false||p.id===form.processId)).map(p=>({value:p.id,label:`${p.code} · ${p.name}${p.enabled===false?'（已停用）':''}`}))]}/></Field><Field label="配置要求"><Input value={form.config} onChange={v=>setForm({...form,config:v})}/></Field><Field label="能力指标" required><Input value={form.metric} onChange={v=>setForm({...form,metric:v})}/></Field><Field label="实际能力值 / 范围"><Input value={form.value} onChange={v=>setForm({...form,value:v})}/></Field><Field label="值类型"><Select value={form.valueType} onChange={v=>setForm({...form,valueType:v})} options={['保证值','典型值','范围值','描述值']}/></Field><Field label="适用条件" full><Area value={form.conditions} onChange={v=>setForm({...form,conditions:v})}/></Field><Field label="适用范围限制" full><Area value={form.limits} onChange={v=>setForm({...form,limits:v})}/></Field><Field label="关联证据"><Select value={form.evidence} onChange={v=>setForm({...form,evidence:v})} options={[{value:'',label:'请选择有效证据'},...evidence.filter(r=>evidenceIsValid(`${r.id} v${r.version}`)).map(r=>({value:`${r.id} v${r.version}，第 8 页`,label:`${r.id} v${r.version} · ${r.name}`})),...(form.evidence?[{value:form.evidence,label:form.evidence}]:[])]}/></Field><Field label="来源定位"><Input value={form.sourceLocation} onChange={v=>setForm({...form,sourceLocation:v})}/></Field><Field label="指定批准人"><Select value={form.approver} onChange={v=>setForm({...form,approver:v})} options={['BU管理员','待指定']}/></Field>
-      </>}</div><Notice>{formType==='model'?'机型配置保存后生效，并保留之前版本。已有机型的硬件版本固定，更换硬件请新建机型；工艺在机型下单独配置。':'缺项可保存候选；提交审核与发布必须具有启用工艺、适用条件及有效证据。'}</Notice>{error&&<p className="ref-error" role="alert">{error}</p>}
+      </>}</div>{formType!=='model'&&<Notice>缺项可保存候选；提交审核与发布必须具有启用工艺、适用条件及有效证据。</Notice>}{error&&<p className="ref-error" role="alert">{error}</p>}
     </Dialog>}
-    {processForm&&<Dialog title={`配置机型下属工艺 · ${model?.name} ${model?.revision}`} onClose={()=>setProcessForm(null)} footer={<><button className="btn" onClick={()=>setProcessForm(null)}>取消</button><button className="btn btn-primary" onClick={saveProcess}>保存工艺配置</button></>}><div className="form-grid"><Field label="所属BU"><input className="input" readOnly value={buName}/></Field><Field label="所属机型"><input className="input" readOnly value={`${model?.name} ${model?.revision}`}/></Field><Field label="工艺编码" required><Input value={processForm.code} onChange={v=>setProcessForm({...processForm,code:v})}/></Field><Field label="工艺名称" required><Input value={processForm.name} onChange={v=>setProcessForm({...processForm,name:v})}/></Field><Field label="适用条件 / 工艺说明" full><Area value={processForm.conditions} onChange={v=>setProcessForm({...processForm,conditions:v})}/></Field><Field label="启用状态"><Select label="工艺启用状态" value={processForm.enabled?'enabled':'disabled'} onChange={v=>setProcessForm({...processForm,enabled:v==='enabled'})} options={[{value:'enabled',label:'启用'},{value:'disabled',label:'停用'}]}/></Field></div><Notice warning>停用保留已有能力和引用，阻止该工艺下的能力继续提交或发布。</Notice>{error&&<p className="ref-error" role="alert">{error}</p>}</Dialog>}
+    {processForm&&<Dialog title={`配置机型下属工艺 · ${latestModels.find(m=>m.id===processForm.modelId)?.name||''}`} onClose={()=>setProcessForm(null)} footer={<><button className="btn" onClick={()=>setProcessForm(null)}>取消</button><button className="btn btn-primary" onClick={saveProcess}>保存工艺配置</button></>}><div className="form-grid"><Field label="所属BU"><input className="input" readOnly value={buName}/></Field><Field label="所属机型"><input className="input" readOnly value={latestModels.filter(m=>m.id===processForm.modelId).map(m=>`${m.name} ${m.revision}`).join('')}/></Field><Field label="工艺编码" required><Input value={processForm.code} onChange={v=>setProcessForm({...processForm,code:v})}/></Field><Field label="工艺名称" required><Input value={processForm.name} onChange={v=>setProcessForm({...processForm,name:v})}/></Field><Field label="适用条件 / 工艺说明" full><Area value={processForm.conditions} onChange={v=>setProcessForm({...processForm,conditions:v})}/></Field><Field label="启用状态"><Select label="工艺启用状态" value={processForm.enabled?'enabled':'disabled'} onChange={v=>setProcessForm({...processForm,enabled:v==='enabled'})} options={[{value:'enabled',label:'启用'},{value:'disabled',label:'停用'}]}/></Field></div><Notice warning>停用保留已有能力和引用，阻止该工艺下的能力继续提交或发布。</Notice>{error&&<p className="ref-error" role="alert">{error}</p>}</Dialog>}
     {drawer&&<Dialog drawer title={`${drawer.item.id} v${drawer.item.version} · ${drawer.type==='model'?'机型配置记录':'能力详情'}`} onClose={()=>setDrawer(null)}><div className="ref-detail-switch">{[['detail','条件与证据'],['history','版本 / 审核记录'],['refs','引用与影响']].map(([key,label])=><button key={key} className={drawerSection===key?'active':''} onClick={()=>setDrawerSection(key)}>{label}</button>)}</div>
       {drawerSection==='detail'&&(drawer.type==='capability'?capDetail(drawer.item):<KeyValues entries={[["所属BU",buName],['机型',`${drawer.item.name} ${drawer.item.revision}`],['标配',drawer.item.standard],['选配',drawer.item.options],['配置',drawer.item.config],['来源',drawer.item.source]]}/>)}
       {drawerSection==='history'&&<><h3 className="ref-section-title">版本链</h3>{(drawer.type==='model'?models:items).filter(r=>r.id===drawer.item.id).sort((a,b)=>b.version-a.version).map(r=><div className="ref-version-row" key={r.version}><strong>v{r.version}</strong><Tag>{r.status}</Tag>{r.validity&&<Tag>{r.validity}</Tag>}<button className="text-link" onClick={()=>setDrawer({...drawer,item:r})}>查看</button></div>)}<h3 className="ref-section-title">维护记录</h3><div className="ref-timeline">{(drawer.item.history||[]).slice().reverse().map((h,i)=><div key={i}><span>{h.date}</span><p>{h.text}</p></div>)}</div></>}
       {drawerSection==='refs'&&(drawer.type==='model'?<p>本机型关联 {processes.filter(p=>p.modelId===drawer.item.id).length} 项工艺、{items.filter(r=>r.modelId===drawer.item.id).length} 条能力版本。</p>:drawer.item.refs?.length?drawer.item.refs.map(r=><button className="ref-reference-row" key={r.id} onClick={()=>navigate?.(r.id.startsWith('K')?'knowledge':'response')}><FileText size={17}/><div><strong>{r.id}</strong><small>{r.title}{r.needsReview?' · 待复核':''}</small></div><ArrowUpRight size={17}/></button>):<Empty>暂无可访问引用</Empty>)}
     </Dialog>}
+    {deleteTarget&&<Dialog title="删除目录条目" onClose={()=>setDeleteTarget(null)} footer={<><button className="btn" onClick={()=>setDeleteTarget(null)}>取消</button><button className="btn btn-danger" onClick={confirmDelete}>确认删除</button></>}><p>确认删除“{deleteTarget.label}”{deleteTarget.kind==='capability'?` v${deleteTarget.record.version}`:''}？</p><Notice warning>{deleteTarget.kind==='model'?'将同时删除该机型的全部资料版本、下属工艺和能力条目。':deleteTarget.kind==='process'?'将同时删除该工艺下的全部能力资料版本。':'将删除所选能力资料版本。'}已有 RFQ 保存的机型及工艺信息保留。</Notice>{deleteError&&<p className="ref-error" role="alert">{deleteError}</p>}</Dialog>}
     {review&&<ReviewDialog {...review} impact={review.item.refs?.length||0} onClose={()=>setReview(null)} onConfirm={confirmAction}/>}
     {importType&&<ImportWizard kind={importType} capabilityScope={{buId,buName,model,process:activeProcess}} toast={toast} onClose={()=>setImportType(null)} onFinish={rows=>{
       if(!canEdit||!activeProcess||activeProcess.enabled===false)return;

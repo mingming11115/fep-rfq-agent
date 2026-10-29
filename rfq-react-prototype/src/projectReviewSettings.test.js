@@ -48,6 +48,31 @@ test('legacy BU changes do not invalidate an RFQ with a saved project rule',()=>
  assert.equal(getProjectFinalReview(next,project.id).technicalMode,'all');
 });
 
+test('BU configuration saves the existing review mode with reviewers for only the selected project',()=>{
+ const state=fixture(),project=state.projects.find(p=>p.id==='RFQ-001');
+ project.technicalReviewSettings={technicalMode:'all',version:2};
+ const others=structuredClone(state.projects.filter(p=>p.id!==project.id));
+ const scope=currentProjectScope(state,project.id,{}),snapshot={approvalScope:scope,approvalFingerprint:snapshotFingerprint(scope)};
+ const next=configureProjectFinalReviewers(state,{actorId:'demo-bu-admin',projectId:project.id,...project.approvalConfig.finalReviewers,technicalMode:'representative',reason:'改为负责人代表通过'});
+ assert.deepEqual(next.projects.find(p=>p.id===project.id).technicalReviewSettings,{technicalMode:'representative',version:3});
+ assert.deepEqual(next.projects.filter(p=>p.id!==project.id),others);
+ assert.equal(getRequiredFinalReviewers(getProjectFinalReview(next,project.id)).length,2);
+ assert.equal(checkSnapshotValidity(snapshot,currentProjectScope(next,project.id,snapshot)).valid,false);
+ assert.deepEqual(project.technicalReviewSettings,{technicalMode:'all',version:2});
+ const same=configureProjectFinalReviewers(next,{actorId:'demo-bu-admin',projectId:project.id,...project.approvalConfig.finalReviewers,technicalMode:'representative',reason:'保存相同规则'});
+ assert.equal(getProjectFinalReview(same,project.id).ruleVersion,3);
+});
+
+test('BU rule changes validate the new mode and representative before saving',()=>{
+ const state=fixture(),project=state.projects.find(p=>p.id==='RFQ-001');
+ const input={actorId:'demo-bu-admin',projectId:project.id,...project.approvalConfig.finalReviewers,reason:'调整评审类型'};
+ assert.throws(()=>configureProjectFinalReviewers(state,{...input,technicalMode:'representative',technicalRepresentativeId:null}),/负责人/);
+ assert.throws(()=>configureProjectFinalReviewers(state,{...input,technicalMode:'invalid'}),/评审/);
+ assert.throws(()=>configureProjectFinalReviewers(state,{...input,actorId:'demo-technical',technicalMode:'all'}),/权限/);
+ const next=configureProjectFinalReviewers(state,{...input,technicalMode:'all',technicalRepresentativeId:null});
+ assert.equal(getProjectFinalReview(next,project.id).technicalMode,'all');
+});
+
 test('legacy project rules migrate once without changing snapshots, signatures or approval fingerprints',()=>{
  const before=fixture();
  for(const project of before.projects)delete project.technicalReviewSettings;

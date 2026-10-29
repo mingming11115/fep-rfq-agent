@@ -12,7 +12,7 @@ function findPath(node, key) {
   return null;
 }
 
-export default function CapabilityTree({ root, selectedKey, onSelect, terminalKinds = ['capability'], ariaLabel = '机型与工艺目录', emptyLabels = {}, revealSelection = false }) {
+export default function CapabilityTree({ root, selectedKey, onSelect, renderActions, terminalKinds = ['capability'], ariaLabel = '机型与工艺目录', emptyLabels = {}, revealSelection = false }) {
   const prefix = useId();
   const ref = useRef(null);
   const revealedKey = useRef('');
@@ -50,6 +50,7 @@ export default function CapabilityTree({ root, selectedKey, onSelect, terminalKi
         <button className={`cap-tree-node ${canExpand ? '' : 'leaf'}`} aria-current={selected ? 'true' : undefined} onClick={() => onSelect(node)}>
           <Icon size={15}/><span><strong>{node.label}{node.kind === 'unassigned' ? ` · ${node.children.length}` : ''}</strong>{description && <small>{description}</small>}</span>
         </button>
+        {renderActions?.(node)}
       </div>
       {canExpand && <ul id={childId} className="cap-tree-children" hidden={!open}>{node.children.length ? node.children.map(renderNode) : <li className="cap-tree-empty">{emptyLabels[node.kind] || (node.kind === 'bu' ? '暂无符合条件的机型或能力' : node.kind === 'model' ? '暂无工艺' : '暂无能力条目')}</li>}</ul>}
     </li>;

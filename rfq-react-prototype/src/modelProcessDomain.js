@@ -33,6 +33,20 @@ export function saveModelProcess(processes,{context,models,record}){
  return before?processes.map(p=>p.id===item.id?item:p):[...processes,item];
 }
 
+export function removeCatalogNode({models,processes,capabilities},{context,kind,id,version}){
+ if(!['model','process','capability'].includes(kind))throw new Error('不支持的目录类型');
+ assertConfiguration(context,{});
+ const local=row=>belongsTo(row,context.buId);
+ const rows={model:models,process:processes,capability:capabilities}[kind];
+ const target=rows.find(row=>local(row)&&row.id===id&&(kind!=='capability'||row.version===version));
+ if(!target)throw new Error('目录条目不存在或不属于当前BU');
+ return {
+  models:models.filter(row=>!(local(row)&&kind==='model'&&row.id===id)),
+  processes:processes.filter(row=>!(local(row)&&(kind==='model'&&row.modelId===id||kind==='process'&&row.id===id))),
+  capabilities:capabilities.filter(row=>!(local(row)&&(kind==='model'&&row.modelId===id||kind==='process'&&row.processId===id&&row.modelId===target.modelId||kind==='capability'&&row.id===id&&row.version===version))),
+ };
+}
+
 export function assertCapabilityProcess(item,{models,processes,buId,requireEnabled=true}){
  if(item.buId&&item.buId!==buId)throw new Error('能力不属于当前BU');
  if(!models.some(m=>m.id===item.modelId&&belongsTo(m,buId)))throw new Error('请选择本BU的有效机型');

@@ -83,3 +83,29 @@ test('capability import templates identify the selected BU hardware model and pr
 test('import templates reject foreign or disabled processes before downloading',()=>{
  for(const selected of [{...process,modelId:'other'},{...process,buId:'B'},{...process,enabled:false}])assert.throws(()=>domain.buildCapabilityImportTemplate({buId:'A',model,process:selected}),/工艺|机型/);
 });
+
+function deletionCatalog(){return {
+ models:[model,{...model,version:2},other],
+ processes:[process,{...process,id:'P2'}, {...process,id:'FOREIGN',buId:'B'}],
+ capabilities:[{id:'C',version:1,buId:'A',modelId:'M1',processId:'P1'},{id:'C',version:2,buId:'A',modelId:'M1',processId:'P1'},{id:'UNASSIGNED',version:1,buId:'A',modelId:'M1'},{id:'KEEP',version:1,buId:'B',modelId:'M1',processId:'P1'}],
+};}
+test('deleting a model removes all its versions and children while preserving foreign BU records',()=>{
+ const before=deletionCatalog(),next=domain.removeCatalogNode(before,{context,kind:'model',id:'M1'});
+ assert.deepEqual(next.models,[other]);
+ assert.deepEqual(next.processes,[before.processes[2]]);
+ assert.deepEqual(next.capabilities,[before.capabilities[3]]);
+ assert.equal(before.models.length,3);
+});
+test('deleting a process removes its capability versions and keeps unassigned capabilities',()=>{
+ const before=deletionCatalog(),next=domain.removeCatalogNode(before,{context,kind:'process',id:'P1'});
+ assert.deepEqual(next.models,before.models);
+ assert.deepEqual(next.processes.map(p=>p.id),['P2','FOREIGN']);
+ assert.deepEqual(next.capabilities.map(c=>c.id),['UNASSIGNED','KEEP']);
+});
+test('deleting a capability targets the selected version and refuses foreign or unauthorized nodes',()=>{
+ const before=deletionCatalog(),next=domain.removeCatalogNode(before,{context,kind:'capability',id:'C',version:2});
+ assert.deepEqual(next.capabilities.map(c=>`${c.id}:${c.version}`),['C:1','UNASSIGNED:1','KEEP:1']);
+ assert.deepEqual(next.models,before.models);assert.deepEqual(next.processes,before.processes);
+ for(const input of [{kind:'model',id:'M2'},{kind:'model',id:'missing'},{kind:'bu',id:'A'},{kind:'capability',id:'C',version:8}])assert.throws(()=>domain.removeCatalogNode(before,{context,...input}),/BU|不存在|类型/);
+ assert.throws(()=>domain.removeCatalogNode(before,{context:{...context,actorId:'tech'},kind:'model',id:'M1'}),/权限/);
+});
