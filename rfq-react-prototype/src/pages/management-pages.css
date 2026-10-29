@@ -3,3 +3,19 @@
 @media(max-width:750px){.mg-admin-role{flex-wrap:wrap}.mg-health-grid{gap:10px}.mg-health-card{padding:15px}.mg-overview-strip{grid-template-columns:1fr 1fr;gap:20px;padding:20px 0}.mg-overview-strip>div:nth-child(2){border:0}.mg-approval-chain{flex-direction:column;gap:12px}.mg-approval-chain>svg{transform:rotate(90deg)}.mg-query-grid{grid-template-columns:1fr}.mg-compare{grid-template-columns:1fr}.mg-table-toolbar{padding:15px;flex-wrap:wrap}.mg-kv>div{grid-template-columns:105px 1fr;gap:10px}.mg-query-panel{padding:17px}.mg-notice{font-size:11px}.mg-impact-list>label{gap:9px;padding:11px}.mg-impact-list .badge{font-size:10px}.mg-section-header{gap:10px;align-items:flex-start}.mg-inline-actions{gap:14px}}
 
 .personnel-checks{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:8px 0}.personnel-checks>label{display:flex;align-items:center;gap:6px;font-size:13px}.personnel-panel{margin-top:16px}.personnel-panel .panel-body>.btn{margin-top:12px}.personnel-panel h3{margin-top:24px}
+
+.platform-bu-body{display:flex;flex-direction:column;gap:16px}
+.platform-bu-options{display:flex;flex-wrap:wrap;gap:10px}
+.platform-bu-options .btn{height:auto;min-height:36px;white-space:normal;text-align:left}
+.platform-bu-options .btn>span{padding:1px 7px;border-radius:10px;background:#f0f3f8;color:#7b899e;font-size:11px}
+.platform-bu-options .btn.is-selected{color:#2459dd;border-color:#9ab7fc;background:#eff4ff}
+.platform-bu-options .btn.is-selected>span{color:#2459dd;background:#dce8ff}
+.platform-bu-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;color:#8b96a7}
+.platform-directory-scope{margin:7px 0 0;font-size:12px;color:#7d8da5}
+.platform-account-switch{display:inline-flex;align-items:center;gap:8px;padding:4px 0;border:0;background:transparent;color:#8592a5;font-size:12px;white-space:nowrap}
+.platform-account-switch-track{position:relative;display:block;width:30px;height:18px;border-radius:10px;background:#b9c3d2;transition:background .15s}
+.platform-account-switch-track:after{content:'';position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #253c6026;transition:transform .15s}
+.platform-account-switch[aria-checked="true"]{color:#465468}
+.platform-account-switch[aria-checked="true"] .platform-account-switch-track{background:#165dff}
+.platform-account-switch[aria-checked="true"] .platform-account-switch-track:after{transform:translateX(12px)}
+.platform-account-switch:disabled{cursor:not-allowed;opacity:.5}

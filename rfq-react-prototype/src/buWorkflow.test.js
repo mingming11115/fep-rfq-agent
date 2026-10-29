@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createDemoState} from './data.js';
 import {upgradePrototypeState} from './stateMigration.js';
 import {reconcileTasks,assertBusinessAction,selectMyTasks,applyTaskAction} from './taskDomain.js';
-import {getProjectFinalReview,assignProjectDuty,updateBuMember,updateBuReviewSettings} from './personnelDomain.js';
+import {getProjectFinalReview,assignProjectDuty,updateBuMember} from './personnelDomain.js';
 import {applyFinalReviewDecision} from './finalReviewDomain.js';
 import {currentProjectScope,snapshotFingerprint,invalidatePendingSnapshots} from './snapshotDomain.js';
 import {canPerform,canAccessPage} from './permissions.js';
@@ -36,8 +36,8 @@ test('revoked users and mismatched active roles cannot act through a previously 
  const f=setup();assert.equal(canPerform('技术','snapshot:approve',{state:f,actorId:'demo-sales',projectId:'RFQ-001'}),false);
  assert.equal(canAccessPage('SR','bu-admin',{state:f,actorId:'demo-sales',buId:'BU-DEMO'}),false);
 });
-test('BU review-mode changes invalidate frozen approval without discarding prior votes',()=>{
+test('project review-mode changes invalidate frozen approval without discarding prior votes',()=>{
  let s=setup();s.snapshotsByProject['RFQ-001']=[];const scope=currentProjectScope(s,'RFQ-001',{});const snap={id:'S',status:'审批中',finalReview:getProjectFinalReview(s,'RFQ-001'),approvalScope:scope,approvalFingerprint:snapshotFingerprint(scope)};
- s.snapshotsByProject['RFQ-001']=[snap];s=updateBuReviewSettings(s,{actorId:'demo-bu-admin',buId:'BU-DEMO',technicalMode:'representative',reason:'负责人代表'});
+ s.snapshotsByProject['RFQ-001']=[snap];const project=s.projects.find(p=>p.id==='RFQ-001');project.technicalReviewSettings={technicalMode:'representative',version:project.technicalReviewSettings.version+1};
  assert.equal(invalidatePendingSnapshots(s).snapshotsByProject['RFQ-001'][0].stale,true);
 });

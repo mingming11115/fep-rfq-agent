@@ -66,3 +66,30 @@ test('professional processing selects a technical member even when SR is the cla
  const route=p.getReviewPersonnel(s,'P','r');assert.equal(route.ownerId,'t1');assert.equal(route.approverId,'sr');
  s.projects[0].participantIds=['sr'];assert.throws(()=>p.getReviewPersonnel(s,'P','r'),/技术|配置/);
 });
+
+test('platform BU account lists include members and managers without duplicates or cross-BU accounts',()=>{
+ const s=fixture();
+ s.buPersonnelByBuId.A.push({userId:'bu',roles:[],enabled:true});
+ s.buPersonnelByBuId.B.push({userId:'t2',roles:['技术'],enabled:true});
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s,'A').map(a=>a.id),['sr','t1','t2','t3','bu']);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s,'B').map(a=>a.id),['t2','other']);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s).find(a=>a.id==='t2').buIds,['A','B']);
+});
+
+test('platform directory keeps disabled accounts visible for maintenance and empty BUs stay empty',()=>{
+ const s=fixture();s.accountsById.t1.enabled=false;s.buPersonnelByBuId.A[1].enabled=false;
+ s.accountsById.ops={id:'ops',name:'平台管理',enabled:true,systemAdmin:true};
+ s.businessUnits.push({id:'EMPTY',name:'空BU'});
+ assert.equal(p.selectPlatformDirectoryAccounts(s,'A').some(a=>a.id==='t1'),true);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s,'EMPTY'),[]);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s,'missing'),[]);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s).filter(a=>!a.buIds.length).map(a=>a.id),['unknown','ops']);
+});
+
+test('saving BU management changes updates the selected account list immediately',()=>{
+ const s=fixture();s.accountsById.ops={id:'ops',name:'平台管理',enabled:true,systemAdmin:true};
+ const next=p.updatePlatformDirectory(s,{actorId:'ops',kind:'account',record:{...s.accountsById.bu,managedBuIds:['B']},reason:'调任B管理员'});
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(next,'A').map(a=>a.id),['sr','t1','t2','t3']);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(next,'B').map(a=>a.id),['bu','other']);
+ assert.deepEqual(p.selectPlatformDirectoryAccounts(s,'A').map(a=>a.id),['sr','t1','t2','t3','bu']);
+});

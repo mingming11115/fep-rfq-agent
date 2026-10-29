@@ -12,7 +12,6 @@ export const NAV_ITEMS = [
   { key: 'documents', label: 'RFQ解析', section: '项目' },
   { key: 'response', label: 'RFQ细则比对', section: '项目' },
   { key: 'export', label: '导出文档', section: '项目' },
-  { key: 'versions', label: '项目版本、变更与快照记录', section: '项目' },
   { key: 'settings', label: '项目设置、成员与审批配置', section: '项目' },
   { key: 'knowledge', label: '知识库', section: '全局' },
   { key: 'history', label: '历史 RFQ', section: '全局' },

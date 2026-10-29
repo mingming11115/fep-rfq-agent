@@ -9,7 +9,7 @@ import CapabilityTree from './CapabilityTree';
 import './create-rfq-dialog.css';
 
 const uid=prefix=>`${prefix}-${crypto.randomUUID()}`;
-const empty={name:'',customer:'',owner:'',deadline:'',modelId:'',processId:''};
+const empty={name:'',customer:'',owner:'',deadline:'',modelId:'',processId:'',technicalMode:'all'};
 function Field({label,children,required=false}){return <label className="field"><span>{label}{required&&' *'}</span>{children}</label>;}
 
 export default function CreateRfqDialog({appState,onClose,onCreateProject,onCatalogChange}){
@@ -58,6 +58,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  return <>
   <Modal title="新建 RFQ 项目" onClose={onClose} footer={<><button className="btn" onClick={onClose}>取消</button><button className="btn btn-primary" onClick={create}>创建并上传资料</button></>}>
    <div className="form-grid">{Object.entries({name:'项目名称',customer:'客户名称',owner:'负责人',deadline:'客户截止日期'}).map(([key,label])=><Field key={key} label={label} required={key!=='customer'}><input className="input" type={key==='deadline'?'date':'text'} value={form[key]} onChange={e=>change(key,e.target.value)}/></Field>)}</div>
+   <Field label="技术组最终评审规则" required><select className="select" aria-label="技术组最终评审规则" value={form.technicalMode} onChange={e=>change('technicalMode',e.target.value)}><option value="all">所有指定技术成员均通过</option><option value="representative">指定技术负责人代表通过</option></select></Field>
    <div className="rfq-process-fields">
     <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><button className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</button><button className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</button></div></div>
     <div className="rfq-catalog-tree"><CapabilityTree root={tree} selectedKey={selectedKey} onSelect={selectProcessNode} terminalKinds={['process']} ariaLabel="选择RFQ关联工艺" emptyLabels={{bu:'暂无机型，请先新建机型',model:'暂无启用工艺，可新建工艺'}} revealSelection/></div>

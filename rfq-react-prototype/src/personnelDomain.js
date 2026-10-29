@@ -1,6 +1,13 @@
 // BU membership is the authorization source; display labels never identify a person.
 export const normalizeRole=role=>({'销售负责人':'SR','技术确认人':'技术','最终审批人':'技术','系统管理员':'后台管理'}[role]||role);
 export const personName=(state,id)=>state.accountsById?.[id]?.name||id||'未配置';
+export function selectPlatformDirectoryAccounts(state,buId='') {
+ const accounts=Object.values(state.accountsById||{}).map(account=>({...account,
+  buIds:(state.businessUnits||[]).filter(b=>account.managedBuIds?.includes(b.id)||(state.buPersonnelByBuId?.[b.id]||[]).some(m=>m.userId===account.id)).map(b=>b.id),
+ }));
+ // Directory maintenance includes disabled accounts and retained BU memberships.
+ return buId?accounts.filter(account=>account.buIds.includes(buId)):accounts;
+}
 export function getPersonnelContext(state,actorId,buId) {
  const account=state.accountsById?.[actorId],member=state.buPersonnelByBuId?.[buId]?.find(m=>m.userId===actorId);
  const exists=state.businessUnits?.some(b=>b.id===buId);
@@ -47,6 +54,10 @@ export function updateBuReviewSettings(state,{actorId,buId,technicalMode,reason}
  const before=state.buReviewSettingsByBuId?.[buId],after={technicalMode,version:(before?.version||0)+1};
  return audited({...state,buReviewSettingsByBuId:{...state.buReviewSettingsByBuId,[buId]:after}},actorId,buId,'变更技术组评审规则',before,after,reason);
 }
+export function getProjectReviewSettings(state,projectId) {
+ const project=state.projects?.find(p=>p.id===projectId);
+ return project?.technicalReviewSettings||state.buReviewSettingsByBuId?.[project?.buId];
+}
 export function assertProjectAssignment(state,{actorId,projectId,userId,duty,side}) {
  const project=projectManager(state,actorId,projectId);
  if(!getEligiblePersonnel(state,{buId:project.buId,projectId,duty,side}).some(m=>m.userId===userId))throw new Error('人员不在本BU有效资格或项目授权范围');
@@ -61,7 +72,7 @@ export function assignProjectDuty(state,{actorId,projectId,userId,duty,side,requ
  const next=audited({...state,requirementsByProject:{...state.requirementsByProject,[projectId]:rows}},actorId,project.buId,'分派条款确认人',row.confirmationAssigneeId,userId,reason);next.audit[0]={...next.audit[0],projectId,requirementId};return next;
 }
 export function configureProjectFinalReviewers(state,{actorId,projectId,srId,technicalIds,technicalRepresentativeId=null,reason}) {
- reasonRequired(reason);const project=projectManager(state,actorId,projectId),settings=state.buReviewSettingsByBuId?.[project.buId];
+ reasonRequired(reason);const project=projectManager(state,actorId,projectId),settings=getProjectReviewSettings(state,projectId);
  const reviewers={srId,technicalIds,technicalRepresentativeId};getRequiredFinalReviewers({policy:'sr-and-technical',technicalMode:settings?.technicalMode,reviewers});
  assertProjectAssignment(state,{actorId,projectId,userId:srId,duty:'final-review',side:'sr'});
  for(const userId of technicalIds)assertProjectAssignment(state,{actorId,projectId,userId,duty:'final-review',side:'technical'});
@@ -81,7 +92,7 @@ export function updateProjectAccess(state,{actorId,projectId,userId,enabled,reas
  return audited({...state,projects:state.projects.map(p=>p.id===projectId?{...p,participantIds:after}:p)},actorId,project.buId,'调整项目授权',ids,after,reason);
 }
 export function getProjectFinalReview(state,projectId) {
- const project=state.projects?.find(p=>p.id===projectId),settings=state.buReviewSettingsByBuId?.[project?.buId];
+ const project=state.projects?.find(p=>p.id===projectId),settings=getProjectReviewSettings(state,projectId);
  const finalReview={policy:'sr-and-technical',technicalMode:settings?.technicalMode,ruleVersion:settings?.version,reviewers:structuredClone(project?.approvalConfig?.finalReviewers),decisions:{sr:null,technicalByActorId:{}}};
  getRequiredFinalReviewers(finalReview);
  for(const [side,ids]of [['sr',[finalReview.reviewers.srId]],['technical',finalReview.reviewers.technicalIds]])for(const id of ids)if(!getEligiblePersonnel(state,{buId:project.buId,projectId,duty:'final-review',side}).some(m=>m.userId===id))throw new Error('最终评审人员资格或项目授权已变化，请重新配置');

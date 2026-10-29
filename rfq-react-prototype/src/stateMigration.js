@@ -55,7 +55,15 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     seedClauseStatusExamples(state, project);
     seedTaskDeadlineExamples(state, project, now);
   }
-  return migrateResponseReviews(mergeLegacyFollowups(initializePersonnel(state),now));
+  return migrateResponseReviews(mergeLegacyFollowups(migrateProjectReviewSettings(initializePersonnel(state)),now));
+}
+
+function migrateProjectReviewSettings(state){
+ for(const project of [...state.projects,...Object.values(state.deletedProjectsById||{}).map(backup=>backup.project)]){
+  const previous=state.buReviewSettingsByBuId?.[project.buId];
+  if(!project.technicalReviewSettings&&previous)project.technicalReviewSettings=structuredClone(previous);
+ }
+ return state;
 }
 
 function mergeLegacyFollowups(state,now){

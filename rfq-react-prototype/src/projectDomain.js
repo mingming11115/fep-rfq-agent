@@ -3,6 +3,11 @@ import {getPersonnelContext,canAccessProject,personName} from './personnelDomain
 
 const projectMaps=['requirementsByProject','reviewsByProject','snapshotsByProject','documentsByProject','exportScopesByProject','commentsByProject','membersByProject'];
 
+export function createProjectReviewSettings(technicalMode='all') {
+ if(!['all','representative'].includes(technicalMode))throw new Error('无效的技术组评审方式');
+ return {technicalMode,version:1};
+}
+
 export function handoverProject(state,{projectId,to,reason}) {
  assertPermission(state.actorRole,'project:handover',{state,actorId:state.actorId,projectId});
  if(!reason?.trim())throw new Error('请填写移交原因');

@@ -63,7 +63,7 @@ export function assertRequirementPatch(role, current, patch,context) {
 }
 export function canAccessPage(role, page,context) {
   if(modernRoles.includes(role)){
-   if(role==='后台管理')return ['dashboard','admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
+   if(role==='后台管理')return ['admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
    if(role==='BU管理员')return ['dashboard','bu-admin','knowledge','history','capabilities','audit'].includes(page)&&(!context||modernCan(role,'bu:manage',context));
    return [...sharedPages,'analysis'].includes(page)&&(!context||modernCan(role,'analysis:view',context));
   }
