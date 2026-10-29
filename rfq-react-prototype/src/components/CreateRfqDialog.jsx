@@ -88,7 +88,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
     <Form.Item name="ownerId" label="负责人" rules={[{required:true,message:'请选择本BU的负责人'}]}><PersonPicker label="负责人" people={getProjectOwnerCandidates(appState,{buId})} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无有效SR，请联系BU管理员添加"/></Form.Item>
     <ProFormDatePicker name="deadline" label="客户截止日期" width="lg" fieldProps={{style:{width:'100%'},'aria-label':'客户截止日期'}} rules={[{required:true,message:'请选择客户截止日期'}]}/>
    </div>
-   <ProFormRadio.Group name="technicalMode" label="最终评审规则" options={[{value:'all',label:'所有指定技术成员均通过'},{value:'representative',label:'指定技术负责人代表通过'}]}/>
+   <ProFormRadio.Group name="technicalMode" label="最终评审规则" formItemProps={{htmlFor:null}} fieldProps={{'aria-label':'最终评审规则'}} options={[{value:'all',label:'所有指定技术成员均通过'},{value:'representative',label:'指定技术负责人代表通过'}]}/>
    <div className="rfq-create-grid">
     <Form.Item name="srId" label="SR方最终评审人"><PersonPicker label="SR方最终评审人" people={srCandidates} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的SR"/></Form.Item>
     <Form.Item name="technicalIds" label="技术组评审成员"><PersonPicker label="技术组评审成员" multiple people={technicalCandidates} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的技术人员"/></Form.Item>

@@ -3,9 +3,9 @@ import { Select } from 'antd';
 import { personnelOptions } from '../antdAdapters';
 
 export default function PersonPicker({ people = [], value = '', onChange, multiple = false, disabled = false,
-  label = '选择人员', resolveName = id => id, emptyLabel = '暂无可选人员', clearLabel = '清空选择', placeholder = '搜索姓名或账号' }) {
+  label = '选择人员', resolveName = id => id, emptyLabel = '暂无可选人员', clearLabel = '清空选择', placeholder = '搜索姓名或账号', ...selectProps }) {
   const options = personnelOptions(people, value, resolveName);
-  return <Select className="rfq-person-select" aria-label={label} showSearch allowClear
+  return <Select {...selectProps} className="rfq-person-select" aria-label={label} showSearch allowClear
     mode={multiple ? 'multiple' : undefined} disabled={disabled}
     value={multiple ? value || [] : value || undefined} options={options}
     placeholder={placeholder} notFoundContent={people.length ? '未找到匹配人员' : emptyLabel}
