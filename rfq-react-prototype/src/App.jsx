@@ -85,7 +85,7 @@ export default function App(){
   }catch{toast('本机演示数据备份失败，请释放浏览器存储后重试','error');return;}
   for(const p of demo.projects){localStorage.removeItem(`fep-rfq-documents:${p.id}`);localStorage.removeItem(`fep-rfq-export-history:${p.id}`);sessionStorage.removeItem(`rfq.export.settings.${p.id}`);}
   delete window.__rfqRequestNavigation;
-  update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，五种RFQ状态及三种应答状态各保留一条示例');
+  update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，五种RFQ状态、五种应答结论各保留一条示例');
  }
  function rawNavigate(key,details={},replace=false){const next={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...details};routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;setFocusedRequirementId(next.requirementId||null);history[replace?'replaceState':'pushState'](null,'',buildWorkRoute(next));}
  function guarded(action){if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(action))return;action();}
@@ -112,8 +112,8 @@ export default function App(){
    if(['name','ownerId','deadline'].some(key=>!form[key]?.trim()))throw new Error('请填写项目名称、负责人和截止时间');
    const catalog=readRfqCatalog(localStorage,context),binding=resolveRfqProcessBinding({...catalog,buId,modelId:form.modelId,processId:form.processId});
    const id=`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number(p.id.match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
-   const {technicalMode,...projectForm}=form;
-   const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId});
+   const {technicalMode,srId,technicalIds,technicalRepresentativeId,...projectForm}=form;
+   const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId,technicalMode,srId,technicalIds,technicalRepresentativeId});
    const p={...projectForm,...binding,id,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:1};
    update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.modelName} ${p.modelRevision} / ${p.processCode} ${p.processName}`));
    toast('项目已关联工艺，请上传资料或载入示例 RFQ');rawNavigate('documents');return true;

@@ -144,13 +144,57 @@ export function ResponsePage({ workspaceHeader, detailPanels = {}, project, requ
   function chooseRow(row) { if (!row) return; guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); }); }
   function applyCardFilters(next) { guardedDetail(() => { setCardFilters(next); setCardFilterDraft(next); setDeferredCards([]); const rows = selectResponseCards(requirements, reviews, next); const first = rows.find(row => row.status !== '已确认') || rows[0]; if (first) { hydrate(first); navigate('response', first.id, { fileId: first.sourceFileId, sourceVersion: first.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); } else { setQueueDone(false); setInlineReviewId(null); } }); }
   function browseCard(direction) { const index = cardRows.findIndex(row => row.id === active?.id); const row = cardRows[(index + direction + cardRows.length) % cardRows.length]; if (row) chooseRow(row); }
-  function deferCard() { guardedDetail(() => { const deferred = [...new Set([...deferredCards, active.id])]; const next = nextResponseCard(cardRows, active.id, deferred); setDeferredCards(deferred); if (next) { hydrate(next); navigate('response', next.id, { fileId: next.sourceFileId, sourceVersion: next.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); } else setQueueDone(true); }); }
+  async function animateCardExit() {
+    if (!aliveRef.current || !cardRef.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const animation = cardRef.current.animate([
+      { transform: 'translateX(0) rotate(0)', opacity: 1 },
+      { transform: 'translateX(25%) rotate(2deg)', opacity: 1, offset: .38 },
+      { transform: 'translateX(115%) rotate(7deg)', opacity: 0 },
+    ], { duration: 420, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    cardAnimation.current = animation;
+    try { await animation.finished; } catch {}
+    animation.cancel();
+    cardAnimation.current = null;
+  }
+  function advanceCard(nextId) {
+    if (!aliveRef.current) return;
+    const next = requirementsRef.current.find(item => item.id === nextId);
+    cardBusyRef.current = false;
+    if (!next) { setQueueDone(true); return; }
+    hydrate(next);
+    setCardEntering(true);
+    requestAnimationFrame(() => {
+      const side = detailSideRef.current, card = cardRef.current;
+      if (side && card) side.scrollTo({ top: Math.max(0, side.scrollTop + card.getBoundingClientRect().top - side.getBoundingClientRect().top - 12), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    });
+    navigate('response', next.id, { fileId: next.sourceFileId, sourceVersion: next.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined });
+  }
+  function deferCard() {
+    guardedDetail(async () => {
+      if (cardBusyRef.current || !active) return;
+      const deferred = [...new Set([...deferredCards, active.id])];
+      const next = nextResponseCard(cardRows, active.id, deferred);
+      cardBusyRef.current = true;
+      setCardBusy(true);
+      try {
+        await animateCardExit();
+        if (!aliveRef.current) return;
+        setDeferredCards(deferred);
+        advanceCard(next?.id);
+      } catch (error) {
+        if (aliveRef.current) setError(error.message || '切换失败，请重试。');
+      } finally {
+        cardBusyRef.current = false;
+        if (aliveRef.current) setCardBusy(false);
+      }
+    });
+  }
   async function finishConfirmation(row, nextId) {
     try {
       const success = await transitionConfirmedCard({
         confirm: () => { const success = onConfirm(row.id, row.version || 1); if (success !== false) { clearDirty(); addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); setModal(null); } return success; },
-        animate: async () => { if (!aliveRef.current || !cardRef.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; const animation = cardRef.current.animate([{ transform: 'translateX(0) rotate(0)', opacity: 1 }, { transform: 'translateX(25%) rotate(2deg)', opacity: 1, offset: .38 }, { transform: 'translateX(115%) rotate(7deg)', opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }); cardAnimation.current = animation; try { await animation.finished; } catch {} animation.cancel(); cardAnimation.current = null; },
-        advance: () => { if (!aliveRef.current) return; const next = requirementsRef.current.find(item => item.id === nextId); cardBusyRef.current = false; if (next) { hydrate(next); setCardEntering(true); requestAnimationFrame(() => { const side = detailSideRef.current, card = cardRef.current; if (side && card) side.scrollTo({ top: Math.max(0, side.scrollTop + card.getBoundingClientRect().top - side.getBoundingClientRect().top - 12), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); }); navigate('response', next.id, { fileId: next.sourceFileId, sourceVersion: next.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); } else setQueueDone(true); },
+        animate: animateCardExit,
+        advance: () => advanceCard(nextId),
       });
       if (success === false && aliveRef.current) setError('本条未确认成功，请核对提示后重试。当前卡片和输入已保留。');
     } catch (error) { if (aliveRef.current) setError(error.message || '确认失败，请重试。'); }
@@ -316,7 +360,7 @@ export function ResponsePage({ workspaceHeader, detailPanels = {}, project, requ
         {error && !modal && <p className="response-error" role="alert">{error}</p>}
         </div><footer className="response-card-footer">{actorRole !== '最终审批人' && <div className="response-editor-actions response-workflow-actions"><button className="btn" disabled={!canEdit || !dirty} onClick={() => saveDraft()}><Save size={14}/>保存草稿</button><button className="btn" onClick={deferCard}>稍后处理</button>
 
-          {['SR','技术'].includes(actorRole) && <button className="btn btn-primary" onClick={beginConfirm} disabled={!canConfirm || !!active.pendingReviewProposal || active.status === '已确认' && !dirty}><Check size={15}/>{cardBusy ? '正在确认…' : active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'?'处理本人评审':'确认本条'}</button>}
+          {['SR','技术'].includes(actorRole) && <button className="btn btn-primary" onClick={beginConfirm} disabled={!canConfirm || !!active.pendingReviewProposal || active.status === '已确认' && !dirty}><Check size={15}/>{cardBusy ? '处理中…' : active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'?'处理本人评审':'确认本条'}</button>}
 
         </div>}
         <p className="response-permission-tip">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')||'待配置项目SR'}{staleSource?' · 当前为旧来源版本，请打开有效版本':openReview?' · 全部评审人确认后完成':!canConfirm?' · 当前账号无本条确认权限':''}</p>

@@ -8,14 +8,18 @@ export default function ProjectWorkspace({route,summary,project,taskContextError
  const isDetail=['response','settings','versions','reviews'].includes(route.page);
  const inlineHeader=isDetail&&React.isValidElement(children);
  const header=<div className="project-context">
-   <div><button className="text-link" onClick={onReturn}><ArrowLeft size={14}/>{route.returnKey==='export'?'返回评审与导出':route.returnKey==='tasks'?'返回任务中心':'返回我的 RFQ'}</button><h1>{project.name}</h1>{project.processId&&<p className="project-process-binding">关联工艺：{project.modelName} {project.modelRevision} / {project.processCode} · {project.processName}</p>}</div>
-   <div className="project-final-actions">
+   <button className="text-link" onClick={onReturn}><ArrowLeft size={14}/>{route.returnKey==='export'?'返回评审与导出':route.returnKey==='tasks'?'返回任务中心':'返回我的 RFQ'}</button>
+   <div className="project-title-row">
+    <h1>{project.name}</h1>
+    <div className="project-final-actions">
     <div className="page-actions">
      {canSubmitFinalReview&&!reviewInProgress&&<button className="btn btn-primary" disabled={!!taskContextError} onClick={onLaunchFinalReview}><ShieldCheck size={14}/>发起最终评审</button>}
      {snapshot&&<button className="btn" onClick={onViewFinalReview}><ShieldCheck size={14}/>{reviewInProgress?'查看最终评审':'评审记录'}</button>}
      <button className="btn" disabled={!canExport} title={exportReason} onClick={()=>onNavigate('export')}><FileOutput size={14}/>导出文档</button>
     </div>
+    </div>
    </div>
+   {project.processId&&<p className="project-process-binding">关联工艺：{project.modelName} {project.modelRevision} / {project.processCode} · {project.processName}</p>}
   </div>;
  return <div className={`project-workspace ${isDetail?'project-detail-workspace':''}`}>
   {!inlineHeader&&header}

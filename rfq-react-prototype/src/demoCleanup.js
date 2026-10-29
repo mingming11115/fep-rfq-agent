@@ -1,8 +1,9 @@
 import {getProjectSummary} from './projectSelectors.js';
-import {selectResponseCards} from './responseCardQueue.js';
 import {createDemoState} from './data.js';
 import {upgradePrototypeState} from './stateMigration.js';
 
+const cleanupVersion = 2;
+const conclusions = ['Comply', '有条件 Comply', '不满足', '不适用', '待确认'];
 const preferredProjects = {
   待上传: 'RFQ-DEMO-UPLOAD', 解析中: 'RFQ-DEMO-PARSING',
   评审中: 'RFQ-001', 审批完成: 'RFQ-002', 已导出: 'RFQ-003',
@@ -13,7 +14,7 @@ const projectMaps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByPr
 
 // A one-time edit of the synthetic BU's presentation data, not a limit on future work.
 export function tidyDemoState(previous) {
-  if (previous.demoCleanupVersion === 1 || !previous.projects.some(p => p.buId === 'BU-DEMO')) return previous;
+  if (previous.demoCleanupVersion >= cleanupVersion || !previous.projects.some(p => p.buId === 'BU-DEMO')) return previous;
   const state = structuredClone(previous);
   const examples = state.projects.filter(p => p.buId === 'BU-DEMO');
   const removedProjects = new Set();
@@ -43,9 +44,28 @@ export function tidyDemoState(previous) {
 
   const retainedRows = new Map(), retainedReviews = new Map();
   for (const project of state.projects.filter(p => p.buId === 'BU-DEMO' && getProjectSummary(state, p.id, 'demo-sales').stage === '评审中')) {
-    const rows = state.requirementsByProject[project.id] || [], reviews = state.reviewsByProject[project.id] || [];
-    const selected = ['pending', 'waiting', 'confirmed'].flatMap(status => {
-      const candidates = selectResponseCards(rows, reviews, {status});
+    const rows = [...(state.requirementsByProject[project.id] || [])], reviews = [...(state.reviewsByProject[project.id] || [])];
+    const files = [...(state.documentsByProject[project.id] || [])];
+    const exampleId = fallback.requirementsByProject[project.id]?.length ? project.id : 'RFQ-001';
+    const copy = value => JSON.parse(JSON.stringify(value, (_, item) => typeof item === 'string' ? item.replaceAll(exampleId, project.id) : item));
+    // The previous compact demo has only two conclusions. Restore missing synthetic
+    // examples together with their source files and review assignments.
+    for (const conclusion of conclusions) {
+      if (rows.some(row => row.conclusion === conclusion)) continue;
+      const example = fallback.requirementsByProject[exampleId].find(row => row.conclusion === conclusion);
+      const added = copy(example);
+      while (rows.some(row => row.id === added.id)) added.id += '-DEMO';
+      rows.push(added);
+      for (const exampleReview of fallback.reviewsByProject[exampleId].filter(review => review.requirementId === example.id)) {
+        const review = {...copy(exampleReview), requirementId: added.id};
+        while (reviews.some(current => current.id === review.id)) review.id += '-DEMO';
+        reviews.push(review);
+      }
+      const file = fallback.documentsByProject[exampleId].find(file => file.id === example.sourceFileId);
+      if (file && !files.some(current => current.id === added.sourceFileId)) files.push(copy(file));
+    }
+    const selected = conclusions.flatMap(conclusion => {
+      const candidates = rows.filter(row => row.conclusion === conclusion);
       const row = candidates.find(r => r.demoStatusExample) || candidates[0];
       return row ? [row] : [];
     });
@@ -56,7 +76,7 @@ export function tidyDemoState(previous) {
     retainedRows.set(project.id, rowIds);
     retainedReviews.set(project.id, reviewIds);
     const fileIds = new Set(selected.map(r => r.sourceFileId).filter(Boolean));
-    state.documentsByProject[project.id] = (state.documentsByProject[project.id] || [])
+    state.documentsByProject[project.id] = files
       .filter(file => fileIds.has(file.id))
       .map(file => ({...file, parsedCount: selected.filter(r => r.sourceFileId === file.id).length}));
     state.commentsByProject[project.id] = (state.commentsByProject[project.id] || [])
@@ -73,19 +93,19 @@ export function tidyDemoState(previous) {
   }));
   if (!state.projects.some(p => p.id === state.activeProjectId))
     state.activeProjectId = state.projects.find(p => p.id === 'RFQ-001')?.id || state.projects[0]?.id || null;
-  state.demoCleanupVersion = 1;
+  state.demoCleanupVersion = cleanupVersion;
   return state;
 }
 
 export function tidyStoredDemo(storage, previous) {
-  if (previous.demoCleanupVersion === 1) return previous;
+  if (previous.demoCleanupVersion >= cleanupVersion) return previous;
   const next = tidyDemoState(previous), related = {};
   if (next === previous) return previous;
   for (const project of previous.projects) {
     const key = `fep-rfq-documents:${project.id}`;
     related[key] = storage.getItem(key);
   }
-  storage.setItem('fep-rfq-demo-before-cleanup-v1', JSON.stringify({savedAt: new Date().toISOString(), state: previous, related}));
+  storage.setItem(`fep-rfq-demo-before-cleanup-v${cleanupVersion}`, JSON.stringify({savedAt: new Date().toISOString(), state: previous, related}));
   for (const project of next.projects) {
     const reviewDemo = project.buId === 'BU-DEMO' && getProjectSummary(next, project.id, 'demo-sales').stage === '评审中';
     if (!reviewDemo && JSON.stringify(previous.requirementsByProject[project.id]) === JSON.stringify(next.requirementsByProject[project.id])) continue;

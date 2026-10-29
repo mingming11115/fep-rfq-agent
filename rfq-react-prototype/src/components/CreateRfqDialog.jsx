@@ -2,7 +2,8 @@ import React,{useState} from 'react';
 import {Plus} from 'lucide-react';
 import {Modal} from './ui';
 import {canPerform} from '../permissions';
-import {getPersonnelContext,getProjectOwnerCandidates,personName} from '../personnelDomain';
+import {getPersonnelContext,getProjectOwnerCandidates,getEligiblePersonnel,personName} from '../personnelDomain';
+import {createProjectPersonnel} from '../projectDomain';
 import {readRfqCatalog,saveRfqCatalogRecord,resolveRfqProcessBinding} from '../rfqProcessBinding';
 import {buildCapabilityTree} from '../capabilityTree';
 import CapabilityTree from './CapabilityTree';
@@ -10,7 +11,7 @@ import PersonPicker from './PersonPicker';
 import './create-rfq-dialog.css';
 
 const uid=prefix=>`${prefix}-${crypto.randomUUID()}`;
-const empty={name:'',customer:'',owner:'',ownerId:'',deadline:'',modelId:'',processId:'',technicalMode:'all'};
+const empty={name:'',customer:'',owner:'',ownerId:'',deadline:'',modelId:'',processId:'',technicalMode:'all',srId:'',technicalIds:[],technicalRepresentativeId:''};
 function Field({label,children,required=false,as:Tag='label'}){return <Tag className="field"><span>{label}{required&&' *'}</span>{children}</Tag>;}
 
 export default function CreateRfqDialog({appState,onClose,onCreateProject,onCatalogChange}){
@@ -27,7 +28,12 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  const processModel=models.find(m=>m.id===processDraft?.modelId);
  const selectedKey=form.processId?`process:${form.processId}`:form.modelId?`model:${form.modelId}`:'';
  const canCreate=canPerform(appState.actorRole,'catalog:create',context);
- const change=(key,value)=>{setForm(current=>({...current,[key]:value,...(key==='modelId'?{processId:''}:{})}));setError('');};
+ const srCandidates=getEligiblePersonnel(appState,{buId,duty:'final-review',side:'sr'}).filter(p=>!form.technicalIds.includes(p.userId));
+ const technicalCandidates=getEligiblePersonnel(appState,{buId,duty:'final-review',side:'technical'}).filter(p=>p.userId!==form.srId);
+ const change=(key,value)=>{setForm(current=>({...current,[key]:value,...(key==='modelId'?{processId:''}:key==='technicalMode'?{technicalRepresentativeId:''}:{})}));setError('');};
+ function changeOwner(ownerId){
+  setForm(current=>({...current,ownerId,owner:ownerId?personName(appState,ownerId):'',...(!current.srId||current.srId===current.ownerId?{srId:srCandidates.some(p=>p.userId===ownerId)?ownerId:''}:{})}));setError('');
+ }
  function selectProcessNode(node){setForm(current=>({...current,modelId:node.modelId||'',processId:node.kind==='process'?node.processId:''}));setError('');}
  function newModel(){if(!canCreate)return;setModelError('');setModelDraft({id:uid('MOD'),buId,code:'',name:'',revision:'R1',series:'',lifecycle:'研发',config:'',standard:'',options:'',source:'RFQ创建时补充'});}
  function newProcess(){if(!canCreate)return;setProcessError('');setProcessDraft({id:uid('PROC'),buId,modelId:form.modelId,code:'',name:'',conditions:'',enabled:true});}
@@ -49,8 +55,9 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  function create(){
   if(!canPerform(appState.actorRole,'project:create',context))return setError('当前身份没有本BU的RFQ创建权限');
   if(!form.name.trim()||!form.ownerId||!form.deadline)return setError('请填写项目名称、负责人和截止时间');
-  if(!form.processId){newProcess();return;}
   try{
+   createProjectPersonnel(appState,{...form,buId});
+   if(!form.processId){newProcess();return;}
    const latest=readRfqCatalog(localStorage,context);setCatalog(latest);
    resolveRfqProcessBinding({...latest,modelId:form.modelId,processId:form.processId,buId});
    if(onCreateProject(form)!==false)onClose();
@@ -58,8 +65,13 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  }
  return <>
   <Modal title="新建 RFQ 项目" onClose={onClose} footer={<><button className="btn" onClick={onClose}>取消</button><button className="btn btn-primary" onClick={create}>创建并上传资料</button></>}>
-   <div className="form-grid">{Object.entries({name:'项目名称',customer:'客户名称',owner:'负责人',deadline:'客户截止日期'}).map(([key,label])=><Field key={key} label={label} required={key!=='customer'} as={key==='owner'?'div':'label'}><>{key==='owner'?<PersonPicker label="负责人" people={getProjectOwnerCandidates(appState,{buId})} value={form.ownerId} resolveName={id=>personName(appState,id)} onChange={ownerId=>{setForm(current=>({...current,ownerId,owner:ownerId?personName(appState,ownerId):''}));setError('');}} emptyLabel="本BU暂无有效SR，请联系BU管理员添加"/>:<input className="input" aria-label={label} type={key==='deadline'?'date':'text'} value={form[key]} onChange={e=>change(key,e.target.value)}/>}</></Field>)}</div>
-   <Field label="技术组最终评审规则" required><select className="select" aria-label="技术组最终评审规则" value={form.technicalMode} onChange={e=>change('technicalMode',e.target.value)}><option value="all">所有指定技术成员均通过</option><option value="representative">指定技术负责人代表通过</option></select></Field>
+   <div className="form-grid">{Object.entries({name:'项目名称',customer:'客户名称',owner:'负责人',deadline:'客户截止日期'}).map(([key,label])=><Field key={key} label={label} required={key!=='customer'} as={key==='owner'?'div':'label'}><>{key==='owner'?<PersonPicker label="负责人" people={getProjectOwnerCandidates(appState,{buId})} value={form.ownerId} resolveName={id=>personName(appState,id)} onChange={changeOwner} emptyLabel="本BU暂无有效SR，请联系BU管理员添加"/>:<input className="input" aria-label={label} type={key==='deadline'?'date':'text'} value={form[key]} onChange={e=>change(key,e.target.value)}/>}</></Field>)}</div>
+   <Field label="最终评审规则" required><select className="select" aria-label="最终评审规则" value={form.technicalMode} onChange={e=>change('technicalMode',e.target.value)}><option value="all">所有指定技术成员均通过</option><option value="representative">指定技术负责人代表通过</option></select></Field>
+   <div className="form-grid rfq-create-reviewers">
+    <Field label="SR方最终评审人" as="div"><PersonPicker label="SR方最终评审人" people={srCandidates} value={form.srId} onChange={srId=>change('srId',srId)} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的SR"/></Field>
+    <Field label="技术组评审成员" as="div"><PersonPicker label="技术组评审成员" multiple people={technicalCandidates} value={form.technicalIds} onChange={technicalIds=>{setForm(current=>({...current,technicalIds,technicalRepresentativeId:technicalIds.includes(current.technicalRepresentativeId)?current.technicalRepresentativeId:''}));setError('');}} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的技术人员"/></Field>
+    {form.technicalMode==='representative'&&<Field label="技术负责人" as="div"><PersonPicker label="技术负责人" people={technicalCandidates.filter(p=>form.technicalIds.includes(p.userId))} value={form.technicalRepresentativeId} onChange={id=>change('technicalRepresentativeId',id)} resolveName={id=>personName(appState,id)} emptyLabel="请先选择技术组评审成员"/></Field>}
+   </div>
    <div className="rfq-process-fields">
     <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><button className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</button><button className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</button></div></div>
     <div className="rfq-catalog-tree"><CapabilityTree root={tree} selectedKey={selectedKey} onSelect={selectProcessNode} terminalKinds={['process']} ariaLabel="选择RFQ关联工艺" emptyLabels={{bu:'暂无机型，请先新建机型',model:'暂无启用工艺，可新建工艺'}} revealSelection/></div>

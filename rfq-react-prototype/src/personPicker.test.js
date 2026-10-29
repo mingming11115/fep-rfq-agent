@@ -12,7 +12,7 @@ test('mention search matches names and account IDs with optional @ and preserves
  assert.equal(picker.filterPeople(people,'@').length,3);
  assert.deepEqual(picker.filterPeople(people,'不存在'),[]);
 });
-const state=()=>({actorId:'creator',actorRole:'SR',businessUnits:[{id:'BU'}],accountsById:Object.fromEntries(['creator','other','tech','disabled','outside'].map(id=>[id,{id,name:id==='other'?'另一个SR':id,enabled:id!=='disabled'}])),buPersonnelByBuId:{BU:['creator','other','tech','disabled'].map(userId=>({userId,roles:[userId==='tech'?'技术':'SR'],enabled:true}))},projects:[{id:'P',buId:'BU',ownerId:'creator',participantIds:['creator','tech']}]});
+const state=()=>({actorId:'creator',actorRole:'SR',businessUnits:[{id:'BU'}],accountsById:Object.fromEntries(['creator','other','tech','disabled','outside'].map(id=>[id,{id,name:id==='other'?'另一个SR':id,enabled:id!=='disabled'}])),buPersonnelByBuId:{BU:['creator','other','tech','disabled'].map(userId=>({userId,roles:[userId==='tech'?'技术':'SR'],enabled:true,canConfirm:true,canFinalReview:true}))},projects:[{id:'P',buId:'BU',ownerId:'creator',participantIds:['creator','tech']}]});
 test('owner mentions use active BU SR accounts and honor existing project access',()=>{
  assert.equal(typeof personnel.getProjectOwnerCandidates,'function');
  const s=state();
@@ -44,4 +44,13 @@ test('saving an owner handover and equipment change invalidates technical confir
  const before=structuredClone(s);
  assert.throws(()=>project.updateProjectSettings(s,{projectId:'P',patch:{ownerId:'disabled',equipment:'新基线',reason:'无效接收人'},invalidateTechnical:true}),/SR/);
  assert.deepEqual(s,before);
+});
+
+test('mention suggestions open only for an @ trigger and search the following name or account',()=>{
+ assert.equal(typeof picker.getMentionSearch,'function');
+ assert.equal(picker.getMentionSearch(''),null);
+ assert.equal(picker.getMentionSearch('林晓'),null);
+ assert.equal(picker.getMentionSearch('@'),'');
+ assert.equal(picker.getMentionSearch('@林'),'林');
+ assert.equal(picker.getMentionSearch(' ＠sr-a'),'sr-a');
 });

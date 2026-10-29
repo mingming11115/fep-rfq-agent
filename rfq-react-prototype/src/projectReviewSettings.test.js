@@ -92,3 +92,37 @@ test('legacy project rules migrate once without changing snapshots, signatures o
  assert.deepEqual(again.deletedProjectsById.OLD.project.technicalReviewSettings,settings);
  assert.deepEqual(again.snapshotsByProject[project.id],[snapshot]);
 });
+
+function creationInput(state,overrides={}){
+ const buId=state.projects.find(p=>p.id==='RFQ-001').buId;
+ state.accountsById['new-sr']={id:'new-sr',name:'新SR',enabled:true};
+ state.buPersonnelByBuId[buId].push({userId:'new-sr',roles:['SR'],enabled:true,canConfirm:true,canFinalReview:true});
+ return {buId,ownerId:'demo-sales',srId:'new-sr',technicalMode:'all',technicalIds:['demo-technical','demo-technical-2'],technicalRepresentativeId:null,...overrides};
+}
+test('new RFQ saves the chosen review group and grants those reviewers project access',()=>{
+ const state=fixture(),input=creationInput(state),personnel=projectDomain.createProjectPersonnel(state,input);
+ assert.deepEqual(personnel.approvalConfig.finalReviewers,{srId:'new-sr',technicalIds:['demo-technical','demo-technical-2'],technicalRepresentativeId:null});
+ assert.deepEqual(new Set(personnel.participantIds),new Set(['demo-sales','new-sr','demo-technical','demo-technical-2']));
+ const next={...state,projects:[...state.projects,{id:'NEW',buId:input.buId,...personnel,technicalReviewSettings:projectDomain.createProjectReviewSettings(input.technicalMode)}]};
+ assert.deepEqual(getRequiredFinalReviewers(getProjectFinalReview(next,'NEW')).map(r=>r.actorId),['new-sr','demo-technical','demo-technical-2']);
+ assert.ok(!state.projects.some(p=>p.id==='NEW'));
+});
+test('new RFQ representative mode preserves the selected leader and all selected group members',()=>{
+ const state=fixture(),input=creationInput(state,{technicalMode:'representative',technicalRepresentativeId:'demo-technical-2'}),personnel=projectDomain.createProjectPersonnel(state,input);
+ const next={...state,projects:[...state.projects,{id:'NEW',buId:input.buId,...personnel,technicalReviewSettings:projectDomain.createProjectReviewSettings(input.technicalMode)}]};
+ assert.deepEqual(getRequiredFinalReviewers(getProjectFinalReview(next,'NEW')).map(r=>r.actorId),['new-sr','demo-technical-2']);
+ assert.ok(personnel.participantIds.includes('demo-technical'));
+});
+test('new RFQ rejects unqualified reviewers, duplicate sides and an out-of-group representative',()=>{
+ const state=fixture(),input=creationInput(state);
+ for(const patch of [{srId:'demo-technical'},{technicalIds:['new-sr']},{technicalIds:['demo-directory-tech']},{technicalIds:['demo-technical','demo-technical']},{technicalRepresentativeId:'demo-technical-3',technicalMode:'representative'}]){
+  assert.throws(()=>projectDomain.createProjectPersonnel(state,{...input,...patch}),/评审|负责人/);
+ }
+ state.accountsById['demo-technical'].enabled=false;
+ assert.throws(()=>projectDomain.createProjectPersonnel(state,input),/评审/);
+});
+test('new RFQ may retain incomplete review settings as a draft',()=>{
+ const state=fixture(),input=creationInput(state,{srId:'',technicalIds:[]}),personnel=projectDomain.createProjectPersonnel(state,input);
+ assert.deepEqual(personnel.approvalConfig.finalReviewers,{srId:'',technicalIds:[],technicalRepresentativeId:null});
+ assert.deepEqual(personnel.participantIds,['demo-sales']);
+});

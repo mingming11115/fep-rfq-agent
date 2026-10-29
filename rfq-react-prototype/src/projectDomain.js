@@ -1,11 +1,20 @@
 import {assertPermission} from './permissions.js';
-import {getPersonnelContext,canAccessProject,personName,getProjectOwnerCandidates} from './personnelDomain.js';
+import {getPersonnelContext,canAccessProject,personName,getProjectOwnerCandidates,getEligiblePersonnel} from './personnelDomain.js';
 
 const projectMaps=['requirementsByProject','reviewsByProject','snapshotsByProject','documentsByProject','exportScopesByProject','commentsByProject','membersByProject'];
 
-export function createProjectPersonnel(state,{buId,ownerId}) {
+export function createProjectPersonnel(state,{buId,ownerId,srId,technicalIds=[],technicalRepresentativeId=null,technicalMode='all'}) {
  if(!getProjectOwnerCandidates(state,{buId}).some(p=>p.userId===ownerId))throw new Error('请通过 @ 选择本BU有效SR作为负责人');
- return {ownerId,owner:personName(state,ownerId),participantIds:[...new Set([state.actorId,ownerId])],approvalConfig:{finalReviewers:{srId:ownerId,technicalIds:[],technicalRepresentativeId:null}}};
+ createProjectReviewSettings(technicalMode);
+ const srCandidates=getEligiblePersonnel(state,{buId,duty:'final-review',side:'sr'});
+ const technicalCandidates=getEligiblePersonnel(state,{buId,duty:'final-review',side:'technical'});
+ const selectedSrId=srId===undefined?(srCandidates.some(p=>p.userId===ownerId)?ownerId:''):srId;
+ if(selectedSrId&&!srCandidates.some(p=>p.userId===selectedSrId))throw new Error('请选择本BU具有最终评审资格的SR评审人');
+ if(!Array.isArray(technicalIds)||new Set(technicalIds).size!==technicalIds.length||technicalIds.some(id=>id===selectedSrId||!technicalCandidates.some(p=>p.userId===id)))throw new Error('请选择本BU有效且不重复的技术组评审成员，SR评审人与技术组成员不能是同一账号');
+ const representativeId=technicalMode==='representative'?technicalRepresentativeId||null:null;
+ if(representativeId&&!technicalIds.includes(representativeId))throw new Error('请选择技术组内的负责人');
+ const reviewers={srId:selectedSrId,technicalIds:[...technicalIds],technicalRepresentativeId:representativeId};
+ return {ownerId,owner:personName(state,ownerId),participantIds:[...new Set([state.actorId,ownerId,selectedSrId,...technicalIds].filter(Boolean))],approvalConfig:{finalReviewers:reviewers}};
 }
 
 export function createProjectReviewSettings(technicalMode='all') {
