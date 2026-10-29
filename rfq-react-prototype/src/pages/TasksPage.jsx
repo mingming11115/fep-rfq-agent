@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import useContentTransition from '../components/useContentTransition';
 import { Button, Checkbox, Form, Input, Select, Space, Tabs } from 'antd';
 import { DrawerForm, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { StatusBadge } from '../components/ui';
@@ -10,6 +11,8 @@ function load() { try { return JSON.parse(sessionStorage.getItem('rfq.tasks.filt
 export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
   const [filters, setFilters] = useState(() => ({ tab: 'pending', query: '', projectId: '', kind: '', overdue: false, ...load() }));
   const [transfer, setTransfer] = useState(null);
+  const resultsRef = useRef(null);
+  useContentTransition(resultsRef, filters.tab, { duration: 120 });
   useEffect(() => { sessionStorage.setItem('rfq.tasks.filters', JSON.stringify(filters)); }, [filters]);
   const change = (key, value) => setFilters(current => ({ ...current, [key]: value }));
   const names = Object.fromEntries(Object.values(appState.accountsById || {}).map(account => [account.id, account.name]));
@@ -41,10 +44,10 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
         <Select aria-label="任务类型" value={filters.kind} onChange={value => change('kind', value)} style={{ width: 160 }} options={[{ value: '', label: '全部类型' }, ...Object.entries(taskLabels).map(([value, label]) => ({ value, label }))]}/>
         <Checkbox checked={filters.overdue} onChange={event => change('overdue', event.target.checked)}>仅逾期</Checkbox>
       </div>
-      <ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false} headerTitle="我的任务"
+      <div ref={resultsRef}><ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false} headerTitle="我的任务"
         options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1140 }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>
-      <div className="workspace-panel-footer">共 {rows.length} 项 · 查看不接手，保存草稿不会完成任务</div>
+      <div className="workspace-panel-footer">共 {rows.length} 项 · 查看不接手，保存草稿不会完成任务</div></div>
     </section>
     {transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) setTransfer(null); }}
       initialValues={{ to: undefined, reason: '' }} submitter={{ searchConfig: { submitText: '确认转办', resetText: '取消' } }}

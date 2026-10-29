@@ -4,6 +4,7 @@ import {getResponseAssignmentContext, assignResponse} from './responseAssignment
 import {reconcileTasks, selectMyTasks, assertBusinessAction, confirmProjectRequirement} from './taskDomain.js';
 import {getConfirmationActorIds} from './confirmationPolicy.js';
 import {updateResponseReview} from './reviewDomain.js';
+import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
 
 function fixture() {
   const ids = ['sr', 't1', 't2', 'outside'];
@@ -58,6 +59,7 @@ test('confirmation reassignment preserves closed reviews and the previously conf
 
 test('review completion hands off to the independently assigned confirmer without changing reviewers', () => {
   const before = withReview();
+  before.requirementsByProject.P[0].needsReview = true;
   let state = assignResponse(before,request(before,{userIds:['t2']}));
   state = reconcileTasks(updateResponseReview({...state,actorId:'t1',actorRole:'技术'},
     {projectId:'P',reviewId:'D',expectedVersion:2,expectedRound:1,patch:{action:'confirm'}}));
@@ -79,6 +81,16 @@ test('ordinary reassignment preserves the saved response and previous confirmati
   Object.assign(before.requirementsByProject.P[0],{status:'已确认',confirmedAt:'2026-10-28',confirmedById:'sr'});
   const next = assignResponse(before,request(before));
   assert.deepEqual(next.requirementsByProject.P[0],{...before.requirementsByProject.P[0],confirmationAssigneeId:'t1',confirmationAssignmentSource:'explicit'});
+});
+
+test('an explicitly assigned confirmation cannot be skipped by a system Comply recommendation', () => {
+  const before = fixture();
+  Object.assign(before.requirementsByProject.P[0],{matchLevel:'standard',score:99,
+    systemRecommendation:{conclusion:'Comply',original:'客户要求',draft:'答复',evidence:'依据',sourceVersion:'V1'}});
+  assert.equal(canReviewWithoutManualConfirmation(before.requirementsByProject.P[0],'P'),true);
+  const next = reconcileTasks(assignResponse(before,request(before)));
+  assert.equal(canReviewWithoutManualConfirmation(next.requirementsByProject.P[0],'P'),false);
+  assert.equal(selectMyTasks(next,{actorId:'t1'}).some(task=>task.objectId==='R'),true);
 });
 
 test('only project assignment managers can reassign the confirmer even when a review exists', () => {

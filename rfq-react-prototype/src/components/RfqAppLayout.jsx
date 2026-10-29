@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import useContentTransition from './useContentTransition';
 import { Avatar, Badge, Button, Grid, Select, Space, Tag, Tooltip } from 'antd';
 import { PageContainer, ProLayout } from '@ant-design/pro-components';
 import { Bell, HelpCircle, Search } from 'lucide-react';
@@ -10,6 +11,8 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
   const compact = !screens.sm;
   const mobile = !screens.md;
   const [mobileCollapsed, setMobileCollapsed] = useState(true);
+  const contentRef = useRef(null);
+  useContentTransition(contentRef, contentKey);
   const menu = navigation.map(item => {
     const Icon = item.page === 'knowledge' ? icons.knowledge : icons[item.key] || icons[item.page];
     return { path: '/' + item.key, key: item.key, name: item.label, targetPage: item.page,
@@ -31,9 +34,9 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
         <Space key="identity" size={6} className="rfq-layout-identity"><Avatar size="small" style={{ background: '#e8f0ff', color: '#165dff' }}>{actorName?.[0]}</Avatar><Select aria-label="演示身份" value={identity} options={identities} onChange={onIdentityChange} variant="borderless" popupMatchSelectWidth={false} style={{ width: compact ? 112 : 155 }}/></Space>,
       ].filter(Boolean)} footerRender={() => footer}
       token={{ bgLayout: '#f5f7fa', sider: { colorMenuBackground: '#ffffff', colorBgMenuItemSelected: '#e8f0ff', colorTextMenuSelected: '#165dff' }, pageContainer: { paddingInlinePageContainerContent: 0, paddingBlockPageContainerContent: 0 } }}>
-      {isDetail ? <div key={contentKey} className="rfq-layout-content rfq-layout-detail">{body}</div> :
+      {isDetail ? <div key={contentKey} ref={contentRef} className="rfq-layout-content rfq-layout-detail">{body}</div> :
         <PageContainer className="rfq-page-container" title={false} breadcrumb={{ items: [{ title: '工作空间' }, { title: pageTitle }] }}>
-          <div key={contentKey} className="rfq-layout-content">{body}</div>
+          <div key={contentKey} ref={contentRef} className="rfq-layout-content">{body}</div>
         </PageContainer>}
     </ProLayout>
     {children}

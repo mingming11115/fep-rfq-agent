@@ -1,7 +1,8 @@
 import {buildReviewRequest,reviewEvidenceHref} from '../reviewRequest';
 import ReviewerPicker from '../components/ReviewerPicker';
+import useContentTransition from '../components/useContentTransition';
 import ResponseAssignmentControl from '../components/ResponseAssignmentControl';
-import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation} from '../confirmationPolicy';
+import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../confirmationPolicy';
 import {personName,canAccessProject} from '../personnelDomain';
 import { Grid, Radio, Splitter } from 'antd';
 import {resizePanelShare} from '../antdAdapters';
@@ -103,6 +104,8 @@ export function ResponsePage({ workspaceHeader, detailPanels = {}, project, requ
   const [queueDone, setQueueDone] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const cardRef = useRef(null), cardBusyRef = useRef(false), aliveRef = useRef(true), cardAnimation = useRef(null);
+  useContentTransition(detailSideRef, detailTab, { duration: 120 });
+  useContentTransition(cardRef, active?.id, { duration: 120, enabled: !cardBusy });
   useEffect(() => { cardRef.current?.querySelector('.response-editor-body')?.scrollTo({ top: 0 }); }, [active?.id]);
   const issueGuardRef = useRef(null);
   const registerIssueGuard = useCallback(guard => { issueGuardRef.current = guard; return () => { if (issueGuardRef.current === guard) issueGuardRef.current = null; }; }, []);
@@ -160,7 +163,7 @@ export function ResponsePage({ workspaceHeader, detailPanels = {}, project, requ
   function browseCard(direction) {
     const index = cardRows.findIndex(row => row.id === active?.id);
     const row = cardRows[(index + direction + cardRows.length) % cardRows.length];
-    if (row && row.id !== active?.id) guardedDetail(() => slideToCard(row.id, -direction));
+    if (row && row.id !== active?.id) chooseRow(row);
   }
   async function animateCardMotion(direction = 1, entering = false) {
     if (!aliveRef.current || !cardRef.current) return;
@@ -356,7 +359,7 @@ export function ResponsePage({ workspaceHeader, detailPanels = {}, project, requ
             {cardVisible && nextCard && <><div className="response-card-under response-card-under-far" aria-hidden="true"/><div className="response-card-under response-card-under-near" aria-hidden="true"/></>}
             {cardVisible ? <article ref={cardRef} className="response-current-card" aria-label="当前应答项"><fieldset disabled={cardBusy}>
 <section className="panel response-editor"><div className="response-column-heading"><h2>应答编辑</h2><span className={`response-save-state ${dirty ? 'dirty' : ''}`}>{dirty ? '● 未保存' : '✓ 已保存'}</span></div><div className="response-editor-body"><div className="response-active-title"><span className="response-clause">条款 {active.clause || "无编号"}</span><StatusBadge status={responseStatusLabel(active, reviews)} /><div className="response-card-title-row"><h2>{active.title}</h2><span className="response-confirmation-owner">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join("、")||"待配置项目SR"}</span></div></div><div className="response-customer-requirement"><button className="text-link" onClick={() => navigate('documents', active.id)}><ChevronLeft size={13}/>返回解析定位本条</button><div><span>客户原始要求</span><button className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</button></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
-        {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<button className="text-link" onClick={() => goPage('export')}>查看最终审批</button></Notice>}{openReview && <Notice warning>评审处理中；全部评审人确认后完成本条。<button className="text-link" onClick={() => openInlineReview(openReview.id)}>查看事项</button></Notice>}
+        {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<button className="text-link" onClick={() => goPage('export')}>查看最终审批</button></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<button className="text-link" onClick={() => openInlineReview(openReview.id)}>查看事项</button></Notice>}
         {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<button className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</button></Notice>}<AssessmentPanel row={active} project={project} suggestion={suggestion} retrieval={retrieval} />
         <div className="form-grid response-form"><div className="field response-wide"><span><i className="response-required">*</i>人工最终结论</span><Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit} onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用','待确认']}/></div>{form.conclusion === '不适用' && <Field label="不适用依据" required wide><textarea className="input" aria-label="不适用依据" value={form.reason} readOnly={!canEdit} onChange={(e) => edit('reason', e.target.value)} placeholder="请说明本条不适用的范围依据" /></Field>}</div>
         {form.conclusion !== 'Comply' && recommendedWording && <RecommendedWording key={`${active.id}:${recommendedWording}`} recommendation={recommendedWording} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => { if (!canEdit) return; edit('draft', wording); addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`); toast('推荐话术已带入应答草稿，提交或确认后保存'); }}/>}
@@ -385,10 +388,10 @@ export function ResponsePage({ workspaceHeader, detailPanels = {}, project, requ
         {error && !modal && <p className="response-error" role="alert">{error}</p>}
         </div><footer className="response-card-footer">{actorRole !== '最终审批人' && <div className="response-editor-actions response-workflow-actions"><button className="btn" disabled={!canEdit || !dirty} onClick={() => saveDraft()}><Save size={14}/>保存草稿</button><button className="btn" onClick={deferCard}>稍后处理</button>
 
-          {['SR','技术'].includes(actorRole) && <button className="btn btn-primary" onClick={beginConfirm} disabled={!canConfirm || !!active.pendingReviewProposal || active.status === '已确认' && !dirty}><Check size={15}/>{cardBusy ? '处理中…' : active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'?'处理本人评审':'确认本条'}</button>}
+          {['SR','技术'].includes(actorRole) && <button className="btn btn-primary" onClick={beginConfirm} disabled={!canConfirm || !!active.pendingReviewProposal || active.status === '已确认' && !dirty}><Check size={15}/>{cardBusy ? '处理中…' : active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'&&!hasAssignedConfirmer(active)?'处理本人评审':'确认本条'}</button>}
 
         </div>}
-        {(staleSource || openReview || !canConfirm) && <p className="response-permission-tip">{staleSource?'当前为旧来源版本，请打开有效版本':openReview?'全部评审人确认后完成':'当前账号无本条确认权限'}</p>}
+        {(staleSource || openReview || !canConfirm) && <p className="response-permission-tip">{staleSource?'当前为旧来源版本，请打开有效版本':openReview?hasAssignedConfirmer(active)?'评审完成后由条款确认人确认':'全部评审人确认后完成':'当前账号无本条确认权限'}</p>}
       </footer></section>
       </fieldset></article> : <div className="response-card-empty"><CheckCircle2 size={30}/><h3>{cardRows.length ? '本轮处理完成' : '没有符合条件的应答项'}</h3><p>{cardRows.length ? `还有 ${requirements.filter(row => row.status !== '已确认').length} 条未完成，可通过统计筛选继续处理。` : '调整搜索或筛选条件后重试。'}</p><button className="btn btn-primary" onClick={() => applyCardFilters(EMPTY_CARD_FILTERS)}>查看全部应答项</button></div>}
           </div>

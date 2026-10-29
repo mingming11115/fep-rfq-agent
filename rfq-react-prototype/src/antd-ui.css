@@ -63,3 +63,5 @@
 .rfq-keyboard-separator{position:absolute;top:0;bottom:0;width:12px;transform:translateX(-6px);z-index:6;pointer-events:none;border-radius:4px}
 .rfq-keyboard-separator:focus-visible{outline:2px solid #165dff;background:#165dff16}
 .rfq-keyboard-separator.is-vertical{left:0;right:0;bottom:auto;width:auto;height:12px;transform:translateY(-6px)}
+
+.rfq-pro-shell :is(.tabs>button,.detail-business-tabs>button,.workspace-view-switch>.btn,.source-outline>div,.source-outline button){transition:background-color 100ms ease-out,color 100ms ease-out,border-color 100ms ease-out}

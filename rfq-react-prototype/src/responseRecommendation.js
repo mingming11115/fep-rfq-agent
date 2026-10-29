@@ -1,5 +1,6 @@
 import { makeRequirements } from './data.js';
 import { buildResponseAdvice } from './responseAdvice.js';
+import { hasAssignedConfirmer } from './confirmationPolicy.js';
 
 export function captureSystemRecommendation(row) {
   return { conclusion:row.conclusion, draft:row.draft||'', conditions:row.conditions||'', evidence:row.evidence||'', original:row.original, sourceVersion:row.sourceVersion, version:row.matchLevel==='history'?'V3':'V2' };
@@ -14,6 +15,7 @@ export function matchingSuggestion(row={}, projectId) {
 }
 
 export function canReviewWithoutManualConfirmation(row, projectId) {
+  if(hasAssignedConfirmer(row))return false;
   if(row.status!=='待确认'||row.conclusion!=='Comply'||row.needsReview||row.pendingReviewProposal||row.sourceRevision||row.sourceCorrected||row.removedFromSource)return false;
   if(![row.original,row.draft,row.evidence].every(value=>typeof value==='string'&&value.trim()))return false;
   const suggestion=matchingSuggestion(row,projectId);

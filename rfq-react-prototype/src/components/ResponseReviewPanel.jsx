@@ -2,7 +2,7 @@ import {reviewEvidenceHref} from '../reviewRequest';
 import React,{useEffect,useRef,useState} from 'react';
 import {Modal} from './ui';
 import ReviewerPicker from './ReviewerPicker';
-import {getReviewActorIds,hasReviewConfirmation} from '../confirmationPolicy';
+import {getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../confirmationPolicy';
 import {getEligiblePersonnel,personName} from '../personnelDomain';
 import './response-review.css';
 
@@ -37,8 +37,8 @@ export default function ResponseReviewPanel({review,row,project,state,actorId,on
   <dl className="flow-description"><dt>评审类别</dt><dd>{review.type||'未分类'}</dd><dt>问题说明</dt><dd>{review.description||'—'}</dd><dt>截止时间</dt><dd>{review.deadline||'未设置'}</dd><dt>客户要求</dt><dd>{row.original}</dd></dl>
   {reviewEvidenceHref(review.requestEvidenceLink||review.evidence)&&<p><a className="text-link" href={reviewEvidenceHref(review.requestEvidenceLink||review.evidence)} target="_blank" rel="noopener noreferrer">打开关联证据 ↗</a></p>}
   <div className="review-confirmation-list" aria-label="逐人确认状态">{ids.map(id=><div key={id}><strong>{personName(state,id)}</strong><span className={hasReviewConfirmation(review,row,id)?'confirmed':'pending'}>{hasReviewConfirmation(review,row,id)?'已确认':eligible.includes(id)?'待确认':'资格或项目授权已失效，需调整人员'}</span><small>{review.confirmations?.[id]?.note||''}</small></div>)}</div>
-  <p className="review-response-notice">{closed?(review.status==='已取消'?'评审已取消，历史记录保留。':'全部评审人已确认，应答项已确认。'):'全部评审人确认同一版本后，应答项自动完成。修改应答、方案或评审人后，所有人需要重新确认。'}</p>
-  {!qualified&&!manager&&<p className="muted">当前确认责任人：{ids.map(id=>personName(state,id)).join('、')}。你可以查看处理进度。</p>}
+  <p className="review-response-notice">{closed?(review.status==='已取消'?'评审已取消，历史记录保留。':row.status==='已确认'?'全部评审人已确认，应答项已确认。':'评审已完成，等待条款确认人确认本条。'):hasAssignedConfirmer(row)?'全部评审人完成本轮评审后，再由条款确认人确认本条。修改应答、方案或评审人后，评审确认需要重新进行。':'全部评审人确认同一版本后，应答项自动完成。修改应答、方案或评审人后，所有人需要重新确认。'}</p>
+  {!qualified&&!manager&&<p className="muted">本事项评审人：{ids.map(id=>personName(state,id)).join('、')}。你可以查看处理进度。</p>}
   {manager&&!mine&&<p className="muted">已交由所选评审人确认，你可以补充沟通或调整评审人。</p>}
   {conflict&&<div className="response-error" role="alert">评审内容已更新，当前输入尚未覆盖新版本。<button className="text-link" onClick={()=>{setForm(fieldsFor(review,row));baseline.current={version:review.version||1,round:review.round||1};mark(false);setError('');}}>放弃当前输入并载入最新版本</button></div>}
   {row.pendingReviewProposal&&<section className="review-response-notice"><strong>历史评审建议待核对</strong><p>当前应答：{row.draft}</p><p>评审建议：{row.pendingReviewProposal.proposal?.draft}</p>{editable&&<><button className="btn btn-primary" disabled={dirty} onClick={()=>onAdoptReview?.(row.id,row.pendingReviewProposal)}>采用评审建议</button><label className="field"><span>保留当前应答的原因</span><textarea className="input" value={keepReason} onChange={e=>setKeepReason(e.target.value)}/></label><button className="btn" disabled={dirty||!keepReason.trim()} onClick={()=>onAdoptReview?.(row.id,row.pendingReviewProposal,keepReason)}>保留当前应答并记录原因</button></>}</section>}
