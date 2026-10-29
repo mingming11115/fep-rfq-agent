@@ -1,5 +1,5 @@
 import {getPersonnelContext,canAccessProject,getEligiblePersonnel,canManageBu} from './personnelDomain.js';
-import {getConfirmationActorIds,getResponseReview,getReviewActorIds} from './confirmationPolicy.js';
+import {getConfirmationActorIds,getResponseReview,getReviewActorIds,hasAssignedConfirmer} from './confirmationPolicy.js';
 const modernRoles=['后台管理','BU管理员','SR','技术'];
 const modernPermissions={
  'project:create':['SR'],'project:manage':['SR'],'project:handover':['SR'],'source:manage':['SR'],
@@ -27,11 +27,13 @@ function modernCan(role,action,context){
  const row=state.requirementsByProject?.[projectId]?.find(r=>r.id===requirementId);
  const responseReview=getResponseReview(state,projectId,requirementId);
  if(action==='response:edit'&&requirementId){
+  if(responseReview?.status==='已关闭'&&hasAssignedConfirmer(row))return getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
   if(responseReview)return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm);
   if(role==='技术')return getConfirmationActorIds(state,projectId,row).includes(actorId);
  }
  if(action==='review:process'&&responseReview)return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm);
  if(action==='response:confirm'){
+  if(hasAssignedConfirmer(row)&&responseReview&&responseReview.status!=='已关闭')return false;
   return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
  }
  if(['snapshot:approve','review:approve'].includes(action))return getEligiblePersonnel(state,{buId,projectId,duty:'final-review',side:role==='SR'?'sr':'technical'}).some(m=>m.userId===actorId);

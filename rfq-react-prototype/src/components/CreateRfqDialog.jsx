@@ -2,6 +2,7 @@ import React,{useEffect,useState} from 'react';
 import { Alert, Form } from 'antd';
 import { ModalForm, ProFormDatePicker, ProFormRadio, ProFormText } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
+import {formDate} from '../antdAdapters';
 import {Plus} from 'lucide-react';
 import {Modal} from './ui';
 import {canPerform} from '../permissions';
@@ -26,7 +27,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  useEffect(()=>{formApi.setFieldsValue({...form,deadline:form.deadline?dayjs(form.deadline):undefined});},[form,formApi]);
  function changeValues(changed,values){
   setForm(current=>{
-   const next={...current,...values,deadline:values.deadline?.format?.('YYYY-MM-DD')||''};
+   const next={...current,...values,deadline:formDate(values.deadline)};
    if('ownerId' in changed){next.ownerId=changed.ownerId||'';next.owner=next.ownerId?personName(appState,next.ownerId):'';if(!current.srId||current.srId===current.ownerId)next.srId=srCandidates.some(p=>p.userId===next.ownerId)?next.ownerId:'';}
    if('technicalMode' in changed)next.technicalRepresentativeId='';
    if('technicalIds' in changed&&!next.technicalIds?.includes(current.technicalRepresentativeId))next.technicalRepresentativeId='';

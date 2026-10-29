@@ -1,4 +1,4 @@
-import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError} from './confirmationPolicy.js';
+import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError,hasAssignedConfirmer} from './confirmationPolicy.js';
 import {updateResponseReview} from './reviewDomain.js';
 import {confirmRequirement} from './domain.js';
 import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
@@ -199,15 +199,16 @@ export function transferBusinessTask(state,{taskId,to,reason,at=new Date().toISO
  return reconcileTasks(next,{at});
 }
 export function confirmProjectRequirement(state,{projectId,requirementId,expectedVersion,route={}}) {
- assertBusinessAction(state,{projectId,objectType:'requirement',objectId:requirementId,action:'confirm',expectedVersion,route});
  const row=state.requirementsByProject[projectId].find(r=>r.id===requirementId);
  const review=getResponseReview(state,projectId,requirementId);
- if(review&&review.status!=='已取消'){
+ if(hasAssignedConfirmer(row)&&review&&!['已关闭','已取消'].includes(review.status))throw new Error('请先完成本条评审，再由确认人确认');
+ assertBusinessAction(state,{projectId,objectType:'requirement',objectId:requirementId,action:'confirm',expectedVersion,route});
+ if(review&&review.status!=='已取消'&&!hasAssignedConfirmer(row)){
   if(review.status==='已关闭'&&row.status==='已确认')return state;
   return updateResponseReview(state,{projectId,reviewId:review.id,expectedVersion:review.version||1,expectedRound:review.round||1,patch:{action:'confirm'}});
  }
  if(row.pendingReviewProposal)throw new Error('请先核对评审建议');
  if(state.reviewsByProject?.[projectId]?.some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status)))throw new Error('请先关闭关联事项');
- const updated={...confirmRequirement(row),confirmedBy:personName(state,state.actorId),confirmedById:state.actorId};
+ const updated={...confirmRequirement(row),confirmedBy:personName(state,state.actorId),confirmedById:state.actorId,...(hasAssignedConfirmer(row)?{confirmedByIds:[state.actorId]}:{})};
  return {...state,requirementsByProject:{...state.requirementsByProject,[projectId]:state.requirementsByProject[projectId].map(r=>r.id===requirementId?updated:r)}};
 }

@@ -1,6 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { personnelOptions, uploadMetadata, mentionIds, statusTone } from './antdAdapters.js';
+import dayjs from 'dayjs';
+import { personnelOptions, uploadMetadata, mentionIds, mentionMatches, statusTone, formDate, resizePanelShare } from './antdAdapters.js';
+
+test('mention candidates are searchable by Chinese display name and account ID', () => {
+  const option = { value: 'demo-technical', label: '顾工 · demo-technical' };
+  assert.equal(mentionMatches('顾', option), true);
+  assert.equal(mentionMatches('DEMO-TECH', option), true);
+  assert.equal(mentionMatches('不存在', option), false);
+});
+
+test('a picked form date persists as a calendar string for both ProForm and DatePicker events', () => {
+  assert.equal(formDate('2026-11-12'), '2026-11-12');
+  assert.equal(formDate(dayjs('2026-11-12')), '2026-11-12');
+  assert.equal(formDate(null), '');
+});
+
+test('keyboard panel resizing respects minimum pane sizes and orientation', () => {
+  const bounds = { span: 1000, minStart: 320, minEnd: 380 };
+  assert.equal(resizePanelShare(55, 'ArrowLeft', bounds), 50);
+  assert.equal(resizePanelShare(55, 'ArrowRight', bounds), 60);
+  assert.equal(resizePanelShare(60, 'ArrowRight', bounds), 62);
+  assert.equal(resizePanelShare(55, 'Home', bounds), 32);
+  assert.equal(resizePanelShare(55, 'End', bounds), 62);
+  assert.equal(resizePanelShare(55, 'ArrowDown', { ...bounds, vertical: true }), 60);
+});
 
 test('personnel options keep stable IDs and unavailable historical selections disabled', () => {
   const options = personnelOptions([{ userId: 'u1', name: '同名' }, { id: 'u2', name: '同名' }], ['u1', 'gone'], id => `旧人员 ${id}`);

@@ -1,9 +1,11 @@
 // Identity and version policy shared by permissions, task generation and review UI.
 export const getReviewActorIds = review => [...new Set((review?.reviewerIds ?? (review?.ownerId ? [review.ownerId] : [])).filter(Boolean))];
+export const hasAssignedConfirmer = row => row?.confirmationAssignmentSource === 'explicit' && !!row?.confirmationAssigneeId;
 export function getResponseReview(state,projectId,requirementId){
  return (state.reviewsByProject?.[projectId]||[]).find(r=>r.requirementId===requirementId&&r.kind!=='clarification'&&r.status!=='已取消'&&Array.isArray(r.reviewerIds));
 }
 export function getConfirmationActorIds(state,projectId,row){
+ if(hasAssignedConfirmer(row))return [row.confirmationAssigneeId];
  const review=getResponseReview(state,projectId,row?.id);
  const implicit=state.implicitConfirmationIdsByProject?.[projectId]?.includes(row?.id)&&row?.confirmationAssignmentSource!=='explicit';
  return review?getReviewActorIds(review):[(!implicit&&row?.confirmationAssigneeId)||state.projects?.find(p=>p.id===projectId)?.ownerId].filter(Boolean);

@@ -55,6 +55,11 @@
 .rfq-pro-shell .app-footer{padding:12px 20px 16px}
 .rfq-layout-detail .project-detail-workspace{height:calc(100dvh - 130px);min-height:480px}
 @media(max-width:900px){.rfq-layout-content{padding-inline:16px}.rfq-pro-shell .ant-page-header{padding-inline:16px}.rfq-demo-tag{display:none}}
-@media(max-width:767px){.rfq-layout-content{padding-inline:12px}.rfq-layout-detail .project-detail-workspace{height:auto;min-height:0}.rfq-layout-identity .ant-select{width:125px!important}}
+@media(max-width:767px){.rfq-layout-content{padding-inline:12px}.rfq-layout-detail .project-detail-workspace{height:auto;min-height:0}.rfq-layout-identity .ant-select{width:112px!important}}
+@media(max-width:575px){.rfq-pro-shell .ant-pro-global-header-right-content{min-width:0!important;flex:1}.rfq-pro-shell .ant-pro-global-header-header-actions{gap:0}.rfq-pro-shell .ant-pro-global-header-header-actions-item{padding-inline:2px}}
 
 .rfq-pro-shell .brand-mark{display:inline-flex!important;align-items:center;justify-content:center;line-height:1!important}
+
+.rfq-keyboard-separator{position:absolute;top:0;bottom:0;width:12px;transform:translateX(-6px);z-index:6;pointer-events:none;border-radius:4px}
+.rfq-keyboard-separator:focus-visible{outline:2px solid #165dff;background:#165dff16}
+.rfq-keyboard-separator.is-vertical{left:0;right:0;bottom:auto;width:auto;height:12px;transform:translateY(-6px)}

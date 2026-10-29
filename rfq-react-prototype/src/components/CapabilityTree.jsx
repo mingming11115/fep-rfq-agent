@@ -46,8 +46,8 @@ export default function CapabilityTree({ root, selectedKey, onSelect, renderActi
       : node.kind === 'model' ? `${node.record.code} · ${node.record.lifecycle}` : node.kind === 'process' && node.record.enabled === false ? '已停用' : '';
     return <li key={node.key}>
       <div className={`cap-tree-row ${selected ? 'selected' : ''} ${node.kind === 'unassigned' ? 'pending' : ''}`} data-node-key={node.key}>
-        {canExpand && <button className="cap-tree-toggle" aria-label={`${open ? '收起' : '展开'}${node.label}`} aria-expanded={open} aria-controls={childId} onClick={() => toggle(node.key)}><ChevronRight size={13}/></button>}
-        <button className={`cap-tree-node ${canExpand ? '' : 'leaf'}`} aria-current={selected ? 'true' : undefined} onClick={() => onSelect(node)}>
+        {canExpand && <button type="button" className="cap-tree-toggle" aria-label={`${open ? '收起' : '展开'}${node.label}`} aria-expanded={open} aria-controls={childId} onClick={() => toggle(node.key)}><ChevronRight size={13}/></button>}
+        <button type="button" className={`cap-tree-node ${canExpand ? '' : 'leaf'}`} aria-current={selected ? 'true' : undefined} onClick={() => onSelect(node)}>
           <Icon size={15}/><span><strong>{node.label}{node.kind === 'unassigned' ? ` · ${node.children.length}` : ''}</strong>{description && <small>{description}</small>}</span>
         </button>
         {renderActions?.(node)}

@@ -1,7 +1,7 @@
 import {assertPermission} from './permissions.js';
 import {applyRequirementEdit,confirmRequirement,confirmationValidation} from './domain.js';
 import {canAccessProject,getPersonnelContext,personName,getEligiblePersonnel} from './personnelDomain.js';
-import {getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError} from './confirmationPolicy.js';
+import {getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError,hasAssignedConfirmer} from './confirmationPolicy.js';
 
 export function validateResponseReviewers(state,projectId,reviewerIds){
  const ids=[...new Set((reviewerIds||[]).filter(Boolean))],project=state.projects.find(p=>p.id===projectId);
@@ -71,7 +71,8 @@ export function updateResponseReview(state,{projectId,reviewId,patch={},expected
  }
  const complete=ids.length>0&&ids.every(id=>hasReviewConfirmation(next,after,id));
  next={...next,status:complete?'已关闭':'处理中',...(complete?{closedAt:new Date().toISOString()}:{}),history:[...(next.history||[]),{action:patch.action==='confirm'?'确认本人评审':'保存评审应答',actorId,actor:personName(state,actorId),time:new Date().toISOString(),reason:patch.note||''}]};
- const updated=complete?{...confirmRequirement(after),confirmedBy:ids.map(id=>personName(state,id)).join('、'),confirmedByIds:ids,confirmedById:actorId,pendingReviewProposal:null}:{...after,status:'评审中',confirmedAt:undefined,confirmedBy:undefined,confirmedById:undefined,pendingReviewProposal:after.pendingReviewProposal??null};
+ const assignedConfirmer=hasAssignedConfirmer(after);
+ const updated=complete&&!assignedConfirmer?{...confirmRequirement(after),confirmedBy:ids.map(id=>personName(state,id)).join('、'),confirmedByIds:ids,confirmedById:actorId,pendingReviewProposal:null}:{...after,status:complete?'待确认':'评审中',confirmedAt:undefined,confirmedBy:undefined,confirmedById:undefined,confirmedByIds:undefined,pendingReviewProposal:after.pendingReviewProposal??null,...(complete?{readyForConfirmation:true,confirmationReason:'评审已完成，待指定确认人确认本条。'}:{})};
  return {...state,reviewsByProject:{...state.reviewsByProject,[projectId]:state.reviewsByProject[projectId].map(r=>r.id===reviewId?next:r)},requirementsByProject:{...state.requirementsByProject,[projectId]:state.requirementsByProject[projectId].map(r=>r.id===row.id?updated:r)}};
 }
 export function prepareReviewProposal(requirement,review){if(review.status!=='已关闭'||review.requirementId!==requirement.id)throw new Error('该事项尚未关闭或不属于当前条款');return {reviewId:review.id,kind:review.kind||'review',baseVersion:review.requirementVersion||requirement.version||1,before:structuredClone(review.requirementAtSubmission||requirement),proposal:{draft:review.proposedDraft||requirement.draft,conclusion:review.proposedConclusion||requirement.conclusion,evidence:review.evidence||requirement.evidence,conditions:review.conditions??requirement.conditions},approvedById:review.approvedById,createdAt:new Date().toISOString()};}

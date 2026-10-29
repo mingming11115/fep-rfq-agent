@@ -1,4 +1,22 @@
 import { filterPeople } from './personPicker.js';
+export function mentionMatches(search, option) {
+  return (String(option.label || '') + ' ' + option.value).toLocaleLowerCase().includes(search.toLocaleLowerCase());
+}
+export function formDate(value) {
+  const date = typeof value === 'string' ? value : value?.format?.('YYYY-MM-DD');
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : '';
+}
+export function resizePanelShare(current, key, { span, minStart, minEnd, vertical = false }) {
+  const low = Math.min(50, Math.ceil(minStart / span * 100));
+  const high = Math.max(low, Math.floor(100 - minEnd / span * 100));
+  let next = current;
+  if (key === (vertical ? 'ArrowUp' : 'ArrowLeft')) next -= 5;
+  if (key === (vertical ? 'ArrowDown' : 'ArrowRight')) next += 5;
+  if (key === 'Home') next = low;
+  if (key === 'End') next = high;
+  if (key === 'Enter') next = 55;
+  return Math.min(high, Math.max(low, next));
+}
 
 export function personnelOptions(people = [], value = [], resolveName = id => id) {
   const selected = Array.isArray(value) ? value : value ? [value] : [];
