@@ -12,7 +12,9 @@ import java.util.HexFormat;
 public class OfficeFileStore {
     public record Document(String id, String name, String fileType, String projectId, String fileId,
                            String sourceVersion, String accessHash, String key, long revision,
-                           String savedAt, String lastError, String digest, String lastCallback) {}
+                           String savedAt, String lastError, String digest, String lastCallback, java.util.List<String> processedCallbacks) {
+        public Document { processedCallbacks = processedCallbacks == null ? java.util.List.of() : java.util.List.copyOf(processedCallbacks); }
+    }
     private final Path root;
     private final ObjectMapper json;
     public OfficeFileStore(OfficeProperties properties, ObjectMapper json) {

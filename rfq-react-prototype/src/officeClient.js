@@ -1,6 +1,7 @@
 export const supportsOffice = name => /\.(docx|pdf)$/i.test(name || '');
 export const officeSourceKey = (source, identity = '') => JSON.stringify([source.projectId,source.fileId,source.sourceVersion,identity]);
 export const saveReached = (before, after) => !after.lastError && (after.revision > before.revision || Boolean(after.savedAt && after.savedAt !== before.savedAt));
+export const savedGeneration = ({baseline,generation,flushedGeneration},after) => generation > 0 && generation === flushedGeneration && saveReached(baseline || {},after);
 
 export async function officeRequest(path, ref, options = {}) {
   const headers = new Headers(options.headers);

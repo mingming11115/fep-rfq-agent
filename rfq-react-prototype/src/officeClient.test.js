@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { supportsOffice, officeRequest, uploadOfficeFile, saveReached, officeSourceKey } from './officeClient.js';
+import { supportsOffice, officeRequest, uploadOfficeFile, saveReached, officeSourceKey, savedGeneration } from './officeClient.js';
 
 test('only actual DOCX and PDF are offered for native editing', () => {
   assert.equal(supportsOffice('RFQ.DOCX'), true);
@@ -43,4 +43,11 @@ test('save confirmation needs a later server timestamp or revision and never ign
 test('document mount identity changes only with file, source version and actual identity', () => {
   assert.notEqual(officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V1'},'actor'),officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V2'},'actor'));
   assert.equal(officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V1',requirementId:'A'},'actor'),officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V1',requirementId:'B'},'actor'));
+});
+test('native save reconciliation waits for the edited generation to reach the document service', () => {
+  const baseline={revision:1,savedAt:'first'},after={revision:2,savedAt:'second'};
+  assert.equal(savedGeneration({baseline,generation:2,flushedGeneration:2},after),true);
+  assert.equal(savedGeneration({baseline,generation:3,flushedGeneration:2},after),false);
+  assert.equal(savedGeneration({baseline,generation:2,flushedGeneration:2},baseline),false);
+  assert.equal(savedGeneration({baseline,generation:2,flushedGeneration:2},{...after,lastError:'save failed'}),false);
 });

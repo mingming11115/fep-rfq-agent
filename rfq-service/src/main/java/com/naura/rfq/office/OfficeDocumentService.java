@@ -31,7 +31,7 @@ public class OfficeDocumentService {
         String type = name.toLowerCase(Locale.ROOT).endsWith(".pdf") ? "pdf" : "docx";
         var random = new byte[32]; new SecureRandom().nextBytes(random);
         String access = Base64.getUrlEncoder().withoutPadding().encodeToString(random), id = UUID.randomUUID().toString();
-        var doc = new OfficeFileStore.Document(id, name, type, text(project), text(file), text(version), OfficeFileStore.hash(access.getBytes(UTF_8)), newKey(), 0, "", "", OfficeFileStore.hash(bytes), "");
+        var doc = new OfficeFileStore.Document(id, name, type, text(project), text(file), text(version), OfficeFileStore.hash(access.getBytes(UTF_8)), newKey(), 0, "", "", OfficeFileStore.hash(bytes), "", List.of());
         store.create(doc, bytes);
         var response = metadata(doc); response.put("access", access); return response;
     }
@@ -75,7 +75,7 @@ public class OfficeDocumentService {
                 String key = payload.path("key").asText();
                 int status = payload.path("status").asInt();
                 String receipt = OfficeFileStore.hash(payload.toString().getBytes(UTF_8));
-                if (receipt.equals(before.lastCallback())) return true;
+                if (before.processedCallbacks().contains(receipt)) return true;
                 if (!key.equals(before.key())) return false;
                 if (status == 3 || status == 7) throw new IOException("文档服务报告保存失败，请保留编辑器并重试");
                 if (status != 2 && status != 6) return true;
@@ -95,12 +95,13 @@ public class OfficeDocumentService {
                 validate(before.name(), bytes);
                 String digest = OfficeFileStore.hash(bytes);
                 long revision = before.revision() + (digest.equals(before.digest()) ? 0 : 1);
-                var after = new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), status == 2 ? newKey() : key, revision, Instant.now().toString(), "", digest, receipt);
+                var receipts = new ArrayList<>(before.processedCallbacks()); receipts.add(receipt);
+                var after = new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), status == 2 ? newKey() : key, revision, Instant.now().toString(), "", digest, receipt, receipts);
                 store.save(after, bytes); return true;
             } catch (Exception e) {
                 // An unauthenticated request cannot change metadata or poison the displayed save status.
                 if (before != null) try {
-                    store.write(new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), before.key(), before.revision(), before.savedAt(), "保存未完成，请重试或下载编辑器中的文件", before.digest(), before.lastCallback()));
+                    store.write(new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), before.key(), before.revision(), before.savedAt(), "保存未完成，请重试或下载编辑器中的文件", before.digest(), before.lastCallback(), before.processedCallbacks()));
                 } catch (IOException ignored) { /* Existing revision is preserved. */ }
                 return false;
             }

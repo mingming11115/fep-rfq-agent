@@ -45,6 +45,10 @@ class OfficeIntegrationTest {
                 exchange.sendResponseHeaders(200, REVIEW.length);
                 try (var output = exchange.getResponseBody()) { output.write(REVIEW); }
             });
+            DOCS.createContext("/cache/files/newer.docx", exchange -> {
+                byte[] bytes=docx("newer review");exchange.sendResponseHeaders(200,bytes.length);
+                try(var output=exchange.getResponseBody()){output.write(bytes);}
+            });
             DOCS.start();
         } catch (Exception e) { throw new RuntimeException(e); }
     }
@@ -67,7 +71,7 @@ class OfficeIntegrationTest {
             var bytes = new ByteArrayOutputStream();
             try (var zip = new ZipOutputStream(bytes)) {
                 for (var entry : Map.of("[Content_Types].xml", "<Types/>", "word/document.xml", "<document>" + content + "</document>").entrySet()) {
-                    zip.putNextEntry(new ZipEntry(entry.getKey())); zip.write(entry.getValue().getBytes(UTF_8)); zip.closeEntry();
+                    var zipEntry=new ZipEntry(entry.getKey());zipEntry.setTime(0);zip.putNextEntry(zipEntry); zip.write(entry.getValue().getBytes(UTF_8)); zip.closeEntry();
                 }
             }
             return bytes.toByteArray();
@@ -136,8 +140,9 @@ class OfficeIntegrationTest {
         mvc.perform(post("/api/office/callback/" + id).header("Authorization", "Bearer " + sign(Map.of("payload", finalBody)))
                 .contentType("application/json").content(mapper.writeValueAsBytes(finalBody))).andExpect(jsonPath("$.error").value(0));
         assertThat(session(ref, false).at("/config/document/key").asText()).isNotEqualTo(key);
-        mvc.perform(post("/api/office/callback/" + id).header("Authorization", "Bearer " + signed)
-                .contentType("application/json").content(mapper.writeValueAsBytes(body))).andExpect(jsonPath("$.error").value(1));
+        var late=Map.of("key",key,"status",6,"url",docsUrl()+"/cache/files/review.docx","userdata","late-unseen");
+        mvc.perform(post("/api/office/callback/" + id).header("Authorization", "Bearer " + sign(Map.of("payload",late)))
+                .contentType("application/json").content(mapper.writeValueAsBytes(late))).andExpect(jsonPath("$.error").value(1));
     }
     @Test void rejectsForgedTokenAndForeignSaveUrlWithoutChangingRevision() throws Exception {
         JsonNode ref = upload(); String id = ref.get("id").asText(), key = session(ref, false).at("/config/document/key").asText();
@@ -155,5 +160,16 @@ class OfficeIntegrationTest {
         mvc.perform(post("/api/office/callback/"+ref.get("id").asText()).header("Authorization","Bearer "+sign(Map.of("payload",body)))
                 .contentType("application/json").content(mapper.writeValueAsBytes(body)))
                 .andExpect(jsonPath("$.error").value(0));
+    }
+    @Test void nonconsecutiveRetriedCallbackCannotRollBackNewerContent() throws Exception {
+        JsonNode ref=upload();String id=ref.get("id").asText(),key=session(ref,false).at("/config/document/key").asText();
+        for(String path:new String[]{"review.docx","newer.docx","review.docx"}){
+            var body=Map.of("key",key,"status",6,"url",docsUrl()+"/cache/files/"+path);
+            mvc.perform(post("/api/office/callback/"+id).header("Authorization","Bearer "+sign(Map.of("payload",body)))
+                    .contentType("application/json").content(mapper.writeValueAsBytes(body))).andExpect(jsonPath("$.error").value(0));
+        }
+        mvc.perform(get("/api/office/documents/"+id+"/download").header("X-Office-Access",ref.get("access").asText()).param("kind","review"))
+                .andExpect(content().bytes(docx("newer review")));
+        assertThat(new OfficeFileStore(properties,mapper).authorize(id,ref.get("access").asText()).revision()).isEqualTo(2);
     }
 }

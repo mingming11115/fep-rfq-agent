@@ -1,6 +1,7 @@
 # ONLYOFFICE 替换详情左侧原文区
 
-状态：待确认的接入设计；未开始修改产品代码。+
+状态：用户已确认并完成实现。验收见 docs/prototype-updates/2026-10-30-onlyoffice-source-pane.md。
+
 ## 意图与已确认选择
 
 用户希望在当前 RFQ 系统中嵌入 ONLYOFFICE，用真实 Word/PDF 完成标注批阅。用户已选择“直接替换详情左侧原文区”，并要求新建分支。当前分支为 `codex/onlyoffice-source-pane`，沿用当前工作区，保留已有未提交的界面改动。
