@@ -13,6 +13,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
   const mobile = !screens.md;
   const [mobileCollapsed, setMobileCollapsed] = useState(true);
   useEffect(() => { setMobileCollapsed(true); }, [mobile]);
+  useEffect(() => { if (isDetail) { onCollapse(true); setMobileCollapsed(true); } }, [isDetail, contentKey, onCollapse]);
   const contentRef = useRef(null);
   useContentTransition(contentRef, contentKey, { kind: 'page' });
   const menu = navigation.map(item => {
@@ -22,7 +23,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
   });
   return <div className="rfq-pro-shell">
     <ProLayout className="rfq-pro-layout" title="FEP RFQ" logo={<span className="brand-mark">F</span>}
-      layout="mix" splitMenus={false} fixSiderbar fixedHeader headerHeight={64} siderWidth={218}
+      layout="mix" splitMenus={false} fixSiderbar fixedHeader headerHeight={64} siderWidth={218} breakpoint={isDetail ? false : undefined}
       collapsed={mobile ? mobileCollapsed : collapsed} onCollapse={mobile ? setMobileCollapsed : onCollapse} location={{ pathname: '/' + activeNav }}
       menuDataRender={() => menu} onMenuHeaderClick={onHome} menu={{ autoClose: false }}
       menuItemRender={(item, dom) => <button type="button" className="rfq-layout-menu-button" data-testid={'nav-' + item.key}

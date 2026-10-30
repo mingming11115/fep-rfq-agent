@@ -65,7 +65,7 @@ const event=(s,action,object='',detail='',result='成功')=>({...s,audit:[{id:`E
 
 export default function App(){
  const {message:antMessage}=AntApp.useApp();
- const [state,setState]=useState(initial),stateRef=useRef(state),[page,setPage]=useState(()=>parseWorkRoute(location.hash).page),[collapsed,setCollapsed]=useState(false),[help,setHelp]=useState(false),[reset,setReset]=useState(false),[globalSearch,setGlobalSearch]=useState(false),[search,setSearch]=useState('');
+ const [state,setState]=useState(initial),stateRef=useRef(state),[page,setPage]=useState(()=>parseWorkRoute(location.hash).page),[collapsed,setCollapsed]=useState(()=>DETAIL_PAGES.includes(parseWorkRoute(location.hash).page)),[help,setHelp]=useState(false),[reset,setReset]=useState(false),[globalSearch,setGlobalSearch]=useState(false),[search,setSearch]=useState('');
  const homePage=state.actorRole==='后台管理'?'admin':'dashboard';
  const [route,setRoute]=useState(()=>parseWorkRoute(location.hash)),routeRef=useRef(route);
  const [focusedRequirementId,setFocusedRequirementId]=useState(()=>route.requirementId||null);
