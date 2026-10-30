@@ -1,5 +1,7 @@
+import { UiButton } from './AntContent';
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageSquarePlus, Minus, Plus, ExternalLink } from 'lucide-react';
+import { Dropdown } from 'antd';
+import { MessageSquarePlus, Minus, Plus, ExternalLink } from "./icons";
 import { makeSourceAnchor, resolveSourceAnchor } from '../documentAnchors';
 import { annotatedSegments, makeCommentDraft } from '../documentAnnotations';
 import { sectionLabel } from '../documentStructure';
@@ -10,6 +12,8 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
   const previousAnchor = useRef(null);
   const [pdf, setPdf] = useState(false), [zoom, setZoom] = useState(100);
   const [selectionError, setSelectionError] = useState('');
+  const [contextComment, setContextComment] = useState(null);
+  const canAnnotate = Boolean(onQuote) && resolved.status === 'resolved';
   const real = file?.realSource || active?.realSource;
   const word = /\.docx?$/i.test(file?.name || active?.source || '');
   useEffect(() => {
@@ -52,8 +56,8 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
     return { row, draft: { quote, anchor: { ...anchor, locator: { ...anchor.locator, quote, textPart: textElement.dataset.sourcePart, textRange: { start, end: start + quote.length } } } } };
   }
 
-  function captureSelection() {
-    if (!onQuote) return;
+  function captureSelection(event) {
+    if (!onQuote || event.button !== 0) return;
     const selected = readSelectionDraft();
     setSelectionError(selected?.invalid ? '请在同一条款的编号、标题或正文内选择文字。' : '');
     if (selected?.draft) onQuote(selected.draft.quote, selected.draft.anchor);
@@ -68,14 +72,33 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
     onQuote(draft.quote, draft.anchor);
   }
 
+  function captureContextComment(row) {
+    if (!canAnnotate) return;
+    const selected = readSelectionDraft();
+    setSelectionError(selected?.invalid ? '请在同一条款的编号、标题或正文内选择文字。' : '');
+    // Capture before the menu takes focus; an earlier selection on another row
+    // must not override the clause that was actually right-clicked.
+    setContextComment({
+      rowId: row.id,
+      draft: selected?.invalid ? null : makeCommentDraft(row, selected?.row.id === row.id ? selected.draft : undefined),
+    });
+  }
+
+  function addContextComment(row) {
+    if (!canAnnotate || contextComment?.rowId !== row.id || !contextComment.draft) return;
+    const draft = makeCommentDraft(row, contextComment.draft);
+    setContextComment(null);
+    onQuote(draft.quote, draft.anchor);
+  }
+
   function renderSourcePart(row, part) {
     return annotatedSegments(row, comments, activeCommentId, part).map(segment => segment.commentIds.length ? <mark key={segment.start} data-comment-ids={segment.commentIds.join(' ')} className={`word-comment-highlight ${segment.commentIds.includes(activeCommentId) ? 'selected' : ''}`} onClick={event => { event.stopPropagation(); if (window.getSelection()?.toString()) return; onSelectComment?.(segment.activeId, makeSourceAnchor(row)); }}>{segment.text}</mark> : <React.Fragment key={segment.start}>{segment.text}</React.Fragment>);
   }
 
   return <section className="source-document detail-source" aria-label="来源原文">
     <div className="detail-source-toolbar"><div><span className="detail-word-icon">W</span><span><strong>{file?.name || active?.source || '来源文档'}</strong><small>{real ? '真实 PDF 原文' : word ? 'Word 示例摘录' : '项目条款摘录'} · {selectedAnchor.sourceVersion}</small></span></div><div className="detail-source-actions">
-      <button className="icon-btn" aria-label="缩小原文" disabled={zoom <= 80} onClick={() => setZoom(z => z - 10)}><Minus size={14}/></button><span>{zoom}%</span><button className="icon-btn" aria-label="放大原文" disabled={zoom >= 140} onClick={() => setZoom(z => z + 10)}><Plus size={14}/></button>
-      {real && <button className="text-link" onClick={() => setPdf(!pdf)}>{pdf ? '返回条款' : '原始 PDF'}<ExternalLink size={13}/></button>}
+      <UiButton className="icon-btn" aria-label="缩小原文" disabled={zoom <= 80} onClick={() => setZoom(z => z - 10)}><Minus size={14}/></UiButton><span>{zoom}%</span><UiButton className="icon-btn" aria-label="放大原文" disabled={zoom >= 140} onClick={() => setZoom(z => z + 10)}><Plus size={14}/></UiButton>
+      {real && <UiButton className="text-link" onClick={() => setPdf(!pdf)}>{pdf ? '返回条款' : '原始 PDF'}<ExternalLink size={13}/></UiButton>}
     </div></div>
     {resolved.status !== 'resolved' && <div className="response-notice response-notice-warning">{resolved.status === 'stale' ? '当前定位属于旧文件版本，请核对新版本后重新定位。' : '找不到该条款原文，请核对来源文件。'}</div>}
     {pdf && real ? <iframe className="source-pdf" title="原始 RFQ PDF" src={active?.sourceUrl || file?.localUrl}/> : <div className="source-document-scroll" ref={container}>
@@ -89,12 +112,16 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
         onDiscuss={onQuote ? row => onQuote(row.sourceOriginal ?? row.original, makeSourceAnchor(row)) : undefined}
       >{anchorProps => rows.map((row, i) => <React.Fragment key={row.id}>
         {(i === 0 || sectionLabel(rows[i - 1]) !== sectionLabel(row)) && <h2 className="word-section-heading">{sectionLabel(row) === '未识别章节' ? '客户要求' : sectionLabel(row)}<span className="wc-format" aria-hidden="true"> ↵</span></h2>}
-        <section data-source-id={row.id} className={`source-paragraph ${row.id === active?.id && resolved.status === 'resolved' ? 'active' : ''}`} onClick={() => { if (!window.getSelection()?.toString()) onSelectAnchor(makeSourceAnchor(row)); }} onMouseUp={captureSelection}>
+        <Dropdown trigger={['contextMenu']} disabled={!canAnnotate}
+          onOpenChange={open => { if (!open) setContextComment(null); }}
+          menu={{ items: [{ key: 'comment', label: '新建批注', icon: <MessageSquarePlus size={14}/>, disabled: contextComment?.rowId !== row.id || !contextComment?.draft }], onClick: ({ domEvent }) => { domEvent.stopPropagation(); addContextComment(row); } }}>
+        <section data-source-id={row.id} className={`source-paragraph ${row.id === active?.id && resolved.status === 'resolved' ? 'active' : ''}`} onClick={() => { if (!window.getSelection()?.toString()) onSelectAnchor(makeSourceAnchor(row)); }} onMouseUp={captureSelection} onContextMenu={() => captureContextComment(row)}>
           <div><b><span data-source-part="heading">{renderSourcePart(row, 'heading')}</span><span className="wc-format" aria-hidden="true"> ↵</span></b><small>第 {row.sourcePage || '—'} 页</small></div>
           <p><span data-source-text data-source-part="body" {...anchorProps(row)}>{renderSourcePart(row, 'body')}</span><span className="wc-format" aria-hidden="true"> ↵</span></p>
         </section>
+        </Dropdown>
       </React.Fragment>)}</WordAnnotationCanvas>
     </div>}
-    <div className="source-quote-toolbar"><span>{rows.length} 条要求 · {comments.filter(c => c.anchor?.fileId === selectedAnchor.fileId && String(c.anchor.sourceVersion) === String(selectedAnchor.sourceVersion)).length} 条批注</span>{onQuote && <button className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => onQuote(active?.sourceOriginal || active?.original, selectedAnchor)}><MessageSquarePlus size={14}/>批注当前条款</button>}<span role={selectionError ? 'status' : undefined}>{selectionError || '选中文字可添加批注'}</span></div>
+    <div className="source-quote-toolbar"><span>{rows.length} 条要求 · {comments.filter(c => c.anchor?.fileId === selectedAnchor.fileId && String(c.anchor.sourceVersion) === String(selectedAnchor.sourceVersion)).length} 条批注</span>{onQuote && <UiButton className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => onQuote(active?.sourceOriginal || active?.original, selectedAnchor)}><MessageSquarePlus size={14}/>批注当前条款</UiButton>}<span role={selectionError ? 'status' : undefined}>{selectionError || '选中文字或右键原文可添加批注'}</span></div>
   </section>;
 }

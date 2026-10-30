@@ -1,3 +1,5 @@
+import { QueryFilter, ProFormSelect } from '@ant-design/pro-components';
+import { PageHeading } from '../components/AntContent';
 import React, { useState } from 'react';
 import { Button, Select, Space } from 'antd';
 import { ProDescriptions, ProTable } from '@ant-design/pro-components';
@@ -16,8 +18,11 @@ export default function AnalysisRecordsPage({ appState, onOpenProject }) {
     { title: '操作', key: 'actions', fixed: 'right', width: 170, render: (_, run) => <Space><Button type="link" onClick={() => setDetail(run)}>查看本次</Button><Button type="link" onClick={() => onOpenProject(run.projectId, 'documents', { fileId: run.fileId, sourceVersion: run.sourceVersion })}>回到文件</Button></Space> },
   ];
   return <div className="workspace-page">
-    <div className="page-heading"><div><span className="workspace-eyebrow">ANALYSIS HISTORY</span><h1>AI 分析记录</h1><p>逐次保留来源版本、解析和匹配结果；当前原型执行模拟分析。</p></div></div>
-    <section className="panel"><div className="workspace-filters"><Select aria-label="分析记录项目" style={{ width: 280, maxWidth: '100%' }} value={projectId} onChange={setProjectId} options={[{ value: '', label: '全部项目' }, ...appState.projects.map(p => ({ value: p.id, label: p.name }))]}/></div>
+    <PageHeading title={<>AI 分析记录</>} description={<>逐次保留来源版本、解析和匹配结果；当前原型执行模拟分析。</>} actions={<></>} />
+    <section className="panel"><QueryFilter className="rfq-query-form" layout="vertical" defaultCollapsed={false}
+ onFinish={async values=>{setProjectId(values.projectId||'');return true;}} onReset={()=>setProjectId('')}>
+ <ProFormSelect name="projectId" label="关联项目" fieldProps={{'aria-label':'分析记录项目'}} options={[{value:'',label:'全部项目'},...appState.projects.map(p=>({value:p.id,label:p.name}))]}/>
+ </QueryFilter>
       <ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={runs} search={false} headerTitle="分析运行记录"
         options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1160 }} pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无本轮分析记录，解析文件后会保留运行结果' }}/>
     </section>

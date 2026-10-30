@@ -1,3 +1,4 @@
+import { UiTag } from '../components/AntContent';
 import React,{useId,useState} from 'react';
 import {buildApprovalLineGeometry} from '../approvalChartGeometry';
 import './bu-approval-charts.css';
@@ -13,7 +14,7 @@ function ApprovalTrend({charts,formatHours}){
  const columnWidth=(plot.right-plot.left)/Math.max(1,trend.length-1);
  const pointDescription=point=>`${point.rangeLabel}，本期${hoursText(point.averageHours,formatHours)}，${point.count}轮；上一周期${point.previousRangeLabel}，${hoursText(point.previousAverageHours,formatHours)}，${point.previousCount}轮`;
  return <section className="panel bu-chart-panel bu-trend-panel">
-  <div className="workspace-panel-heading"><div><h2>审批时长趋势</h2><p>本期与上期平均审批时长；无记录区间保留空档。</p></div><span className="badge">每 {bucketDays} 天</span></div>
+  <div className="workspace-panel-heading"><div><h2>审批时长趋势</h2><p>本期与上期平均审批时长；无记录区间保留空档。</p></div><UiTag className="badge">每 {bucketDays} 天</UiTag></div>
   <div className="bu-chart-legend"><span><i style={{background:colors.current}}/>本期</span><span><i className="is-dashed"/>上期对应区间</span><small>单位：小时／轮</small></div>
   <div className="bu-trend-canvas">
    <svg className="bu-trend-svg" viewBox={`0 0 ${geometry.width} ${geometry.height}`} role="group" aria-label="审批时长趋势图" onMouseLeave={()=>setActive(null)}>
@@ -42,7 +43,7 @@ function ApprovalDistribution({bins,total}){
  const [active,setActive]=useState(null),width=430,height=225,plot={left:38,right:410,top:28,bottom:182};
  const maximum=Math.max(1,...bins.map(bin=>bin.count)),step=(plot.right-plot.left)/bins.length,barWidth=36;
  const selected=active===null?null:bins[active];
- return <section className="panel bu-chart-panel"><div className="workspace-panel-heading"><div><h2>审批耗时分布</h2><p>按本期办结轮次统计，查看较长审批的占比。</p></div><span className="badge">{total} 轮</span></div>
+ return <section className="panel bu-chart-panel"><div className="workspace-panel-heading"><div><h2>审批耗时分布</h2><p>按本期办结轮次统计，查看较长审批的占比。</p></div><UiTag className="badge">{total} 轮</UiTag></div>
   <div className="bu-distribution-canvas"><svg viewBox={`0 0 ${width} ${height}`} role="group" aria-label="审批耗时分布柱状图" onMouseLeave={()=>setActive(null)}>
    {[0,1,2].map(index=>{const value=Math.ceil(maximum/2)*index,y=plot.bottom-value/(Math.ceil(maximum/2)*2)*(plot.bottom-plot.top);return <g key={index}><line x1={plot.left} x2={plot.right} y1={y} y2={y} className="bu-chart-gridline"/><text x={plot.left-10} y={y+4} textAnchor="end" className="bu-chart-axis">{value}</text></g>;})}
    {bins.map((bin,index)=>{
@@ -62,7 +63,7 @@ function ApprovalDistribution({bins,total}){
 function ApprovalOutcomes({parts,total,pending}){
  const [active,setActive]=useState(null),selected=parts.find(part=>part.key===active),label=selected?.label||'本期办结',value=selected?.count??total;
  let offset=0;
- return <section className="panel bu-chart-panel"><div className="workspace-panel-heading"><div><h2>审批结果分布</h2><p>仅统计本期通过与退回，待审单独列出。</p></div><span className="badge">当前待审 {pending} 轮</span></div>
+ return <section className="panel bu-chart-panel"><div className="workspace-panel-heading"><div><h2>审批结果分布</h2><p>仅统计本期通过与退回，待审单独列出。</p></div><UiTag className="badge">当前待审 {pending} 轮</UiTag></div>
   <div className="bu-outcome-body"><svg className="bu-outcome-ring" viewBox="0 0 210 210" role="group" aria-label="本期审批结果环形图" onMouseLeave={()=>setActive(null)}>
    <circle cx="105" cy="105" r="77" fill="none" stroke="#edf1f7" strokeWidth="19"/>
    {parts.map(part=>{

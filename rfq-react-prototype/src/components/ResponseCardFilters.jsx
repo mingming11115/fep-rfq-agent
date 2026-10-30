@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input, Popover, Select } from 'antd';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal } from "./icons";
 import {RESPONSE_STATUS_LABELS} from '../responseCardQueue';
 
 export const EMPTY_CARD_FILTERS = { query: '', status: 'all', source: 'all', type: 'all' };

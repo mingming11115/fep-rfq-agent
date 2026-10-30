@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CornerUpLeft, Ellipsis } from 'lucide-react';
+import { CornerUpLeft, Ellipsis } from "./icons";
 
 export default function SourceResponseAnnotation({ row, annotation, color, active, onSelect, onDiscuss, onOpen }) {
   const [menuOpen, setMenuOpen] = useState(false);

@@ -1,8 +1,9 @@
+import { UiButton } from './AntContent';
 import React,{useState} from 'react';
 import { Alert, Input, Select, Steps, Upload as AntUpload } from 'antd';
 import { InboxOutlined } from '@ant-design/icons';
 import { uploadMetadata } from '../antdAdapters';
-import {ShieldCheck} from 'lucide-react';
+import {ShieldCheck} from "./icons";
 import {Modal,StatusBadge} from './ui';
 
 function Field({label,children,required=false,wide=false}){return <label className={`field ${wide?'flow-field-wide':''}`}><span>{required&&<i className="flow-required">*</i>}{label}</span>{children}</label>;}
@@ -17,7 +18,7 @@ export default function SourceUploadDialog({project,files=[],onSubmit,onClose}){
   const incoming=selected.map(file=>({id:`FILE-${crypto.randomUUID()}`,name:file.name,size:file.size,mime:file.type,lastModified:file.lastModified,purpose,version:version.trim(),visibility,reason:reason.trim(),previousVersionId:[...files].reverse().find(old=>old.name===file.name)?.id,status:'排队中',createdAt:new Date().toLocaleString('zh-CN',{hour12:false})}));
   onSubmit(incoming);
  }
- return <Modal title="上传并智能解析" onClose={onClose} footer={<><button className="btn" onClick={onClose}>取消</button><button className="btn btn-primary" onClick={submit}>开始智能解析</button></>}>
+ return <Modal title="上传并智能解析" onClose={onClose} footer={<><UiButton className="btn" onClick={onClose}>取消</UiButton><UiButton className="btn btn-primary" onClick={submit}>开始智能解析</UiButton></>}>
   <Steps size="small" current={0} style={{marginBottom:20}} items={['选择文件','条款解析','应答项对比','查看结果'].map(title=>({title}))}/>
   <div className="dw-mode-note"><ShieldCheck size={19}/><div><strong>智能抽取 · 应答项对比 · 自动导入</strong><p>要求来源文件先解析条款、对比应答项，再生成应答结果，完成后直接进入应答项处理。本原型仅记录元数据，解析与对比使用模拟数据。</p></div></div>
   <div className="form-grid"><Field label="文件用途" required><Select aria-label="文件用途" value={purpose} onChange={setPurpose} options={['要求来源','补充附件','应答模板'].map(value=>({value,label:value}))}/></Field><Field label="文件版本" required><Input aria-label="文件版本" value={version} onChange={e=>setVersion(e.target.value)}/></Field><Field label="可见范围"><Select aria-label="可见范围" value={visibility} onChange={setVisibility} options={['项目成员可见','项目负责人及专业人员'].map(value=>({value,label:value}))}/></Field><Field label="关联项目"><Input value={project.name} readOnly/></Field></div>

@@ -1,5 +1,6 @@
+import { UiCheckbox } from './AntContent';
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronUp, ChevronDown, MessageSquarePlus } from 'lucide-react';
+import { ChevronUp, ChevronDown, MessageSquarePlus } from "./icons";
 import { selectSourceResponseAnnotations, SOURCE_ANNOTATION_CONCLUSIONS } from '../responseAdvice';
 import SourceResponseAnnotation from './SourceResponseAnnotation';
 import './source-response-annotation.css';
@@ -90,7 +91,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
     <div className="wc-annotation-filters" role="group" aria-label="按应答结论显示标注">
       <span>显示标注：</span>
       {SOURCE_ANNOTATION_CONCLUSIONS.map(conclusion => <label key={conclusion}>
-        <input type="checkbox" aria-label={`显示 ${conclusion} 标注`} disabled={!showAnnotations}
+        <UiCheckbox type="checkbox" aria-label={`显示 ${conclusion} 标注`} disabled={!showAnnotations}
           checked={visibleConclusions.includes(conclusion)}
           onChange={event => setVisibleConclusions(previous => event.target.checked ? [...previous, conclusion] : previous.filter(value => value !== conclusion))}/>
         {conclusion}

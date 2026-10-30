@@ -1,3 +1,5 @@
+import { QueryFilter, ProFormText, ProFormSelect, ProFormCheckbox } from '@ant-design/pro-components';
+import { PageHeading } from '../components/AntContent';
 import React, { useEffect, useRef, useState } from 'react';
 import useContentTransition from '../components/useContentTransition';
 import { Button, Checkbox, Form, Input, Select, Space, Tabs } from 'antd';
@@ -11,7 +13,8 @@ function load() { try { return JSON.parse(sessionStorage.getItem('rfq.tasks.filt
 export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
   const [filters, setFilters] = useState(() => ({ tab: 'pending', query: '', projectId: '', kind: '', overdue: false, ...load() }));
   const [transfer, setTransfer] = useState(null);
-  const resultsRef = useRef(null);
+  const resultsRef = useRef(null), queryFormRef = useRef(null);
+  const initialQuery = useRef({query:filters.query,projectId:filters.projectId,kind:filters.kind,overdue:filters.overdue});
   useContentTransition(resultsRef, filters.tab, { duration: 120 });
   useEffect(() => { sessionStorage.setItem('rfq.tasks.filters', JSON.stringify(filters)); }, [filters]);
   const change = (key, value) => setFilters(current => ({ ...current, [key]: value }));
@@ -33,17 +36,20 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
     </Space> },
   ];
   return <div className="workspace-page">
-    <div className="page-heading"><div><span className="workspace-eyebrow">MY TASKS</span><h1>任务中心</h1><p>每一项待办都关联具体条款、评审或审批版本。</p></div></div>
+    <PageHeading title={<>任务中心</>} description={<>每一项待办都关联具体条款、评审或审批版本。</>} actions={<></>} />
     <section className="panel">
       <Tabs className="rfq-panel-tabs" activeKey={filters.tab} onChange={key => change('tab', key)} items={[
         ['pending', '待办'], ['done', '已处理'], ['all', '全部'],
       ].map(([key, label]) => ({ key, label: label + ' ' + selectMyTasks(appState, { actorId: appState.actorId, tab: key }).length }))}/>
-      <div className="workspace-filters rfq-ant-filters">
-        <Input.Search aria-label="搜索任务" placeholder="项目、条款或任务关键词" allowClear value={filters.query} onChange={event => change('query', event.target.value)} style={{ width: 300, maxWidth: '100%' }}/>
-        <Select aria-label="任务项目" value={filters.projectId} onChange={value => change('projectId', value)} style={{ width: 220 }} options={[{ value: '', label: '全部项目' }, ...appState.projects.map(p => ({ value: p.id, label: p.name }))]}/>
-        <Select aria-label="任务类型" value={filters.kind} onChange={value => change('kind', value)} style={{ width: 160 }} options={[{ value: '', label: '全部类型' }, ...Object.entries(taskLabels).map(([value, label]) => ({ value, label }))]}/>
-        <Checkbox checked={filters.overdue} onChange={event => change('overdue', event.target.checked)}>仅逾期</Checkbox>
-      </div>
+      <QueryFilter formRef={queryFormRef} className="rfq-query-form" layout="vertical" defaultCollapsed={false}
+ initialValues={initialQuery.current}
+ onFinish={async values=>{setFilters(current=>({...current,query:values.query||'',projectId:values.projectId||'',kind:values.kind||'',overdue:!!values.overdue}));return true;}}
+ onReset={()=>{queryFormRef.current?.setFieldsValue({query:'',projectId:'',kind:'',overdue:false});setFilters(current=>({...current,query:'',projectId:'',kind:'',overdue:false}));}}>
+ <ProFormText name="query" label="关键词" placeholder="项目、条款或任务关键词" fieldProps={{'aria-label':'搜索任务',allowClear:true}}/>
+ <ProFormSelect name="projectId" label="关联项目" fieldProps={{'aria-label':'任务项目'}} options={[{value:'',label:'全部项目'},...appState.projects.map(p=>({value:p.id,label:p.name}))]}/>
+ <ProFormSelect name="kind" label="任务类型" fieldProps={{'aria-label':'任务类型'}} options={[{value:'',label:'全部类型'},...Object.entries(taskLabels).map(([value,label])=>({value,label}))]}/>
+ <ProFormCheckbox name="overdue" label="到期情况">仅逾期</ProFormCheckbox>
+ </QueryFilter>
       <div ref={resultsRef}><ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false} headerTitle="我的任务"
         options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1140 }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>

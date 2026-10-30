@@ -1,5 +1,5 @@
 import React from 'react';
-import { History, MessageSquare, Users, ArrowUpRight } from 'lucide-react';
+import { History, MessageSquare, Users, ArrowUpRight } from "./icons";
 import { resolveSourceAnchor } from '../documentAnchors';
 
 export default function ProjectActivityPanel({ project, requirements, reviews, snapshots = [], comments = [], members = [], audit = [], onLocate }) {

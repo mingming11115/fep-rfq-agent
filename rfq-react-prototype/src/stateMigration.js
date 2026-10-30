@@ -1,6 +1,8 @@
 import {normalizeTaskStatus} from './taskStatus.js';
 import {makeDocumentDemo} from './documentMocks.js';
 import {initializePersonnel,getEligiblePersonnel} from './personnelDomain.js';
+import {MODELS,PROCESSES} from './modelProcessSeeds.js';
+import {resolveRfqProcessBinding} from './rfqProcessBinding.js';
 export const actorIdForRole = role => ['SR','销售负责人'].includes(role) ? 'demo-sales' : role==='BU管理员'?'demo-bu-admin':role==='后台管理'?'demo-system-admin':/最终|批准人/.test(role || '') ? 'demo-approver' : 'demo-technical';
 export function getActor(state) { return { id: state.actorId || actorIdForRole(state.actorRole), role: state.actorRole || '销售负责人' }; }
 export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
@@ -55,7 +57,26 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     seedClauseStatusExamples(state, project);
     seedTaskDeadlineExamples(state, project, now);
   }
-  return migrateResponseReviews(mergeLegacyFollowups(migrateProjectReviewSettings(initializePersonnel(state)),now));
+  return migrateResponseReviews(mergeLegacyFollowups(migrateProjectReviewSettings(seedDemoProcessLinks(initializePersonnel(state),demo)),now));
+}
+
+function seedDemoProcessLinks(state,demo){
+ const processByProject={
+  'RFQ-001':'PROC-A-R2-P1','RFQ-002':'PROC-A-R2-P1',
+  'RFQ-DEMO-UPLOAD':'PROC-A-R2-P2','RFQ-DEMO-PARSING':'PROC-A-R2-P2',
+  'RFQ-003':'PROC-A-R2-GESI',
+ };
+ for(const project of state.projects){
+  const processId=processByProject[project.id];
+  const trusted=demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer)
+   ||project.id==='RFQ-DEMO-PARSING'&&project.sample&&project.customer==='演示客户（模拟）';
+  if(!processId||!trusted||project.buId!=='BU-DEMO'||project.demoProcessBindingVersion===1)continue;
+  // Seed only missing demo associations once; saved replies and frozen approvals remain intact.
+  project.demoProcessBindingVersion=1;
+  if(project.modelId||project.processId)continue;
+  Object.assign(project,resolveRfqProcessBinding({models:MODELS,processes:PROCESSES,buId:'BU-DEMO',modelId:'MOD-A-R2',processId}));
+ }
+ return state;
 }
 
 function migrateProjectReviewSettings(state){

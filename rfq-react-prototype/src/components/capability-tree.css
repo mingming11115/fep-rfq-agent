@@ -14,7 +14,7 @@
 .cap-tree .cap-tree-children { margin-left:11px; padding-left:10px; border-left:1px solid #e1e7f0; }
 .cap-tree-row { display:flex; align-items:center; min-height:40px; border-radius:5px; margin:3px 0; position:relative; }
 .cap-tree-children > li > .cap-tree-row:before { content:''; position:absolute; left:-10px; top:21px; width:9px; height:1px; background:#e1e7f0; }
-.cap-tree-row.selected { background:#edf3ff; color:#165dff; }
+.cap-tree-row.selected { background:#edf3ff; color:#1677ff; }
 .cap-tree .cap-tree-toggle { display:grid; place-items:center; flex:none; background:transparent; border:0; color:#8794a7; width:22px; min-height:36px; padding:0; }
 .cap-tree-toggle svg { transition:transform .15s; }
 .cap-tree-toggle[aria-expanded="true"] svg { transform:rotate(90deg); }
@@ -64,4 +64,4 @@
 @media(pointer:coarse) { .cap-tree .cap-tree-toggle { width:30px; min-height:44px; } .cap-tree .cap-tree-node { min-height:44px; } }
 @media(prefers-reduced-motion:reduce) { .cap-tree-toggle svg { transition:none; } }
 
-.cap-tree-actions{display:flex;flex:none;gap:1px;padding-right:3px}.cap-tree-action{display:grid;place-items:center;width:23px;height:28px;border:0;border-radius:4px;background:transparent;color:#7d8ca2}.cap-tree-action:hover,.cap-tree-action:focus-visible{background:#e4edfc;color:#165dff}.cap-tree-action.danger:hover,.cap-tree-action.danger:focus-visible{background:#fff0ed;color:#d94141}
+.cap-tree-actions{display:flex;flex:none;gap:1px;padding-right:3px}.cap-tree-action{display:grid;place-items:center;width:23px;height:28px;border:0;border-radius:4px;background:transparent;color:#7d8ca2}.cap-tree-action:hover,.cap-tree-action:focus-visible{background:#e4edfc;color:#1677ff}.cap-tree-action.danger:hover,.cap-tree-action.danger:focus-visible{background:#fff0ed;color:#d94141}

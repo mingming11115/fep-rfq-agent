@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import dayjs from 'dayjs';
-import { personnelOptions, uploadMetadata, mentionIds, mentionMatches, statusTone, formDate, resizePanelShare } from './antdAdapters.js';
+import { nativeTextArea, personnelOptions, uploadMetadata, mentionIds, mentionMatches, statusTone, formDate, resizePanelShare } from './antdAdapters.js';
+
+test('textarea ref exposes native focus and scrolling for validation', () => {
+  const calls=[];
+  const textarea={scrollIntoView:options=>calls.push(['scroll',options]),focus:options=>calls.push(['focus',options])};
+  const exposed=nativeTextArea({focus:()=>{},resizableTextArea:{textArea:textarea}});
+  assert.equal(typeof exposed.scrollIntoView,'function');
+  exposed.scrollIntoView({block:'nearest'});
+  exposed.focus({preventScroll:true});
+  assert.deepEqual(calls,[['scroll',{block:'nearest'}],['focus',{preventScroll:true}]]);
+  assert.equal(nativeTextArea(null),null);
+});
 
 test('mention candidates are searchable by Chinese display name and account ID', () => {
   const option = { value: 'demo-technical', label: '顾工 · demo-technical' };

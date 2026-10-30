@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Building2, Box, ChevronRight, FileText, FolderClock, Workflow } from 'lucide-react';
+import { Building2, Box, ChevronRight, FileText, FolderClock, Workflow } from "./icons";
 import './capability-tree.css';
 
 const icons = { bu: Building2, model: Box, process: Workflow, unassigned: FolderClock, capability: FileText };

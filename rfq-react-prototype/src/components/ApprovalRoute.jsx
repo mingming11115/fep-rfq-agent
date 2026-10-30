@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, GitBranch, Clock3 } from 'lucide-react';
+import { ArrowRight, GitBranch, Clock3 } from "./icons";
 import { getReviewRoute } from '../rfqWorkflow';
 export default function ApprovalRoute({ requirement, config, review }) {
   const route = getReviewRoute(requirement, config);

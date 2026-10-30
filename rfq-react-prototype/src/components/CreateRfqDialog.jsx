@@ -1,9 +1,10 @@
+import { UiButton, UiInput } from './AntContent';
 import React,{useEffect,useState} from 'react';
 import { Alert, Form } from 'antd';
 import { ModalForm, ProFormDatePicker, ProFormRadio, ProFormText } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import {formDate} from '../antdAdapters';
-import {Plus} from 'lucide-react';
+import {Plus} from "./icons";
 import {Modal} from './ui';
 import {canPerform} from '../permissions';
 import {getPersonnelContext,getProjectOwnerCandidates,getEligiblePersonnel,personName} from '../personnelDomain';
@@ -95,22 +96,22 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
     {form.technicalMode==='representative'&&<Form.Item name="technicalRepresentativeId" label="技术负责人"><PersonPicker label="技术负责人" people={technicalCandidates.filter(p=>form.technicalIds.includes(p.userId))} resolveName={id=>personName(appState,id)} emptyLabel="请先选择技术组评审成员"/></Form.Item>}
    </div>
    <div className="rfq-process-fields">
-    <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><button type="button" className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</button><button type="button" className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</button></div></div>
+    <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><UiButton type="button" className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</UiButton><UiButton type="button" className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</UiButton></div></div>
     <div className="rfq-catalog-tree"><CapabilityTree root={tree} selectedKey={selectedKey} onSelect={selectProcessNode} terminalKinds={['process']} ariaLabel="选择RFQ关联工艺" emptyLabels={{bu:'暂无机型，请先新建机型',model:'暂无启用工艺，可新建工艺'}} revealSelection/></div>
     {(selectedProcess||selectedModel)&&<div className="rfq-tree-selection" role="status" aria-label="已选工艺">{selectedProcess?<>已选工艺：<strong>{selectedModel?.name} {selectedModel?.revision} / {selectedProcess.code} · {selectedProcess.name}</strong></>:<>已选机型：{selectedModel.name} {selectedModel.revision} · 请继续选择具体工艺</>}</div>}
    </div>
    {(error||catalog.error)&&<Alert className="rfq-form-error" type="error" showIcon message={error||catalog.error}/>}
   </ModalForm>
-  {processDraft&&<Modal title="新建工艺" onClose={()=>setProcessDraft(null)} footer={<><button className="btn" onClick={()=>setProcessDraft(null)}>取消</button><button className="btn btn-primary" onClick={saveProcess}>保存并选用工艺</button></>}>
+  {processDraft&&<Modal title="新建工艺" onClose={()=>setProcessDraft(null)} footer={<><UiButton className="btn" onClick={()=>setProcessDraft(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveProcess}>保存并选用工艺</UiButton></>}>
    <p className="rfq-create-hint">请选择工艺所属机型，保存后自动关联当前RFQ。</p>
-   <div className="rfq-catalog-heading"><strong>工艺所属机型 *</strong><button className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</button></div>
+   <div className="rfq-catalog-heading"><strong>工艺所属机型 *</strong><UiButton className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</UiButton></div>
    <div className="rfq-catalog-tree rfq-model-tree"><CapabilityTree root={modelTree} selectedKey={processDraft.modelId?`model:${processDraft.modelId}`:''} onSelect={node=>setProcessDraft({...processDraft,modelId:node.kind==='model'?node.modelId:''})} terminalKinds={['model']} ariaLabel="选择工艺所属机型" emptyLabels={{bu:'暂无机型，请先新建机型'}} revealSelection/></div>
    <div className="rfq-tree-selection" role="status" aria-label="已选机型">{processModel?`${processModel.name} ${processModel.revision}`:'请选择工艺所属机型'}</div>
-   <div className="form-grid">{Object.entries({code:'工艺编码',name:'工艺名称',conditions:'适用条件 / 工艺说明'}).map(([key,label])=><Field key={key} label={label} required={key!=='conditions'}><input className="input" value={processDraft[key]} onChange={e=>setProcessDraft({...processDraft,[key]:e.target.value})}/></Field>)}</div>
+   <div className="form-grid">{Object.entries({code:'工艺编码',name:'工艺名称',conditions:'适用条件 / 工艺说明'}).map(([key,label])=><Field key={key} label={label} required={key!=='conditions'}><UiInput className="input" value={processDraft[key]} onChange={e=>setProcessDraft({...processDraft,[key]:e.target.value})}/></Field>)}</div>
    {processError&&<p className="flow-error-inline" role="alert">{processError}</p>}
   </Modal>}
-  {modelDraft&&<Modal title="新建机型" onClose={()=>setModelDraft(null)} footer={<><button className="btn" onClick={()=>setModelDraft(null)}>取消</button><button className="btn btn-primary" onClick={saveModel}>保存并选用机型</button></>}>
-   <div className="form-grid">{Object.entries({code:'机型编码',name:'机型名称',revision:'硬件版本',series:'产品系列',config:'配置定义',standard:'标准配置',options:'可选配置'}).map(([key,label])=><Field key={key} label={label} required={['code','name','revision','config'].includes(key)}><input className="input" value={modelDraft[key]} onChange={e=>setModelDraft({...modelDraft,[key]:e.target.value})}/></Field>)}</div>
+  {modelDraft&&<Modal title="新建机型" onClose={()=>setModelDraft(null)} footer={<><UiButton className="btn" onClick={()=>setModelDraft(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveModel}>保存并选用机型</UiButton></>}>
+   <div className="form-grid">{Object.entries({code:'机型编码',name:'机型名称',revision:'硬件版本',series:'产品系列',config:'配置定义',standard:'标准配置',options:'可选配置'}).map(([key,label])=><Field key={key} label={label} required={['code','name','revision','config'].includes(key)}><UiInput className="input" value={modelDraft[key]} onChange={e=>setModelDraft({...modelDraft,[key]:e.target.value})}/></Field>)}</div>
    {modelError&&<p className="flow-error-inline" role="alert">{modelError}</p>}
   </Modal>}
  </>;

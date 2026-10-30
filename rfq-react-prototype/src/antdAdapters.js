@@ -1,4 +1,5 @@
 import { filterPeople } from './personPicker.js';
+export function nativeTextArea(instance) { return instance?.resizableTextArea?.textArea || null; }
 export function mentionMatches(search, option) {
   return (String(option.label || '') + ' ' + option.value).toLocaleLowerCase().includes(search.toLocaleLowerCase());
 }

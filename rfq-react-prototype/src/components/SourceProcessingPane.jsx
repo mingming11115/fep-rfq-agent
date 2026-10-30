@@ -1,5 +1,6 @@
+import { UiButton } from './AntContent';
 import React from 'react';
-import {FileText,LoaderCircle,AlertCircle,CheckCircle2,ArrowRight} from 'lucide-react';
+import {FileText,LoaderCircle,AlertCircle,CheckCircle2,ArrowRight} from "./icons";
 import {StatusBadge} from './ui';
 import SourceParseProgress from './SourceParseProgress';
 
@@ -10,6 +11,6 @@ export default function SourceProcessingPane({summary,onOpen}){
   <SourceParseProgress files={summary.files}/>
   {summary.files.some(file=>file.demoParsePreview)&&<p className="detail-parsing-demo-note">解析中示例 · 固定展示应答项对比阶段，刷新或切换页面后仍可查看。</p>}
   <div className="detail-processing-files">{summary.files.map(file=><article key={file.id}><FileText size={22}/><div><strong>{file.name}</strong><small>{file.version} · {file.purpose}</small>{file.error&&<p className="flow-error-inline">{file.error}</p>}</div><StatusBadge status={file.status}/></article>)}</div>
-  {(failed||ready)&&<button className="btn btn-primary" onClick={onOpen}>{failed?'查看失败任务':'查看解析结果'}<ArrowRight size={15}/></button>}
+  {(failed||ready)&&<UiButton className="btn btn-primary" onClick={onOpen}>{failed?'查看失败任务':'查看解析结果'}<ArrowRight size={15}/></UiButton>}
  </section>;
 }
