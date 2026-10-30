@@ -120,6 +120,31 @@ class OfficeIntegrationTest {
         assertThat(signed.get("document")).isEqualTo(config.get("document"));
         assertThat(config.at("/document/url").asText()).contains("/api/office/content/", "ticket=");
     }
+    @Test void clausePluginConfigIsSignedAndCannotLoadUntrustedCode() throws Exception {
+        JsonNode ref=upload();String channel="b221c509-e18c-4d97-a387-22f57e505a68";
+        var request=Map.of("readOnly",true,"pluginOrigin","http://localhost:5173","pluginChannel",channel);
+        JsonNode config=mapper.readTree(mvc.perform(post("/api/office/documents/"+ref.get("id").asText()+"/session")
+                .header("X-Office-Access",ref.get("access").asText()).contentType("application/json").content(mapper.writeValueAsBytes(request)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).at("/data/config");
+        assertThat(config.at("/editorConfig/plugins/pluginsData/0").asText()).contains("http://localhost:5173/api/office/plugin/config.json",channel);
+        assertThat(java.net.URI.create(config.at("/editorConfig/plugins/pluginsData/0").asText()).getPath()).endsWith("/config.json");
+        JsonNode signed=JSON.readTree(Base64.getUrlDecoder().decode(config.get("token").asText().split("\\.")[1]));
+        assertThat(signed.get("editorConfig")).isEqualTo(config.get("editorConfig"));
+        mvc.perform(get("/api/office/plugin/config.json").param("origin","http://localhost:5173").param("channel",channel)
+                .header("Origin","http://browser.invalid:8082")).andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin","*"))
+                .andExpect(jsonPath("$.variations[0].isVisual").value(false))
+                .andExpect(jsonPath("$.baseUrl").value(""))
+                .andExpect(jsonPath("$.variations[0].url").value("index.html#channel="+channel));
+        mvc.perform(post("/api/office/documents/"+ref.get("id").asText()+"/session")
+                .header("X-Office-Access",ref.get("access").asText()).contentType("application/json")
+                .content(mapper.writeValueAsBytes(Map.of("pluginOrigin","http://evil.test","pluginChannel",channel))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/office/plugin/config.json").param("origin","http://localhost:5173").param("channel","bad?injection"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/office/plugin/index.html")).andExpect(status().isOk()).andExpect(content().contentTypeCompatibleWith("text/html"));
+        mvc.perform(get("/api/office/plugin/config.json")).andExpect(status().isOk()).andExpect(jsonPath("$.guid").value(OfficeDocumentService.CLAUSE_PLUGIN));
+    }
     @Test void saveIsDurableIdempotentAndPreservesOriginalAndForceSaveSession() throws Exception {
         JsonNode ref = upload(); String id = ref.get("id").asText(), access = ref.get("access").asText();
         String key = session(ref, false).at("/config/document/key").asText();

@@ -19,6 +19,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Service
 @EnableConfigurationProperties(OfficeProperties.class)
 public class OfficeDocumentService {
+    public static final String CLAUSE_PLUGIN = "asc.{B221C509-E18C-4D97-A387-22F57E505A68}";
     private final OfficeProperties properties;
     private final OfficeFileStore store;
     private final OfficeJwt jwt;
@@ -42,6 +43,13 @@ public class OfficeDocumentService {
         return out;
     }
     public Map<String, Object> session(OfficeFileStore.Document doc, boolean readOnly, String userId, String userName) {
+        return session(doc, readOnly, userId, userName, "", "");
+    }
+    public void validatePlugin(String origin, String channel) {
+        if (!properties.allowsFrontend(origin) || channel == null || !channel.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "条款联动来源或通道无效");
+    }
+    public Map<String, Object> session(OfficeFileStore.Document doc, boolean readOnly, String userId, String userName, String pluginOrigin, String pluginChannel) {
         if (!properties.configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "文档服务尚未配置，请先启动 ONLYOFFICE 并设置 JWT 密钥");
         var config = new LinkedHashMap<String, Object>();
         config.put("documentType", doc.fileType().equals("pdf") ? "pdf" : "word");
@@ -49,10 +57,15 @@ public class OfficeDocumentService {
         config.put("document", Map.of("fileType", doc.fileType(), "key", doc.key(), "title", doc.name() + " · 批阅副本",
                 "url", properties.callbackBaseUrl() + "/api/office/content/" + doc.id() + "?ticket=" + ticket(doc, "review"),
                 "permissions", Map.of("edit", !readOnly, "comment", !readOnly, "review", !readOnly, "download", true, "print", true)));
-        config.put("editorConfig", Map.of("mode", readOnly ? "view" : "edit", "lang", "zh-CN",
+        var editorConfig = new LinkedHashMap<String, Object>(Map.of("mode", readOnly ? "view" : "edit", "lang", "zh-CN",
                 "callbackUrl", properties.callbackBaseUrl() + "/api/office/callback/" + doc.id(),
                 "user", Map.of("id", text(userId).isEmpty() ? "rfq-local" : text(userId), "name", text(userName).isEmpty() ? "RFQ 用户" : text(userName)),
-                "customization", Map.of("forcesave", true, "autosave", true, "compactToolbar", true, "help", false)));
+                "customization", Map.of("forcesave", true, "autosave", true, "compactToolbar", true, "help", false, "features", Map.of("featuresTips", false))));
+        if (!pluginOrigin.isEmpty() || !pluginChannel.isEmpty()) {
+            validatePlugin(pluginOrigin, pluginChannel);
+            if (doc.fileType().equals("docx")) editorConfig.put("plugins", Map.of("autostart", List.of(CLAUSE_PLUGIN), "pluginsData", List.of(pluginOrigin + "/api/office/plugin/config.json?origin=" + java.net.URLEncoder.encode(pluginOrigin, UTF_8) + "&channel=" + pluginChannel)));
+        }
+        config.put("editorConfig", editorConfig);
         config.put("token", jwt.sign(config));
         return Map.of("config", config, "apiUrl", properties.publicUrl() + "/web-apps/apps/api/documents/api.js", "document", metadata(doc));
     }

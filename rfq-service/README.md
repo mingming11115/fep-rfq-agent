@@ -21,6 +21,7 @@ docker compose -p rfq-office --profile office up --build -d
 | `ONLYOFFICE_INTERNAL_URL` | `http://onlyoffice`，后端在 Docker 网络中访问文档服务的地址 |
 | `ONLYOFFICE_CALLBACK_BASE_URL` | Compose 固定 `http://rfq-service:48081`；本机 Java 启动时需改成文档容器能访问的后端地址 |
 | `ONLYOFFICE_STORAGE_DIR` | Compose 使用 `/app/data/onlyoffice`；本机 Java 默认为 `data/onlyoffice` |
+| `ONLYOFFICE_FRONTEND_ORIGINS` | 可加载条款联动插件的前端来源；默认 `http://127.0.0.1:5173,http://localhost:5173`，部署时填写真实来源 |
 
 Vite 已为 `/api/office` 配置同源代理。修改后端端口时，可在启动前端时设置 `RFQ_BACKEND_URL`。浏览器地址、容器内地址与回调地址分别配置，不能把容器中的 `localhost` 当作宿主机。
 
@@ -34,6 +35,7 @@ Vite 已为 `/api/office` 配置同源代理。修改后端端口时，可在启
 - `GET /documents/{id}/download?kind=original|review`：原件或最新已保存批阅版。
 - `GET /content/{id}?ticket=...`：供文档服务读取的有时限签名地址。
 - `POST /callback/{id}`：JWT 验签后的保存回调，返回 ONLYOFFICE 原生 `{error:0|1}`。
+- `GET /plugin/config.json`、`GET /plugin/{asset}`：社区插件公开资源；session 仅为白名单来源签入插件配置，随机通道隔离不同编辑器。`config.json` 文件名必须保留，9.3 编辑器依赖该名称解析资源目录。插件通过内容控件标签或精确唯一原文定位，不调用收费 Automation API。
 
 除签名内容地址和保存回调外，文档接口使用 `X-Office-Access` 访问凭据。只处理 DOCX / PDF，单文件上限 30 MiB；旧 DOC 请先转换。强制保存保留当前协作 key；最终保存后换用新 key。成功回调的凭据摘要持久化，非连续重复回调也不会回滚已保存版本。
 

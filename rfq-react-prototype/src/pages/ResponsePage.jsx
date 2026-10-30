@@ -160,9 +160,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   function hydrate(row) { if (!row) return; setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setConfirmReason(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(reviews.find(r => r.requirementId === row.id && !['已关闭', '已取消'].includes(r.status))?.id || null); setInlineReviewAction(null); }
   function edit(field, value) { setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
   function requestTransition(next) { if (cardBusyRef.current) return false; return guardCardNavigation({ dirty: dirtyRef.current || candidateDirty.current || !!reviewFormRef.current, onBlock: action => setTransition({ next: action }), previous: issueGuardRef.current }, next); }
-  function guardedDetail(next) { if (!window.__rfqRequestNavigation || window.__rfqRequestNavigation(next)) next(); }
+  function guardedDetail(next, sourceRow) { const officeSource=sourceRow?makeSourceAnchor({...sourceRow,projectId:project.id}):undefined; const allowed=!window.__rfqRequestNavigation||window.__rfqRequestNavigation(next,{officeSource});if(allowed)next();return allowed; }
   function revealCard(row) { if (row && !cardRows.some(item => item.id === row.id)) { setCardFilters(EMPTY_CARD_FILTERS); setCardFilterDraft(EMPTY_CARD_FILTERS); } }
-  function chooseRow(row) { if (!row) return; guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); }); }
+  function chooseRow(row) { if (!row) return; return guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); },row); }
   function applyCardFilters(next) { guardedDetail(() => { setCardFilters(next); setCardFilterDraft(next); setDeferredCards([]); const rows = selectResponseCards(requirements, reviews, next); const first = rows.find(row => row.status !== '已确认') || rows[0]; if (first) { hydrate(first); navigate('response', first.id, { fileId: first.sourceFileId, sourceVersion: first.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); } else { setQueueDone(false); setInlineReviewId(null); } }); }
   function browseCard(direction) {
     const index = cardRows.findIndex(row => row.id === active?.id);
@@ -236,7 +236,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       if (quote) detailSideRef.current?.scrollTo({ top: 0 });
       navigate('response', row.id, { fileId: anchor.fileId, sourceVersion: anchor.sourceVersion });
     };
-    guardedDetail(next);
+    return guardedDetail(next,row);
   }
   useEffect(() => { if (route?.page !== 'reviews' || !route.reviewId) return; const review = reviews.find(item => item.id === route.reviewId); if (!review) return; const row = requirements.find(item => item.id === review.requirementId); revealCard(row); if (row && row.id !== activeId) hydrate(row); setDetailTab('response'); setInlineReviewId(review.id); setInlineReviewAction(route.action === 'reopen' ? 'reopen' : null); }, [route?.page, route?.reviewId]);
   function changeDetailTab(key) {
@@ -257,7 +257,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   useEffect(() => { setPage(1); }, [query, status, section, owner, special]);
   useEffect(() => { const index = requirements.findIndex((row) => row.id === focusedRequirementId); if (index >= 0) {setPage(Math.floor(index / 6) + 1);if(focusedRequirementId!==activeId){revealCard(requirements[index]);hydrate(requirements[index]);}} }, [focusedRequirementId]);
   useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
-  useEffect(() => { const previous = window.__rfqRequestNavigation; const hook = (next) => officeCanLeave() && requestTransition(next) && (!previous || previous(next)); window.__rfqRequestNavigation = hook; const beforeUnload = (e) => { if (dirtyRef.current || candidateDirty.current || reviewFormRef.current) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', beforeUnload); return () => { if (window.__rfqRequestNavigation === hook) { if (previous) window.__rfqRequestNavigation = previous; else delete window.__rfqRequestNavigation; } window.removeEventListener('beforeunload', beforeUnload); clearTimeout(timer.current); }; }, []);
+  useEffect(() => { const previous = window.__rfqRequestNavigation; const hook = (next,options) => officeCanLeave(options?.officeSource) && requestTransition(next) && (!previous || previous(next,options)); window.__rfqRequestNavigation = hook; const beforeUnload = (e) => { if (dirtyRef.current || candidateDirty.current || reviewFormRef.current) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', beforeUnload); return () => { if (window.__rfqRequestNavigation === hook) { if (previous) window.__rfqRequestNavigation = previous; else delete window.__rfqRequestNavigation; } window.removeEventListener('beforeunload', beforeUnload); clearTimeout(timer.current); }; }, []);
   useEffect(() => {
     if (!pendingConfirmation) return;
     const current = requirements.find((r) => r.id === pendingConfirmation.id);

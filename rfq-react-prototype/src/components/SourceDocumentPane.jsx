@@ -130,7 +130,7 @@ function SourceExcerptPane({ file, rows, selectedAnchor, showResponses = true, r
 
 export default function SourceDocumentPane(props) {
   const source={projectId:props.selectedAnchor.projectId,fileId:props.selectedAnchor.fileId,sourceVersion:props.selectedAnchor.sourceVersion};
-  return <OnlyOfficeSourcePane key={officeSourceKey(source,`${props.officeUser?.id}:${props.canManageOffice}`)} file={props.file} source={source} canManage={Boolean(props.canManageOffice)} user={props.officeUser}>
+  return <OnlyOfficeSourcePane key={officeSourceKey(source,`${props.officeUser?.id}:${props.canManageOffice}`)} file={props.file} source={source} canManage={Boolean(props.canManageOffice)} user={props.officeUser} rows={props.rows} selectedAnchor={props.selectedAnchor} onSelectAnchor={props.onSelectAnchor}>
     <SourceExcerptPane {...props}/>
   </OnlyOfficeSourcePane>;
 }

@@ -3,6 +3,7 @@ package com.naura.rfq.office;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.naura.rfq.common.api.ApiResponse;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,7 +29,22 @@ public class OfficeController {
     }
     @PostMapping("/documents/{id}/session") public ApiResponse<?> session(@PathVariable String id,
             @RequestHeader(value = "X-Office-Access", required = false) String access, @RequestBody JsonNode request) {
-        return ApiResponse.success(service.session(store.authorize(id, access), request.path("readOnly").asBoolean(true), request.path("userId").asText(), request.path("userName").asText()));
+        return ApiResponse.success(service.session(store.authorize(id, access), request.path("readOnly").asBoolean(true), request.path("userId").asText(), request.path("userName").asText(), request.path("pluginOrigin").asText(), request.path("pluginChannel").asText()));
+    }
+    // Public plugin manifest only: no document identifiers, capabilities or user data.
+    @CrossOrigin(origins = "*")
+    // Docs 9.3 derives baseUrl by looking for the literal filename "config.json".
+    @GetMapping("/plugin/config.json") public Map<String, Object> clausePlugin(@RequestParam(defaultValue = "") String origin, @RequestParam(defaultValue = "") String channel) {
+        if (!origin.isEmpty() || !channel.isEmpty()) service.validatePlugin(origin, channel);
+        return Map.of("name", "RFQ 条款联动", "guid", OfficeDocumentService.CLAUSE_PLUGIN, "baseUrl", "", "version", "1.0.0",
+                "variations", java.util.List.of(Map.of("description", "RFQ 条款联动", "url", "index.html" + (channel.isEmpty() ? "" : "#channel=" + channel),
+                        "isViewer", true, "EditorsSupport", java.util.List.of("word"), "isVisual", false, "isModal", false, "isInsideMode", false,
+                        "initDataType", "none", "initData", "", "buttons", java.util.List.of())));
+    }
+    @GetMapping("/plugin/{asset:index\\.html|clause-link\\.js|plugins\\.js|LICENSE-sdk\\.txt|NOTICE\\.txt}")
+    public ResponseEntity<?> pluginAsset(@PathVariable String asset) {
+        String type=asset.endsWith(".js")?"text/javascript":asset.endsWith(".html")?"text/html":asset.endsWith(".json")?"application/json":"text/plain";
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL,"no-cache").contentType(MediaType.parseMediaType(type+";charset=UTF-8")).body(new ClassPathResource("office-plugin/"+asset));
     }
     @PostMapping("/documents/{id}/save") public ApiResponse<?> save(@PathVariable String id, @RequestHeader(value = "X-Office-Access", required = false) String access) throws Exception {
         return ApiResponse.success(service.forceSave(store.authorize(id, access)));

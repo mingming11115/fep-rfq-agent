@@ -12,7 +12,7 @@ export async function loadDemoOffice(source, signal) {
   const response = await fetch(asset,{signal});
   if (!response.ok) throw new Error('内置示例文件未能读取，请重试');
   const file = new File([await response.blob()],'RFQ批阅示例.docx',{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-  return uploadOfficeFile(file,source,signal);
+  return {...await uploadOfficeFile(file,source,signal),demoVersion:'clauses-v2'};
 }
 
 export async function officeRequest(path, ref, options = {}) {
@@ -47,8 +47,8 @@ export function loadOfficeApi(url) {
   }
   return scripts.get(url);
 }
-export function officeCanLeave() {
-  return !window.__rfqOfficeUnsaved?.dirty || window.confirm('文档修改尚未确认保存到服务器。建议先保存原文；仍要离开吗？');
+export function officeCanLeave(source) {
+  return !window.__rfqOfficeUnsaved?.dirty || Boolean(source&&window.__rfqOfficeUnsaved.sourceKey===officeSourceKey(source)) || window.confirm('文档修改尚未确认保存到服务器。建议先保存原文；仍要离开吗？');
 }
 export async function downloadOfficeFile(ref, kind = 'review') {
   const blob = await officeRequest(`/documents/${ref.id}/download?kind=${kind}`,ref,{binary:true});

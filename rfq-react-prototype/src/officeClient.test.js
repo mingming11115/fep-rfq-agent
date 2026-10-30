@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { supportsOffice, officeRequest, uploadOfficeFile, saveReached, officeSourceKey, savedGeneration, demoOfficeAsset, loadDemoOffice } from './officeClient.js';
+import { supportsOffice, officeRequest, uploadOfficeFile, saveReached, officeSourceKey, savedGeneration, demoOfficeAsset, loadDemoOffice, officeCanLeave } from './officeClient.js';
 
 test('only actual DOCX and PDF are offered for native editing', () => {
   assert.equal(supportsOffice('RFQ.DOCX'), true);
@@ -44,6 +44,14 @@ test('document mount identity changes only with file, source version and actual 
   assert.notEqual(officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V1'},'actor'),officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V2'},'actor'));
   assert.equal(officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V1',requirementId:'A'},'actor'),officeSourceKey({projectId:'P',fileId:'F',sourceVersion:'V1',requirementId:'B'},'actor'));
 });
+test('same document clause navigation retains unsaved native edits without bypassing other-source protection',()=>{
+  const previous=globalThis.window;let confirmations=0;const source={projectId:'P',fileId:'F',sourceVersion:'V1'};
+  try{globalThis.window={__rfqOfficeUnsaved:{dirty:true,sourceKey:officeSourceKey(source)},confirm:()=>{confirmations++;return false;}};
+    assert.equal(officeCanLeave(source),true);assert.equal(confirmations,0);
+    assert.equal(officeCanLeave({...source,sourceVersion:'V2'}),false);assert.equal(confirmations,1);
+    assert.equal(officeCanLeave(),false);assert.equal(confirmations,2);
+  }finally{globalThis.window=previous;}
+});
 test('native save reconciliation waits for the edited generation to reach the document service', () => {
   const baseline={revision:1,savedAt:'first'},after={revision:2,savedAt:'second'};
   assert.equal(savedGeneration({baseline,generation:2,flushedGeneration:2},after),true);
@@ -72,7 +80,7 @@ test('a fresh browser uploads only the bundled public demo and receives a normal
       assert.equal(options.body.get('sourceVersion'),'V1.0');
       return new Response(JSON.stringify({code:0,data:{id:'public-demo-copy',access:'local-capability'}}));
     };
-    assert.deepEqual(await loadDemoOffice(demoSource),{id:'public-demo-copy',access:'local-capability'});
+    assert.deepEqual(await loadDemoOffice(demoSource),{id:'public-demo-copy',access:'local-capability',demoVersion:'clauses-v2'});
     assert.deepEqual(calls,['/onlyoffice-demo/RFQ-review-example.docx','/api/office/documents']);
   }finally{globalThis.fetch=saved;}
 });
