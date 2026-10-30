@@ -1,4 +1,5 @@
 import React from 'react';
+import { Sparkles } from 'lucide-react';
 import { makeRequirements } from '../data';
 import { buildResponseAdvice } from '../responseAdvice';
 export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference }) {
@@ -18,13 +19,11 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
   const supportingEvidence = candidateEvidence && advice.evidence.startsWith(candidateEvidence)
     ? advice.evidence.slice(candidateEvidence.length).replace(/^；/, '')
     : advice.evidence;
-  return <section className="response-advice" aria-label="应答建议">
-    <h3>应答建议</h3>
+  return <section className="response-advice" aria-label="AI 应答建议">
     <dl>
-      <dt>建议结论</dt><dd><strong>{advice.conclusion}</strong></dd>
+      <dt>建议结论</dt><dd className="response-advice-conclusion"><strong>{advice.conclusion}</strong><span className="response-advice-ai" title="基于当前要求与参考依据提供建议"><Sparkles size={12} aria-hidden="true"/>AI 应答建议</span></dd>
       <dt>建议来源</dt><dd><div>{advice.reference}</div>{advice.evidence&&onOpenReference&&<button className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</button>}</dd>
       {supportingEvidence&&<><dt>核实资料</dt><dd>{supportingEvidence}</dd></>}
-      {advice.checks.length>0&&<><dt>待核实</dt><dd><ul>{advice.checks.map(item=><li key={item}>{item}</li>)}</ul></dd></>}
     </dl>
     {row.previousOriginal&&<details><summary>查看变更前要求</summary><p>{row.previousOriginal}</p></details>}
   </section>;

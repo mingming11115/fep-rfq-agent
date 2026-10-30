@@ -1,13 +1,13 @@
 import React from 'react';
-import {canPerform,getRoleDescription} from '../permissions';
-import {Plus,ArrowUpRight,ClipboardList,FolderKanban,ShieldCheck,Clock3,AlertTriangle} from 'lucide-react';
+import {getRoleDescription} from '../permissions';
+import {ArrowUpRight,ClipboardList,FolderKanban,ShieldCheck,Clock3,AlertTriangle} from 'lucide-react';
 import {selectMyTasks,taskLabels,isTaskOverdue} from '../taskDomain';
 import {selectProjects,getProjectSummary} from '../projectSelectors';
 import './workspace-pages.css';
 export default function DashboardPage({appState,navigate,onOpenTask,onOpenProject}){
  const tasks=selectMyTasks(appState,{actorId:appState.actorId}),projects=selectProjects(appState,{actorId:appState.actorId});
  const stats=[['我的待办',tasks.length,ClipboardList,'tasks'],['参与项目',projects.length,FolderKanban,'projects'],['审批待办',tasks.filter(t=>t.kind.endsWith('approve')).length,ShieldCheck,'tasks'],['需重新确认',tasks.filter(t=>t.kind==='recheck').length,Clock3,'tasks']];
- return <div className="workspace-page"><div className="page-heading"><div><span className="workspace-eyebrow">RFQ WORKSPACE</span><h1>工作台</h1><p>你好，{appState.actorRole}。{getRoleDescription(appState.actorRole)}</p></div>{canPerform(appState.actorRole,'project:create')&&<button className="btn btn-primary" onClick={()=>navigate('projects',null,{action:'create'})}><Plus size={16}/>新建 RFQ</button>}</div><div className="workspace-stat-grid">{stats.map(([label,n,Icon,page])=><button className="panel workspace-stat" key={label} onClick={()=>navigate(page)}><Icon size={22}/><span>{label}<strong>{n}<small>项</small></strong></span><ArrowUpRight size={16}/></button>)}</div><section className="panel"><div className="workspace-panel-heading"><div><h2>优先处理</h2><p>与任务中心共用同一份待办，按截止时间排列。</p></div><button className="text-link" onClick={()=>navigate('tasks')}>全部 {tasks.length} 项 →</button></div>{tasks.slice(0,5).map(t=>{
+ return <div className="workspace-page"><div className="page-heading"><div><span className="workspace-eyebrow">RFQ WORKSPACE</span><h1>工作台</h1><p>你好，{appState.actorRole}。{getRoleDescription(appState.actorRole)}</p></div></div><div className="workspace-stat-grid">{stats.map(([label,n,Icon,page])=><button className="panel workspace-stat" key={label} onClick={()=>navigate(page)}><Icon size={22}/><span>{label}<strong>{n}<small>项</small></strong></span><ArrowUpRight size={16}/></button>)}</div><section className="panel"><div className="workspace-panel-heading"><div><h2>优先处理</h2><p>与任务中心共用同一份待办，按截止时间排列。</p></div><button className="text-link" onClick={()=>navigate('tasks')}>全部 {tasks.length} 项 →</button></div>{tasks.slice(0,5).map(t=>{
   const overdue=isTaskOverdue(t);
   return <div className={`workspace-todo${overdue?' is-overdue':''}`} key={t.id}>
    <div><span className="badge">{taskLabels[t.kind]}</span>{overdue&&<span className="workspace-overdue-badge"><AlertTriangle size={12} aria-hidden="true"/>已延期</span>}<button className="text-link" onClick={()=>onOpenTask(t,'view')}>{t.title}</button><small>{appState.projects.find(p=>p.id===t.projectId)?.name} · {t.objectId}</small></div>

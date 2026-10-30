@@ -65,3 +65,28 @@
 .rfq-keyboard-separator.is-vertical{left:0;right:0;bottom:auto;width:auto;height:12px;transform:translateY(-6px)}
 
 .rfq-pro-shell :is(.tabs>button,.detail-business-tabs>button,.workspace-view-switch>.btn,.source-outline>div,.source-outline button){transition:background-color 100ms ease-out,color 100ms ease-out,border-color 100ms ease-out}
+
+.rfq-layout-detail .project-detail-workspace>.project-context-top{flex:none;flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px 18px;min-height:56px;margin-bottom:14px;padding:0 0 12px;border-bottom:1px solid #e5e9f0}
+.project-detail-workspace>.project-context-top>.text-link{flex:none;align-self:center}
+.project-detail-workspace>.project-context-top .project-title-row{flex:1;min-width:0;flex-wrap:nowrap;gap:12px 20px}
+.project-detail-workspace>.project-context-top h1{flex:1;min-width:0;font-size:20px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.project-detail-workspace>.project-context-top .project-final-actions{margin-left:auto;align-items:flex-end}
+.project-detail-workspace>.project-context-top .page-actions{padding-top:0;justify-content:flex-end}
+.project-detail-workspace>.project-context-top .project-process-binding{flex-basis:100%;margin:0;font-size:12px}
+@media(max-width:767px){.rfq-layout-detail .project-detail-workspace>.project-context-top{gap:8px;min-height:0}.project-detail-workspace>.project-context-top .project-title-row{flex-basis:100%;flex-wrap:wrap;gap:10px}.project-detail-workspace>.project-context-top h1{flex-basis:100%;font-size:18px;white-space:normal;overflow-wrap:anywhere}.project-detail-workspace>.project-context-top .project-final-actions{margin-left:0;align-items:flex-start}.project-detail-workspace>.project-context-top .page-actions{justify-content:flex-start}}
+
+.rfq-layout-detail{display:flex;flex-direction:column;height:calc(100dvh - var(--pro-layout-header-height,56px));padding-block:12px 16px;box-sizing:border-box}
+.rfq-layout-detail .project-detail-workspace{flex:1;height:auto;min-height:0}
+.response-card-query>.ant-input-search{flex:1;min-width:0}.response-card-query .ant-input{font-size:12px}
+.response-card-query>.response-filter-trigger{flex:none;padding-inline:8px;gap:3px}.response-filter-trigger.is-active{color:#165dff;border-color:#a5bee9;background:#edf3ff}
+.response-filter-popover{width:260px;max-width:calc(100vw - 48px);display:grid;gap:14px}
+.response-filter-popover>label{display:grid;gap:6px;font-size:12px;color:#59677d}.response-filter-popover .ant-select{width:100%}
+.response-filter-popover-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
+.response-card-stats{gap:2px;padding-inline:8px}.response-card-stats button{min-height:32px;padding-inline:7px}
+.response-card-deck{padding-bottom:3px}.response-card-under{bottom:3px}
+.response-fixed-actions{flex:none;background:#fff;border-top:1px solid #e5e9f0;padding:8px 10px;position:relative;z-index:4}
+.response-fixed-action-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px;flex-wrap:wrap}
+.response-card-navigation{display:flex;align-items:center;gap:2px;flex:none}.response-card-navigation .icon-btn{width:26px;height:30px;padding:3px;color:#59677d}.response-card-navigation>span{min-width:35px;text-align:center;font-size:11px;color:#86909c;font-variant-numeric:tabular-nums;white-space:nowrap}
+.response-fixed-primary-actions{display:flex;align-items:center;gap:6px;margin-left:auto}.response-fixed-primary-actions .btn{font-size:12px;min-height:32px;padding:6px 9px;gap:5px;white-space:nowrap}.response-fixed-primary-actions>.text-link{font-size:12px;white-space:nowrap;margin-right:2px}
+.response-fixed-actions>.response-permission-tip{margin:0 0 6px;font-size:11px;line-height:1.6;color:#86909c}.response-fixed-actions>.response-error{margin:0 0 8px;max-height:72px;overflow:auto;color:#c73636;font-size:12px}
+@media(max-width:767px){.rfq-layout-detail{height:auto;display:block}.rfq-layout-detail .project-detail-workspace{height:auto;min-height:0}.response-fixed-actions{padding-inline:8px}}

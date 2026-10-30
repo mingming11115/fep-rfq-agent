@@ -30,9 +30,9 @@ function AssignmentDialog({state, project, requirementId, route, onPersonnelActi
         resolveName={id => personName(state,id)} emptyLabel="暂无具备确认资格和项目授权的人员"/>
     </div>
     <label className="field"><span>分工原因 *</span><textarea className="input" aria-label="指派或改派原因" value={reason} onChange={event => setReason(event.target.value)} placeholder="说明本次确认人调整的原因"/></label>
-    <p className="muted">{context.row?.status === '已确认'
-      ? '保存后调整后续确认人，保留本版确认及原确认人记录。'
-      : context.review && context.review.status !== '已关闭' ? '评审继续由原评审人处理，评审完成后交由新确认人确认本条。' : '保存后，未完成的条款确认待办交由新确认人处理。'}</p>
+    {context.row?.status === '已确认'
+      ? <p className="muted">保存后调整后续确认人，保留本版确认及原确认人记录。</p>
+      : context.review && context.review.status !== '已关闭' && <p className="muted">评审继续由原评审人处理，评审完成后交由新确认人确认本条。</p>}
     {error && <p className="response-error" role="alert">{error}</p>}
   </Modal>;
 }
