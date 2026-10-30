@@ -5,6 +5,18 @@ spring:
     default: local
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 32MB
+
+office:
+  public-url: ${ONLYOFFICE_PUBLIC_URL:http://127.0.0.1:8082}
+  internal-url: ${ONLYOFFICE_INTERNAL_URL:http://onlyoffice}
+  callback-base-url: ${ONLYOFFICE_CALLBACK_BASE_URL:http://rfq-service:48081}
+  jwt-secret: ${ONLYOFFICE_JWT_SECRET:}
+  storage-dir: ${ONLYOFFICE_STORAGE_DIR:data/onlyoffice}
+  max-file-bytes: 31457280
 
 server:
   port: ${SERVER_PORT:48081}
