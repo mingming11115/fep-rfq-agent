@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 export default defineConfig({
   esbuild: { jsx: 'automatic' },
+  server: { proxy: { '/api/office': { target: process.env.RFQ_BACKEND_URL || 'http://127.0.0.1:48081', changeOrigin: true } } },
   optimizeDeps: { include: ['antd', '@ant-design/pro-components', '@ant-design/icons', '@ant-design/v5-patch-for-react-19'] },
   build: {
     target: 'es2022',

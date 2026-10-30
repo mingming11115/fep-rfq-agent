@@ -6,8 +6,10 @@ import { makeSourceAnchor, resolveSourceAnchor } from '../documentAnchors';
 import { annotatedSegments, makeCommentDraft } from '../documentAnnotations';
 import { sectionLabel } from '../documentStructure';
 import WordAnnotationCanvas from './WordAnnotationCanvas';
+import OnlyOfficeSourcePane from './OnlyOfficeSourcePane';
+import { officeSourceKey } from '../officeClient';
 
-export default function SourceDocumentPane({ file, rows, selectedAnchor, showResponses = true, responsePreview, quoteDraft, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
+function SourceExcerptPane({ file, rows, selectedAnchor, showResponses = true, responsePreview, quoteDraft, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
   const resolved = resolveSourceAnchor(rows, selectedAnchor), active = resolved.row, container = useRef();
   const previousAnchor = useRef(null);
   const [pdf, setPdf] = useState(false), [zoom, setZoom] = useState(100);
@@ -124,4 +126,11 @@ export default function SourceDocumentPane({ file, rows, selectedAnchor, showRes
     </div>}
     <div className="source-quote-toolbar"><span>{rows.length} 条要求 · {comments.filter(c => c.anchor?.fileId === selectedAnchor.fileId && String(c.anchor.sourceVersion) === String(selectedAnchor.sourceVersion)).length} 条批注</span>{onQuote && <UiButton className="text-link" disabled={resolved.status !== 'resolved'} onClick={() => onQuote(active?.sourceOriginal || active?.original, selectedAnchor)}><MessageSquarePlus size={14}/>批注当前条款</UiButton>}<span role={selectionError ? 'status' : undefined}>{selectionError || '选中文字或右键原文可添加批注'}</span></div>
   </section>;
+}
+
+export default function SourceDocumentPane(props) {
+  const source={projectId:props.selectedAnchor.projectId,fileId:props.selectedAnchor.fileId,sourceVersion:props.selectedAnchor.sourceVersion};
+  return <OnlyOfficeSourcePane key={officeSourceKey(source,`${props.officeUser?.id}:${props.canManageOffice}`)} file={props.file} source={source} canManage={Boolean(props.canManageOffice)} user={props.officeUser}>
+    <SourceExcerptPane {...props}/>
+  </OnlyOfficeSourcePane>;
 }
