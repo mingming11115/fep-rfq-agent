@@ -14,7 +14,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
   const [mobileCollapsed, setMobileCollapsed] = useState(true);
   useEffect(() => { setMobileCollapsed(true); }, [mobile]);
   const contentRef = useRef(null);
-  useContentTransition(contentRef, contentKey);
+  useContentTransition(contentRef, contentKey, { kind: 'page' });
   const menu = navigation.map(item => {
     const Icon = item.page === 'knowledge' ? icons.knowledge : icons[item.key] || icons[item.page];
     return { path: '/' + item.key, key: item.key, name: item.label, targetPage: item.page,
@@ -27,9 +27,9 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
       menuDataRender={() => menu} onMenuHeaderClick={onHome} menu={{ autoClose: false }}
       menuItemRender={(item, dom) => <button type="button" className="rfq-layout-menu-button" data-testid={'nav-' + item.key}
         onClick={event => { event.preventDefault(); onNavigate(item.targetPage); if (mobile) setMobileCollapsed(true); }}>{dom}</button>}
-      menuFooterRender={() => <span className="rfq-layout-menu-footer">{collapsed ? 'RFQ' : '交互原型 · 示例匹配'}</span>}
+      menuFooterRender={() => <span className="rfq-layout-menu-footer">{collapsed ? 'RFQ' : 'FEP · RFQ 工作空间'}</span>}
       actionsRender={() => [
-        compact ? null : <Tag key="mode" className="rfq-demo-tag" bordered={false}>本机交互演示</Tag>,
+        compact ? null : <Tooltip key="mode" title="当前为本机演示环境，使用示例数据"><Tag className="rfq-demo-tag" bordered={false}>演示环境</Tag></Tooltip>,
         compact ? null : <Tooltip key="search" title="搜索页面和项目"><Button type="text" aria-label="搜索页面和项目" icon={<Search size={18}/>} onClick={onSearch}/></Tooltip>,
         <Tooltip key="help" title="使用指南"><Button type="text" aria-label="使用指南" icon={<HelpCircle size={18}/>} onClick={onHelp}/></Tooltip>,
         <Tooltip key="tasks" title="待办事项"><Badge count={pending} size="small"><Button type="text" aria-label="待办事项" icon={<Bell size={18}/>} onClick={() => onNavigate('tasks')}/></Badge></Tooltip>,

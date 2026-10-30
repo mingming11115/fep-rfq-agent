@@ -1,4 +1,4 @@
-import { QueryFilter, ProFormText, ProFormSelect, ProFormCheckbox } from '@ant-design/pro-components';
+import { QueryFilter, ProFormText, ProFormSelect } from '@ant-design/pro-components';
 import { PageHeading } from '../components/AntContent';
 import React, { useEffect, useRef, useState } from 'react';
 import useContentTransition from '../components/useContentTransition';
@@ -14,8 +14,8 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
   const [filters, setFilters] = useState(() => ({ tab: 'pending', query: '', projectId: '', kind: '', overdue: false, ...load() }));
   const [transfer, setTransfer] = useState(null);
   const resultsRef = useRef(null), queryFormRef = useRef(null);
-  const initialQuery = useRef({query:filters.query,projectId:filters.projectId,kind:filters.kind,overdue:filters.overdue});
-  useContentTransition(resultsRef, filters.tab, { duration: 120 });
+  const initialQuery = useRef({query:filters.query,projectId:filters.projectId,kind:filters.kind});
+  useContentTransition(resultsRef, filters.tab, { kind:'tab', position:['pending','done','all'].indexOf(filters.tab) });
   useEffect(() => { sessionStorage.setItem('rfq.tasks.filters', JSON.stringify(filters)); }, [filters]);
   const change = (key, value) => setFilters(current => ({ ...current, [key]: value }));
   const names = Object.fromEntries(Object.values(appState.accountsById || {}).map(account => [account.id, account.name]));
@@ -36,24 +36,25 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
     </Space> },
   ];
   return <div className="workspace-page">
-    <PageHeading title={<>任务中心</>} description={<>每一项待办都关联具体条款、评审或审批版本。</>} actions={<></>} />
+    <PageHeading title={<>任务中心</>} />
     <section className="panel">
       <Tabs className="rfq-panel-tabs" activeKey={filters.tab} onChange={key => change('tab', key)} items={[
         ['pending', '待办'], ['done', '已处理'], ['all', '全部'],
       ].map(([key, label]) => ({ key, label: label + ' ' + selectMyTasks(appState, { actorId: appState.actorId, tab: key }).length }))}/>
       <QueryFilter formRef={queryFormRef} className="rfq-query-form" layout="vertical" defaultCollapsed={false}
  initialValues={initialQuery.current}
- onFinish={async values=>{setFilters(current=>({...current,query:values.query||'',projectId:values.projectId||'',kind:values.kind||'',overdue:!!values.overdue}));return true;}}
- onReset={()=>{queryFormRef.current?.setFieldsValue({query:'',projectId:'',kind:'',overdue:false});setFilters(current=>({...current,query:'',projectId:'',kind:'',overdue:false}));}}>
+ onFinish={async values=>{setFilters(current=>({...current,query:values.query||'',projectId:values.projectId||'',kind:values.kind||''}));return true;}}
+ onReset={()=>{queryFormRef.current?.setFieldsValue({query:'',projectId:'',kind:''});setFilters(current=>({...current,query:'',projectId:'',kind:'',overdue:false}));}}>
  <ProFormText name="query" label="关键词" placeholder="项目、条款或任务关键词" fieldProps={{'aria-label':'搜索任务',allowClear:true}}/>
  <ProFormSelect name="projectId" label="关联项目" fieldProps={{'aria-label':'任务项目'}} options={[{value:'',label:'全部项目'},...appState.projects.map(p=>({value:p.id,label:p.name}))]}/>
  <ProFormSelect name="kind" label="任务类型" fieldProps={{'aria-label':'任务类型'}} options={[{value:'',label:'全部类型'},...Object.entries(taskLabels).map(([value,label])=>({value,label}))]}/>
- <ProFormCheckbox name="overdue" label="到期情况">仅逾期</ProFormCheckbox>
  </QueryFilter>
-      <div ref={resultsRef}><ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false} headerTitle="我的任务"
+      <div ref={resultsRef} className="rfq-task-results"><ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false}
+        headerTitle={<span className="muted">{rows.length} 项任务</span>} tooltip="查看任务不会自动接手；保存草稿不会完成任务。"
+        toolBarRender={()=>[<Checkbox key="overdue" checked={filters.overdue} onChange={event=>change('overdue',event.target.checked)}>仅逾期</Checkbox>]}
         options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1140 }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>
-      <div className="workspace-panel-footer">共 {rows.length} 项 · 查看不接手，保存草稿不会完成任务</div></div>
+      </div>
     </section>
     {transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) setTransfer(null); }}
       initialValues={{ to: undefined, reason: '' }} submitter={{ searchConfig: { submitText: '确认转办', resetText: '取消' } }}

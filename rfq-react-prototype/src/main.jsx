@@ -7,6 +7,7 @@ import App from './App';
 import ThemeBridge from './components/ThemeBridge';
 import './styles.css';
 import './antd-ui.css';
+import './ui-polish.css';
 
 createRoot(document.getElementById('root')).render(
   <ConfigProvider locale={zhCN} theme={{

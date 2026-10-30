@@ -1,3 +1,4 @@
+import { playContentMotion } from '../contentMotion';
 import { UiButton, UiSelect, UiCheckbox, UiInput, UiTextArea, BusinessTable } from '../components/AntContent';
 import {buildReviewRequest,reviewEvidenceHref} from '../reviewRequest';
 import ReviewerPicker from '../components/ReviewerPicker';
@@ -106,7 +107,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [queueDone, setQueueDone] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const cardRef = useRef(null), cardBusyRef = useRef(false), aliveRef = useRef(true), cardAnimation = useRef(null);
-  useContentTransition(detailSideRef, detailTab, { duration: 120 });
+  useContentTransition(detailSideRef, detailTab, { kind:'tab',position:['settings','response','activity'].indexOf(detailTab) });
   useContentTransition(cardRef, active?.id, { duration: 120, enabled: !cardBusy });
   useEffect(() => { cardRef.current?.querySelector('.response-editor-body')?.scrollTo({ top: 0 }); }, [active?.id]);
   const issueGuardRef = useRef(null);
@@ -169,16 +170,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   async function animateCardMotion(direction = 1, entering = false) {
     if (!aliveRef.current || !cardRef.current) return;
-    const frames = entering ? [
-      { transform: `translateX(${-direction * 65}%) rotate(${-direction * 4}deg) scale(.96)`, opacity: 0 },
-      { transform: 'translateX(0) rotate(0) scale(1)', opacity: 1 },
-    ] : [
-      { transform: 'translateX(0) rotate(0)', opacity: 1 },
-      { transform: `translateX(${direction * 25}%) rotate(${direction * 2}deg)`, opacity: 1, offset: .38 },
-      { transform: `translateX(${direction * 115}%) rotate(${direction * 7}deg)`, opacity: 0 },
-    ];
-    const animation = cardRef.current.animate(frames,
-      { duration: entering ? 360 : 420, easing: entering ? 'cubic-bezier(.2,.8,.2,1)' : 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    const animation = playContentMotion(cardRef.current, {kind:entering?'card-in':'card-out',direction});
+    if (!animation) return;
     cardAnimation.current = animation;
     try { await animation.finished; } catch {}
     animation.cancel();
