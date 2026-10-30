@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { supportsOffice, officeRequest, uploadOfficeFile, saveReached, officeSourceKey, savedGeneration } from './officeClient.js';
+import { supportsOffice, officeRequest, uploadOfficeFile, saveReached, officeSourceKey, savedGeneration, demoOfficeAsset, loadDemoOffice } from './officeClient.js';
 
 test('only actual DOCX and PDF are offered for native editing', () => {
   assert.equal(supportsOffice('RFQ.DOCX'), true);
@@ -50,4 +50,32 @@ test('native save reconciliation waits for the edited generation to reach the do
   assert.equal(savedGeneration({baseline,generation:3,flushedGeneration:2},after),false);
   assert.equal(savedGeneration({baseline,generation:2,flushedGeneration:2},baseline),false);
   assert.equal(savedGeneration({baseline,generation:2,flushedGeneration:2},{...after,lastError:'save failed'}),false);
+});
+
+const demoSource={projectId:'RFQ-001',fileId:'RFQ-001-DEMO-FILE-CLAUSE-STATUSES',sourceVersion:'V1.0'};
+test('the public RFQ demo resolves from project or task routes without a previous browser binding', () => {
+  assert.equal(demoOfficeAsset(demoSource),'/onlyoffice-demo/RFQ-review-example.docx');
+  assert.equal(demoOfficeAsset({...demoSource,requirementId:'RFQ-001-DOC-EXAMPLE-6',taskId:'task',action:'start'}),demoOfficeAsset(demoSource));
+  assert.equal(demoOfficeAsset({...demoSource,projectId:'RFQ-002'}),null);
+  assert.equal(demoOfficeAsset({...demoSource,sourceVersion:'V2.0'}),null);
+  assert.equal(demoOfficeAsset({...demoSource,fileId:'private-customer-file'}),null);
+});
+test('a fresh browser uploads only the bundled public demo and receives a normal scoped document reference', async () => {
+  const saved=globalThis.fetch;const calls=[];
+  try{
+    globalThis.fetch=async(url,options={})=>{
+      calls.push(url);
+      if(calls.length===1)return new Response(new Blob(['public-demo-binary']));
+      assert.equal(options.body.get('file').name,'RFQ批阅示例.docx');
+      assert.equal(await options.body.get('file').text(),'public-demo-binary');
+      assert.equal(options.body.get('fileId'),demoSource.fileId);
+      assert.equal(options.body.get('sourceVersion'),'V1.0');
+      return new Response(JSON.stringify({code:0,data:{id:'public-demo-copy',access:'local-capability'}}));
+    };
+    assert.deepEqual(await loadDemoOffice(demoSource),{id:'public-demo-copy',access:'local-capability'});
+    assert.deepEqual(calls,['/onlyoffice-demo/RFQ-review-example.docx','/api/office/documents']);
+  }finally{globalThis.fetch=saved;}
+});
+test('an unknown source cannot trigger a public demo upload', async () => {
+  await assert.rejects(loadDemoOffice({...demoSource,fileId:'private-file'}),/没有内置示例/);
 });

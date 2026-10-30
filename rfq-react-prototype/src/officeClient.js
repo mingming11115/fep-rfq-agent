@@ -2,6 +2,18 @@ export const supportsOffice = name => /\.(docx|pdf)$/i.test(name || '');
 export const officeSourceKey = (source, identity = '') => JSON.stringify([source.projectId,source.fileId,source.sourceVersion,identity]);
 export const saveReached = (before, after) => !after.lastError && (after.revision > before.revision || Boolean(after.savedAt && after.savedAt !== before.savedAt));
 export const savedGeneration = ({baseline,generation,flushedGeneration},after) => generation > 0 && generation === flushedGeneration && saveReached(baseline || {},after);
+export const demoOfficeAsset = source => source?.projectId === 'RFQ-001'
+  && source.fileId === 'RFQ-001-DEMO-FILE-CLAUSE-STATUSES'
+  && String(source.sourceVersion) === 'V1.0' ? '/onlyoffice-demo/RFQ-review-example.docx' : null;
+
+export async function loadDemoOffice(source, signal) {
+  const asset = demoOfficeAsset(source);
+  if (!asset) throw new Error('该来源没有内置示例，请上传对应原件');
+  const response = await fetch(asset,{signal});
+  if (!response.ok) throw new Error('内置示例文件未能读取，请重试');
+  const file = new File([await response.blob()],'RFQ批阅示例.docx',{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  return uploadOfficeFile(file,source,signal);
+}
 
 export async function officeRequest(path, ref, options = {}) {
   const headers = new Headers(options.headers);
