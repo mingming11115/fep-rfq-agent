@@ -1,11 +1,14 @@
 --- a/crates/ui-egui/src/panes/comments.rs
 +++ b/crates/ui-egui/src/panes/comments.rs
-@@ -1,66 +1,182 @@
+@@ -1,66 +1,185 @@
 -use super::{BTreeMap, StoryRef, Stroke, Tokens, Ui, Value, WordApp, json, regular, semibold};
 -
 -/// Draws the Comments pane: New Comment and scrollable comment and reply cards with edit, go-to,
 -/// reply, resolve or reopen, and delete actions.
 +use super::{BTreeMap, StoryRef, Tokens, Ui, Value, WordApp, json, regular};
++
++#[path = "host_review.rs"]
++mod host_review;
 +
 +/// Classic Word-style comments: one flat card per thread, an author-colour rail, inline
 +/// editing, and replies nested under the comment they answer. All edits still use the engine.
@@ -239,7 +242,7 @@
  }
  
  /// What has been typed in comment and reply fields but not yet written to the document (#1348).
-@@ -122,6 +238,8 @@
+@@ -122,6 +241,8 @@
      let mut edit = egui::TextEdit::multiline(&mut text)
          .id(field_id(app, ui, "comment_edit", id))
          .interactive(editable)
@@ -248,7 +251,7 @@
          .desired_rows(1)
          .desired_width(f32::INFINITY)
          .hint_text(tl!("Add a comment"));
-@@ -129,6 +247,11 @@
+@@ -129,6 +250,11 @@
          edit = edit.font(f);
      }
      let r = ui.add(edit);
@@ -260,7 +263,7 @@
      if focus {
          r.request_focus();
      }
-@@ -182,6 +305,8 @@
+@@ -182,6 +308,8 @@
      let mut edit = egui::TextEdit::multiline(&mut text)
          .id(field_id(app, ui, "comment_reply", id))
          .interactive(editable)
@@ -269,7 +272,7 @@
          .desired_rows(1)
          .desired_width(f32::INFINITY)
          .hint_text(tl!("Write a reply"));
-@@ -189,6 +314,11 @@
+@@ -189,6 +317,11 @@
          edit = edit.font(f);
      }
      let r = ui.add(edit);
@@ -281,6 +284,255 @@
      if focus {
          r.request_focus();
      }
+--- /dev/null
++++ b/crates/ui-egui/src/panes/host_review.rs
+@@ -0,0 +1,246 @@
++//! Native data and commands for the host's existing Word-style comment surface.
++use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
++use std::collections::BTreeMap;
++use wordcraft_doc::{Pos, para::InlineObject};
++
++fn id_of(value: &Value) -> Result<u32, String> {
++    value.get("id").and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok()).ok_or_else(|| "invalid comment id".into())
++}
++
++impl WordApp {
++    pub fn enable_host_review(&mut self) {
++        if !self.canvas.host_comments {
++            let _ = self.session.run("view.zoom", &json!({"value":"pageWidth"}));
++            self.ui.mini_toolbar = false;
++        }
++        self.canvas.host_comments = true;
++        self.session.view.comments_pane = false;
++        self.session.view.show_markup = true;
++        self.session.prefs.markup.comments = true;
++        self.session.prefs.markup.comment_display = wordcraft_layout::display::CommentDisplay::Margin;
++    }
++    /// Only comment operations are accepted; document generations prevent delayed edits crossing files.
++    pub fn host_review_action(&mut self, message: &Value) -> Result<Value, String> {
++        if message.get("document").and_then(Value::as_str) != Some(self.session.document_id().to_string().as_str()) {
++            return Err("the document has changed".into());
++        }
++        let action = message.get("action").and_then(Value::as_str).unwrap_or("");
++        let p = message.get("params").cloned().unwrap_or_else(|| json!({}));
++        match action {
++            "draft" | "replyDraft" => {
++                let id = id_of(&p)?;
++                if !self.session.doc.comments.contains_key(&id) {
++                    return Err("no such comment".into());
++                }
++                let command = if action == "draft" { "review.editComment" } else { "review.reply" };
++                if !crate::widgets::enabled(self, command) {
++                    return Err("the document is protected".into());
++                }
++                let text = p.get("text").and_then(Value::as_str).ok_or("missing text")?;
++                if text.len() > 1_048_576 {
++                    return Err("comment is too long".into());
++                }
++                if action == "draft" {
++                    drafts(self).edits.insert(id, text.to_string());
++                } else {
++                    drafts(self).replies.insert(id, text.to_string());
++                }
++                Ok(json!({}))
++            }
++            "cancelReply" => {
++                let id = id_of(&p)?;
++                drafts(self).replies.remove(&id);
++                Ok(json!({}))
++            }
++            "cancelEdit" => {
++                let id = id_of(&p)?;
++                drafts(self).edits.remove(&id);
++                Ok(json!({}))
++            }
++            "flush" => {
++                flush_comment_drafts(self)?;
++                Ok(json!({}))
++            }
++            "reply" => {
++                let id = id_of(&p)?;
++                commit_reply(self, id)?;
++                Ok(json!({}))
++            }
++            "select" => {
++                let id = id_of(&p)?;
++                let position =
++                    wordcraft_engine::cmd::review::comment_list(&self.session).into_iter().find(|(cid, _)| *cid == id).and_then(|(_, pos)| pos);
++                if let Some(position) = position {
++                    self.session.sel = wordcraft_engine::Selection::caret(position);
++                    self.canvas.scroll_to_caret = true;
++                    self.canvas.nav_to_caret = true;
++                }
++                Ok(json!({"id": id}))
++            }
++            "new" | "previous" | "next" | "resolve" | "delete" | "format" | "save" => {
++                flush_comment_drafts(self)?;
++                let command = match action {
++                    "new" => "review.newComment",
++                    "previous" => "review.previousComment",
++                    "next" => "review.nextComment",
++                    "resolve" => "review.resolveComment",
++                    "delete" => "review.deleteComment",
++                    "format" => "view.marks",
++                    _ => "file.save",
++                };
++                if action == "previous" || action == "next" {
++                    crate::canvas::deselect_balloon(self);
++                }
++                let result = self.run(command, p)?;
++                self.session.view.comments_pane = false;
++                Ok(result)
++            }
++            _ => Err("unsupported comment action".into()),
++        }
++    }
++
++    /// Coordinates are CSS pixels in the embedded editor, including scroll and interface zoom.
++    pub fn host_review_snapshot(&mut self, zoom: f32) -> Value {
++        let zoom = if zoom.is_finite() { zoom.clamp(0.25, 5.0) } else { 1.0 };
++        let layout = self.session.layout();
++        let mut starts: BTreeMap<u32, Pos> = BTreeMap::new();
++        let mut ends: BTreeMap<u32, Pos> = BTreeMap::new();
++        for story in self.session.doc.shown_stories() {
++            for path in self.session.doc.para_paths(story) {
++                let Some(p) = self.session.doc.para(story, &path) else { continue };
++                for off in p.object_offsets() {
++                    let pos = Pos { story, path: path.clone(), off };
++                    match p.object_at(off) {
++                        Some(InlineObject::CommentStart { id }) => {
++                            starts.insert(*id, pos);
++                        }
++                        Some(InlineObject::CommentEnd { id }) => {
++                            ends.insert(*id, pos);
++                        }
++                        _ => {}
++                    }
++                }
++            }
++        }
++        let document = self.session.document_id();
++        let active = self
++            .canvas
++            .balloon
++            .filter(|id| self.session.doc.comments.contains_key(id))
++            .or_else(|| wordcraft_engine::cmd::review::comment_range_at_caret(&self.session));
++        let rect = |r: egui::Rect| json!({"x":r.min.x*zoom,"y":r.min.y*zoom,"w":r.width()*zoom,"h":r.height()*zoom});
++        let pages: Vec<Value> = self
++            .canvas
++            .page_rects
++            .iter()
++            .enumerate()
++            .filter_map(|(index, r)| {
++                let page = layout.pages.get(index)?;
++                let scale = r.width() / page.w.max(1.0);
++                Some(json!({"page":index,"x":r.min.x*zoom,"y":r.min.y*zoom,"w":r.width()*zoom,"h":r.height()*zoom,"margin":216.0*scale*zoom}))
++            })
++            .collect();
++        let mut notes = Vec::new();
++        for (index, (id, replies)) in comment_threads(&self.session.doc.comments).into_iter().take(2000).enumerate() {
++            let Some(comment) = self.session.doc.comments.get(&id) else { continue };
++            let mut ranges = Vec::new();
++            if let Some(a) = starts.get(&id) {
++                let b = ends.get(&id).unwrap_or(a);
++                for (page_index, range) in layout.selection_rects(&self.session.doc, a, b, self.session.page_hint) {
++                    if let (Some(screen), Some(page)) = (self.canvas.page_rects.get(page_index), layout.pages.get(page_index)) {
++                        let scale = screen.width() / page.w.max(1.0);
++                        ranges.push(json!({"page":page_index,"x":(screen.min.x+range.x*scale)*zoom,"y":(screen.min.y+range.y*scale)*zoom,"w":range.w*scale*zoom,"h":range.h*scale*zoom}));
++                    }
++                }
++                if ranges.is_empty()
++                    && let Some(caret) = layout.caret_on(a, self.session.page_hint)
++                    && let (Some(screen), Some(page)) = (self.canvas.page_rects.get(caret.page), layout.pages.get(caret.page))
++                {
++                    let scale = screen.width() / page.w.max(1.0);
++                    ranges.push(json!({"page":caret.page,"x":(screen.min.x+caret.x*scale)*zoom,"y":(screen.min.y+caret.top*scale)*zoom,"w":2.0,"h":caret.height*scale*zoom}));
++                }
++            }
++            let text = if self.comment_drafts.document == document { self.comment_drafts.edits.get(&id).cloned() } else { None }
++                .unwrap_or_else(|| self.session.doc.plain_text(wordcraft_doc::StoryRef::Part(comment.part)));
++            let replies: Vec<Value> = replies.iter().filter_map(|id| {
++                let c = self.session.doc.comments.get(id)?;
++                Some(json!({"id":id,"author":c.author,"text":self.session.doc.plain_text(wordcraft_doc::StoryRef::Part(c.part)),"resolved":c.resolved}))
++            }).collect();
++            notes.push(json!({"id":id,"author":comment.author,"date":comment.date,"text":text,"resolved":comment.resolved,"color":index%3,"ranges":ranges,"replies":replies}));
++        }
++        json!({"document":document.to_string(),"author":self.session.author,"active":active,"notes":notes,"pages":pages,
++            "clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
++            "editable":crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks})
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn app() -> (WordApp, u32) {
++        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
++        a.run("text.insert", json!({"text":"Review this text"})).unwrap();
++        let id = a.run("review.newComment", json!({"text":"Original"})).unwrap()["id"].as_u64().unwrap() as u32;
++        (a, id)
++    }
++    fn message(app: &WordApp, action: &str, params: Value) -> Value {
++        json!({"document":app.session.document_id().to_string(),"action":action,"params":params})
++    }
++    #[test]
++    fn host_comment_drafts_flush_through_native_engine() {
++        let (mut a, id) = app();
++        let m = message(&a, "draft", json!({"id":id,"text":"Edited in the original UI"}));
++        a.host_review_action(&m).unwrap();
++        assert_eq!(a.host_review_snapshot(1.0)["notes"][0]["text"], "Edited in the original UI");
++        let m = message(&a, "flush", json!({}));
++        a.host_review_action(&m).unwrap();
++        assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Part(a.session.doc.comments[&id].part)), "Edited in the original UI");
++    }
++    #[test]
++    fn host_comment_cancelled_reply_does_not_enter_document() {
++        let (mut a, id) = app();
++        for (action, p) in [("replyDraft", json!({"id":id,"text":"Discard me"})), ("cancelReply", json!({"id":id})), ("flush", json!({}))] {
++            let m = message(&a, action, p);
++            a.host_review_action(&m).unwrap();
++        }
++        assert_eq!(a.session.doc.comments.len(), 1);
++    }
++    #[test]
++    fn host_comment_actions_reject_stale_documents_and_arbitrary_commands() {
++        let (mut a, id) = app();
++        let mut m = message(&a, "draft", json!({"id":id,"text":"Wrong file"}));
++        m["document"] = json!("old");
++        assert!(a.host_review_action(&m).is_err());
++        let m = message(&a, "text.insert", json!({"text":"no"}));
++        assert!(a.host_review_action(&m).is_err());
++    }
++    #[test]
++    fn host_comment_edits_and_replies_survive_native_save_and_reopen() {
++        let (mut a, id) = app();
++        for (action, params) in
++            [("draft", json!({"id":id,"text":"Saved from original cards"})), ("replyDraft", json!({"id":id,"text":"Native threaded reply"}))]
++        {
++            let m = message(&a, action, params);
++            a.host_review_action(&m).unwrap();
++        }
++        let path = std::env::temp_dir().join(format!("wordcraft-host-comments-{}.docx", std::process::id()));
++        a.run("file.save", json!({"path":path.to_string_lossy()})).unwrap();
++        let saved = wordcraft_engine::io::open_path(&path).unwrap();
++        let _ = std::fs::remove_file(path);
++        let root = saved.comments.get(&id).unwrap();
++        assert_eq!(saved.plain_text(wordcraft_doc::StoryRef::Part(root.part)), "Saved from original cards");
++        let reply = saved.comments.values().find(|c| c.parent == Some(id)).unwrap();
++        assert_eq!(saved.plain_text(wordcraft_doc::StoryRef::Part(reply.part)), "Native threaded reply");
++    }
++    #[test]
++    fn host_comment_anchor_coordinates_follow_the_native_page() {
++        let (mut a, _) = app();
++        let l = a.session.layout();
++        let page = &l.pages[0];
++        a.canvas.page_rects = vec![egui::Rect::from_min_size(egui::pos2(50.0, 200.0), egui::vec2(page.w, page.h))];
++        let first = a.host_review_snapshot(1.0)["notes"][0]["ranges"][0]["y"].as_f64().unwrap();
++        a.canvas.page_rects[0] = a.canvas.page_rects[0].translate(egui::vec2(0.0, -70.0));
++        let second = a.host_review_snapshot(1.0)["notes"][0]["ranges"][0]["y"].as_f64().unwrap();
++        assert!((first - second - 70.0).abs() < 0.01);
++    }
++}
 --- a/crates/ui-egui/src/theme.rs
 +++ b/crates/ui-egui/src/theme.rs
 @@ -301,6 +301,12 @@
@@ -296,6 +548,139 @@
      pub fn light() -> Self {
          Tokens {
              dark: false,
+--- a/crates/ui-egui/src/canvas.rs
++++ b/crates/ui-egui/src/canvas.rs
+@@ -205,6 +205,8 @@
+     pub cols: usize,
+     /// The comment whose balloon is selected (its text is editable in place, like Word's).
+     pub balloon: Option<u32>,
++    /// A same-origin host renders the comment cards, using native document coordinates.
++    pub host_comments: bool,
+     /// Give the selected balloon's text field keyboard focus on its next frame.
+     pub(crate) balloon_focus: bool,
+     /// The selected balloon shows a reply field.
+@@ -409,6 +411,7 @@
+             viewport: None,
+             cols: 1,
+             balloon: None,
++            host_comments: false,
+             balloon_focus: false,
+             balloon_reply: false,
+             balloon_h: 0.0,
+--- a/crates/ui-egui/src/canvas/balloons.rs
++++ b/crates/ui-egui/src/canvas/balloons.rs
+@@ -10,6 +10,9 @@
+ /// in place, with Reply, Resolve and Delete (the same commands as the Comments pane).
+ pub(super) fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Rect], layout: &DocLayout, scale: f32, view: Rect) {
+     app.canvas.balloon_rects.clear();
++    if app.canvas.host_comments {
++        return;
++    }
+     let mw = markup_width(app);
+     let float = floating_comments(app);
+     if app.canvas.balloon.is_some_and(|id| (mw <= 0.0 && !float) || !app.session.doc.comments.contains_key(&id)) {
+--- a/crates/ui-egui/src/canvas/pages.rs
++++ b/crates/ui-egui/src/canvas/pages.rs
+@@ -10,6 +10,7 @@
+     (v.marks, app.session.prefs.marks, v.show_markup, v.dark_mode, wordcraft_render::DARK_PAPER, v.hide_ink, v.draw.replay).hash(&mut h);
+     (v.read_mode, v.read_page_color).hash(&mut h);
+     app.session.prefs.markup.hash(&mut h);
++    app.canvas.host_comments.hash(&mut h);
+     dim_body.hash(&mut h);
+     format!("{:?}{:?}{:?}", app.session.doc.settings.page_color, app.session.doc.settings.page_picture, app.session.doc.settings.watermark)
+         .hash(&mut h);
+@@ -231,6 +232,9 @@
+     // Ink Replay draws the ink itself, stroke by stroke, over pages without it.
+     opts.display.hide_ink = app.session.view.hide_ink || app.session.view.draw.replay;
+     opts.display.revisions = app.session.prefs.markup.clone();
++    if app.canvas.host_comments {
++        opts.display.revisions.comments = false;
++    }
+     opts.dark = app.session.view.dark_mode;
+     opts.dark_paper = wordcraft_render::DARK_PAPER;
+     // In Read Mode the Page color sets the paper and the dark page, and Switch Modes is ignored.
+--- a/apps/wordcraft-web/src/host.rs
++++ b/apps/wordcraft-web/src/host.rs
+@@ -23,7 +23,7 @@
+ //! Only the parent window on the page's own origin is heard or answered. In host mode the parent
+ //! guards leaving the page, and `?author=` names the user for comments and tracked changes.
+ 
+-use std::cell::Cell;
++use std::cell::{Cell, RefCell};
+ use std::rc::Rc;
+ 
+ use wasm_bindgen::JsCast as _;
+@@ -39,6 +39,8 @@
+     window: web_sys::Window,
+     parent: web_sys::Window,
+     origin: String,
++    review_actions: Rc<RefCell<Vec<serde_json::Value>>>,
++    review_sequence: Rc<Cell<u64>>,
+ }
+ 
+ impl Bridge {
+@@ -60,7 +62,7 @@
+         if parent.location().origin().ok()? != origin {
+             return None;
+         }
+-        Some(Self { window, parent, origin })
++        Some(Self { window, parent, origin, review_actions: Rc::default(), review_sequence: Rc::default() })
+     }
+ 
+     /// Hand saved and exported files to the parent instead of downloading them, report unsaved
+@@ -95,6 +97,29 @@
+         self.send(&[("type", "wordcraft:ready".into()), ("version", env!("CARGO_PKG_VERSION").into())]);
+     }
+ 
++    pub fn drain_review(&self, app: &mut WordApp) {
++        let actions: Vec<_> = self.review_actions.borrow_mut().drain(..).collect();
++        for action in actions {
++            let result = app.host_review_action(&action);
++            if let Some(sequence) = action.get("request").and_then(serde_json::Value::as_u64) {
++                self.review_sequence.set(self.review_sequence.get().max(sequence));
++            }
++            let payload = match result {
++                Ok(value) => serde_json::json!({"request":action.get("request"),"ok":true,"result":value}),
++                Err(error) => serde_json::json!({"request":action.get("request"),"ok":false,"error":error}),
++            };
++            self.send(&[("type", "wordcraft:reviewResult".into()), ("payload", payload.to_string().into())]);
++        }
++    }
++
++    pub fn post_review(&self, payload: &str) {
++        self.send(&[("type", "wordcraft:reviewState".into()), ("payload", payload.into())]);
++    }
++
++    pub fn review_sequence(&self) -> u64 {
++        self.review_sequence.get()
++    }
++
+     /// The app couldn't start (no WebGPU or WebGL2, for example): let the parent say so.
+     pub fn post_failed(&self, error: &str) {
+         self.send(&[("type", "wordcraft:failed".into()), ("error", error.into())]);
+@@ -119,11 +144,22 @@
+     fn listen(&self, inbox: Inbox, ctx: egui::Context) {
+         let parent = self.parent.clone();
+         let origin = self.origin.clone();
++        let review_actions = self.review_actions.clone();
+         let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
+             if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
+                 return;
+             }
+             let data = event.data();
++            if string(&data, "type").as_deref() == Some("wordcraft:review") {
++                if let Some(payload) = string(&data, "payload").filter(|p| p.len() <= 1_100_000)
++                    && let Ok(action) = serde_json::from_str(&payload)
++                    && review_actions.borrow().len() < 64
++                {
++                    review_actions.borrow_mut().push(action);
++                    ctx.request_repaint();
++                }
++                return;
++            }
+             if string(&data, "type").as_deref() != Some("wordcraft:open") {
+                 return;
+             }
 --- a/apps/wordcraft-web/src/web.rs
 +++ b/apps/wordcraft-web/src/web.rs
 @@ -79,6 +79,10 @@
@@ -304,8 +689,57 @@
                      crate::prefs::restore(&mut app, stored.as_deref());
 +                    // The review demo opens the redesigned comment threads on first load.
 +                    if app_bridge.is_some() && query_param("comments").as_deref() == Some("classic") {
-+                        let _ = app.session.run("view.commentsPane", &serde_json::json!({"value": true}));
++                        app.enable_host_review();
 +                    }
                      // A region chosen in File › Options replaces the browser's for the first blank
                      // document too (#838).
                      if !sample && app.session.prefs.region.is_some() {
+@@ -99,7 +103,8 @@
+                         crate::host::Bridge::set_author(&mut app, &author);
+                         prefs.keep_own_author(&app.session.author, &own);
+                     }
+-                    Ok(Box::new(WebShell { app, inbox, messages, prefs }))
++                    let review = app_bridge.clone().filter(|_| query_param("comments").as_deref() == Some("classic"));
++                    Ok(Box::new(WebShell { app, inbox, messages, prefs, review, last_review: String::new() }))
+                 }),
+             )
+             .await;
+@@ -134,6 +139,8 @@
+     inbox: Inbox,
+     messages: Rc<RefCell<Vec<String>>>,
+     prefs: crate::prefs::PrefsSync,
++    review: Option<crate::host::Bridge>,
++    last_review: String,
+ }
+ 
+ fn local_storage() -> Option<web_sys::Storage> {
+@@ -154,7 +161,13 @@
+         for msg in msgs {
+             self.app.status(msg);
+         }
++        if let Some(review) = &self.review {
++            review.drain_review(&mut self.app);
++        }
+         self.app.logic(ctx);
++        if self.review.is_some() {
++            self.app.enable_host_review();
++        }
+         // Store changed preferences straight away: a reload or closed tab runs no exit code (#2132).
+         if let Some(json) = self.prefs.changed(&self.app) {
+             match local_storage() {
+@@ -197,6 +210,15 @@
+             }
+         }
+         self.app.ui(ui);
++        if let Some(review) = &self.review {
++            let mut snapshot = self.app.host_review_snapshot(ui.ctx().zoom_factor());
++            snapshot["applied"] = serde_json::json!(review.review_sequence());
++            let state = snapshot.to_string();
++            if state != self.last_review {
++                review.post_review(&state);
++                self.last_review = state;
++            }
++        }
+     }
+ }
+ 

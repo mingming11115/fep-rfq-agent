@@ -1,16 +1,19 @@
+import {createOriginalComments} from './original-comments.js';
 const options = {
-  word: {project:'wordcraft', version:'0.13.2', engine:'wordcraft-classic', ext:'docx', hint:'右侧为 Word 风格批注。点击文字编辑，点击 ↶ 回复，在 ⋯ 菜单中定位、解决或删除；点击编辑器保存，再下载批阅稿。'},
+  word: {project:'wordcraft', version:'0.13.2', engine:'wordcraft-classic', ext:'docx', hint:'页边批注沿用原版样式：选中文字新建批注，点击卡片定位原文；批注与回复可随 DOCX 保存。'},
   pdf: {project:'pdfcraft', version:'0.16.1', ext:'pdf', hint:'示例已带一条便笺。可使用评论、高亮或圈画工具；点击编辑器里的保存，或按 Ctrl / ⌘ + S，再下载带批注的 PDF。'}
 };
-const states = Object.fromEntries(Object.keys(options).map(key=>[key,{frame:document.getElementById(key+'-frame'), ready:false, dirty:false, loading:false, filename:'RFQ-review-example.'+options[key].ext, message:'正在加载编辑器…', saved:null, pending:0}]));
+const states = Object.fromEntries(Object.keys(options).map(key=>[key,{frame:document.getElementById(key+'-frame'), ready:false, dirty:false, loading:false, filename:'RFQ-review-example.'+options[key].ext, message:'正在加载编辑器…', notice:'', saved:null, pending:0}]));
 const el = id => document.getElementById(id);
 let active = 'word';
+const comments=createOriginalComments({frame:states.word.frame,onStatus:message=>{states.word.notice=message;render();},onDirty:()=>{states.word.dirty=true;states.word.notice='';render();}});
 function render(){
   const state=states[active], option=options[active];
   document.querySelectorAll('[data-app]').forEach(a=>a.setAttribute('aria-current',a.dataset.app===active?'page':'false'));
   for(const [key,s] of Object.entries(states))s.frame.hidden=key!==active;
+  comments.setVisible(active==='word');
   el('filename').textContent=state.filename;
-  el('status').textContent=state.pending?'正在保存批阅稿…':state.dirty?'有未保存修改':state.message;
+  el('status').textContent=state.pending?'正在保存批阅稿…':state.notice|| (state.dirty?'有未保存修改':state.message);
   el('hint').textContent=option.hint;
   el('version').textContent=option.project+' '+option.version+' · Alpha';
   el('footer-text').textContent='本地演示 · 中文 RFQ 示例 · '+(state.saved?'最近保存 '+state.saved.time:'文件在本机处理');
@@ -42,6 +45,9 @@ window.addEventListener('message',async event=>{
     try{const response=await fetch('/samples/RFQ-review-example.'+option.ext);if(!response.ok)throw new Error('示例文件读取失败');await sendFile(key,state.filename,await response.arrayBuffer())}catch(error){state.message=error.message;render()}
   }else if(kind==='failed'){state.ready=true;state.message='启动失败：'+data.error;render()}
   else if(kind==='dirty'){state.dirty=!!data.dirty;render()}
+  else if(key==='word'&&(kind==='reviewState'||kind==='reviewResult')){
+    try{comments.receive(kind,JSON.parse(data.payload))}catch(error){state.message='批注同步失败：'+error.message;render()}
+  }
   else if(kind==='save'){
     if(!(data.bytes instanceof ArrayBuffer)&&!ArrayBuffer.isView(data.bytes))return;
     state.pending++;render();
@@ -49,7 +55,7 @@ window.addEventListener('message',async event=>{
       const name=typeof data.name==='string'?data.name:state.filename;
       const response=await fetch('/api/save?app='+key,{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Demo-Filename':encodeURIComponent(name)},body:data.bytes});
       if(!response.ok)throw new Error(await response.text());
-      state.saved=await response.json();state.message='已保存，可下载或重开';
+      state.saved=await response.json();state.notice='';state.message='已保存，可下载或重开';
     }catch(error){state.message='保存失败：'+error.message;state.dirty=true;alert(state.message)}
     finally{state.pending--;render()}
   }
@@ -67,4 +73,5 @@ el('reopen').addEventListener('click',async()=>{
   const response=await fetch(state.saved.url);if(response.ok)await sendFile(key,state.saved.name,await response.arrayBuffer());
 });
 window.addEventListener('beforeunload',event=>{if(Object.values(states).some(state=>state.dirty||state.pending)){event.preventDefault();event.returnValue=''}});
+window.addEventListener('keydown',event=>{if(active==='word'&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();comments.save();}});
 activate(new URLSearchParams(location.search).get('app')||'word');

@@ -1,0 +1,76 @@
+.word-classic-document{container-type:inline-size;container-name:word-classic}
+.word-classic-document{color-scheme:light;--wc-paper:#fff;--wc-ink:#111;--wc-muted:#707070;--wc-line:#c9c9c9;--wc-purple:#6633a4;--wc-red:#df3540;--wc-blue:#008cf0;--wc-format:#51a6ff;--wc-selection:#c9e2fb;--wc-toolbar:#f7f7f7;font:13px/1.5 "Segoe UI","PingFang SC",sans-serif;color:var(--wc-ink);background:var(--wc-paper);overflow-wrap:anywhere}
+.word-classic-document *{box-sizing:border-box}
+.word-classic-document [hidden]{display:none!important}
+.word-classic-document p,.word-classic-document h1,.word-classic-document h2,.word-classic-document h3{margin:0}
+.word-classic-document button,.word-classic-document textarea{font:inherit;color:inherit}
+.word-classic-document button svg{height:14px;width:14px;flex-shrink:0}
+.word-classic-document .wc-tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 104px 9px 12px;border-bottom:1px solid var(--wc-line);background:var(--wc-toolbar)}
+.word-classic-document .wc-file{color:var(--wc-muted);font-size:12px;margin-right:auto;padding-right:10px}
+.word-classic-document .wc-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:4px 8px;border:1px solid transparent;border-radius:2px;background:transparent;white-space:nowrap}
+.word-classic-document .wc-button:hover,.word-classic-document .wc-button[aria-pressed="true"]{background:#e9e9e9;border-color:#d0d0d0}
+.word-classic-document .wc-button:disabled{opacity:.4;cursor:not-allowed}
+.word-classic-document .wc-canvas{display:grid;grid-template-columns:minmax(0,72.5%) minmax(0,27.5%);position:relative;align-items:stretch;background:var(--wc-paper)}
+.word-classic-document .wc-page{position:relative;min-width:0;min-height:858px;padding:48px 57px 69px;border-right:1px solid #bdbdbd;font-family:"Songti SC",SimSun,"Times New Roman",serif}
+.word-classic-document .wc-page::before,.word-classic-document .wc-page::after{content:"";position:absolute;top:29px;width:22px;height:22px;border-bottom:2px solid #b2b2b2}
+.word-classic-document .wc-page::before{left:34px;border-right:2px solid #b2b2b2}
+.word-classic-document .wc-page::after{right:54px;border-left:2px solid #b2b2b2}
+.word-classic-document .wc-doc-head{display:grid;grid-template-columns:1fr 1.9fr;gap:15px;align-items:baseline;font-size:12px;margin:5px 0 32px}
+.word-classic-document .wc-doc-head span:last-child{font-family:Arial,sans-serif}
+.word-classic-document .wc-page h1{font-family:"Songti SC",SimSun,serif;font-size:27px;font-weight:700;letter-spacing:.1px;text-align:center;margin:0 0 39px}
+.word-classic-document .wc-intro{font-size:14px;line-height:1.9;margin-bottom:38px!important;user-select:text;white-space:pre-wrap}
+.word-classic-document .wc-page h2{position:relative;font-size:18px;font-weight:700;line-height:1.6;margin:33px 0 28px}
+.word-classic-document .wc-page h3{position:relative;font-size:15px;font-weight:700;line-height:1.6;margin:28px 0 20px}
+.word-classic-document .wc-page h2::before,.word-classic-document .wc-page h3::before{content:"";position:absolute;left:-8px;bottom:6px;width:4px;height:4px;background:var(--wc-ink)}
+.word-classic-document .wc-source{font-size:14px;line-height:2;user-select:text;white-space:pre-wrap}
+.word-classic-document .wc-source::selection,.word-classic-document .wc-source *::selection,.word-classic-document .wc-intro::selection,.word-classic-document .wc-intro *::selection{background:var(--wc-selection);color:var(--wc-ink)}
+.word-classic-document .wc-source-wrapper{margin-bottom:23px}
+.word-classic-document .wc-format{font-family:Arial,sans-serif;color:var(--wc-format);user-select:none;font-weight:400;white-space:nowrap}
+.word-classic-document.wc-hide-format .wc-format{display:none}
+.word-classic-document .wc-anchor{background:var(--wc-fill);box-shadow:inset 1px 0 var(--wc-color),inset -1px 0 var(--wc-color);padding:3px 0}
+.word-classic-document .wc-anchor-active{box-shadow:inset 2px 0 var(--wc-color),inset -2px 0 var(--wc-color)}
+.word-classic-document .wc-margin{position:relative;min-width:0}
+.word-classic-document .wc-note{position:absolute;left:0;right:0;min-width:0;background:var(--wc-paper);border:0;border-left:3px solid var(--wc-color);padding:6px 8px 7px;z-index:3;font:12px/1.65 "Songti SC",SimSun,serif}
+.word-classic-document .wc-note-active{border:1px solid var(--wc-color);border-left:2px solid var(--wc-color);padding-left:9px}
+.word-classic-document .wc-note-head{display:flex;align-items:center;gap:5px;min-height:18px}
+.word-classic-document .wc-author{font-weight:400;flex:1;min-width:0}
+.word-classic-document .wc-time{font-size:11px;color:#555;white-space:nowrap}
+.word-classic-document .wc-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:20px;border:0;padding:1px;background:transparent;color:var(--wc-color);flex-shrink:0}
+.word-classic-document .wc-icon:hover{background:#f0f0f0}
+.word-classic-document .wc-note-body{white-space:pre-wrap;min-height:19px}
+.word-classic-document .wc-note-body-button{border:0;background:transparent;display:block;text-align:left;padding:0;width:100%;white-space:pre-wrap;min-height:20px;font:inherit}
+.word-classic-document .wc-edit{width:100%;display:block;min-height:22px;resize:none;overflow:hidden;border:0;background:transparent;padding:0;color:var(--wc-ink);font:inherit;line-height:1.65;border-radius:0}
+.word-classic-document .wc-edit::placeholder{color:#888}
+.word-classic-document .wc-mobile-quote{display:none;color:var(--wc-muted);margin-bottom:7px;font-size:11px}
+.word-classic-document .wc-connectors{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:2}
+.word-classic-document .wc-menu{position:absolute;right:7px;top:27px;background:var(--wc-paper);border:1px solid var(--wc-line);padding:3px;z-index:6;min-width:108px;box-shadow:0 2px 5px #00000015;font:12px/1.5 "Segoe UI","PingFang SC",sans-serif}
+.word-classic-document .wc-menu button{display:block;border:0;background:transparent;text-align:left;padding:6px 9px;width:100%;min-height:28px}
+.word-classic-document .wc-menu button:hover{background:#efefef}
+.word-classic-document .wc-replies{margin-top:7px;border-top:1px solid #e4e4e4;padding-top:5px}
+.word-classic-document .wc-reply-item+.wc-reply-item{margin-top:7px}
+.word-classic-document .wc-reply-author{color:var(--wc-muted);font-size:11px}
+.word-classic-document .wc-reply-input{width:100%;border:1px solid var(--wc-line);padding:5px;margin-top:7px;resize:vertical;background:#fff;font:12px/1.6 "Songti SC",SimSun,serif}
+.word-classic-document .wc-reply-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:4px}
+.word-classic-document .wc-reply-actions button{font-size:11px;min-height:25px}
+.word-classic-document .wc-floating{position:absolute;z-index:8;background:var(--wc-paper);border:1px solid #aaa;box-shadow:0 2px 5px #00000020;padding:2px}
+.word-classic-document .wc-floating button{font-size:12px}
+.word-classic-document .wc-status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--wc-line);padding:7px 12px;font-size:11px;color:var(--wc-muted);background:var(--wc-toolbar)}
+.word-classic-document .wc-status-text{flex:1;min-width:160px}
+.word-classic-document .wc-export{padding:13px 16px;border-bottom:1px solid var(--wc-line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--wc-paper);font-size:12px}
+.word-classic-document .wc-export p+p{margin-top:4px;color:var(--wc-muted);font-size:11px}
+@container word-classic (max-width:680px){
+ .word-classic-document .wc-tools{padding-right:78px}
+ .word-classic-document .wc-file{width:100%}
+ .word-classic-document .wc-canvas{grid-template-columns:minmax(0,1fr)}
+ .word-classic-document .wc-page{border-right:0;min-height:0;padding:43px 30px 40px}
+ .word-classic-document .wc-page::before{left:13px}
+ .word-classic-document .wc-page::after{right:25px}
+ .word-classic-document .wc-doc-head{grid-template-columns:1fr 1.25fr;font-size:11px}
+ .word-classic-document .wc-page h1{font-size:24px}
+ .word-classic-document .wc-margin{border-top:1px solid var(--wc-line);padding:12px 20px;min-height:0!important}
+ .word-classic-document .wc-note{position:relative;top:auto!important;margin:0 0 13px;left:auto;right:auto;padding:8px 10px;font-size:13px}
+ .word-classic-document .wc-mobile-quote{display:block}
+ .word-classic-document .wc-connectors{display:none}
+}
+@container word-classic (max-width:400px){.word-classic-document .wc-page{padding-left:23px;padding-right:23px}.word-classic-document .wc-page h1{font-size:21px}.word-classic-document .wc-doc-head{grid-template-columns:1fr;gap:3px}}
+@media(pointer:coarse){.word-classic-document .wc-button,.word-classic-document .wc-icon,.word-classic-document .wc-menu button{min-height:44px}.word-classic-document .wc-icon{width:30px}.word-classic-document .wc-edit,.word-classic-document .wc-reply-input{font-size:16px}}

@@ -1,12 +1,14 @@
 # Word 风格批注 Demo
 
-在 WordCraft 0.13.2 中改造原生批注面板，样式参照 master 的
-`rfq-react-prototype/public/word-comments.css` 和 `word-comments.html`。
+在 WordCraft 0.13.2 上复用 master 的
+`rfq-react-prototype/public/word-comments.css` 和 `word-comments.html` 中的批注结构、
+宋体字体栈与图标，提供随原文定位的页边批注。
 不修改 RFQ 业务页面。
 
-改动包括：白底平直卡片、紫/红/蓝侧边线、无边框批注编辑、同一卡片内的回复，
-以及收进菜单的定位、解决/重新打开和删除操作。批注及回复仍走 WordCraft 的原生
-命令、撤销栈和 DOCX 序列化；保存前继续提交待写入的编辑草稿。
+原版卡片、回复输入框、彩色连接线和对应原文高亮通过 DOM 显示；原文仍由 WordCraft
+编辑和排版。扩展的同源消息桥提供文档代次、批注、原生排版坐标、选中状态和操作确认。
+批注及回复通过原生草稿和命令进入撤销栈与 DOCX；保存前提交待写入的编辑草稿。
+回传状态带已处理请求序号，防止较旧状态覆盖刚输入的文字。长卡片和密集批注支持滚动。
 
 ## 编译
 
@@ -46,8 +48,17 @@ PDF 切换沿用此前的 PdfCraft Demo；要在新机器使用 PDF 页面，需
 ## 验证
 
 - 固定版本的源码补丁应用检查、浏览器版 WASM 编译和重复构建通过。
-- `wordcraft-ui-egui` 的 20 项批注相关测试通过，覆盖编辑、回复、保存草稿、取消编辑、
-  权限拒绝、分组和异常父级关系。
+- `wordcraft-ui-egui` 的 25 项批注相关测试通过，包括宿主草稿通过原生保存后再打开
+  保留批注和回复，以及原生坐标随滚动变化。
+- 13 项 DOM 测试通过，覆盖原版样式/图标复用、页边布局和连线、回复取消、输入焦点、
+  旧回传状态与 ABA 输入顺序、密集批注滚动、文档切换和错误提示。
 - 本地页面、脚本、WASM、保存接口及导出文件下载已检查；保存接口保留文件的完整字节。
-- 重启前已检查新版卡片的实际页面显示。恢复服务后，浏览器自动化在 Work 设置中不可用，
-  尚未重新验证浏览器里的保存后重开操作，也未验证外部 Word/WPS 的兼容性。
+- 当前 Work 设置未开放浏览器自动化，最终页面未作浏览器视觉回归；未验证外部 Word/WPS
+  的兼容性。
+
+DOM 测试使用隔离依赖，不修改 RFQ 主应用依赖：
+
+```sh
+npm install --prefix demos/craft-review/.cache/dom-qa --ignore-scripts --no-package-lock happy-dom@20.0.10
+node --test demos/craft-review/tests/original-comments.test.mjs
+```
