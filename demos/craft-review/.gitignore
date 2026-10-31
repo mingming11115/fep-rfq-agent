@@ -1,0 +1,6 @@
+.cache/
+site/wordcraft-classic/
+site/wordcraft/
+site/pdfcraft/
+site/exports/
+__pycache__/

@@ -1,0 +1,311 @@
+--- a/crates/ui-egui/src/panes/comments.rs
++++ b/crates/ui-egui/src/panes/comments.rs
+@@ -1,66 +1,182 @@
+-use super::{BTreeMap, StoryRef, Stroke, Tokens, Ui, Value, WordApp, json, regular, semibold};
+-
+-/// Draws the Comments pane: New Comment and scrollable comment and reply cards with edit, go-to,
+-/// reply, resolve or reopen, and delete actions.
++use super::{BTreeMap, StoryRef, Tokens, Ui, Value, WordApp, json, regular};
++
++/// Classic Word-style comments: one flat card per thread, an author-colour rail, inline
++/// editing, and replies nested under the comment they answer. All edits still use the engine.
+ pub(super) fn comments(app: &mut WordApp, ui: &mut Ui) {
+-    if crate::widgets::icon_text_button(ui, "newComment", tl!("New Comment"), regular(12.5)).clicked() {
+-        let _ = app.run("review.newComment", json!({"text": ""}));
+-    }
+-    ui.separator();
++    let t = Tokens::get(ui.ctx());
++    let mut focus = None;
++    ui.horizontal(|ui| {
++        let count = comment_threads(&app.session.doc.comments).len();
++        ui.label(egui::RichText::new(format!("{} · {count}", tl!("Comments"))).font(regular(12.0)).color(t.text_dim));
++        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
++            if ui.add(egui::Button::new(egui::RichText::new(format!("+ {}", tl!("New Comment"))).font(regular(12.0))).frame(false)).clicked()
++                && let Ok(result) = run_comment_action(app, "review.newComment", json!({"text": ""}))
++            {
++                focus = result.get("id").and_then(Value::as_u64).and_then(|id| u32::try_from(id).ok());
++            }
++        });
++    });
++    ui.add_space(8.0);
++    let document = app.session.document_id();
++    let active_key = egui::Id::unique(("classic_comment_active", document));
++    if let Some(id) = focus {
++        ui.data_mut(|data| data.insert_temp(active_key, id));
++    }
++    let active = ui.data(|data| data.get_temp::<u32>(active_key));
+     let list = app.session.run("review.comments", &json!({})).unwrap_or_default();
++    let threads = comment_threads(&app.session.doc.comments);
++    egui::ScrollArea::vertical().id_salt(("classic_comments", document)).show(ui, |ui| {
++        for (index, (root, replies)) in threads.into_iter().enumerate() {
++            if !app.session.doc.comments.contains_key(&root) {
++                continue;
++            }
++            let color = t.classic_comment_color(index);
++            let selected = active == Some(root);
++            let card = ui
++                .push_id(("classic_thread", document, root), |ui| {
++                    egui::Frame::NONE
++                        .fill(t.balloon)
++                        .stroke(if selected { egui::Stroke::new(1.0, color) } else { egui::Stroke::NONE })
++                        .inner_margin(egui::Margin { left: 12, right: 9, top: 8, bottom: 10 })
++                        .show(ui, |ui| {
++                            ui.set_width(ui.available_width());
++                            ui.spacing_mut().item_spacing.y = 5.0;
++                            comment_header(app, ui, root, root, &list, true, color);
++                            comment_editor(app, ui, root, Some(regular(13.0)), focus == Some(root));
++                            for reply in replies {
++                                if !app.session.doc.comments.contains_key(&reply) {
++                                    continue;
++                                }
++                                ui.add_space(5.0);
++                                ui.separator();
++                                comment_header(app, ui, reply, root, &list, false, color);
++                                comment_editor(app, ui, reply, Some(regular(12.5)), false);
++                            }
++                            let open_key = egui::Id::unique(("comment_reply_open", document, root));
++                            if ui.data(|data| data.get_temp::<bool>(open_key)).unwrap_or(false) {
++                                ui.add_space(5.0);
++                                ui.separator();
++                                let focus_key = egui::Id::unique(("comment_reply_focus", document, root));
++                                let focus_reply = ui.data_mut(|data| data.remove_temp::<bool>(focus_key)).unwrap_or(false);
++                                if reply_editor(app, ui, root, Some(regular(12.5)), focus_reply) {
++                                    ui.data_mut(|data| data.remove::<bool>(open_key));
++                                }
++                            }
++                        })
++                })
++                .inner;
++            let rect = card.response.rect;
++            ui.painter().line_segment(
++                [egui::pos2(rect.left() + 1.5, rect.top()), egui::pos2(rect.left() + 1.5, rect.bottom())],
++                egui::Stroke::new(if selected { 3.0 } else { 2.0 }, color),
++            );
++            ui.add_space(9.0);
++        }
++    });
++}
++
++fn run_comment_action(app: &mut WordApp, command: &str, params: Value) -> Result<Value, String> {
++    flush_comment_drafts(app)?;
++    app.run(command, params)
++}
++
++fn comment_header(app: &mut WordApp, ui: &mut Ui, id: u32, root: u32, list: &Value, is_root: bool, color: egui::Color32) {
++    let Some(comment) = app.session.doc.comments.get(&id) else { return };
+     let t = Tokens::get(ui.ctx());
+-    // Comment ids are the document's own; another window's document has the same ones.
+-    let document = app.session.document_id();
+-    egui::ScrollArea::vertical().show(ui, |ui| {
+-        for c in list.as_array().cloned().unwrap_or_default() {
+-            let id = c.get("id").and_then(Value::as_u64).unwrap_or(0);
+-            let reply = c.get("parent").is_some_and(|p| !p.is_null());
+-            let when = u32::try_from(id).ok().and_then(|i| app.session.doc.comments.get(&i)).map(crate::local_time::comment_time).unwrap_or_default();
+-            egui::Frame::NONE.fill(t.input).stroke(Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
+-                ui.set_width(ui.available_width());
+-                if reply {
+-                    ui.add_space(0.0);
+-                }
+-                ui.horizontal(|ui| {
+-                    ui.label(egui::RichText::new(c.get("author").and_then(Value::as_str).unwrap_or("")).font(semibold(12.0)));
+-                    ui.label(egui::RichText::new(when).small().weak());
+-                    if c.get("resolved").and_then(Value::as_bool).unwrap_or(false) {
+-                        ui.label(egui::RichText::new(tl!("Resolved")).small().color(t.green));
++    let author = comment.author.clone();
++    let when = crate::local_time::comment_time(comment);
++    let resolved = comment.resolved;
++    ui.horizontal(|ui| {
++        ui.label(egui::RichText::new(author).font(regular(12.0)).color(t.text));
++        ui.label(egui::RichText::new(when).font(regular(10.0)).color(t.text_dim));
++        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
++            ui.scope(|ui| {
++                ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::NONE;
++                ui.visuals_mut().widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
++                ui.menu_button(egui::RichText::new("⋯").color(color), |ui| {
++                    if ui.button(tl!("Go to")).clicked() {
++                        if let Some(anchor) = list
++                            .as_array()
++                            .and_then(|items| items.iter().find(|item| item.get("id").and_then(Value::as_u64) == Some(u64::from(root))))
++                            .and_then(|item| item.get("anchor"))
++                            .filter(|anchor| !anchor.is_null())
++                        {
++                            let _ = run_comment_action(app, "caret.set", json!({"pos": anchor}));
++                        }
++                        ui.close();
++                    }
++                    if is_root && ui.button(if resolved { tl!("Reopen") } else { tl!("Resolve") }).clicked() {
++                        let _ = run_comment_action(app, "review.resolveComment", json!({"id": root}));
++                        ui.close();
++                    }
++                    if ui.button(tl!("Delete")).clicked() {
++                        let _ = run_comment_action(app, "review.deleteComment", json!({"id": id}));
++                        ui.close();
+                     }
+                 });
+-                // Editable comment text (one undo step per edit, like the balloons).
+-                comment_editor(app, ui, id as u32, None, false);
+-                let open_key = egui::Id::unique(("comment_reply_open", document, id));
+-                let mut replying = ui.data(|d| d.get_temp::<bool>(open_key)).unwrap_or(false);
+-                ui.horizontal(|ui| {
+-                    if ui.small_button(tl!("Go to")).clicked()
+-                        && let Some(a) = c.get("anchor").filter(|a| !a.is_null())
+-                    {
+-                        let _ = app.run("caret.set", json!({"pos": a}));
+-                    }
+-                    if ui.small_button(tl!("Reply")).clicked() {
+-                        replying = true;
+-                        ui.data_mut(|d| d.insert_temp(open_key, true));
+-                        ui.data_mut(|d| d.insert_temp(egui::Id::unique(("comment_reply_focus", document, id)), true));
+-                    }
+-                    let resolved = c.get("resolved").and_then(Value::as_bool).unwrap_or(false);
+-                    if ui.small_button(if resolved { tl!("Reopen") } else { tl!("Resolve") }).clicked() {
+-                        let _ = app.run("review.resolveComment", json!({"id": id}));
+-                    }
+-                    if ui.small_button(tl!("Delete")).clicked() {
+-                        let _ = app.run("review.deleteComment", json!({"id": id}));
+-                    }
++            });
++            if is_root && ui.add(egui::Button::new(egui::RichText::new("↶").color(color)).frame(false)).on_hover_text(tl!("Reply")).clicked() {
++                let document = app.session.document_id();
++                ui.data_mut(|data| {
++                    data.insert_temp(egui::Id::unique(("comment_reply_open", document, root)), true);
++                    data.insert_temp(egui::Id::unique(("comment_reply_focus", document, root)), true);
++                    data.insert_temp(egui::Id::unique(("classic_comment_active", document)), root);
+                 });
+-                if replying {
+-                    let focus = ui.data_mut(|d| d.remove_temp::<bool>(egui::Id::unique(("comment_reply_focus", document, id)))).unwrap_or(false);
+-                    if reply_editor(app, ui, id as u32, None, focus) {
+-                        ui.data_mut(|d| d.remove::<bool>(open_key));
+-                    }
++            }
++        });
++    });
++    if resolved {
++        ui.label(egui::RichText::new(tl!("Resolved")).font(regular(10.0)).color(t.resolved_text));
++    }
++}
++
++/// Group all replies under their root, retaining orphans as visible standalone comments.
++/// A corrupt parent cycle or unreasonably deep chain never hangs the interface.
++fn comment_threads(comments: &BTreeMap<u32, wordcraft_doc::Comment>) -> Vec<(u32, Vec<u32>)> {
++    let mut threads: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
++    for id in comments.keys().copied() {
++        let mut root = id;
++        let mut complete = false;
++        for _ in 0..64 {
++            match comments.get(&root).and_then(|comment| comment.parent).filter(|parent| comments.contains_key(parent)) {
++                Some(parent) if parent != root && parent != id => root = parent,
++                None => {
++                    complete = true;
++                    break;
+                 }
+-            });
+-            ui.add_space(6.0);
+-        }
+-    });
++                _ => break,
++            }
++        }
++        if !complete {
++            root = id;
++        }
++        let replies = threads.entry(root).or_default();
++        if root != id {
++            replies.push(id);
++        }
++    }
++    threads.into_iter().collect()
++}
++
++#[cfg(test)]
++mod classic_comment_tests {
++    use super::*;
++
++    fn comment(parent: Option<u32>) -> wordcraft_doc::Comment {
++        wordcraft_doc::Comment { parent, ..Default::default() }
++    }
++
++    #[test]
++    fn replies_and_nested_replies_stay_in_one_card() {
++        let comments = BTreeMap::from([(2, comment(None)), (8, comment(Some(2))), (10, comment(Some(8))), (20, comment(None))]);
++        assert_eq!(comment_threads(&comments), vec![(2, vec![8, 10]), (20, vec![])]);
++    }
++
++    #[test]
++    fn missing_and_cyclic_parents_remain_visible() {
++        let comments = BTreeMap::from([(1, comment(Some(99))), (2, comment(Some(3))), (3, comment(Some(2)))]);
++        assert_eq!(comment_threads(&comments), vec![(1, vec![]), (2, vec![]), (3, vec![])]);
++    }
+ }
+ 
+ /// What has been typed in comment and reply fields but not yet written to the document (#1348).
+@@ -122,6 +238,8 @@
+     let mut edit = egui::TextEdit::multiline(&mut text)
+         .id(field_id(app, ui, "comment_edit", id))
+         .interactive(editable)
++        .frame(egui::Frame::NONE)
++        .margin(egui::vec2(0.0, 2.0))
+         .desired_rows(1)
+         .desired_width(f32::INFINITY)
+         .hint_text(tl!("Add a comment"));
+@@ -129,6 +247,11 @@
+         edit = edit.font(f);
+     }
+     let r = ui.add(edit);
++    if r.has_focus() || r.clicked() {
++        let document = app.session.document_id();
++        let root = thread_root(app, id);
++        ui.data_mut(|data| data.insert_temp(egui::Id::unique(("classic_comment_active", document)), root));
++    }
+     if focus {
+         r.request_focus();
+     }
+@@ -182,6 +305,8 @@
+     let mut edit = egui::TextEdit::multiline(&mut text)
+         .id(field_id(app, ui, "comment_reply", id))
+         .interactive(editable)
++        .frame(egui::Frame::NONE)
++        .margin(egui::vec2(0.0, 2.0))
+         .desired_rows(1)
+         .desired_width(f32::INFINITY)
+         .hint_text(tl!("Write a reply"));
+@@ -189,6 +314,11 @@
+         edit = edit.font(f);
+     }
+     let r = ui.add(edit);
++    if r.has_focus() || r.clicked() {
++        let document = app.session.document_id();
++        let root = thread_root(app, id);
++        ui.data_mut(|data| data.insert_temp(egui::Id::unique(("classic_comment_active", document)), root));
++    }
+     if focus {
+         r.request_focus();
+     }
+--- a/crates/ui-egui/src/theme.rs
++++ b/crates/ui-egui/src/theme.rs
+@@ -301,6 +301,12 @@
+ }
+ 
+ impl Tokens {
++    /// Colours shared by the classic comment cards and their active author rails.
++    pub fn classic_comment_color(&self, index: usize) -> Color32 {
++        let colors = if self.dark { [(185, 149, 227), (247, 136, 145), (100, 185, 248)] } else { [(102, 51, 164), (223, 53, 64), (0, 140, 240)] };
++        let (r, g, b) = colors.get(index % colors.len()).copied().unwrap_or((102, 51, 164));
++        Color32::from_rgb(r, g, b)
++    }
+     pub fn light() -> Self {
+         Tokens {
+             dark: false,
+--- a/apps/wordcraft-web/src/web.rs
++++ b/apps/wordcraft-web/src/web.rs
+@@ -79,6 +79,10 @@
+                     // Preferences from an earlier visit (#2132), as the desktop app reads `ui.json`.
+                     let stored = stored_prefs();
+                     crate::prefs::restore(&mut app, stored.as_deref());
++                    // The review demo opens the redesigned comment threads on first load.
++                    if app_bridge.is_some() && query_param("comments").as_deref() == Some("classic") {
++                        let _ = app.session.run("view.commentsPane", &serde_json::json!({"value": true}));
++                    }
+                     // A region chosen in File › Options replaces the browser's for the first blank
+                     // document too (#838).
+                     if !sample && app.session.prefs.region.is_some() {
