@@ -1,14 +1,14 @@
 /* Only placement over the native canvas is new; card styling comes unchanged from master. */
-#original-comments{position:absolute;inset:0;pointer-events:none;background:transparent;container-type:normal}
-#original-comments [data-native-clip]{position:absolute;overflow:hidden;pointer-events:none}
-#original-comments .wc-margin{position:absolute;inset:0}
-#original-comments .wc-note{pointer-events:auto}
-#original-comments .wc-note:has(.wc-menu){z-index:6}
-#original-comments .wc-native-column{position:absolute;top:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;scrollbar-width:thin}
-#original-comments .wc-native-margin{position:absolute;background:#fff;border-left:1px solid #bdbdbd}
-#original-comments [data-native-margins]{position:absolute;inset:0}
-#original-comments .wc-connectors{position:absolute;inset:0}
-#original-comments [data-native-highlights]{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none}
-#original-comments .wc-floating{pointer-events:auto}
-#review-tools .wc-tools{padding-right:12px}
-#review-tools .wc-file{font-size:12px}
+.original-comments{position:absolute;inset:0;pointer-events:none;background:transparent;container-type:normal}
+.original-comments [data-native-clip]{position:absolute;overflow:hidden;pointer-events:none}
+.original-comments .wc-margin{position:absolute;inset:0}
+.original-comments .wc-note{pointer-events:auto}
+.original-comments .wc-note:has(.wc-menu){z-index:6}
+.original-comments .wc-native-column{position:absolute;top:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;scrollbar-width:thin}
+.original-comments .wc-native-margin{position:absolute;background:#fff;border-left:1px solid #bdbdbd}
+.original-comments [data-native-margins]{position:absolute;inset:0}
+.original-comments .wc-connectors{position:absolute;inset:0}
+.original-comments [data-native-highlights]{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none}
+.original-comments .wc-floating{pointer-events:auto}
+.review-tools .wc-tools{padding-right:12px}
+.review-tools .wc-file{font-size:12px}

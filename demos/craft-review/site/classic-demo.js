@@ -1,17 +1,24 @@
 import {createOriginalComments} from './original-comments.js';
 const options = {
-  word: {project:'wordcraft', version:'0.13.2', engine:'wordcraft-classic', ext:'docx', hint:'页边批注沿用原版样式：选中文字新建批注，点击卡片定位原文；批注与回复可随 DOCX 保存。'},
-  pdf: {project:'pdfcraft', version:'0.16.1', ext:'pdf', hint:'示例已带一条便笺。可使用评论、高亮或圈画工具；点击编辑器里的保存，或按 Ctrl / ⌘ + S，再下载带批注的 PDF。'}
+  word: {project:'wordcraft', version:'0.13.2', engine:'wordcraft-classic', ext:'docx', hint:'Word 与 PDF 共用原版页边批注：选中文字新建批注，点击卡片定位原文；批注与回复可随 DOCX 保存。'},
+  pdf: {project:'pdfcraft', version:'0.16.1', engine:'pdfcraft-classic', ext:'pdf', hint:'PDF 沿用 Word 的页边批注样式：点击新建批注或原文标记，在卡片中编辑与回复；批注可随 PDF 保存。'}
 };
 const states = Object.fromEntries(Object.keys(options).map(key=>[key,{frame:document.getElementById(key+'-frame'), ready:false, dirty:false, loading:false, filename:'RFQ-review-example.'+options[key].ext, message:'正在加载编辑器…', notice:'', saved:null, pending:0}]));
 const el = id => document.getElementById(id);
 let active = 'word';
-const comments=createOriginalComments({frame:states.word.frame,onStatus:message=>{states.word.notice=message;render();},onDirty:()=>{states.word.dirty=true;states.word.notice='';render();}});
+const comments=Object.fromEntries(Object.entries(states).map(([key,state])=>{
+  let root=el('original-comments'), tools=el('review-tools');
+  if(key!=='word'){
+    root=root.cloneNode(true);root.id=key+'-original-comments';root.setAttribute('aria-label','PDF 页边批注');root.hidden=true;el('original-comments').after(root);
+    tools=tools.cloneNode(true);tools.id=key+'-review-tools';tools.hidden=true;el('review-tools').after(tools);
+  }
+  return [key,createOriginalComments({frame:state.frame,namespace:options[key].project,root,tools,documentFormat:options[key].ext.toUpperCase(),supportsFormatting:key==='word',onStatus:message=>{state.notice=message;render();},onDirty:()=>{state.dirty=true;state.notice='';render();}})];
+}));
 function render(){
   const state=states[active], option=options[active];
   document.querySelectorAll('[data-app]').forEach(a=>a.setAttribute('aria-current',a.dataset.app===active?'page':'false'));
   for(const [key,s] of Object.entries(states))s.frame.hidden=key!==active;
-  comments.setVisible(active==='word');
+  for(const [key,surface] of Object.entries(comments))surface.setVisible(key===active);
   el('filename').textContent=state.filename;
   el('status').textContent=state.pending?'正在保存批阅稿…':state.notice|| (state.dirty?'有未保存修改':state.message);
   el('hint').textContent=option.hint;
@@ -26,7 +33,7 @@ function render(){
 function activate(key){
   if(!options[key])key='word';active=key;
   const state=states[key], option=options[key];
-  if(!state.loading){state.loading=true;state.frame.src='/'+(option.engine||option.project)+'/?host=parent&author='+encodeURIComponent('RFQ Demo')+(key==='word'?'&comments=classic':'')}
+  if(!state.loading){state.loading=true;state.frame.src='/'+option.engine+'/?host=parent&author='+encodeURIComponent('RFQ Demo')+'&comments=classic'}
   history.replaceState(null,'',location.pathname+'?app='+key);render();
 }
 async function sendFile(key,name,bytes){
@@ -45,8 +52,8 @@ window.addEventListener('message',async event=>{
     try{const response=await fetch('/samples/RFQ-review-example.'+option.ext);if(!response.ok)throw new Error('示例文件读取失败');await sendFile(key,state.filename,await response.arrayBuffer())}catch(error){state.message=error.message;render()}
   }else if(kind==='failed'){state.ready=true;state.message='启动失败：'+data.error;render()}
   else if(kind==='dirty'){state.dirty=!!data.dirty;render()}
-  else if(key==='word'&&(kind==='reviewState'||kind==='reviewResult')){
-    try{comments.receive(kind,JSON.parse(data.payload))}catch(error){state.message='批注同步失败：'+error.message;render()}
+  else if(kind==='reviewState'||kind==='reviewResult'){
+    try{comments[key].receive(kind,JSON.parse(data.payload))}catch(error){state.notice='批注同步失败：'+error.message;render()}
   }
   else if(kind==='save'){
     if(!(data.bytes instanceof ArrayBuffer)&&!ArrayBuffer.isView(data.bytes))return;
@@ -73,5 +80,5 @@ el('reopen').addEventListener('click',async()=>{
   const response=await fetch(state.saved.url);if(response.ok)await sendFile(key,state.saved.name,await response.arrayBuffer());
 });
 window.addEventListener('beforeunload',event=>{if(Object.values(states).some(state=>state.dirty||state.pending)){event.preventDefault();event.returnValue=''}});
-window.addEventListener('keydown',event=>{if(active==='word'&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();comments.save();}});
+window.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();comments[active].save();}});
 activate(new URLSearchParams(location.search).get('app')||'word');

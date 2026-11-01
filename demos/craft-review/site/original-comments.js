@@ -7,14 +7,15 @@ const palette = [
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const overlap = (a,b) => a.y+a.h>b.y && a.y<b.y+b.h && a.x+a.w>b.x && a.x<b.x+b.w;
 
-export function createOriginalComments({frame, onStatus, onDirty}) {
-  const root=document.getElementById('original-comments'), clip=root.querySelector('[data-native-clip]');
+export function createOriginalComments({frame, onStatus, onDirty, namespace='wordcraft', root=document.getElementById('original-comments'), tools=document.getElementById('review-tools'), documentFormat='DOCX', supportsFormatting=true}) {
+  const clip=root.querySelector('[data-native-clip]');
   const margin=root.querySelector('[data-margin]'), svg=root.querySelector('[data-connectors]');
   const highlights=root.querySelector('[data-native-highlights]'), backgrounds=root.querySelector('[data-native-margins]');
-  const floating=root.querySelector('[data-floating]'), tools=document.getElementById('review-tools');
-  for(const placeholder of document.querySelectorAll('[data-icon]'))placeholder.outerHTML=icons[placeholder.dataset.icon]||'';
+  const floating=root.querySelector('[data-floating]');
+  for(const owner of [root,tools])for(const placeholder of owner.querySelectorAll('[data-icon]'))placeholder.outerHTML=icons[placeholder.dataset.icon]||'';
+  tools.querySelector('[data-format]').hidden=!supportsFormatting;
   let snapshot=null, active=null, editing=null, menu=null, replyTarget=null, reply='', focusTarget=null;
-  let requestId=0, frameId=0, visible=true, composing=false,reveal=null;
+  let requestId=0, frameId=0, visible=!root.hidden, composing=false,reveal=null;
   const pending=new Map(), localEdits=new Map();let applied=0;
   const columnScrolls=new Map(), cardScrolls=new Map();
   const noteFor=id=>snapshot?.notes.find(n=>n.id===id);
@@ -22,14 +23,14 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
   function request(action, params={}) {
     if (!snapshot) return Promise.reject(new Error('编辑器还未就绪'));
     const request=++requestId;
-    frame.contentWindow.postMessage({type:'wordcraft:review',payload:JSON.stringify({document:snapshot.document,request,action,params})},location.origin);
+    frame.contentWindow.postMessage({type:namespace+':review',payload:JSON.stringify({document:snapshot.document,request,action,params})},location.origin);
     return new Promise((resolve,reject)=>{
       const timeout=setTimeout(()=>{pending.delete(request);reject(new Error('批注操作未收到响应，请先保存后刷新'));},10000);
       pending.set(request,{resolve,reject,timeout});
     });
   }
   const run=(action,params={})=>request(action,params).catch(error=>{onStatus(error.message);return false;});
-  function setVisible(value) { visible=value;root.hidden=!value;tools.hidden=!value;if(value)schedule(); }
+  function setVisible(value) { const showing=value&&!visible;visible=value;root.hidden=!value;tools.hidden=!value;if(showing&&focusTarget!==null)renderNotes();if(value)schedule(); }
   function receive(kind, payload) {
     if(kind==='reviewResult'){
       const item=pending.get(payload.request);if(!item)return;clearTimeout(item.timeout);pending.delete(payload.request);
@@ -41,6 +42,7 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
     if(changed){active=editing=menu=replyTarget=null;reply='';focusTarget=null;localEdits.clear();reveal=null;}
     const previous=snapshot;
     const created=!changed&&payload.editable?payload.notes.filter(n=>n.author===payload.author&&!n.text&&!previous.notes.some(old=>old.id===n.id)).at(-1):null;
+    const nativeEdit=!changed&&payload.editable&&payload.editRequest>0&&payload.editRequest!==previous?.editRequest?payload.notes.find(n=>n.id===payload.edit):null;
     const previousContent=content(previous), previousActive=active;
     applied=payload.applied??0;
     for(const [id,draft] of localEdits){
@@ -60,12 +62,13 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
       if(document.activeElement===frame)editing=null;
     }
     if(created){active=editing=created.id;focusTarget=created.id;}
+    if(nativeEdit){active=editing=nativeEdit.id;focusTarget=nativeEdit.id;}
     tools.querySelector('[data-count]').textContent=payload.notes.length+' 条批注';
     tools.querySelector('[data-format]').setAttribute('aria-pressed',String(payload.formatting));
     tools.querySelectorAll('button').forEach(button=>button.disabled=false);
     tools.querySelector('[data-new]').disabled=!payload.editable;
-    root.classList.toggle('wc-hide-format',!payload.formatting);
-    if(!composing&&(changed||created||previousContent!==content(payload)||previousActive!==active||previous?.author!==payload.author||previous?.editable!==payload.editable||previous?.formatting!==payload.formatting))renderNotes(changed);
+    root.classList.toggle('wc-hide-format',!supportsFormatting||!payload.formatting);
+    if(!composing&&(changed||created||nativeEdit||previousContent!==content(payload)||previousActive!==active||previous?.author!==payload.author||previous?.editable!==payload.editable||previous?.formatting!==payload.formatting))renderNotes(changed);
     schedule();
     if(changed&&payload.notes.length){void navigate(payload.notes[0].id);}
   }
@@ -93,7 +96,7 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
     let restore=focusTarget;
     if(!restore&&field)restore=field.reply?'reply':Number(field.edit);
     const input=restore==='reply'?root.querySelector('[data-reply-input]'):restore!==null?root.querySelector(`[data-edit-input="${restore}"]`):null;
-    if(input){input.focus({preventScroll:true});if(field)input.setSelectionRange(field.start,field.end);else input.setSelectionRange(input.value.length,input.value.length);focusTarget=null;}
+    if(input&&visible){input.focus({preventScroll:true});if(field)input.setSelectionRange(field.start,field.end);else input.setSelectionRange(input.value.length,input.value.length);focusTarget=null;}
     schedule();
   }
   function grow(input){input.style.height='auto';input.style.height=Math.max(22,input.scrollHeight)+'px';}
@@ -109,8 +112,11 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
       const onVisiblePage=n.ranges.filter(r=>{const p=pages.get(r.page);return p&&p.y+p.h>view.y&&p.y<view.y+view.h;});
       const anchor=ranges.at(-1)||onVisiblePage.at(-1), page=pages.get(anchor?.page),box=margin.querySelector(`[data-note="${n.id}"]`);
       if(!box)return null;
-      box.hidden=!anchor&&n.ranges.length>0;
-      if(box.hidden)return null;
+      box.hidden=!anchor&&(n.ranges.length>0||(Number.isInteger(n.page)&&!pages.has(n.page)));
+      if(box.hidden){
+        if(box.parentElement!==margin){const column=box.parentElement;columnScrolls.set(column.dataset.column,column.scrollTop);margin.append(box);}
+        return null;
+      }
       return {n,box,anchor,page};
     }).filter(Boolean).sort((a,b)=>(a.anchor?.y??view.y)-(b.anchor?.y??view.y));
     const bottoms=new Map(), columns=new Set(), newColumns=new Set(), connections=[];
@@ -140,7 +146,7 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
     });
     svg.setAttribute('viewBox',`0 0 ${view.w} ${view.h}`);svg.innerHTML=paths.join('');
     highlights.setAttribute('viewBox',`0 0 ${view.w} ${view.h}`);
-    highlights.innerHTML=snapshot.notes.flatMap(n=>n.ranges.filter(r=>overlap(r,view)).map(r=>`<rect x="${r.x-view.x}" y="${r.y-view.y}" width="${Math.max(2,r.w)}" height="${r.h}" fill="${palette[n.color%3].fill}"/><path d="M ${r.x-view.x} ${r.y-view.y} v ${r.h} M ${r.x+r.w-view.x} ${r.y-view.y} v ${r.h}" stroke="${palette[n.color%3].ink}" stroke-width="${n.id===active?2:1}"/>`)).join('');
+    highlights.innerHTML=snapshot.notes.filter(n=>n.highlight!==false).flatMap(n=>n.ranges.filter(r=>overlap(r,view)).map(r=>`<rect x="${r.x-view.x}" y="${r.y-view.y}" width="${Math.max(2,r.w)}" height="${r.h}" fill="${palette[n.color%3].fill}"/><path d="M ${r.x-view.x} ${r.y-view.y} v ${r.h} M ${r.x+r.w-view.x} ${r.y-view.y} v ${r.h}" stroke="${palette[n.color%3].ink}" stroke-width="${n.id===active?2:1}"/>`)).join('');
     const selection=snapshot.selection;floating.hidden=!selection||!snapshot.editable;
     if(selection)Object.assign(floating.style,{left:Math.max(5,Math.min(selection.x+selection.w-view.x-110,view.w-135))+'px',top:Math.max(2,selection.y-view.y-35)+'px'});
   }
@@ -161,7 +167,7 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
   async function newComment(){
     try{
       const result=await request('new');active=editing=result.id;focusTarget=result.id;menu=null;
-      renderNotes();onStatus('已在对应页边新建批注，输入内容后可保存 DOCX。');
+      renderNotes();onStatus('已在对应页边新建批注，输入内容后可保存 '+documentFormat+'。');
     }catch(error){onStatus(error.message);}
   }
   root.addEventListener('compositionstart',()=>{composing=true;});
@@ -204,7 +210,7 @@ export function createOriginalComments({frame, onStatus, onDirty}) {
       if(!reply.trim())return;if(await run('reply',{id:replyTarget})===false)return;replyTarget=null;reply='';renderNotes();return;
     }
     for(const action of ['delete','resolve'])if(button.hasAttribute('data-'+action)){menu=null;await run(action,{id:Number(button.dataset[action])});return;}
-    for(const action of ['previous','next','format'])if(button.hasAttribute('data-'+action)){editing=null;await run(action);return;}
+    for(const action of ['previous','next','format'])if(button.hasAttribute('data-'+action)){if(action==='format'&&!supportsFormatting)return;editing=null;await run(action);return;}
   }
   root.addEventListener('click',event=>{void click(event);});
   tools.addEventListener('pointerdown',event=>{if(event.target.closest('button'))event.preventDefault();});

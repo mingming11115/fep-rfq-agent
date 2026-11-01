@@ -1,0 +1,1260 @@
+diff --git a/crates/engine/src/document.rs b/crates/engine/src/document.rs
+--- a/crates/engine/src/document.rs
++++ b/crates/engine/src/document.rs
+@@ -548,6 +548,47 @@
+         self.editor.as_ref().and_then(|e| pdfcraft_annot::props(&e.cos, page, index))
+     }
+ 
++    /// Opaque identities for every entry of each page's `/Annots`, including replies, status
++    /// records and pop-ups. The first two values are the current zero-based page and array index.
++    /// Indirect identities use the page and annotation object references, so deleting an earlier
++    /// annotation or editing this one does not change its key. Incremental Save/reopen keeps them;
++    /// a full rewrite may renumber objects and therefore change keys.
++    ///
++    /// Inline entries have a bounded content fingerprint and a same-content occurrence number.
++    /// Editing/promoting an inline entry can change its key; callers should migrate the identity
++    /// they already hold after their own mutation. Identical inline entries have no intrinsic
++    /// identity, so deleting one can change the occurrence numbers of its identical siblings.
++    /// At most a million entries are returned. Cache by [`Self::edit_generation`] between edits.
++    pub fn comment_keys(&self) -> Vec<(usize, usize, String)> {
++        let Some(editor) = &self.editor else { return Vec::new() };
++        let Ok(pages) = pdfcraft_annot::page_refs(&editor.cos) else { return Vec::new() };
++        let mut keys = Vec::new();
++        for (page, page_ref) in pages.into_iter().enumerate() {
++            let page_object = editor.cos.get(page_ref);
++            let Some(annots) = page_object.as_dict().and_then(|d| d.get(b"Annots")) else { continue };
++            let annots = editor.cos.resolve(annots);
++            let Some(annots) = annots.as_array() else { continue };
++            let mut occurrences = std::collections::HashMap::<u64, usize>::new();
++            for (index, annot) in annots.iter().enumerate() {
++                if keys.len() >= 1_000_000 {
++                    return keys;
++                }
++                let identity = match annot {
++                    pdfcraft_cos::Object::Ref(r) => format!("ref:{}:{}", r.num, r.generation),
++                    inline => {
++                        let fingerprint = comment_fingerprint(inline);
++                        let occurrence = occurrences.entry(fingerprint).or_default();
++                        let key = format!("inline:{fingerprint:016x}:{occurrence}");
++                        *occurrence += 1;
++                        key
++                    }
++                };
++                keys.push((page, index, format!("page:{}:{}/{}", page_ref.num, page_ref.generation, identity)));
++            }
++        }
++        keys
++    }
++
+     /// A form field's Appearance-tab look (borders, colours, font).
+     pub fn field_look(&self, name: &str) -> Option<pdfcraft_forms::Look> {
+         let e = self.editor.as_ref()?;
+@@ -790,3 +831,210 @@
+     }
+     Ok(())
+ }
++
++/// Hash only bounded inline content, never recursively resolving references or decoding streams.
++/// FNV-1a is deterministic across processes; type and length markers keep values unambiguous.
++fn comment_fingerprint(object: &pdfcraft_cos::Object) -> u64 {
++    struct Fingerprint {
++        hash: u64,
++        nodes: usize,
++        bytes: usize,
++    }
++    impl Fingerprint {
++        fn feed(&mut self, bytes: &[u8]) {
++            for byte in bytes {
++                self.hash = (self.hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
++            }
++        }
++        fn blob(&mut self, bytes: &[u8]) {
++            self.feed(&(bytes.len() as u64).to_le_bytes());
++            let len = bytes.len().min(self.bytes);
++            for byte in bytes.iter().take(len) {
++                self.feed(&[*byte]);
++            }
++            self.bytes -= len;
++        }
++        fn dict(&mut self, dict: &pdfcraft_cos::Dict, depth: usize) {
++            self.feed(&(dict.len() as u64).to_le_bytes());
++            for (key, value) in dict.iter() {
++                if self.nodes == 0 || self.bytes == 0 {
++                    break;
++                }
++                self.blob(key);
++                self.object(value, depth + 1);
++            }
++        }
++        fn object(&mut self, object: &pdfcraft_cos::Object, depth: usize) {
++            use pdfcraft_cos::Object;
++            if depth >= 16 || self.nodes == 0 || self.bytes == 0 {
++                self.feed(b"!");
++                return;
++            }
++            self.nodes -= 1;
++            match object {
++                Object::Null => self.feed(b"0"),
++                Object::Bool(value) => self.feed(if *value { b"t" } else { b"f" }),
++                Object::Int(_) | Object::Real(_) => {
++                    self.feed(b"n");
++                    let mut number = Vec::new();
++                    pdfcraft_cos::serialize(object, &mut number);
++                    self.blob(&number);
++                }
++                Object::String(value) => {
++                    self.feed(b"s");
++                    self.blob(&value.bytes);
++                }
++                Object::Name(value) => {
++                    self.feed(b"/");
++                    self.blob(value);
++                }
++                Object::Ref(value) => {
++                    self.feed(b"r");
++                    self.feed(&value.num.to_le_bytes());
++                    self.feed(&value.generation.to_le_bytes());
++                }
++                Object::Array(values) => {
++                    self.feed(b"a");
++                    self.feed(&(values.len() as u64).to_le_bytes());
++                    for value in values.iter().take(self.nodes) {
++                        if self.nodes == 0 || self.bytes == 0 {
++                            break;
++                        }
++                        self.object(value, depth + 1);
++                    }
++                }
++                Object::Dict(value) => {
++                    self.feed(b"d");
++                    self.dict(value, depth);
++                }
++                Object::Stream(value) => {
++                    self.feed(b"S");
++                    self.dict(&value.dict, depth);
++                    self.blob(value.raw.as_ref());
++                }
++            }
++        }
++    }
++    let mut fingerprint = Fingerprint { hash: 0xcbf29ce484222325, nodes: 4096, bytes: 65_536 };
++    fingerprint.object(object, 0);
++    fingerprint.hash
++}
++
++#[cfg(test)]
++mod comment_key_tests {
++    use super::*;
++    use crate::{NewAnnotation, NoteIcon, ReviewState, Session, Shape, Style};
++
++    fn blank() -> (Session, DocId) {
++        let mut session = Session::new().with_clock(|| 1_700_000_000);
++        let bytes = session.create_blank(200.0, 300.0, 1).unwrap();
++        let id = session.open("comments.pdf", None, bytes, None).unwrap();
++        (session, id)
++    }
++
++    fn note(text: &str) -> Edit {
++        let shape = Shape::Note { at: [50.0, 100.0], icon: NoteIcon::Comment };
++        Edit::AddAnnotation(NewAnnotation { page: 0, style: Style::default_for(&shape), shape, contents: text.into(), author: "Reviewer".into() })
++    }
++
++    fn comment_slot(doc: &Document, text: &str) -> (usize, usize) {
++        let annotation = doc.info.annotations.iter().find(|a| a.contents.as_deref() == Some(text)).unwrap();
++        (annotation.page, annotation.index)
++    }
++
++    fn comment_key(doc: &Document, slot: (usize, usize)) -> String {
++        doc.comment_keys().into_iter().find(|(page, index, _)| (*page, *index) == slot).unwrap().2
++    }
++
++    #[test]
++    fn comment_keys_survive_deleting_an_earlier_annotation() {
++        let (mut session, id) = blank();
++        session.apply(id, note("Earlier")).unwrap();
++        session.apply(id, note("Later")).unwrap();
++        let doc = session.get(id).unwrap();
++        let earlier = comment_slot(doc, "Earlier");
++        let later = comment_slot(doc, "Later");
++        let earlier_key = comment_key(doc, earlier);
++        let later_key = comment_key(doc, later);
++        assert!(earlier.1 < later.1);
++        assert_ne!(earlier_key, later_key);
++        session.apply(id, Edit::DeleteAnnotation { page: earlier.0, index: earlier.1 }).unwrap();
++        let doc = session.get(id).unwrap();
++        let shifted = comment_slot(doc, "Later");
++        assert!(shifted.1 < later.1, "deleting the earlier note and its popup shifts the later native index");
++        assert_eq!(comment_key(doc, shifted), later_key, "the later note keeps its identity after reindexing");
++        assert!(!doc.comment_keys().iter().any(|(_, _, key)| *key == earlier_key));
++        assert!(!doc.info.annotations.iter().any(|a| a.contents.as_deref() == Some("Earlier")));
++    }
++
++    #[test]
++    fn comment_keys_survive_edits_undo_and_incremental_save_reopen() {
++        let (mut session, id) = blank();
++        session.apply(id, note("Original")).unwrap();
++        let doc = session.get(id).unwrap();
++        let (page, index) = comment_slot(doc, "Original");
++        let before = doc.comment_keys();
++        session.apply(id, Edit::SetAnnotationContents { page, index, text: "Edited".into() }).unwrap();
++        session.apply(id, Edit::MoveAnnotation { page, index, dx: 15.0, dy: 0.0 }).unwrap();
++        assert_eq!(session.get(id).unwrap().comment_keys(), before);
++        session.undo(id).unwrap();
++        assert_eq!(session.get(id).unwrap().comment_keys(), before);
++        session.redo(id).unwrap();
++        let bytes = session.save_bytes(id).unwrap();
++        session.mark_saved(id, bytes.clone(), None).unwrap();
++        assert_eq!(session.get(id).unwrap().comment_keys(), before);
++        let mut reopened = Session::new();
++        let reopened_id = reopened.open("saved.pdf", None, bytes, None).unwrap();
++        assert_eq!(reopened.get(reopened_id).unwrap().comment_keys(), before);
++    }
++
++    #[test]
++    fn comment_keys_include_replies_status_and_inline_popups() {
++        use pdfcraft_cos::{Dict, Object};
++        let (mut session, id) = blank();
++        session.apply(id, note("Root")).unwrap();
++        let (root_page, root_index) = comment_slot(session.get(id).unwrap(), "Root");
++        session.apply(id, Edit::ReplyToAnnotation { page: root_page, index: root_index, text: "Reply".into(), author: "Other".into() }).unwrap();
++        session
++            .apply(id, Edit::SetAnnotationStatus { page: root_page, index: root_index, state: ReviewState::Completed, author: "Other".into() })
++            .unwrap();
++        let mut cos = pdfcraft_cos::Document::open(session.get(id).unwrap().bytes.clone()).unwrap();
++        let page = pdfcraft_annot::page_refs(&cos).unwrap()[0];
++        let annots = cos.get(page).as_dict().unwrap().get(b"Annots").unwrap().clone();
++        let mut annots = cos.resolve(&annots).as_array().unwrap().clone();
++        assert!(annots.iter().any(|entry| cos.resolve(entry).as_dict().is_some_and(|dict| dict.name(b"Subtype") == Some(b"Popup"))));
++        let inline_index = annots.len();
++        let mut popup = Dict::new();
++        popup.set(b"Type".to_vec(), Object::name("Annot"));
++        popup.set(b"Subtype".to_vec(), Object::name("Popup"));
++        popup.set(b"Rect".to_vec(), Object::Array(vec![0.into(), 0.into(), 20.into(), 20.into()]));
++        annots.push(Object::Dict(popup));
++        let expected_count = annots.len();
++        pdfcraft_annot::set_annots(&mut cos, page, annots).unwrap();
++        let bytes = Arc::new(write_incremental(&cos, &SaveOptions::default()).unwrap());
++        let imported = session.open("popup.pdf", None, bytes, None).unwrap();
++        let doc = session.get(imported).unwrap();
++        let keys = doc.comment_keys();
++        assert_eq!(keys.iter().map(|(p, i, _)| (*p, *i)).collect::<Vec<_>>(), (0..expected_count).map(|i| (0, i)).collect::<Vec<_>>());
++        assert_eq!(keys.iter().map(|(_, _, key)| key).collect::<std::collections::HashSet<_>>().len(), expected_count);
++        let reply = comment_slot(doc, "Reply");
++        let reply_key = comment_key(doc, reply);
++        let root_key = comment_key(doc, comment_slot(doc, "Root"));
++        let status = doc.info.annotations.iter().find(|a| a.state.as_deref() == Some("Completed")).unwrap();
++        assert!(keys.iter().any(|(page, index, _)| (*page, *index) == (status.page, status.index)), "status records have keys too");
++        let inline_key = comment_key(doc, (0, inline_index));
++        session.apply(imported, Edit::DeleteAnnotation { page: reply.0, index: reply.1 }).unwrap();
++        let doc = session.get(imported).unwrap();
++        let after = doc.comment_keys();
++        assert!(!doc.info.annotations.iter().any(|a| a.contents.as_deref() == Some("Reply")), "the real reply was deleted");
++        assert!(!after.iter().any(|(_, _, key)| *key == reply_key));
++        assert_eq!(comment_key(doc, comment_slot(doc, "Root")), root_key, "deleting a reply preserves its parent");
++        assert!(doc.info.annotations.iter().any(|a| a.state.as_deref() == Some("Completed")), "the status sibling remains");
++        let shifted_inline = after.iter().find(|(_, _, key)| *key == inline_key).expect("inline popup keeps its content identity");
++        assert!(shifted_inline.1 < inline_index, "the inline popup's native index shifted after reply deletion");
++        let saved = session.save_bytes(imported).unwrap();
++        let mut reopened = Session::new();
++        let reopened_id = reopened.open("popup-saved.pdf", None, saved, None).unwrap();
++        assert_eq!(reopened.get(reopened_id).unwrap().comment_keys(), session.get(imported).unwrap().comment_keys());
++    }
++}
+diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+--- a/crates/ui-egui/src/lib.rs
++++ b/crates/ui-egui/src/lib.rs
+@@ -71,6 +71,7 @@
+ 
+ mod app;
+ mod hooks;
++mod host_review;
+ mod persist;
+ mod platform;
+ mod state;
+@@ -242,6 +243,7 @@
+ }
+ 
+ pub struct PdfCraftApp {
++    pub(crate) host_review: Option<host_review::HostReview>,
+     /// Tools side and pane widths; which panes are open is `left_open` and `right`.
+     pub side_panels: side_panels::SidePanels,
+     pub session: Session,
+diff --git a/crates/ui-egui/src/app.rs b/crates/ui-egui/src/app.rs
+--- a/crates/ui-egui/src/app.rs
++++ b/crates/ui-egui/src/app.rs
+@@ -82,6 +82,7 @@
+             last_right: RightPanel::Comments,
+             right_before_read: None,
+             comments_panel_closed: false,
++            host_review: None,
+             right_panel_closed: false,
+             quick_tool: QuickTool::Select,
+             space_hand: None,
+diff --git a/crates/ui-egui/src/host_review.rs b/crates/ui-egui/src/host_review.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/ui-egui/src/host_review.rs
+@@ -0,0 +1,551 @@
++//! Host review adapter; edits stay in the native PDF engine.
++use crate::PdfCraftApp;
++use pdfcraft_engine::{DocId, Edit, NewAnnotation, NoteIcon, ReviewState, Shape};
++use serde_json::{Value, json};
++use std::collections::{BTreeMap, HashMap, HashSet};
++
++#[derive(Default)]
++pub(crate) struct HostReview {
++    documents: HashMap<DocId, ReviewDocument>,
++    serial: u64,
++    pub clip: Option<egui::Rect>,
++}
++
++#[derive(Default)]
++struct ReviewDocument {
++    token: String,
++    generation: Option<u64>,
++    next_id: u32,
++    keys: HashMap<String, u32>,
++    native: BTreeMap<(usize, usize), u32>,
++    edits: BTreeMap<u32, String>,
++    replies: BTreeMap<u32, String>,
++    edit_request: u64,
++    edit: Option<u32>,
++}
++
++fn numeric_id(p: &Value) -> Result<u32, String> {
++    p.get("id").and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok()).ok_or_else(|| "invalid comment id".into())
++}
++
++impl PdfCraftApp {
++    pub fn enable_host_review(&mut self) {
++        if self.host_review.is_none() {
++            self.host_review = Some(HostReview::default());
++            self.left_open = false;
++        }
++        if self.right == Some(crate::RightPanel::Comments) {
++            self.right = None;
++        }
++        self.comments_panel_closed = true;
++        self.right_panel_closed = true;
++        for view in &mut self.views {
++            if !view.host_comments {
++                view.host_comments = true;
++                view.fit = crate::canvas::Fit::Width;
++                view.layout = crate::canvas::PageLayout::Single;
++            }
++        }
++    }
++
++    fn sync_host_review(&mut self) -> Option<(usize, DocId)> {
++        let (i, id) = self.active_ids()?;
++        let host = self.host_review.as_mut()?;
++        host.documents.retain(|id, _| self.views.iter().any(|v| v.id == *id));
++        if !host.documents.contains_key(&id) {
++            host.serial = host.serial.saturating_add(1);
++            host.documents.insert(id, ReviewDocument { token: format!("{}:{}", id.0, host.serial), ..Default::default() });
++        }
++        let state = host.documents.get_mut(&id)?;
++        let doc = self.session.get(id)?;
++        if state.generation != Some(doc.edit_generation()) {
++            state.native.clear();
++            for (page, index, key) in doc.comment_keys().into_iter().take(50_000) {
++                let numeric = *state.keys.entry(key).or_insert_with(|| {
++                    state.next_id = state.next_id.saturating_add(1);
++                    state.next_id
++                });
++                state.native.insert((page, index), numeric);
++            }
++            let current: HashSet<u32> = state.native.values().copied().collect();
++            state.edits.retain(|key, _| current.contains(key));
++            state.replies.retain(|key, _| current.contains(key));
++            state.generation = Some(doc.edit_generation());
++        }
++        Some((i, id))
++    }
++
++    fn comment_native(&mut self, numeric: u32) -> Result<(usize, usize), String> {
++        let (_, id) = self.sync_host_review().ok_or("no document")?;
++        self.host_review
++            .as_ref()
++            .and_then(|s| s.documents.get(&id))
++            .and_then(|s| s.native.iter().find(|(_, n)| **n == numeric).map(|(at, _)| *at))
++            .filter(|(page, index)| self.session.get(id).is_some_and(|d| d.info.annotations.iter().any(|a| a.page == *page && a.index == *index)))
++            .ok_or_else(|| "the comment no longer exists".into())
++    }
++
++    // Inline PDF dictionaries become indirect objects on their first mutation. Keep their card
++    // identity at that moment; subsequent edits and deletions use the native object reference.
++    fn apply_host_comment(&mut self, edit: Edit, keep: Option<(u32, usize, usize)>) -> Result<(), String> {
++        if !self.apply_edit(edit) {
++            return Err("PDF refused the comment change; your draft is retained".into());
++        }
++        if let Some((numeric, page, index)) = keep
++            && let Some((_, id)) = self.active_ids()
++            && let Some(key) =
++                self.session.get(id).and_then(|d| d.comment_keys().into_iter().find(|(p, n, _)| *p == page && *n == index).map(|(_, _, key)| key))
++            && let Some(state) = self.host_review.as_mut().and_then(|h| h.documents.get_mut(&id))
++        {
++            state.keys.insert(key, numeric);
++            state.generation = None;
++        }
++        self.sync_host_review();
++        Ok(())
++    }
++
++    fn flush_host_comments(&mut self) -> Result<(), String> {
++        let (_, id) = self.sync_host_review().ok_or("no document")?;
++        let (edits, replies) =
++            self.host_review.as_ref().and_then(|h| h.documents.get(&id)).map(|s| (s.edits.clone(), s.replies.clone())).unwrap_or_default();
++        for (numeric, text) in edits {
++            let (page, index) = self.comment_native(numeric)?;
++            let same = self.session.get(id).is_some_and(|d| {
++                d.info.annotations.iter().any(|a| a.page == page && a.index == index && a.contents.as_deref().unwrap_or("") == text)
++            });
++            if !same {
++                self.apply_host_comment(Edit::SetAnnotationContents { page, index, text }, Some((numeric, page, index)))?;
++            }
++            if let Some(s) = self.host_review.as_mut().and_then(|h| h.documents.get_mut(&id)) {
++                s.edits.remove(&numeric);
++            }
++        }
++        for (numeric, text) in replies {
++            if !text.trim().is_empty() {
++                self.post_host_reply(numeric)?;
++            }
++        }
++        Ok(())
++    }
++
++    fn post_host_reply(&mut self, numeric: u32) -> Result<(), String> {
++        let (page, index) = self.comment_native(numeric)?;
++        let (_, id) = self.active_ids().ok_or("no document")?;
++        let text = self.host_review.as_ref().and_then(|h| h.documents.get(&id)).and_then(|s| s.replies.get(&numeric)).cloned().unwrap_or_default();
++        if text.trim().is_empty() {
++            return Err("reply is empty".into());
++        }
++        self.apply_host_comment(
++            Edit::ReplyToAnnotation { page, index, text, author: self.comment_prefs.author.clone() },
++            Some((numeric, page, index)),
++        )?;
++        if let Some(s) = self.host_review.as_mut().and_then(|h| h.documents.get_mut(&id)) {
++            s.replies.remove(&numeric);
++        }
++        Ok(())
++    }
++
++    pub(crate) fn host_review_dirty(&self, id: DocId) -> bool {
++        if self
++            .views
++            .iter()
++            .any(|v| v.id == id && v.host_composer_fallback && v.comments.composer.as_ref().is_some_and(|c| !c.text.trim().is_empty()))
++        {
++            return true;
++        }
++        self.host_review
++            .as_ref()
++            .and_then(|h| h.documents.get(&id))
++            .is_some_and(|s| !s.edits.is_empty() || s.replies.values().any(|text| !text.trim().is_empty()))
++    }
++
++    pub(crate) fn host_review_flush(&mut self, id: DocId) -> bool {
++        if self
++            .views
++            .iter()
++            .any(|v| v.id == id && v.host_composer_fallback && v.comments.composer.as_ref().is_some_and(|c| !c.text.trim().is_empty()))
++        {
++            self.notify("Finish or cancel the comment that could not be added before saving".to_string());
++            return false;
++        }
++        if !self.host_review_dirty(id) {
++            return true;
++        }
++        match self.flush_host_comments() {
++            Ok(()) => true,
++            Err(e) => {
++                self.notify(e);
++                false
++            }
++        }
++    }
++
++    pub(crate) fn host_review_reverted(&mut self, id: DocId) {
++        if let Some(h) = self.host_review.as_mut() {
++            h.documents.remove(&id);
++        }
++    }
++
++    fn select_host_comment(&mut self, numeric: u32) -> Result<(), String> {
++        let (page, index) = self.comment_native(numeric)?;
++        let (i, id) = self.active_ids().ok_or("no document")?;
++        let top = self
++            .session
++            .get(id)
++            .and_then(|d| {
++                let p = d.info.pages.get(page)?;
++                let a = d.info.annotations.iter().find(|a| a.page == page && a.index == index)?;
++                let xf = crate::canvas::PageXform {
++                    rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(1.0)),
++                    rot: self.views[i].rotation,
++                    pw: p.width,
++                    ph: p.height,
++                };
++                Some((xf.user_rect(&d.info, page, a.shown_rect(p.rotation)).top() - 0.03).clamp(0.0, 1.0))
++            })
++            .unwrap_or(0.0);
++        self.views[i].comments.selected = Some((page, index));
++        self.views[i].go_to_page(page);
++        self.views[i].goto = Some((page, top));
++        Ok(())
++    }
++
++    fn add_host_note(&mut self, page: usize, at: [f64; 2], text: String) -> Result<Value, String> {
++        self.apply_host_comment(
++            Edit::AddAnnotation(NewAnnotation {
++                page,
++                shape: Shape::Note { at, icon: NoteIcon::Comment },
++                style: self.comment_prefs.style(crate::comments::CommentTool::Note),
++                contents: text,
++                author: self.comment_prefs.author.clone(),
++            }),
++            None,
++        )?;
++        let (i, id) = self.active_ids().ok_or("no document")?;
++        let index = self
++            .session
++            .get(id)
++            .and_then(|d| d.info.annotations.iter().filter(|a| a.page == page && a.is_comment()).map(|a| a.index).max())
++            .ok_or("comment was not added")?;
++        self.views[i].comments.selected = Some((page, index));
++        self.quick_tool = crate::QuickTool::Select;
++        let numeric = self
++            .host_review
++            .as_ref()
++            .and_then(|h| h.documents.get(&id))
++            .and_then(|s| s.native.get(&(page, index)))
++            .copied()
++            .ok_or("comment identity unavailable")?;
++        Ok(json!({"id":numeric}))
++    }
++
++    pub fn host_review_command(&mut self, document: &str, action: &str, params: &Value) -> Result<Value, String> {
++        let (i, id) = self.sync_host_review().ok_or("no document")?;
++        if self.host_review.as_ref().and_then(|h| h.documents.get(&id)).is_none_or(|s| s.token != document) {
++            return Err("the document has changed".into());
++        }
++        match action {
++            "draft" | "replyDraft" => {
++                let numeric = numeric_id(params)?;
++                self.comment_native(numeric)?;
++                if !self.session.get(id).is_some_and(|d| d.allows_annotation() && d.read_only_reason.is_none()) {
++                    return Err("PDF is read only".into());
++                }
++                let text = params.get("text").and_then(Value::as_str).ok_or("missing text")?;
++                if text.len() > 1_048_576 {
++                    return Err("comment is too long".into());
++                }
++                if let Some(s) = self.host_review.as_mut().and_then(|h| h.documents.get_mut(&id)) {
++                    let target = if action == "draft" { &mut s.edits } else { &mut s.replies };
++                    target.insert(numeric, text.to_string());
++                }
++            }
++            "cancelEdit" | "cancelReply" => {
++                let numeric = numeric_id(params)?;
++                if let Some(s) = self.host_review.as_mut().and_then(|h| h.documents.get_mut(&id)) {
++                    if action == "cancelEdit" {
++                        s.edits.remove(&numeric);
++                    } else {
++                        s.replies.remove(&numeric);
++                    }
++                }
++            }
++            "flush" => self.flush_host_comments()?,
++            "reply" => self.post_host_reply(numeric_id(params)?)?,
++            "select" => self.select_host_comment(numeric_id(params)?)?,
++            "new" => {
++                self.flush_host_comments()?;
++                let page = self.views[i].current;
++                let at = self.session.get(id).and_then(|d| d.info.pages.get(page)).map(|p| p.view_to_user(p.width - 44.0, 24.0)).ok_or("no page")?;
++                return self.add_host_note(page, at.map(f64::from), String::new());
++            }
++            "previous" | "next" => {
++                self.flush_host_comments()?;
++                let state = self.host_review.as_ref().and_then(|h| h.documents.get(&id)).ok_or("no document")?;
++                let notes: Vec<u32> = self
++                    .session
++                    .get(id)
++                    .map(|d| {
++                        d.info
++                            .annotations
++                            .iter()
++                            .filter(|a| a.is_comment())
++                            .filter_map(|a| state.native.get(&(a.page, a.index)).copied())
++                            .take(2000)
++                            .collect()
++                    })
++                    .unwrap_or_default();
++                if notes.is_empty() {
++                    return Ok(json!({}));
++                }
++                let current = self.views[i].comments.selected.and_then(|at| state.native.get(&at)).and_then(|n| notes.iter().position(|v| v == n));
++                let n = if action == "next" {
++                    current.map_or(0, |n| (n + 1) % notes.len())
++                } else {
++                    current.map_or(notes.len() - 1, |n| (n + notes.len() - 1) % notes.len())
++                };
++                self.select_host_comment(notes[n])?;
++            }
++            "resolve" | "delete" => {
++                self.flush_host_comments()?;
++                let numeric = numeric_id(params)?;
++                let (page, index) = self.comment_native(numeric)?;
++                if action == "delete" {
++                    self.apply_host_comment(Edit::DeleteAnnotation { page, index }, None)?;
++                } else {
++                    let doc = self.session.get(id).ok_or("no document")?;
++                    let tops = pdfcraft_render::thread_tops(&doc.info.annotations);
++                    let completed = doc
++                        .info
++                        .annotations
++                        .iter()
++                        .rfind(|a| tops.get(&(a.page, a.index)) == Some(&(page, index)) && a.state.is_some() && !a.is_mark())
++                        .is_some_and(|a| a.state.as_deref() == Some("Completed"));
++                    self.apply_host_comment(
++                        Edit::SetAnnotationStatus {
++                            page,
++                            index,
++                            state: if completed { ReviewState::None } else { ReviewState::Completed },
++                            author: self.comment_prefs.author.clone(),
++                        },
++                        Some((numeric, page, index)),
++                    )?;
++                }
++            }
++            "save" => {
++                self.flush_host_comments()?;
++                if !self.save_active(crate::SaveTarget::InPlace) {
++                    return Err("PDF could not be saved".into());
++                }
++            }
++            _ => return Err("unsupported comment action".into()),
++        }
++        Ok(json!({}))
++    }
++
++    /// Divert the native sticky-note composer into the shared DOM card, preserving its anchor.
++    pub fn host_review_tick(&mut self) {
++        if self.host_review.is_none() {
++            return;
++        }
++        self.enable_host_review();
++        let Some((i, id)) = self.sync_host_review() else { return };
++        if self.views[i].comments.composer.is_none() {
++            self.views[i].host_composer_fallback = false;
++        }
++        if self.views[i].host_composer_fallback {
++            return;
++        }
++        let pending = self.views[i]
++            .comments
++            .composer
++            .as_ref()
++            .filter(|c| matches!(c.kind, crate::comments::ComposerKind::Note | crate::comments::ComposerKind::Edit(_)))
++            .cloned();
++        if let Some(c) = pending {
++            let result = match c.kind {
++                crate::comments::ComposerKind::Note => self.add_host_note(c.page, c.at, c.text.clone()).map(|_| ()),
++                crate::comments::ComposerKind::Edit(index) => {
++                    let numeric = self.host_review.as_ref().and_then(|h| h.documents.get(&id)).and_then(|s| s.native.get(&(c.page, index))).copied();
++                    if let Some(numeric) = numeric {
++                        self.views[i].comments.selected = Some((c.page, index));
++                        if let Some(s) = self.host_review.as_mut().and_then(|h| h.documents.get_mut(&id)) {
++                            s.edit = Some(numeric);
++                            s.edit_request = s.edit_request.saturating_add(1);
++                        }
++                    }
++                    Ok(())
++                }
++                _ => Ok(()),
++            };
++            if result.is_ok() {
++                self.views[i].comments.composer = None;
++            } else if let Err(e) = result {
++                self.notify(e);
++                self.views[i].host_composer_fallback = true;
++            }
++        }
++    }
++
++    pub fn host_review_snapshot(&mut self, ctx: &egui::Context, applied: u64) -> Value {
++        let Some((i, id)) = self.sync_host_review() else {
++            return json!({"document":"","notes":[],"pages":[],"clip":null,"selection":null,"active":null,"author":self.comment_prefs.author,"editable":false,"formatting":false,"applied":applied});
++        };
++        let Some(doc) = self.session.get(id) else { return Value::Null };
++        let Some(host) = self.host_review.as_ref() else { return Value::Null };
++        let Some(state) = host.documents.get(&id) else { return Value::Null };
++        let view = &self.views[i];
++        let zoom = ctx.zoom_factor().clamp(0.25, 5.0);
++        let rect = |r: egui::Rect| json!({"x":r.min.x*zoom,"y":r.min.y*zoom,"w":r.width()*zoom,"h":r.height()*zoom});
++        let area = host.clip.unwrap_or(view.viewport_rect());
++        let pages: Vec<Value> = view.visible_page_rects().into_iter().map(|(page,r)| json!({"page":page,"x":r.min.x*zoom,"y":r.min.y*zoom,"w":r.width()*zoom,"h":r.height()*zoom,"margin":(area.right()-r.right()).max(0.0)*zoom})).collect();
++        let tops = pdfcraft_render::thread_tops(&doc.info.annotations);
++        let mut notes = Vec::new();
++        for a in doc.info.annotations.iter().filter(|a| a.is_comment()).take(2000) {
++            let Some(numeric) = state.native.get(&(a.page, a.index)).copied() else { continue };
++            let mut ranges = Vec::new();
++            if let Some(xf) = view.page_xform(a.page) {
++                let r = xf.user_rect(&doc.info, a.page, a.shown_rect(doc.info.pages.get(a.page).map_or(0, |p| p.rotation)));
++                if r.is_finite() {
++                    let mut r = rect(r);
++                    r["page"] = json!(a.page);
++                    ranges.push(r);
++                }
++            }
++            let thread: Vec<_> = doc.info.annotations.iter().filter(|r| tops.get(&(r.page, r.index)) == Some(&(a.page, a.index))).collect();
++            let resolved = thread.iter().rfind(|r| r.state.is_some() && !r.is_mark()).is_some_and(|r| r.state.as_deref() == Some("Completed"));
++            let replies: Vec<Value> = thread
++                .iter()
++                .filter(|r| r.is_reply() && r.state.is_none() && !r.grouped)
++                .filter_map(|r| Some(json!({"id":state.native.get(&(r.page,r.index))?,"author":r.author,"text":r.contents.as_deref().unwrap_or("")})))
++                .collect();
++            notes.push(json!({"id":numeric,"page":a.page,"author":a.author,"text":state.edits.get(&numeric).map(String::as_str).unwrap_or(a.contents.as_deref().unwrap_or("")),"date":a.modified,"resolved":resolved,"color":(numeric-1)%3,"ranges":ranges,"replies":replies,"highlight":false}));
++        }
++        let active = view.comments.selected.and_then(|at| tops.get(&at).copied().or(Some(at))).and_then(|at| state.native.get(&at));
++        json!({"document":state.token,"notes":notes,"pages":pages,"clip":rect(area),"selection":null,"active":active,"author":self.comment_prefs.author,"editable":doc.allows_annotation()&&doc.read_only_reason.is_none(),"formatting":false,"applied":applied,"edit":state.edit,"editRequest":state.edit_request})
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn app() -> PdfCraftApp {
++        let mut a = PdfCraftApp::new();
++        let bytes = a.session.create_blank(612.0, 792.0, 2).unwrap();
++        a.open_bytes("review.pdf", None, bytes.to_vec()).unwrap();
++        a.enable_host_review();
++        a
++    }
++    fn command(a: &mut PdfCraftApp, action: &str, p: Value) -> Result<Value, String> {
++        let doc = a.host_review_snapshot(&egui::Context::default(), 0)["document"].as_str().unwrap().to_string();
++        a.host_review_command(&doc, action, &p)
++    }
++    #[test]
++    fn host_pdf_comments_stage_and_save_in_native_document() {
++        let mut a = app();
++        let id = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        command(&mut a, "draft", json!({"id":id,"text":"Saved from the shared cards"})).unwrap();
++        command(&mut a, "replyDraft", json!({"id":id,"text":"A threaded PDF reply"})).unwrap();
++        command(&mut a, "flush", json!({})).unwrap();
++        let source = a.views[0].id;
++        let bytes = a.session.save_bytes(source).unwrap();
++        let mut reopened = PdfCraftApp::new();
++        reopened.open_bytes("saved.pdf", None, bytes.to_vec()).unwrap();
++        let doc = reopened.session.get(reopened.views[0].id).unwrap();
++        let root = doc.info.annotations.iter().find(|c| c.is_comment()).unwrap();
++        assert_eq!(root.contents.as_deref(), Some("Saved from the shared cards"));
++        assert!(
++            doc.info.annotations.iter().any(|c| c.parent == Some((root.page, root.index)) && c.contents.as_deref() == Some("A threaded PDF reply"))
++        );
++    }
++    #[test]
++    fn host_pdf_cancelled_drafts_do_not_enter_native_pdf() {
++        let mut a = app();
++        let id = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        for action in ["draft", "replyDraft"] {
++            command(&mut a, action, json!({"id":id,"text":"Discard this"})).unwrap();
++        }
++        for action in ["cancelEdit", "cancelReply", "flush"] {
++            command(&mut a, action, json!({"id":id})).unwrap();
++        }
++        let notes = a.host_review_snapshot(&egui::Context::default(), 0)["notes"].as_array().unwrap().clone();
++        assert_eq!(notes.len(), 1);
++        assert_eq!(notes[0]["text"], "");
++        assert_eq!(notes[0]["replies"].as_array().unwrap().len(), 0);
++    }
++    #[test]
++    fn host_pdf_deletion_keeps_later_card_identity() {
++        let mut a = app();
++        let first = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        let second = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        command(&mut a, "delete", json!({"id":first})).unwrap();
++        command(&mut a, "draft", json!({"id":second,"text":"The surviving annotation"})).unwrap();
++        command(&mut a, "flush", json!({})).unwrap();
++        let snap = a.host_review_snapshot(&egui::Context::default(), 0);
++        assert_eq!(snap["notes"].as_array().unwrap().len(), 1);
++        assert_eq!(snap["notes"][0]["id"], second);
++        assert_eq!(snap["notes"][0]["text"], "The surviving annotation");
++    }
++    #[test]
++    fn host_pdf_rejects_stale_documents_and_unsupported_actions() {
++        let mut a = app();
++        assert!(a.host_review_command("old-document", "new", &json!({})).is_err());
++        assert!(command(&mut a, "file.delete", json!({})).is_err());
++        assert!(command(&mut a, "format", json!({})).is_err());
++        assert!(a.session.get(a.views[0].id).unwrap().info.annotations.is_empty());
++    }
++    #[test]
++    fn host_pdf_resolution_and_reopening_use_native_review_status() {
++        let mut a = app();
++        let id = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        command(&mut a, "resolve", json!({"id":id})).unwrap();
++        assert_eq!(a.host_review_snapshot(&egui::Context::default(), 0)["notes"][0]["resolved"], true);
++        command(&mut a, "resolve", json!({"id":id})).unwrap();
++        assert_eq!(a.host_review_snapshot(&egui::Context::default(), 0)["notes"][0]["resolved"], false);
++    }
++    #[test]
++    fn host_pdf_drafts_survive_switching_native_tabs_and_flush_on_native_save() {
++        let mut a = app();
++        let first_doc = a.views[0].id;
++        let id = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        command(&mut a, "draft", json!({"id":id,"text":"Draft in the first document"})).unwrap();
++        assert!(a.has_unsaved_work(0));
++        let bytes = a.session.create_blank(612.0, 792.0, 1).unwrap();
++        a.open_bytes("other.pdf", None, bytes.to_vec()).unwrap();
++        a.host_review_tick();
++        assert!(a.host_review_snapshot(&egui::Context::default(), 0)["notes"].as_array().unwrap().is_empty());
++        assert!(a.commit_typing_in(first_doc));
++        let native = a.session.get(first_doc).unwrap();
++        assert!(native.info.annotations.iter().any(|n| n.contents.as_deref() == Some("Draft in the first document")));
++    }
++    #[test]
++    fn host_pdf_refused_composer_retains_typed_text() {
++        let mut a = app();
++        a.views[0].comments.composer = Some(crate::comments::Composer {
++            page: 99,
++            at: [20.0, 20.0],
++            kind: crate::comments::ComposerKind::Note,
++            text: "Keep this failed draft".into(),
++            focus: true,
++        });
++        a.host_review_tick();
++        assert!(a.views[0].comments.composer.as_ref().is_some_and(|c| c.text == "Keep this failed draft"));
++        assert!(a.has_unsaved_work(0), "failed typed text must prevent a silent close");
++        let id = a.views[0].id;
++        assert!(!a.commit_typing_in(id), "saving must not silently omit a failed composer");
++    }
++    #[test]
++    fn host_pdf_navigation_reveals_the_anchor_in_a_rotated_view() {
++        let mut a = app();
++        let id = command(&mut a, "new", json!({})).unwrap()["id"].as_u64().unwrap();
++        for rotation in [90, 180] {
++            a.views[0].rotation = rotation;
++            command(&mut a, "select", json!({"id":id})).unwrap();
++            assert!(a.views[0].goto.unwrap().1 > 0.85, "top-right note should move near bottom at {rotation} degrees");
++        }
++        a.views[0].rotation = 270;
++        command(&mut a, "select", json!({"id":id})).unwrap();
++        assert!(a.views[0].goto.unwrap().1 < 0.12);
++    }
++}
+diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
+--- a/crates/ui-egui/src/canvas.rs
++++ b/crates/ui-egui/src/canvas.rs
+@@ -272,6 +272,8 @@
+ }
+ 
+ pub struct DocView {
++    pub(crate) host_comments: bool,
++    pub(crate) host_composer_fallback: bool,
+     pub id: DocId,
+     pub zoom: f32,
+     pub fit: Fit,
+@@ -609,6 +611,8 @@
+     /// any layout or zoom the PDF itself asks for.
+     pub fn new(id: DocId, info: &DocInfo, defaults: ViewDefaults) -> Self {
+         Self {
++            host_comments: false,
++            host_composer_fallback: false,
+             id,
+             zoom: defaults.zoom,
+             fit: defaults.fit,
+@@ -2990,6 +2994,18 @@
+ /// Draws the document tab at `index`: its notice bars, then its pages (or the Organize grid) in a
+ /// scroll area with this frame's zoom, scrolling, tool input, overlays and render requests.
+ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
++    if let Some(host) = app.host_review.as_mut() {
++        let full = ui.available_rect_before_wrap();
++        host.clip = Some(full);
++        let reserve = 264.0_f32.min(full.width() * 0.42);
++        let page = egui::Rect::from_min_max(full.min, egui::pos2(full.right() - reserve, full.bottom()));
++        ui.scope_builder(egui::UiBuilder::new().max_rect(page), |ui| document_area_native(app, index, ui));
++    } else {
++        document_area_native(app, index, ui);
++    }
++}
++
++fn document_area_native(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+     let t = Tokens::get(ui.ctx());
+     // Keyboard scrolling applies to this frame's page view only, never later.
+     let key_scroll = std::mem::take(&mut app.views[index].key_scroll);
+@@ -3310,10 +3326,11 @@
+     match canvas_action {
+         Some(comments::CanvasAction::Edit(e)) => view.pending_edit = Some(*e),
+         // `choose_right_panel` would borrow all of `app` while `view` is held; same effect.
+-        Some(comments::CanvasAction::OpenComments) => {
++        Some(comments::CanvasAction::OpenComments) if app.host_review.is_none() => {
+             app.right = Some(RightPanel::Comments);
+             app.comments_panel_closed = false;
+         }
++        Some(comments::CanvasAction::OpenComments) => {}
+         Some(comments::CanvasAction::Properties(p, i)) => open_props = Some((p, i)),
+         Some(comments::CanvasAction::CopyImage(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::Copy(p, i)),
+         Some(comments::CanvasAction::CopyImageFile(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::CopyFile(p, i)),
+@@ -3494,3 +3511,42 @@
+ 
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++mod host_review_geometry_tests {
++    use super::*;
++    use serde_json::json;
++
++    #[test]
++    fn host_pdf_anchor_tracks_native_scroll_rotation_and_css_zoom() {
++        let mut a = PdfCraftApp::new();
++        let bytes = a.session.create_blank(612.0, 792.0, 1).unwrap();
++        a.open_bytes("geometry.pdf", None, bytes.to_vec()).unwrap();
++        a.enable_host_review();
++        let ctx = egui::Context::default();
++        let token = a.host_review_snapshot(&ctx, 0)["document"].as_str().unwrap().to_owned();
++        a.host_review_command(&token, "new", &json!({})).unwrap();
++        let r = Rect::from_min_size(pos2(50.0, 200.0), vec2(612.0, 792.0));
++        a.views[0].screen_xforms = vec![(0, PageXform { rect: r, rot: 0, pw: 612.0, ph: 792.0 })];
++        a.views[0].viewport_screen = Rect::from_min_size(pos2(0.0, 100.0), vec2(1000.0, 600.0));
++        a.host_review.as_mut().unwrap().clip = Some(a.views[0].viewport_rect());
++        let first = a.host_review_snapshot(&ctx, 0);
++        let y = first["notes"][0]["ranges"][0]["y"].as_f64().unwrap();
++        a.views[0].screen_xforms[0].1.rect = r.translate(vec2(0.0, -70.0));
++        let scrolled = a.host_review_snapshot(&ctx, 0);
++        assert!((y - scrolled["notes"][0]["ranges"][0]["y"].as_f64().unwrap() - 70.0).abs() < 0.01);
++        a.views[0].screen_xforms[0].1 = PageXform { rect: Rect::from_min_size(r.min, vec2(792.0, 612.0)), rot: 90, pw: 612.0, ph: 792.0 };
++        let rotated = a.host_review_snapshot(&ctx, 0);
++        let p = &rotated["notes"][0]["ranges"][0];
++        assert!(p["x"].as_f64().unwrap() > 790.0, "the note at the page top must move to the right after clockwise rotation");
++        assert_eq!(rotated["pages"][0]["w"], 792.0);
++        ctx.set_zoom_factor(1.5);
++        // Interface zoom takes effect at the beginning of the next egui pass.
++        ctx.begin_pass(Default::default());
++        let mut pass = ctx.end_pass();
++        pass.textures_delta.clear();
++        let zoomed = a.host_review_snapshot(&ctx, 0);
++        assert!((zoomed["notes"][0]["ranges"][0]["x"].as_f64().unwrap() - p["x"].as_f64().unwrap() * 1.5).abs() < 0.01);
++        assert_eq!(zoomed["clip"]["w"], 1500.0);
++    }
++}
+diff --git a/crates/ui-egui/src/tools/comments/composer.rs b/crates/ui-egui/src/tools/comments/composer.rs
+--- a/crates/ui-egui/src/tools/comments/composer.rs
++++ b/crates/ui-egui/src/tools/comments/composer.rs
+@@ -9,6 +9,10 @@
+ /// The floating composer card (new note, new text box, edit). Returns the edit to apply.
+ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, prefs: &CommentPrefs) -> Option<Edit> {
+     let c = view.comments.composer.as_ref()?;
++    if view.host_comments && !view.host_composer_fallback && matches!(c.kind, ComposerKind::Note | ComposerKind::Edit(_)) {
++        ctx.request_repaint();
++        return None;
++    }
+     let page = c.page;
+     let Some(xf) = view.page_xform(page) else {
+         // Scrolled away: keep the draft until the page is back, and give it the keyboard then.
+diff --git a/crates/ui-egui/src/editing.rs b/crates/ui-egui/src/editing.rs
+--- a/crates/ui-egui/src/editing.rs
++++ b/crates/ui-egui/src/editing.rs
+@@ -684,7 +684,8 @@
+             return false;
+         }
+         let typing = self.views.get(i).is_some_and(|v| {
+-            v.pending_edit.is_some()
++            self.host_review_dirty(v.id)
++                || v.pending_edit.is_some()
+                 || v.forms.focus.is_some()
+                 || v.content.draft.is_some()
+                 || v.line_editor.as_ref().is_some_and(|ed| ed.has_changes())
+@@ -696,7 +697,7 @@
+             }
+             self.active = Some(i);
+         }
+-        self.commit_form_typing() && self.commit_open_fill_text(id) && self.commit_open_text_edits(id)
++        self.host_review_flush(id) && self.commit_form_typing() && self.commit_open_fill_text(id) && self.commit_open_text_edits(id)
+     }
+ 
+     /// The Edit a PDF ▸ Text boxes (new text, and a paragraph open for editing) commit on
+@@ -774,6 +775,7 @@
+         let Some(v) = self.views.get(index) else { return false };
+         let Some(doc) = self.session.get(v.id) else { return false };
+         doc.dirty
++            || self.host_review_dirty(v.id)
+             || v.pending_edit.is_some()
+             || v.content.blocked().is_some()
+             || v.forms.focus.as_ref().is_some_and(|f| crate::forms_ui::draft_edit(f, &doc.form).is_some())
+diff --git a/crates/ui-egui/src/editing/close.rs b/crates/ui-egui/src/editing/close.rs
+--- a/crates/ui-egui/src/editing/close.rs
++++ b/crates/ui-egui/src/editing/close.rs
+@@ -43,6 +43,7 @@
+         let Some((_, id)) = self.active_ids() else { return };
+         match self.session.revert(id) {
+             Ok(()) => {
++                self.host_review_reverted(id);
+                 if let Some(i) = self.active
+                     && let Some(d) = self.session.get(id)
+                 {
+diff --git a/crates/ui-egui/src/widgets.rs b/crates/ui-egui/src/widgets.rs
+--- a/crates/ui-egui/src/widgets.rs
++++ b/crates/ui-egui/src/widgets.rs
+@@ -585,24 +585,14 @@
+     cancel
+ }
+ 
+-/// The ArtCraft wordmark (Storyteller's brand, docs/brand/; not open source), sized to `height`.
++/// Neutral identity for the locally modified review demo.
+ pub fn artcraft_logo(ui: &mut egui::Ui, height: f32) -> Response {
+-    let dark = ui.visuals().dark_mode;
+-    let (uri, bytes): (&str, &'static [u8]) = if dark {
+-        ("bytes://artcraft-logo-white.svg", include_bytes!("../../../docs/brand/artcraft-logo-white.svg"))
+-    } else {
+-        ("bytes://artcraft-logo.svg", include_bytes!("../../../docs/brand/artcraft-logo.svg"))
+-    };
+-    ui.add(egui::Image::from_bytes(uri, bytes).max_height(height).alt_text("ArtCraft"))
+-}
+-
+-/// The ArtCraft mark (brand blue, works on light and dark), `size` points square.
++    ui.label(egui::RichText::new("RFQ Review").size(height.max(12.0)))
++}
++
++/// Contributor-original text mark; no upstream trademark assets are embedded.
+ pub fn artcraft_mark(ui: &mut egui::Ui, size: f32) -> Response {
+-    ui.add(
+-        egui::Image::from_bytes("bytes://artcraft-mark.svg", include_bytes!("../../../docs/brand/artcraft-mark.svg"))
+-            .fit_to_exact_size(vec2(size, size))
+-            .alt_text("ArtCraft"),
+-    )
++    ui.label(egui::RichText::new("R").size(size.max(12.0)))
+ }
+ 
+ /// Buttons for every community link (`pdfcraft_engine::links`), Discord first and prominent.
+diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
+--- a/apps/pdfcraft-web/src/main.rs
++++ b/apps/pdfcraft-web/src/main.rs
+@@ -56,6 +56,7 @@
+                     warn_before_unload(app.unsaved_flag.clone());
+                     // `?host=parent`: a same-origin page embedding PdfCraft in an iframe (such
+                     // as the Nextcloud app) passes files in and takes saves back (`host` below).
++                    let mut review = None;
+                     if query_param("host").as_deref() == Some("parent")
+                         && let Some(bridge) = host::Bridge::new()
+                     {
+@@ -66,7 +67,12 @@
+                         {
+                             app.comment_prefs.author = author.chars().take(200).collect();
+                         }
+-                        bridge.listen(app.startup_inbox.clone(), cc.egui_ctx.clone());
++                        let review_enabled = query_param("comments").as_deref() == Some("classic");
++                        if review_enabled {
++                            app.enable_host_review();
++                            review = Some(bridge.clone());
++                        }
++                        bridge.listen(app.startup_inbox.clone(), cc.egui_ctx.clone(), review_enabled);
+                         app.host_save = Some(bridge.save_fn());
+                         app.host_dirty = Some(bridge.dirty_fn());
+                         bridge.post_ready();
+@@ -75,7 +81,7 @@
+                             &"PdfCraft: ?host=parent needs a framing page on the same origin; saves download instead".into(),
+                         );
+                     }
+-                    Ok(Box::new(app))
++                    Ok(Box::new(WebShell { app, review, last_review: String::new() }))
+                 }),
+             )
+             .await;
+@@ -88,6 +94,67 @@
+             }
+         }
+     });
++}
++
++/// Keep PdfCraft's normal lifecycle while letting an opted-in host own the comment sidebar.
++#[cfg(target_arch = "wasm32")]
++struct WebShell {
++    app: pdfcraft_ui_egui::PdfCraftApp,
++    review: Option<host::Bridge>,
++    last_review: String,
++}
++
++#[cfg(target_arch = "wasm32")]
++impl eframe::App for WebShell {
++    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
++        // Opens are consumed by `app.logic`: commands still refer to the document the host
++        // saw before that open, so apply them first and let the app check their document id.
++        if let Some(review) = &self.review {
++            review.drain_review(&mut self.app);
++        }
++        self.app.logic(ctx, frame);
++        if self.review.is_some() {
++            self.app.host_review_tick();
++        }
++    }
++
++    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
++        self.app.ui(ui, frame);
++        if let Some(review) = &self.review {
++            let state = self.app.host_review_snapshot(ui.ctx(), review.review_sequence()).to_string();
++            if state != self.last_review && review.post_review(&state) {
++                self.last_review = state;
++            }
++        }
++    }
++
++    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
++        self.app.raw_input_hook(ctx, raw);
++    }
++
++    fn save(&mut self, storage: &mut dyn eframe::Storage) {
++        self.app.save(storage);
++    }
++
++    fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
++        self.app.on_exit(gl);
++    }
++
++    fn auto_save_interval(&self) -> std::time::Duration {
++        self.app.auto_save_interval()
++    }
++
++    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
++        self.app.clear_color(visuals)
++    }
++
++    fn persist_egui_memory(&self) -> bool {
++        self.app.persist_egui_memory()
++    }
++
++    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
++        self.app.as_any_mut()
++    }
+ }
+ 
+ #[cfg(target_arch = "wasm32")]
+@@ -133,18 +200,30 @@
+ ///   a transferred `ArrayBuffer`. The parent stores the file (and reports its own errors).
+ /// - `pdfcraft:dirty` (to the parent): `{ dirty }` whenever unsaved work appears or goes away.
+ /// - `pdfcraft:failed` (to the parent): `{ error }` when the app couldn't start.
++/// - `pdfcraft:review` (from the parent, with `?comments=classic`): a JSON `payload`
++///   containing `{ document, request, action, params }` for the host-owned comment sidebar.
++/// - `pdfcraft:reviewResult` (to the parent): JSON `payload` with `{ request, ok, result|error }`.
++/// - `pdfcraft:reviewState` (to the parent): the changed review snapshot as a JSON `payload`.
+ ///
+ /// Only the parent window on the app's own origin is heard or answered. With a parent on
+ /// another origin there is no bridge: the app runs as if unframed and saves download.
+ #[cfg(target_arch = "wasm32")]
+ mod host {
++    use std::cell::{Cell, RefCell};
++    use std::rc::Rc;
++
+     use eframe::wasm_bindgen::{JsCast, JsValue, closure::Closure};
++
++    const MAX_REVIEW_PAYLOAD_BYTES: usize = 1_100_000;
++    const MAX_REVIEW_ACTIONS: usize = 64;
+ 
+     #[derive(Clone)]
+     pub struct Bridge {
+         window: web_sys::Window,
+         parent: web_sys::Window,
+         origin: String,
++        review_actions: Rc<RefCell<Vec<serde_json::Value>>>,
++        review_sequence: Rc<Cell<u64>>,
+     }
+ 
+     impl Bridge {
+@@ -162,7 +241,7 @@
+             if parent.location().origin().ok()? != origin {
+                 return None;
+             }
+-            Some(Self { window, parent, origin })
++            Some(Self { window, parent, origin, review_actions: Rc::default(), review_sequence: Rc::default() })
+         }
+ 
+         fn post(&self, message: &js_sys::Object, transfer: Option<&JsValue>) -> Result<(), String> {
+@@ -186,15 +265,61 @@
+             }
+         }
+ 
++        pub fn drain_review(&self, app: &mut pdfcraft_ui_egui::PdfCraftApp) {
++            let actions: Vec<_> = self.review_actions.borrow_mut().drain(..).collect();
++            for command in actions {
++                let request = command.get("request").and_then(serde_json::Value::as_u64);
++                let result = match (
++                    request,
++                    command.get("document").and_then(serde_json::Value::as_str),
++                    command.get("action").and_then(serde_json::Value::as_str),
++                    command.get("params").filter(|params| params.is_object()),
++                ) {
++                    (Some(_), Some(document), Some(action), Some(params)) => app.host_review_command(document, action, params),
++                    _ => Err("Expected { document: string, request: unsigned integer, action: string, params: object }".to_string()),
++                };
++                if let Some(request) = request {
++                    self.review_sequence.set(self.review_sequence.get().max(request));
++                }
++                let payload = match result {
++                    Ok(value) => serde_json::json!({ "request": request, "ok": true, "result": value }),
++                    Err(error) => serde_json::json!({ "request": request, "ok": false, "error": error }),
++                };
++                if let Some(m) = message(&[("type", "pdfcraft:reviewResult".into()), ("payload", payload.to_string().into())]) {
++                    let _ = self.post(&m, None);
++                }
++            }
++        }
++
++        pub fn review_sequence(&self) -> u64 {
++            self.review_sequence.get()
++        }
++
++        pub fn post_review(&self, payload: &str) -> bool {
++            message(&[("type", "pdfcraft:reviewState".into()), ("payload", payload.into())]).is_some_and(|m| self.post(&m, None).is_ok())
++        }
++
+         /// Hear `pdfcraft:open` from the parent and queue the file like a `?file=` download.
+-        pub fn listen(&self, inbox: pdfcraft_ui_egui::Inbox, ctx: egui::Context) {
++        pub fn listen(&self, inbox: pdfcraft_ui_egui::Inbox, ctx: egui::Context, review_enabled: bool) {
+             let parent = self.parent.clone();
+             let origin = self.origin.clone();
++            let review_actions = self.review_actions.clone();
+             let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
+                 if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
+                     return;
+                 }
+                 let data = event.data();
++                if string(&data, "type").as_deref() == Some("pdfcraft:review") {
++                    if review_enabled
++                        && review_actions.borrow().len() < MAX_REVIEW_ACTIONS
++                        && let Some(payload) = string(&data, "payload").filter(|payload| payload.len() <= MAX_REVIEW_PAYLOAD_BYTES)
++                        && let Ok(command) = serde_json::from_str(&payload)
++                    {
++                        review_actions.borrow_mut().push(command);
++                        ctx.request_repaint();
++                    }
++                    return;
++                }
+                 if string(&data, "type").as_deref() != Some("pdfcraft:open") {
+                     return;
+                 }
+diff --git a/apps/pdfcraft-web/Cargo.toml b/apps/pdfcraft-web/Cargo.toml
+--- a/apps/pdfcraft-web/Cargo.toml
++++ b/apps/pdfcraft-web/Cargo.toml
+@@ -13,6 +13,7 @@
+ pdfcraft-ui-egui = { workspace = true }
+ eframe = { workspace = true, features = ["default_fonts", "glow", "persistence", "accesskit"] }
+ egui = { workspace = true, features = ["default_fonts", "monochrome_emoji_fonts"] }
++serde_json.workspace = true
+ 
+ [target.'cfg(target_arch = "wasm32")'.dependencies]
+ wasm-bindgen-futures = "0.4"
+diff --git a/Cargo.lock b/Cargo.lock
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -4706,6 +4706,7 @@
+  "egui",
+  "js-sys",
+  "pdfcraft-ui-egui",
++ "serde_json",
+  "wasm-bindgen-futures",
+  "web-sys",
+ ]

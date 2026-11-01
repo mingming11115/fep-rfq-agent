@@ -66,7 +66,7 @@ def main():
     local_bindgen = cache / 'wasm-bindgen-0.2.129-aarch64-apple-darwin' / 'wasm-bindgen'
     if args.wasm_bindgen == 'wasm-bindgen' and local_bindgen.is_file():
         args.wasm_bindgen = str(local_bindgen)
-    source = args.source or cache / 'wordcraft-0.13.2'
+    source = (args.source or cache / 'wordcraft-0.13.2').resolve()
     if not args.source:
         archive = cache / 'wordcraft-0.13.2.tar.gz'
         download(SOURCE_URL, archive, SOURCE_SHA256)
@@ -75,11 +75,13 @@ def main():
     patch = ROOT / 'wordcraft-classic-comments.patch'
     stamp = source / '.rfq-classic-comment-patch'
     digest = hashlib.sha256(patch.read_bytes()).hexdigest()
-    if not args.already_patched and (not stamp.exists() or stamp.read_text() != digest):
-        applied = subprocess.run(['git', 'apply', '--reverse', '--check', str(patch)], cwd=source, capture_output=True)
+    # A source archive in an ignored directory must not inherit the outer repo's Git prefix.
+    patch_env = dict(os.environ, GIT_CEILING_DIRECTORIES=str(source.parent))
+    if not args.already_patched:
+        applied = subprocess.run(['git', 'apply', '--reverse', '--check', str(patch)], cwd=source, env=patch_env, capture_output=True)
         if applied.returncode != 0:
-            run(['git', 'apply', '--check', patch], cwd=source)
-            run(['git', 'apply', patch], cwd=source)
+            run(['git', 'apply', '--check', patch], cwd=source, env=patch_env)
+            run(['git', 'apply', patch], cwd=source, env=patch_env)
         stamp.write_text(digest)
     env = dict(os.environ)
     if Path(args.cargo) == local_toolchain / 'cargo':
