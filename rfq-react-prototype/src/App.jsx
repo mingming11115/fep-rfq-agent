@@ -7,6 +7,7 @@ import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomai
 import {invalidatePendingSnapshots,currentProjectScope,checkSnapshotValidity} from './snapshotDomain';
 import {getFinalReviewGate} from './finalReviewFlow';
 import {tidyDemoState,tidyStoredDemo} from './demoCleanup';
+import {officeRouteSource} from './officeClauseLink';
 import {migrateFepDemoCatalog} from './fepDemoCatalog';
 import {canPerform,assertPermission,assertRequirementPatch,canAccessPage,getRoleNavigation} from './permissions';
 import {reconcileTasks,selectMyTasks,applyTaskAction,assertBusinessAction,getTaskContextError,isTaskPending,startTaskForObject,transferBusinessTask,confirmProjectRequirement} from './taskDomain';
@@ -64,7 +65,7 @@ const event=(s,action,object='',detail='',result='成功')=>({...s,audit:[{id:`E
 
 export default function App(){
  const {message:antMessage}=AntApp.useApp();
- const [state,setState]=useState(initial),stateRef=useRef(state),[page,setPage]=useState(()=>parseWorkRoute(location.hash).page),[collapsed,setCollapsed]=useState(false),[help,setHelp]=useState(false),[reset,setReset]=useState(false),[globalSearch,setGlobalSearch]=useState(false),[search,setSearch]=useState('');
+ const [state,setState]=useState(initial),stateRef=useRef(state),[page,setPage]=useState(()=>parseWorkRoute(location.hash).page),[collapsed,setCollapsed]=useState(()=>DETAIL_PAGES.includes(parseWorkRoute(location.hash).page)),[help,setHelp]=useState(false),[reset,setReset]=useState(false),[globalSearch,setGlobalSearch]=useState(false),[search,setSearch]=useState('');
  const homePage=state.actorRole==='后台管理'?'admin':'dashboard';
  const [route,setRoute]=useState(()=>parseWorkRoute(location.hash)),routeRef=useRef(route);
  const [focusedRequirementId,setFocusedRequirementId]=useState(()=>route.requirementId||null);
@@ -76,7 +77,7 @@ export default function App(){
  const item=NAV_ITEMS.find(n=>n.key===(page==='reviews'?'response':page)),isProjectPage=item?.section==='项目';
  const pageTitle=DETAIL_PAGES.includes(page)?'RFQ 详情':state.actorRole==='BU管理员'&&page==='projects'?'BU RFQ':page==='dashboard'&&state.actorRole==='BU管理员'?'BU看板':shortLabels[page]||item?.label||'工作台';
  useEffect(()=>{try{localStorage.setItem(STORAGE,JSON.stringify(state));}catch{}},[state]);
- useEffect(()=>{const handle=()=>{const next=parseWorkRoute(location.hash);const proceed=()=>{routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;if(next.projectId&&stateRef.current.projects.some(p=>p.id===next.projectId))update(s=>({...s,activeProjectId:next.projectId}));setFocusedRequirementId(next.requirementId||null);};if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(proceed)){history.replaceState(null,'',buildWorkRoute(routeRef.current));return;}proceed();};window.addEventListener('hashchange',handle);if(routeRef.current.projectId)handle();return()=>{window.removeEventListener('hashchange',handle);timers.current.forEach(clearTimeout);};},[]);
+ useEffect(()=>{const handle=()=>{const next=parseWorkRoute(location.hash);const proceed=()=>{routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;if(next.projectId&&stateRef.current.projects.some(p=>p.id===next.projectId))update(s=>({...s,activeProjectId:next.projectId}));setFocusedRequirementId(next.requirementId||null);};if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(proceed,{officeSource:officeRouteSource(stateRef.current,next)})){history.replaceState(null,'',buildWorkRoute(routeRef.current));return;}proceed();};window.addEventListener('hashchange',handle);if(routeRef.current.projectId)handle();return()=>{window.removeEventListener('hashchange',handle);timers.current.forEach(clearTimeout);};},[]);
  useEffect(()=>{document.title=`${pageTitle} · FEP RFQ`;window.scrollTo(0,0);},[page,pageTitle]);
  useEffect(()=>{if(state.actorRole==='后台管理'&&page==='dashboard')rawNavigate('admin',{},true);},[state.actorRole,page]);
  function toast(content,type='success'){antMessage.open({type,content,duration:4.5});}
@@ -94,8 +95,8 @@ export default function App(){
   update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，五种RFQ状态各一条；应答按3种处理状态×5种结论保留15条示例');
  }
  function rawNavigate(key,details={},replace=false){const next={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...details};routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;setFocusedRequirementId(next.requirementId||null);history[replace?'replaceState':'pushState'](null,'',buildWorkRoute(next));}
- function guarded(action){if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(action))return;action();}
- function navigate(key,requirementId,details={}){guarded(()=>{const current=routeRef.current;const context=PROJECT_PAGES.includes(key)&&current.projectId===stateRef.current.activeProjectId?{taskId:current.taskId,action:current.action,returnKey:current.returnKey}:{};rawNavigate(key,{...context,...(requirementId?{requirementId}:{}),...details});});}
+ function guarded(action,options){if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(action,options))return false;action();return true;}
+ function navigate(key,requirementId,details={}){const current=routeRef.current;const context=PROJECT_PAGES.includes(key)&&current.projectId===stateRef.current.activeProjectId?{taskId:current.taskId,action:current.action,returnKey:current.returnKey}:{};const target={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...context,...(requirementId?{requirementId}:{}),...details};return guarded(()=>rawNavigate(key,target),{officeSource:officeRouteSource(stateRef.current,target)});}
  function selectProject(id,destination='response',details={}){guarded(()=>{update(s=>({...s,activeProjectId:id}));rawNavigate(destination,{projectId:id,returnKey:'projects',...details});});}
  function taskAction(id,action){const s=stateRef.current,t=s.tasksById[id];try{if(action.type==='transfer'){update(st=>event(transferBusinessTask(st,{taskId:id,to:action.to,reason:action.reason}),'转办任务',id,action.reason));return true;}const next=applyTaskAction(t,{...action,actorId:s.actorId,objectVersion:t?.objectVersion,at:new Date().toISOString()},s);update(s=>event({...s,tasksById:{...s.tasksById,[id]:next}},action.type==='transfer'?'转办任务':'接手任务',id,action.reason||''));return true;}catch(e){toast(e.message,'error');return false;}}
  function openTask(task,mode='view',returnKey='tasks'){guarded(()=>{const t=stateRef.current.tasksById[task.id];if(!t||!canAccessProject(stateRef.current,stateRef.current.actorId,t.projectId)){toast('任务不存在，请刷新后查看','error');return;}if(mode==='start'&&!taskAction(t.id,{type:'start'}))return;update(s=>({...s,activeProjectId:t.projectId}));rawNavigate(t.objectType==='requirement'||t.kind==='response-revise'?'response':t.objectType==='review'?'reviews':'export',{projectId:t.projectId,requirementId:t.requirementId,reviewId:t.reviewId,snapshotId:t.snapshotId,taskId:t.id,action:mode,returnKey});});}

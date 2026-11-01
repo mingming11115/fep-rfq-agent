@@ -153,7 +153,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
     setFiles(nextFiles);onFilesChange?.(project.id,nextFiles);
     incoming.forEach(scheduleParse);closeUpload(true);
     logEvent('上传资料元数据',project.id,`${incoming.length} 个文件；${incoming[0].purpose}；${incoming[0].version}`);
-    toast('文件已进入模拟处理队列；只保存文件名、大小等元数据');
+    toast('资料已保存；DOCX / PDF 可打开原件批阅，条款解析仍为模拟');
   }
   function openEditor(sourceFile = null) {
     if(!canManage)return;
@@ -172,7 +172,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   return <div className="flow-page">
     <PageHeading title={<>RFQ 解析</>} description={<>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</>} actions={<>{canManage&&<div className="page-actions"><UiButton className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />历史批注示例</UiButton><UiButton className="btn" onClick={()=>openEditor()}>人工补录</UiButton><UiButton className="btn" onClick={loadSample}><FileText size={16} />载入示例</UiButton><UiButton className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</UiButton></div>}</>} />{!canManage&&<Notice>来源文件与解析结果为只读；上传、重新解析及修正由SR处理。</Notice>}
     {wordCommentsOpen && canManage && <WordCommentsPrototype projectId={project.id} onClose={() => setWordCommentsOpen(false)} />}
-    <Notice>{project.id === BHEL_ID ? '真实RFQ演示 · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : '交互原型 · 文件仅保存元数据，解析结果使用模拟数据。仅“要求来源”生成要求条目；真实文件内容不会上传或读取。'}</Notice>
+    <Notice>{project.id === BHEL_ID ? '真实RFQ演示 · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : 'DOCX / PDF 原文件已接入文档服务，可在详情左侧批阅；条款解析仍为模拟结果。仅“要求来源”生成要求条目。'}</Notice>
     <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
     {files.length > 0 ? <DocumentWorkbench readOnly={!canManage} files={files} rows={parsed} responseRows={requirements} imported={imported} selectedId={activeId} onSelect={setActiveId} onCorrect={correctRow} onReparse={reparse} onSupplement={openEditor} onContinue={(id) => navigate('response', id)} /> : <section className="panel"><NoRows title="上传第一份 RFQ，自动抽取要求条款"><span>支持 DOC、DOCX，兼容 PDF、Excel、CSV 和 TXT；载入示例可体验不同客户章节。</span>{canManage&&<UiButton className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={15}/>上传并解析</UiButton>}</NoRows></section>}
     <details className="panel dw-file-records"><summary>文件与版本记录<span>{files.length} 份资料 · 查看历史版本和失败任务</span></summary><BusinessTabs className="tabs"><button className={fileTab === '文件清单' ? 'active' : ''} onClick={() => setFileTab('文件清单')}>文件清单 <span>{files.length}</span></button><button className={fileTab === '版本记录' ? 'active' : ''} onClick={() => setFileTab('版本记录')}>文件版本</button></BusinessTabs>

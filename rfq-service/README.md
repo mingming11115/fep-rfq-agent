@@ -1,5 +1,48 @@
 # RFQ 独立后端框架
 
+## ONLYOFFICE 原件批阅（2026-10-30）
+
+现已提供真实 DOCX / PDF 上传、批阅副本、签名编辑器会话、保存回调和下载接口。原始文件保留不变，后续编辑只写入批阅副本。文件及元数据保存在 Docker 命名卷，重启后继续可用。
+
+在 `rfq-service` 目录准备 `.env`：
+
+```bash
+cp .env.example .env
+# 用 openssl rand -hex 32 生成随机密钥，填入 .env 的 ONLYOFFICE_JWT_SECRET。
+docker compose -p rfq-office --profile office up --build -d
+```
+
+本机入口：RFQ 后端 `http://127.0.0.1:48081`，ONLYOFFICE `http://127.0.0.1:8082`。首次启动文档服务需稍等，`/healthcheck` 返回 `true` 后即可使用。当前机器已配置并启动，不需要再次覆盖 `.env`。不加 `--profile office` 仍可单独启动后端框架。
+
+| 配置 | 默认值 / 含义 |
+| --- | --- |
+| `ONLYOFFICE_JWT_SECRET` | 至少 32 字符；后端和文档服务必须一致，勿提交到 Git |
+| `ONLYOFFICE_PUBLIC_URL` | `http://127.0.0.1:8082`，浏览器加载编辑器脚本的地址 |
+| `ONLYOFFICE_INTERNAL_URL` | `http://onlyoffice`，后端在 Docker 网络中访问文档服务的地址 |
+| `ONLYOFFICE_CALLBACK_BASE_URL` | Compose 固定 `http://rfq-service:48081`；本机 Java 启动时需改成文档容器能访问的后端地址 |
+| `ONLYOFFICE_STORAGE_DIR` | Compose 使用 `/app/data/onlyoffice`；本机 Java 默认为 `data/onlyoffice` |
+| `ONLYOFFICE_FRONTEND_ORIGINS` | 可加载条款联动插件的前端来源；默认 `http://127.0.0.1:5173,http://localhost:5173`，部署时填写真实来源 |
+
+Vite 已为 `/api/office` 配置同源代理。修改后端端口时，可在启动前端时设置 `RFQ_BACKEND_URL`。浏览器地址、容器内地址与回调地址分别配置，不能把容器中的 `localhost` 当作宿主机。
+
+接口前缀 `/api/office`：
+
+- `GET /status`：配置状态与上传上限。
+- `POST /documents`：multipart 文件及项目、文件、来源版本引用，返回随机文档引用和访问凭据。
+- `GET /documents/{id}`：持久化版本、保存时间、保存错误状态。
+- `POST /documents/{id}/session`：返回签名后的官方 Docs API 配置。
+- `POST /documents/{id}/save`：请求文档服务强制保存，仍须等待回调确认落盘。
+- `GET /documents/{id}/download?kind=original|review`：原件或最新已保存批阅版。
+- `GET /content/{id}?ticket=...`：供文档服务读取的有时限签名地址。
+- `POST /callback/{id}`：JWT 验签后的保存回调，返回 ONLYOFFICE 原生 `{error:0|1}`。
+- `GET /plugin/config.json`、`GET /plugin/{asset}`：社区插件公开资源；session 仅为白名单来源签入插件配置，随机通道隔离不同编辑器。`config.json` 文件名必须保留，9.3 编辑器依赖该名称解析资源目录。插件通过内容控件标签或精确唯一原文定位，不调用收费 Automation API。
+
+除签名内容地址和保存回调外，文档接口使用 `X-Office-Access` 访问凭据。只处理 DOCX / PDF，单文件上限 30 MiB；旧 DOC 请先转换。强制保存保留当前协作 key；最终保存后换用新 key。成功回调的凭据摘要持久化，非连续重复回调也不会回滚已保存版本。
+
+这是本机集成：前端演示身份决定编辑/只读配置，但尚未接入企业认证和后端项目成员权限。保留默认回环端口；正式部署需接入业务认证与授权。原文件批阅下载与正式对外应答导出是两套操作，批阅不会自动更新条款、确认状态或最终评审。
+
+下方为原框架的运行说明；数据库、企业身份和 AI 业务仍未接入。
+
 `rfq-service` 是可独立构建、运行和部署的 Spring Boot 后端项目，位于当前工作区的 `rfq-service/` 目录，与现有 Naura 应用分别维护和启动。
 
 当前使用 Java 17、Spring Boot 3.5.9 和 Maven，版本为 `0.0.1-SNAPSHOT`。应用启动不需要数据库、Redis 或其他外部服务。
@@ -11,7 +54,7 @@
 - `local`、`prod` 两套运行 profile，默认应用端口 `48081`。
 - 仅暴露 `/actuator/health` 和 `/actuator/info` 两个管理端点；健康详情及组件信息隐藏，Actuator 保留标准返回结构。
 
-本阶段没有 RFQ 业务 API、数据库或 Redis 依赖、认证实现、AI 或模型服务接入。`/` 没有业务页面或接口，验证启动状态请访问健康端点。
+当前新增上述文档集成 API；仍没有数据库或 Redis 依赖、企业认证实现、AI 或模型服务接入。`/` 没有业务页面或接口，验证启动状态请访问健康端点。
 
 ## 项目结构
 
