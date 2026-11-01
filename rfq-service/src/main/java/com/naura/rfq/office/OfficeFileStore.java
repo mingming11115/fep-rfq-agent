@@ -37,9 +37,12 @@ public class OfficeFileStore {
     }
     public Path file(Document doc, boolean original) { return directory(doc.id()).resolve(original ? "original" : "review-" + doc.revision()); }
     public void create(Document doc, byte[] content) throws java.io.IOException {
+        create(doc, content, content);
+    }
+    public void create(Document doc, byte[] original, byte[] review) throws java.io.IOException {
         Files.createDirectories(directory(doc.id()));
-        atomic(directory(doc.id()).resolve("original"), content);
-        atomic(file(doc, false), content);
+        atomic(directory(doc.id()).resolve("original"), original);
+        atomic(file(doc, false), review);
         write(doc);
     }
     public void write(Document doc) throws java.io.IOException { atomic(directory(doc.id()).resolve("metadata.json"), json.writeValueAsBytes(doc)); }

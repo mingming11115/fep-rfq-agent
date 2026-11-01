@@ -7,7 +7,9 @@ const palette = [
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const overlap = (a,b) => a.y+a.h>b.y && a.y<b.y+b.h && a.x+a.w>b.x && a.x<b.x+b.w;
 
-export function createOriginalComments({frame, onStatus, onDirty, namespace='wordcraft', root=document.getElementById('original-comments'), tools=document.getElementById('review-tools'), documentFormat='DOCX', supportsFormatting=true}) {
+export function createOriginalComments({frame, onStatus, onDirty, namespace='wordcraft', root=document.getElementById('original-comments'), tools=document.getElementById('review-tools'), documentFormat='DOCX', supportsFormatting=true, beforeCommand, onSelect}) {
+  let disposed=false;const disposers=[];
+  const listen=(owner,type,handler,options)=>{owner.addEventListener(type,handler,options);disposers.push(()=>owner.removeEventListener(type,handler,options));};
   const clip=root.querySelector('[data-native-clip]');
   const margin=root.querySelector('[data-margin]'), svg=root.querySelector('[data-connectors]');
   const highlights=root.querySelector('[data-native-highlights]'), backgrounds=root.querySelector('[data-native-margins]');
@@ -21,6 +23,8 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
   const noteFor=id=>snapshot?.notes.find(n=>n.id===id);
   const content=state=>JSON.stringify(state?.notes.map(({ranges,...note})=>note));
   function request(action, params={}) {
+    if(disposed)return Promise.reject(new Error('编辑器已关闭'));
+    const blocked=beforeCommand?.(action,params,snapshot);if(blocked)return Promise.reject(new Error(typeof blocked==='string'?blocked:'当前身份无权执行此批注操作'));
     if (!snapshot) return Promise.reject(new Error('编辑器还未就绪'));
     const request=++requestId;
     frame.contentWindow.postMessage({type:namespace+':review',payload:JSON.stringify({document:snapshot.document,request,action,params})},location.origin);
@@ -32,6 +36,7 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
   const run=(action,params={})=>request(action,params).catch(error=>{onStatus(error.message);return false;});
   function setVisible(value) { const showing=value&&!visible;visible=value;root.hidden=!value;tools.hidden=!value;if(showing&&focusTarget!==null)renderNotes();if(value)schedule(); }
   function receive(kind, payload) {
+    if(disposed)return;
     if(kind==='reviewResult'){
       const item=pending.get(payload.request);if(!item)return;clearTimeout(item.timeout);pending.delete(payload.request);
       if(payload.ok)item.resolve(payload.result);else item.reject(new Error(payload.error));return;
@@ -83,14 +88,15 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
     const focused=document.activeElement, preserve=root.contains(focused)&&focused.matches('textarea');
     const field=preserve?{edit:focused.dataset.editInput,reply:focused.hasAttribute('data-reply-input'),start:focused.selectionStart,end:focused.selectionEnd}:null;
     margin.innerHTML=snapshot.notes.map(n=>{
-      const color=palette[n.color%3], selected=active===n.id, own=n.author===snapshot.author, isEditing=editing===n.id;
+      const color=palette[n.color%3], selected=active===n.id, own=n.author===snapshot.author||n.canEdit===true, isEditing=editing===n.id;
+      const allowed=key=>snapshot.editable&&n[key]!==false;
       const mark=snapshot.formatting?'<span class="wc-format" aria-hidden="true"> ↵</span>':'';
-      const body=isEditing?`<textarea class="wc-edit" data-edit-input="${n.id}" aria-label="批注内容" rows="1" placeholder="输入批注…" ${!snapshot.editable?'readonly':''}>${esc(n.text)}</textarea>`:
-        own?`<button type="button" class="wc-note-body-button" data-edit="${n.id}" ${!snapshot.editable?'disabled':''}>${esc(n.text||'空白批注')}${mark}</button>`:`<p class="wc-note-body">${esc(n.text)}${mark}</p>`;
+      const body=isEditing?`<textarea class="wc-edit" data-edit-input="${n.id}" aria-label="批注内容" rows="1" placeholder="输入批注…" ${!allowed('canEdit')?'readonly':''}>${esc(n.text)}</textarea>`:
+        own?`<button type="button" class="wc-note-body-button" data-edit="${n.id}" ${!allowed('canEdit')?'disabled':''}>${esc(n.text||'空白批注')}${mark}</button>`:`<p class="wc-note-body">${esc(n.text)}${mark}</p>`;
       const thread=n.replies.length?`<div class="wc-replies">${n.replies.map(r=>`<div class="wc-reply-item"><span class="wc-reply-author">${esc(author(r.author))}</span><p>${esc(r.text)}</p></div>`).join('')}</div>`:'';
       const composer=replyTarget===n.id?`<textarea class="wc-reply-input" data-reply-input aria-label="回复批注" rows="2" placeholder="输入回复…">${esc(reply)}</textarea><div class="wc-reply-actions"><button type="button" class="wc-button" data-cancel-reply>取消</button><button type="button" class="wc-button" data-send-reply="${n.id}" ${!reply.trim()?'disabled':''}>回复</button></div>`:'';
-      const popup=menu===n.id?`<div class="wc-menu">${own?`<button type="button" data-edit="${n.id}">编辑批注</button>`:''}<button type="button" data-goto="${n.id}">转到原文</button><button type="button" data-resolve="${n.id}">${n.resolved?'重新打开':'解决批注'}</button><button type="button" data-delete="${n.id}">删除批注</button></div>`:'';
-      return `<section class="wc-note${selected?' wc-note-active':''}" style="--wc-color:${color.ink};--wc-fill:${color.fill}" data-note="${n.id}" aria-label="${esc(author(n.author))}的批注"><div class="wc-note-head"><span class="wc-author">${esc(author(n.author))}</span>${own?'<span class="wc-time">刚刚</span>':''}<button type="button" class="wc-icon" data-reply="${n.id}" aria-label="回复此批注" ${!snapshot.editable?'disabled':''}>${icons['corner-up-left']}</button><button type="button" class="wc-icon" data-menu="${n.id}" aria-label="批注操作" aria-expanded="${menu===n.id}">${icons.ellipsis}</button></div>${n.resolved?'<p class="wc-reply-author">已解决</p>':''}${body}${thread}${composer}${popup}</section>`;
+      const popup=menu===n.id?`<div class="wc-menu">${own?`<button type="button" data-edit="${n.id}">编辑批注</button>`:''}<button type="button" data-goto="${n.id}">转到原文</button><button type="button" data-resolve="${n.id}" ${!allowed('canResolve')?'disabled':''}>${n.resolved?'重新打开':'解决批注'}</button><button type="button" data-delete="${n.id}" ${!allowed('canDelete')?'disabled':''}>删除批注</button></div>`:'';
+      return `<section class="wc-note${selected?' wc-note-active':''}" style="--wc-color:${color.ink};--wc-fill:${color.fill}" data-note="${n.id}" aria-label="${esc(author(n.author))}的批注"><div class="wc-note-head"><span class="wc-author">${esc(author(n.author))}</span>${own?'<span class="wc-time">刚刚</span>':''}<button type="button" class="wc-icon" data-reply="${n.id}" aria-label="回复此批注" ${!allowed('canReply')?'disabled':''}>${icons['corner-up-left']}</button><button type="button" class="wc-icon" data-menu="${n.id}" aria-label="批注操作" aria-expanded="${menu===n.id}">${icons.ellipsis}</button></div>${n.resolved?'<p class="wc-reply-author">已解决</p>':''}${body}${thread}${composer}${popup}</section>`;
     }).join('');
     root.querySelectorAll('[data-edit-input]').forEach(grow);
     let restore=focusTarget;
@@ -100,7 +106,7 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
     schedule();
   }
   function grow(input){input.style.height='auto';input.style.height=Math.max(22,input.scrollHeight)+'px';}
-  function schedule(){if(frameId)cancelAnimationFrame(frameId);frameId=requestAnimationFrame(()=>{frameId=0;layout();});}
+  function schedule(){if(disposed)return;if(frameId)cancelAnimationFrame(frameId);frameId=requestAnimationFrame(()=>{frameId=0;layout();});}
   function layout(){
     if(!snapshot?.clip||!visible)return;
     const view=snapshot.clip;
@@ -151,11 +157,11 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
     if(selection)Object.assign(floating.style,{left:Math.max(5,Math.min(selection.x+selection.w-view.x-110,view.w-135))+'px',top:Math.max(2,selection.y-view.y-35)+'px'});
   }
   async function select(id, edit=false){
-    if(edit&&!snapshot.editable)return false;
+    if(edit&&(!snapshot.editable||noteFor(id)?.canEdit===false))return false;
     if(editing!==null&&editing!==id&&await run('flush')===false)return false;
     if(replyTarget!==null&&replyTarget!==id){if(await run('cancelReply',{id:replyTarget})===false)return false;replyTarget=null;reply='';}
     if(await navigate(id)===false)return false;
-    active=id;editing=edit?id:null;menu=null;
+    active=id;editing=edit?id:null;menu=null;onSelect?.(id,noteFor(id));
     if(edit)focusTarget=id;renderNotes();
     return true;
   }
@@ -170,23 +176,24 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
       renderNotes();onStatus('已在对应页边新建批注，输入内容后可保存 '+documentFormat+'。');
     }catch(error){onStatus(error.message);}
   }
-  root.addEventListener('compositionstart',()=>{composing=true;});
-  root.addEventListener('compositionend',event=>{composing=false;stage(event.target);});
+  listen(root,'compositionstart',()=>{composing=true;});
+  listen(root,'compositionend',event=>{composing=false;stage(event.target);});
   function stage(input){
     if(input.matches('[data-edit-input]')){
-      const id=Number(input.dataset.editInput);const n=noteFor(id);if(n)n.text=input.value;
+      const id=Number(input.dataset.editInput);const n=noteFor(id);if(!snapshot?.editable||n?.canEdit===false)return;if(n)n.text=input.value;
       localEdits.set(id,{text:input.value,sequence:requestId+1});
       onDirty();run('draft',{id,text:input.value});grow(input);schedule();
     }else if(input.matches('[data-reply-input]')){
+      if(!snapshot?.editable||noteFor(replyTarget)?.canReply===false)return;
       reply=input.value;onDirty();run('replyDraft',{id:replyTarget,text:reply});
       const send=root.querySelector('[data-send-reply]');if(send)send.disabled=!reply.trim();schedule();
     }
   }
-  root.addEventListener('input',event=>stage(event.target));
-  root.addEventListener('focusout',event=>{
+  listen(root,'input',event=>stage(event.target));
+  listen(root,'focusout',event=>{
     if(event.target.matches('[data-edit-input]')&&!composing)run('flush');
   });
-  root.addEventListener('keydown',event=>{
+  listen(root,'keydown',event=>{
     if((event.ctrlKey||event.metaKey)&&event.altKey&&event.key.toLowerCase()==='m'){event.preventDefault();void newComment();}
     if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();event.stopPropagation();run('save');}
     if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&event.target.matches('[data-reply-input]')){event.preventDefault();root.querySelector('[data-send-reply]')?.click();}
@@ -195,6 +202,7 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
   async function click(event){
     const button=event.target.closest('button');
     if(!button){const card=event.target.closest('[data-note]');if(card&&!event.target.closest('textarea'))await select(Number(card.dataset.note));return;}
+    if(button.disabled)return;
     if(button.hasAttribute('data-new'))return newComment();
     if(button.hasAttribute('data-edit'))return select(Number(button.dataset.edit),true);
     if(button.hasAttribute('data-goto'))return select(Number(button.dataset.goto));
@@ -212,11 +220,11 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
     for(const action of ['delete','resolve'])if(button.hasAttribute('data-'+action)){menu=null;await run(action,{id:Number(button.dataset[action])});return;}
     for(const action of ['previous','next','format'])if(button.hasAttribute('data-'+action)){if(action==='format'&&!supportsFormatting)return;editing=null;await run(action);return;}
   }
-  root.addEventListener('click',event=>{void click(event);});
-  tools.addEventListener('pointerdown',event=>{if(event.target.closest('button'))event.preventDefault();});
-  tools.addEventListener('click',event=>{void click(event);});
-  margin.addEventListener('scroll',schedule,true);
-  new ResizeObserver(schedule).observe(root);
+  listen(root,'click',event=>{void click(event);});
+  listen(tools,'pointerdown',event=>{if(event.target.closest('button'))event.preventDefault();});
+  listen(tools,'click',event=>{void click(event);});
+  listen(margin,'scroll',schedule,true);
+  const observer=new ResizeObserver(schedule);observer.observe(root);
   document.fonts?.ready.then(schedule);
-  return {receive,setVisible,save:()=>run('save')};
+  return {receive,setVisible,save:()=>run('save'),command:request,get sequence(){return requestId;},destroy(){disposed=true;observer.disconnect();if(frameId)cancelAnimationFrame(frameId);for(const off of disposers)off();for(const item of pending.values()){clearTimeout(item.timeout);item.reject(new Error('编辑器已关闭'));}pending.clear();}};
 }

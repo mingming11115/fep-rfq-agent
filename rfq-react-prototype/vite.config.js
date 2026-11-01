@@ -1,7 +1,14 @@
 import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
 export default defineConfig({
   esbuild: { jsx: 'automatic' },
-  server: { proxy: { '/api/office': { target: process.env.RFQ_BACKEND_URL || 'http://127.0.0.1:48081', changeOrigin: true } } },
+  server: {
+    fs: { allow: [fileURLToPath(new URL('..',import.meta.url))] },
+    proxy: {
+      '/api/craft': { target: process.env.RFQ_CRAFT_API_TARGET || 'http://127.0.0.1:48083', changeOrigin: true },
+      '/api/office': { target: process.env.RFQ_BACKEND_URL || 'http://127.0.0.1:48081', changeOrigin: true },
+    },
+  },
   optimizeDeps: { include: ['antd', '@ant-design/pro-components', '@ant-design/icons', '@ant-design/v5-patch-for-react-19'] },
   build: {
     target: 'es2022',

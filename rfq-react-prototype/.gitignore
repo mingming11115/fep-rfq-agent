@@ -1,3 +1,4 @@
 node_modules/
 dist/
+public/craft-editors/
 .DS_Store

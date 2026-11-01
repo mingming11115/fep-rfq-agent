@@ -99,6 +99,9 @@ await init({module_or_path:'./pdfcraft-classic_bg.wasm'});
     for notice in fonts.glob('fonts/*/OFL.txt'):
         shutil.copy2(notice, args.out / ('OFL-' + notice.parent.name + '.txt'))
     shutil.copy2(fonts / 'ATTRIBUTION.md', args.out / 'ATTRIBUTION-craft-fonts.md')
+    names = sorted(str(path.relative_to(args.out)) for path in args.out.rglob('*') if path.is_file() and path.name != 'build.json')
+    (args.out / 'build.json').write_text(json.dumps({'editor':'pdfcraft','version':'0.16.1','patchSha256':digest,
+        'files':{name:hashlib.sha256((args.out / name).read_bytes()).hexdigest() for name in names}}, indent=2))
     print('Built PDF comments:', args.out, flush=True)
 
 

@@ -28,13 +28,42 @@ public class OfficeDocumentService {
     private final Map<String, Object> locks = new ConcurrentHashMap<>();
     public OfficeDocumentService(OfficeProperties p, OfficeFileStore s, OfficeJwt j, ObjectMapper json) { properties = p; store = s; jwt = j; this.json = json; }
     public Map<String, Object> upload(String name, byte[] bytes, String project, String file, String version) throws IOException {
+        return uploadCraft(name, bytes, null, null, project, file, version);
+    }
+    public Map<String, Object> uploadCraft(String name, byte[] bytes, String reviewName, byte[] review,
+                                           String project, String file, String version) throws IOException {
         validate(name, bytes);
+        if (review != null) {
+            validate(reviewName, review);
+            // An imported review must have the same native format as its source.
+            validate(name, review);
+        }
+        byte[] latest = review == null ? bytes : review;
         String type = name.toLowerCase(Locale.ROOT).endsWith(".pdf") ? "pdf" : "docx";
         var random = new byte[32]; new SecureRandom().nextBytes(random);
         String access = Base64.getUrlEncoder().withoutPadding().encodeToString(random), id = UUID.randomUUID().toString();
-        var doc = new OfficeFileStore.Document(id, name, type, text(project), text(file), text(version), OfficeFileStore.hash(access.getBytes(UTF_8)), newKey(), 0, "", "", OfficeFileStore.hash(bytes), "", List.of());
-        store.create(doc, bytes);
+        long revision = Arrays.equals(bytes, latest) ? 0 : 1;
+        var doc = new OfficeFileStore.Document(id, name, type, text(project), text(file), text(version), OfficeFileStore.hash(access.getBytes(UTF_8)), newKey(), revision,
+                review == null ? "" : Instant.now().toString(), "", OfficeFileStore.hash(latest), "", List.of());
+        store.create(doc, bytes, latest);
         var response = metadata(doc); response.put("access", access); return response;
+    }
+    public Map<String, Object> saveCraftReview(String id, String access, long expectedRevision, byte[] bytes) throws IOException {
+        synchronized (locks.computeIfAbsent(id, unused -> new Object())) {
+            var before = store.authorize(id, access);
+            if (expectedRevision < 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前文件版本无效，请重新打开原文件");
+            if (before.revision() != expectedRevision)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "原文件已有更新，请保留本地批阅稿并重新打开最新版本");
+            validate(before.name(), bytes);
+            String digest = OfficeFileStore.hash(bytes);
+            long revision = before.revision() + (digest.equals(before.digest()) ? 0 : 1);
+            // Every native save ends any previous ONLYOFFICE session. Old callback
+            // receipts must not acknowledge or overwrite this new publication.
+            var after = new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(),
+                    before.accessHash(), newKey(), revision, Instant.now().toString(), "", digest, "", List.of());
+            store.save(after, bytes);
+            return metadata(after);
+        }
     }
     public Map<String, Object> metadata(OfficeFileStore.Document d) {
         var out = new LinkedHashMap<String, Object>();

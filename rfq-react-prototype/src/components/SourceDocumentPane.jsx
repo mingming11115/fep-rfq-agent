@@ -6,7 +6,7 @@ import { makeSourceAnchor, resolveSourceAnchor } from '../documentAnchors';
 import { annotatedSegments, makeCommentDraft } from '../documentAnnotations';
 import { sectionLabel } from '../documentStructure';
 import WordAnnotationCanvas from './WordAnnotationCanvas';
-import OnlyOfficeSourcePane from './OnlyOfficeSourcePane';
+import CraftSourcePane from './CraftSourcePane';
 import { officeSourceKey } from '../officeClient';
 
 function SourceExcerptPane({ file, rows, selectedAnchor, showResponses = true, responsePreview, quoteDraft, onSelectAnchor, onQuote, comments = [], activeCommentId, onSelectComment, focusOnMount = false }) {
@@ -130,7 +130,7 @@ function SourceExcerptPane({ file, rows, selectedAnchor, showResponses = true, r
 
 export default function SourceDocumentPane(props) {
   const source={projectId:props.selectedAnchor.projectId,fileId:props.selectedAnchor.fileId,sourceVersion:props.selectedAnchor.sourceVersion};
-  return <OnlyOfficeSourcePane key={officeSourceKey(source,`${props.officeUser?.id}:${props.canManageOffice}`)} file={props.file} source={source} canManage={Boolean(props.canManageOffice)} user={props.officeUser} rows={props.rows} selectedAnchor={props.selectedAnchor} onSelectAnchor={props.onSelectAnchor}>
+  return <CraftSourcePane key={officeSourceKey(source,`${props.officeUser?.id}:${props.canManageOffice}`)} file={props.file} source={source} canManage={Boolean(props.canManageOffice)} user={props.officeUser} rows={props.rows} selectedAnchor={props.selectedAnchor} onSelectAnchor={props.onSelectAnchor} allComments={props.allComments||props.comments} people={props.people} canEditRow={props.canEditRow} onProjectCommentsChange={props.onProjectCommentsChange} activeCommentId={props.activeCommentId} onSelectComment={props.onSelectComment}>
     <SourceExcerptPane {...props}/>
-  </OnlyOfficeSourcePane>;
+  </CraftSourcePane>;
 }

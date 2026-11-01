@@ -3,7 +3,7 @@
 在 WordCraft 0.13.2 与 PdfCraft 0.16.1 上复用 master 的
 `rfq-react-prototype/public/word-comments.css` 和 `word-comments.html` 中的批注结构、
 宋体字体栈与图标，提供随原文定位的页边批注。
-不修改 RFQ 业务页面。
+独立 Demo 的入口保持不变；RFQ 项目接入方式见 [项目批阅接入说明](../../docs/craft-project-review.md)。
 
 原版卡片、回复输入框和彩色连接线通过共用 DOM 界面显示；原文分别由 WordCraft 与
 PdfCraft 编辑和排版。扩展的同源消息桥提供文档代次、批注、原生坐标、选中状态和操作确认。

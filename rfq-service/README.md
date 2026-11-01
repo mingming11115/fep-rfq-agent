@@ -1,5 +1,18 @@
 # RFQ 独立后端框架
 
+## 原生 Word / PDF 文件接口（2026-11-01）
+
+`/api/craft` 提供原生编辑器的文件持久化，不需要 ONLYOFFICE 服务或 JWT 密钥。独立演示后端监听 `48083`，使用新的 `rfq-craft-documents` Docker 卷；启动命令见 [项目批阅接入说明](../docs/craft-project-review.md)。
+
+- `POST /documents`：multipart `file` 原件、可选 `review` 批阅稿，以及 `projectId`、`fileId`、`sourceVersion`。返回文档引用与一次性显示的随机访问凭据。
+- `GET /documents/{id}`：版本、保存时间、来源信息。
+- `GET /documents/{id}/download?kind=original|review`：不可变原件或最新批阅稿。
+- `PUT /documents/{id}/review`：`application/octet-stream`，`If-Match` 为当前 revision；过期版本返回 `409`。
+
+除上传外均要求 `X-Craft-Access`。只支持 DOCX / PDF，单份 30 MiB；导入两份文件的 multipart 总上限为 64 MiB。新批阅稿发布成功后才更新元数据；失败保留上一版本。原件不随编辑改变。原生保存会失效旧 ONLYOFFICE 会话，阻止旧回调覆盖新版本。
+
+当前凭据是本机演示的文件访问机制，企业认证与服务端项目成员授权仍待接入。历史 `/api/office` 接口继续保留，用于旧文件导入。
+
 ## ONLYOFFICE 原件批阅（2026-10-30）
 
 现已提供真实 DOCX / PDF 上传、批阅副本、签名编辑器会话、保存回调和下载接口。原始文件保留不变，后续编辑只写入批阅副本。文件及元数据保存在 Docker 命名卷，重启后继续可用。

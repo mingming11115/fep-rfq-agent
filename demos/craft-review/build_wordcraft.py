@@ -1,6 +1,7 @@
 """Build the Word-style comment demo from the pinned WordCraft release and a small patch."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -113,6 +114,9 @@ await init({module_or_path:'./wordcraft-classic_bg.wasm'});
     (args.out / 'index.html').write_text(html)
     for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE'):
         shutil.copy2(source / name, args.out / name)
+    names = sorted(str(path.relative_to(args.out)) for path in args.out.rglob('*') if path.is_file() and path.name != 'build.json')
+    (args.out / 'build.json').write_text(json.dumps({'editor':'wordcraft','version':'0.13.2','patchSha256':digest,
+        'files':{name:hashlib.sha256((args.out / name).read_bytes()).hexdigest() for name in names}}, indent=2))
     print('Built Word-style comments:', args.out, flush=True)
 
 

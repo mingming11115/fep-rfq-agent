@@ -5,7 +5,7 @@ import { InboxOutlined } from '@ant-design/icons';
 import { uploadMetadata } from '../antdAdapters';
 import {ShieldCheck} from "./icons";
 import {Modal,StatusBadge} from './ui';
-import {supportsOffice,uploadOfficeFile} from '../officeClient';
+import {supportsCraft,uploadCraftFile} from '../craftClient';
 
 function Field({label,children,required=false,wide=false}){return <label className={`field ${wide?'flow-field-wide':''}`}><span>{required&&<i className="flow-required">*</i>}{label}</span>{children}</label>;}
 
@@ -24,7 +24,7 @@ export default function SourceUploadDialog({project,files=[],onSubmit,onClose}){
   try{
    for(let index=0;index<incoming.length;index++){
     const original=fileList[index]?.originFileObj||fileList[index];
-    if(supportsOffice(incoming[index].name))incoming[index].office=await uploadOfficeFile(original,{projectId:project.id,fileId:incoming[index].id,sourceVersion:incoming[index].version},abort.current.signal);
+    if(supportsCraft(incoming[index].name))incoming[index].craft=await uploadCraftFile(original,{projectId:project.id,fileId:incoming[index].id,sourceVersion:incoming[index].version},{signal:abort.current.signal});
    }
    if(alive.current)onSubmit(incoming);
   }catch(cause){if(alive.current&&cause.name!=='AbortError')setError(cause.message);}finally{if(alive.current)setBusy(false);}
