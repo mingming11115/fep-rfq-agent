@@ -1,5 +1,6 @@
 import {createOriginalComments} from '../../demos/craft-review/site/original-comments.js';
 import {officeClauseTargets} from './officeClauseLink.js';
+import {craftClauseTargets} from './craftClauseTargets.js';
 import {makeSourceAnchor} from './documentAnchors.js';
 import {mergeNativeComments,planCraftWrites,applyCraftBinding,markCraftSaved,craftCommentFingerprint} from './craftCommentSync.js';
 
@@ -73,13 +74,14 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     if(!alive)return;
     const c=context(),merged=snapshot?mergeNativeComments({...c,snapshot}):{unlinked:[],conflicts:[]};
     const value={ready:Boolean(boundToken),synchronizing:busy,source:snapshot?.source||{status:'waiting'},
+      geometry:{selectedId:snapshot?.source?.selectedId,status:snapshot?.source?.status,clip:snapshot?.clip,ranges:snapshot?.sourceRanges||[]},
       unlinked:(merged.unlinked||[]).map(({id,nativeKey,text,author,reason})=>({id,nativeKey,text,author,reason})),conflicts:merged.conflicts||[]};
     const key=JSON.stringify(value);if(key!==lastState){lastState=key;onState(value);}
   }
   function schedule(){if(!alive||scheduled)return;scheduled=true;queueMicrotask(()=>{scheduled=false;void pump();});}
   function configurationFor(){
     const c=getContext();
-    const targets=officeClauseTargets(source,c.rows).map(({anchor,tag,...target})=>({...target,page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(c.rows.find(r=>r.id===target.id)))}));
+    const targets=craftClauseTargets(source,c.rows,engine).map(({anchor,tag,...target})=>({...target,page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(c.rows.find(r=>r.id===target.id)))}));
     const linked=(c.comments||[]).filter(comment=>comment.nativeRef?.documentId===reference.id&&comment.nativeRef.key&&!comment.nativeDeleted).map(comment=>({nativeKey:comment.nativeRef.key,clauseId:comment.anchor.requirementId,...permissions({nativeKey:comment.nativeRef.key})}));
     for(const [nativeKey,clauseId] of Object.entries(associations))if(!linked.some(item=>item.nativeKey===nativeKey))linked.push({nativeKey,clauseId});
     return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),targets,selectedId:c.selectedAnchor?.requirementId,associations:linked};
@@ -170,7 +172,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     checkpointCovers,
     open(name,bytes){file={name,bytes};sendFile();},refresh(){failedConfiguration='';schedule();},
     save:()=>command('save',{}),setVisible:value=>surface.setVisible(value),
-    locate:()=>command('locate',{id:getContext().selectedAnchor?.requirementId}),
+    locate:(id=getContext().selectedAnchor?.requirementId)=>command('locate',{id}),
     retry(){failures.clear();configuration='';failedConfiguration='';schedule();},
     associate(nativeKey,clauseId){
       if(!alive)return false;const c=getContext(),row=c.rows.find(row=>row.id===clauseId),note=snapshot?.notes.find(note=>note.nativeKey===nativeKey);

@@ -57,6 +57,8 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.match(container.textContent,/保存原文/);assert.match(container.textContent,/条款摘录/);
     assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]')?.textContent||'',/Comply/);
     const calls=await connectNative(frame,ref);
+    await act(async()=>{container.querySelector('[data-response-note="R"] .wc-note-body').click();await settle();});
+    assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='locate'&&JSON.parse(call.payload).params.id==='R'),'clicking even the current advice must explicitly locate the native source');
     const editorUrl=frame.src;
     await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:'R2'},responsePreview:{id:'R2',conclusion:'不满足',reason:'当前方案达不到要求'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});
     assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]').textContent,/当前方案达不到要求/);

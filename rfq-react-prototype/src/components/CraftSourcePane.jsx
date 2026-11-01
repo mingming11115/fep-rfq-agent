@@ -138,7 +138,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       <div className="word-classic-document review-tools" ref={tools}/>
       <div className="craft-editor-and-advice">
       <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
-      {showResponses&&<CraftResponseAdvice rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} onSelectAnchor={onSelectAnchor} onQuote={onQuote} canEditRow={canEditRow}/>}
+      {showResponses&&<CraftResponseAdvice rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} geometry={editorState.geometry} frame={frame} onSelectAnchor={anchor=>{const allowed=onSelectAnchor?.(anchor);if(allowed!==false&&editorState.ready)editor.current?.locate(anchor.requirementId).catch(cause=>setError(cause.message));return allowed;}} onQuote={onQuote} canEditRow={canEditRow}/>}
       </div>
     </div>
     {!excerpt&&!bytes&&(loading?<div className="office-missing"><Spin/><p>正在读取项目原件…</p></div>:<div className="office-missing"><Empty description="尚未关联原文件"/><p>原有条款摘录继续保留。上传对应 DOCX / PDF 后，可在这里批阅并同步协作记录。</p>{canManage?<Button type="primary" icon={<Upload size={15}/>} onClick={()=>picker.current?.click()}>上传对应原文件</Button>:<p>请由项目 SR 关联原件；当前身份可查看条款摘录。</p>}</div>)}

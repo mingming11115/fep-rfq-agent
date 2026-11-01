@@ -1203,8 +1203,24 @@ diff --git a/crates/ui-egui/src/panes/host_project_tests.rs b/crates/ui-egui/src
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project_tests.rs
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,149 @@
 +use super::*;
++
++#[test]
++fn project_word_source_ranges_follow_native_page_coordinates_and_hide_ambiguous_quotes() {
++    let mut a = app("Unique clause Repeated Repeated");
++    configure(&mut a, true);
++    let layout = a.session.layout();
++    let page = &layout.pages[0];
++    a.canvas.page_rects = vec![egui::Rect::from_min_size(egui::pos2(40.0, 100.0), egui::vec2(page.w, page.h))];
++    let first = a.host_review_snapshot(1.0)["sourceRanges"].clone();
++    assert!(!first.as_array().unwrap().is_empty());
++    a.canvas.page_rects[0] = a.canvas.page_rects[0].translate(egui::vec2(0.0, -60.0));
++    let next = a.host_review_snapshot(1.0)["sourceRanges"].clone();
++    assert!((first[0]["y"].as_f64().unwrap() - next[0]["y"].as_f64().unwrap() - 60.0).abs() < 0.1);
++    command(&mut a, "locate", json!({"id":"c2"})).unwrap();
++    assert!(a.host_review_snapshot(1.0)["sourceRanges"].as_array().unwrap().is_empty());
++}
 +
 +#[test]
 +fn project_word_chinese_text_has_embedded_glyphs_without_system_fonts() {
@@ -1341,7 +1357,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,258 @@
+@@ -0,0 +1,272 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1496,6 +1512,20 @@ new file mode 100644
 +                Some(json!({"page":index,"x":r.min.x*zoom,"y":r.min.y*zoom,"w":r.width()*zoom,"h":r.height()*zoom,"margin":216.0*scale*zoom}))
 +            })
 +            .collect();
++        let mut source_ranges = Vec::new();
++        let project = &self.comment_drafts.project;
++        if project.status == "matched" {
++            if let Some(found) = project.selected.as_ref().and_then(|id| project.matches.get(id)).filter(|found| found.len() == 1) {
++                if let Some((a, b)) = found.first() {
++                    for (index, range) in layout.selection_rects(&self.session.doc, a, b, self.session.page_hint) {
++                        if let (Some(screen), Some(page)) = (self.canvas.page_rects.get(index), layout.pages.get(index)) {
++                            let scale = screen.width() / page.w.max(1.0);
++                            source_ranges.push(json!({"page":index,"x":(screen.min.x+range.x*scale)*zoom,"y":(screen.min.y+range.y*scale)*zoom,"w":range.w*scale*zoom,"h":range.h*scale*zoom}));
++                        }
++                    }
++                }
++            }
++        }
 +        let mut notes = Vec::new();
 +        for (index, (id, replies)) in comment_threads(&self.session.doc.comments).into_iter().take(2000).enumerate() {
 +            let Some(comment) = self.session.doc.comments.get(&id) else { continue };
@@ -1525,7 +1555,7 @@ new file mode 100644
 +            notes.push(json!({"id":id,"nativeKey":project::key(id),"quote":self.host_comment_quote(id),"clauseId":self.comment_drafts.project.associations.get(&project::key(id)),"author":comment.author,"date":comment.date,"text":text,"resolved":comment.resolved,"color":index%3,"ranges":ranges,"replies":replies}));
 +        }
 +        json!({"fileName":self.session.path.as_ref().and_then(|p|p.file_name()).map(|n|n.to_string_lossy().to_string()).or_else(||self.session.file_name.clone()),"source":source,"complete":comment_threads(&self.session.doc.comments).len()<=2000,"document":document.to_string(),"author":self.session.author,"active":active,"notes":notes,"pages":pages,
-+            "clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
++            "sourceRanges":source_ranges,"clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
 +            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks})
 +    }
 +}

@@ -1582,7 +1582,7 @@ diff --git a/crates/ui-egui/src/host_review.rs b/crates/ui-egui/src/host_review.
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/host_review.rs
-@@ -0,0 +1,587 @@
+@@ -0,0 +1,617 @@
 +//! Host review adapter; edits stay in the native PDF engine.
 +use crate::PdfCraftApp;
 +use pdfcraft_engine::{DocId, Edit, NewAnnotation, NoteIcon, ReviewState, Shape};
@@ -2021,6 +2021,36 @@ new file mode 100644
 +        let area = host.clip.unwrap_or(view.viewport_rect());
 +        let pages: Vec<Value> = view.visible_page_rects().into_iter().map(|(page,r)| json!({"page":page,"x":r.min.x*zoom,"y":r.min.y*zoom,"w":r.width()*zoom,"h":r.height()*zoom,"margin":(area.right()-r.right()).max(0.0)*zoom})).collect();
 +        let tops = pdfcraft_render::thread_tops(&doc.info.annotations);
++        let mut source_ranges = Vec::new();
++        if state.project.status == "matched" {
++            if let Some(Ok(found)) = state
++                .project
++                .selected
++                .as_ref()
++                .and_then(|id| state.project.matches.get(id))
++                .filter(|found| found.as_ref().is_ok_and(|m| m.len() == 1))
++            {
++                if let Some((page, quads)) = found.first() {
++                    if let Some(xf) = view.page_xform(*page) {
++                        for q in quads {
++                            let mut bounds = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
++                            for p in q.chunks_exact(2) {
++                                bounds[0] = bounds[0].min(p[0]);
++                                bounds[1] = bounds[1].min(p[1]);
++                                bounds[2] = bounds[2].max(p[0]);
++                                bounds[3] = bounds[3].max(p[1]);
++                            }
++                            let r = xf.user_rect(&doc.info, *page, bounds.map(|n| n as f32));
++                            if r.is_finite() {
++                                let mut r = rect(r);
++                                r["page"] = json!(page);
++                                source_ranges.push(r);
++                            }
++                        }
++                    }
++                }
++            }
++        }
 +        let mut notes = Vec::new();
 +        for a in doc.info.annotations.iter().filter(|a| a.is_comment()).take(2000) {
 +            let Some(numeric) = state.native.get(&(a.page, a.index)).copied() else { continue };
@@ -2043,7 +2073,7 @@ new file mode 100644
 +            notes.push(json!({"id":numeric,"nativeKey":state.native_keys.get(&(a.page,a.index)),"quote":state.native_keys.get(&(a.page,a.index)).and_then(|key|state.project.quotes.get(key)).cloned().unwrap_or_default(),"clauseId":state.native_keys.get(&(a.page,a.index)).and_then(|key|state.project.associations.get(key)),"page":a.page,"author":a.author,"text":state.edits.get(&numeric).map(String::as_str).unwrap_or(a.contents.as_deref().unwrap_or("")),"date":a.modified,"resolved":resolved,"color":(numeric-1)%3,"ranges":ranges,"replies":replies,"highlight":false}));
 +        }
 +        let active = view.comments.selected.and_then(|at| tops.get(&at).copied().or(Some(at))).and_then(|at| state.native.get(&at));
-+        json!({"fileName":doc.name,"source":source,"complete":doc.info.annotations.iter().filter(|a|a.is_comment()).count()<=2000&&state.native.len()<50_000,"document":state.token,"notes":notes,"pages":pages,"clip":rect(area),"selection":null,"active":active,"author":self.comment_prefs.author,"editable":self.session.host_review_editable(id)&&doc.allows_annotation()&&doc.read_only_reason.is_none(),"formatting":false,"applied":applied,"edit":state.edit,"editRequest":state.edit_request})
++        json!({"fileName":doc.name,"source":source,"sourceRanges":source_ranges,"complete":doc.info.annotations.iter().filter(|a|a.is_comment()).count()<=2000&&state.native.len()<50_000,"document":state.token,"notes":notes,"pages":pages,"clip":rect(area),"selection":null,"active":active,"author":self.comment_prefs.author,"editable":self.session.host_review_editable(id)&&doc.allows_annotation()&&doc.read_only_reason.is_none(),"formatting":false,"applied":applied,"edit":state.edit,"editRequest":state.edit_request})
 +    }
 +}
 +
