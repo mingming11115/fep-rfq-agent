@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {craftRequest, uploadCraftFile, saveCraftReview, importOfficeReview, createCraftSaveQueue} from './craftClient.js';
+import {craftRequest, uploadCraftFile, saveCraftReview, importOfficeReview, createCraftSaveQueue,craftDemoAsset} from './craftClient.js';
 
 const source={projectId:'P',fileId:'F',sourceVersion:'V1'};
 const ref={id:'document',access:'secret',name:'customer.docx'};
 const response=data=>new Response(JSON.stringify({code:0,data}));
+
+test('all built-in RFQ demo sources have a native Word document without affecting other projects or versions',()=>{
+  for(const [fileId,sourceVersion] of [['RFQ-001-DEMO-FILE-BIZ-2','V1.1'],['RFQ-001-DEMO-FILE-TECH-3','V2.0'],['RFQ-001-DEMO-FILE-RESPONSE-MATRIX','V1.0']]){
+    const source={projectId:'RFQ-001',fileId,sourceVersion};
+    assert.match(craftDemoAsset(source)||'',/^\/craft-demo\/.+\.docx$/);
+    assert.equal(craftDemoAsset({...source,projectId:'OTHER'}),null);
+    assert.equal(craftDemoAsset({...source,sourceVersion:'V999'}),null);
+  }
+});
 
 test('Craft upload preserves original and imported review as separate binaries',async()=>{
   const previous=globalThis.fetch;

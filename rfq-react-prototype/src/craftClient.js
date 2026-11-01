@@ -41,8 +41,13 @@ export async function importOfficeReview(reference,source,signal){
   return uploadCraftFile(new File([original],meta.name||reference.name,{type:original.type}),source,{review,signal});
 }
 
-export const craftDemoAsset=source=>source?.projectId==='RFQ-001'&&source.fileId==='RFQ-001-DEMO-FILE-CLAUSE-STATUSES'&&String(source.sourceVersion)==='V1.0'
-  ?'/onlyoffice-demo/RFQ-review-example.docx':null;
+const demoAssets={
+  'RFQ-001-DEMO-FILE-CLAUSE-STATUSES:V1.0':'/onlyoffice-demo/RFQ-review-example.docx',
+  'RFQ-001-DEMO-FILE-BIZ-2:V1.1':'/craft-demo/business-clauses.docx',
+  'RFQ-001-DEMO-FILE-TECH-3:V2.0':'/craft-demo/technical-requirements.docx',
+  'RFQ-001-DEMO-FILE-RESPONSE-MATRIX:V1.0':'/craft-demo/response-matrix.docx',
+};
+export const craftDemoAsset=source=>source?.projectId==='RFQ-001'?demoAssets[`${source.fileId}:${source.sourceVersion}`]||null:null;
 
 export async function loadCraftDemo(source,signal){
   const url=craftDemoAsset(source);if(!url)throw new Error('此来源没有内置原件，请上传对应文件');
