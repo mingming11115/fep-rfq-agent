@@ -15,7 +15,7 @@ export async function prepareCraftEditor({editor,source,target,patch}){
   for(const [name,hash] of Object.entries(manifest.files))if(digest(await readFile(path.join(source,name)))!==hash)throw new Error(`${editor} 编译文件校验失败，请重新构建。`);
   await mkdir(target,{recursive:true});
   for(const item of await readdir(source,{withFileTypes:true}))await cp(path.join(source,item.name),path.join(target,item.name),{recursive:item.isDirectory()});
-  console.log(`Prepared ${editor} ${manifest.version}: /craft-editors/${editor}-classic/`);
+  console.log(`Prepared ${editor} ${manifest.version}: /craft-editors/${editor}-classic/index.html`);
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

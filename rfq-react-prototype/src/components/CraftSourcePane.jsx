@@ -98,7 +98,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       }});
     saveQueue.current=queue;
     instance.open(meta.name,bytes);
-    frame.current.src=`${import.meta.env.BASE_URL}craft-editors/${engine}-classic/?host=parent&comments=classic&readonly=1&body=0&author=${encodeURIComponent(user?.name||'RFQ 用户')}`;
+    frame.current.src=`${import.meta.env.BASE_URL}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0&author=${encodeURIComponent(user?.name||'RFQ 用户')}`;
     return()=>{abort.abort();queue.dispose();instance.destroy();if(editor.current===instance)editor.current=null;if(saveQueue.current===queue)saveQueue.current=null;};
   },[bytes,meta?.id,reference?.id,user?.id,frameEpoch]);
   useEffect(()=>{editor.current?.refresh();},[allComments,rows,selectedAnchor?.requirementId,activeCommentId,canEditRow,canManage]);
