@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/storytold/craft-fonts",
+  "revision": "b076417b5880bd4154bd22f00695b1d28c6bea83",
+  "files": [
+    {"path": "fonts/manifest.txt", "sha256": "e825709cd46ff7abe213c141e981c0c11e098195a134951e95dada85eaea778a"},
+    {"path": "ATTRIBUTION.md", "sha256": "aa2aa7eec68c32ac2da6ff7162ca9100ab3680e4c7b98365fc7c74ddd4167d07"},
+    {"path": "fonts/biz-ud-pgothic/BIZUDPGothic-Regular.ttf", "sha256": "258d7156c165f2ff774b6efee637c22c3b950de0d8a10e501137061bc8085d01"},
+    {"path": "fonts/biz-ud-pgothic/OFL.txt", "sha256": "e753d7155d53c747d037a445e584c8ecfca6dd79846db610417e282a736b28bc"},
+    {"path": "fonts/noto-sans-cjk-sc/NotoSansCJKsc-Regular.otf", "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b"},
+    {"path": "fonts/noto-sans-cjk-sc/OFL.txt", "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"}
+  ]
+}

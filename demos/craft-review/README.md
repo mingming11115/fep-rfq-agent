@@ -29,7 +29,9 @@ python3 demos/craft-review/build_pdfcraft.py
 同时加载固定版本的官方翻译，把浏览器版编译到 `site/wordcraft-classic`。
 PDF 脚本校验固定的源码、`pdfcraft-classic-comments.patch` 和官方发布所用的开源字体输入，
 输出到 `site/pdfcraft-classic`，并附带字体及第三方许可。字体清单与散列见 `pdfcraft-fonts.json`。
-沿用上游 Web 版的字体范围，含 BIZ UDPGothic 的常用汉字回退，不承诺覆盖所有中文生僻字。
+Word 构建默认校验并内置 Noto Sans CJK SC 和 BIZ UDPGothic，字体及许可的固定版本与
+散列见 `wordcraft-fonts.json`。补丁允许 Web 构建保留中文字体；缺少必须字体时构建失败，
+避免浏览器画布缺字。PDF 仍沿用上游 Web 字体范围，含 BIZ UDPGothic 的常用汉字回退。
 下载缓存、编译产物、导出文件均留在本项目目录，不依赖系统临时目录，也不入 Git。
 本机已准备的 `.cache/toolchain` 和 `.cache/wasm-bindgen-*` 会被脚本自动识别，
 后续可直接运行同一条编译命令。

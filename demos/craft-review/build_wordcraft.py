@@ -51,6 +51,28 @@ def unpack(archive, target):
                 raise ValueError('Unexpected archive link or special file')
 
 
+def prepare_fonts(cache):
+    spec = json.loads((ROOT / 'wordcraft-fonts.json').read_text())
+    target = cache / 'craft-fonts-word'
+    for item in spec['files']:
+        # Keep the verified upstream manifest intact; the local build manifest
+        # lists only font files included in this pinned, bounded input set.
+        local = 'fonts/manifest.upstream.txt' if item['path'] == 'fonts/manifest.txt' else item['path']
+        destination = target / local
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        download('https://raw.githubusercontent.com/storytold/craft-fonts/' + spec['revision'] + '/' + item['path'], destination, item['sha256'])
+    selected = {item['path'] for item in spec['files'] if item['path'].endswith(('.ttf', '.otf'))}
+    entries = []
+    for line in (target / 'fonts/manifest.upstream.txt').read_text().splitlines():
+        fields = line.split(' | ')
+        if len(fields) >= 4 and fields[2] in selected:
+            entries.append(line)
+    if len(entries) != len(selected):
+        raise ValueError('Word font manifest does not match the verified font inputs')
+    (target / 'fonts/manifest.txt').write_text('\n'.join(entries) + '\n')
+    return target
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, help='Existing WordCraft v0.13.2 source checkout')
@@ -96,6 +118,9 @@ def main():
         if not (translations / 'locales').is_dir():
             unpack(archive, translations)
         env['CRAFT_I18N_DIR'] = str(translations.resolve())
+    fonts = Path(env.get('CRAFT_FONTS_DIR') or prepare_fonts(cache))
+    env['CRAFT_FONTS_DIR'] = str(fonts.resolve())
+    env['CRAFT_FONTS_REQUIRED'] = '1'
     target = Path(env.setdefault('CARGO_TARGET_DIR', str(cache / 'target')))
     # Keep this local preview quick to rebuild. These options do not change document features.
     env.setdefault('CARGO_PROFILE_RELEASE_LTO', 'false')
@@ -114,6 +139,9 @@ await init({module_or_path:'./wordcraft-classic_bg.wasm'});
     (args.out / 'index.html').write_text(html)
     for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE'):
         shutil.copy2(source / name, args.out / name)
+    for notice in fonts.glob('fonts/*/OFL.txt'):
+        shutil.copy2(notice, args.out / ('OFL-' + notice.parent.name + '.txt'))
+    shutil.copy2(fonts / 'ATTRIBUTION.md', args.out / 'ATTRIBUTION-craft-fonts.md')
     names = sorted(str(path.relative_to(args.out)) for path in args.out.rglob('*') if path.is_file() and path.name != 'build.json')
     (args.out / 'build.json').write_text(json.dumps({'editor':'wordcraft','version':'0.13.2','patchSha256':digest,
         'files':{name:hashlib.sha256((args.out / name).read_bytes()).hexdigest() for name in names}}, indent=2))

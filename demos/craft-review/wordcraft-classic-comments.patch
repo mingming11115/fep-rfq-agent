@@ -462,6 +462,40 @@ diff --git a/crates/engine/src/session/snapshot.rs b/crates/engine/src/session/s
              user_dict_path: _,
              dirty,
              clipboard: _,
+diff --git a/crates/fonts/build.rs b/crates/fonts/build.rs
+--- a/crates/fonts/build.rs
++++ b/crates/fonts/build.rs
+@@ -1,8 +1,9 @@
+ //! Optional craft-fonts build input (https://github.com/storytold/craft-fonts, recipe from its
+ //! `docs/integration.md`). With `CRAFT_FONTS_DIR=<checkout>` the fonts in its
+ //! `fonts/manifest.txt` are embedded as `CRAFT_FONTS`; unset, `CRAFT_FONTS` is empty. Web
+-//! (wasm32) builds embed only the Georgian interface face (about 230 KB), to stay within the web
+-//! size budget; the Japanese one is 4.7 MB. With `CRAFT_FONTS_REQUIRED` (releases), a native
++//! (wasm32) builds keep the Chinese, Japanese and Georgian fallback faces. Browser canvas text
++//! cannot use installed system fonts, so the RFQ editor must embed Chinese glyphs too.
++//! With `CRAFT_FONTS_REQUIRED` (releases), a
+ //! build also fails when the checkout has no font for a CJK interface language (Japanese,
+ //! Simplified Chinese), as an outdated pin once did (#241). It only reads the local checkout: no
+ //! network.
+@@ -19,8 +20,7 @@
+                 src.push_str(&entries);
+                 // Each CJK interface language needs its own face: without the Chinese one, Chinese
+                 // menus fall back to the Japanese face and show boxes for simplified hanzi (#241).
+-                let wasm = std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "wasm32");
+-                if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() && !wasm {
++                if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() {
+                     for s in REQUIRED_SCRIPTS.iter().filter(|s| !covered.iter().any(|c| c == *s)) {
+                         println!("cargo::error=CRAFT_FONTS_DIR={}: no {s} font in fonts/manifest.txt (craft-fonts too old?)", dir.display());
+                     }
+@@ -56,7 +56,7 @@
+         let [family, style, file, scripts, ..] = f.as_slice() else {
+             return Err(format!("malformed manifest line: {line}"));
+         };
+-        if wasm && !scripts.split(',').any(|s| s.trim() == "Geor") {
++        if wasm && !scripts.split(',').any(|s| matches!(s.trim(), "Geor" | "Hans" | "Jpan")) {
+             continue;
+         }
+         let path = dir.join(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;
 diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
 --- a/crates/ui-egui/src/canvas.rs
 +++ b/crates/ui-egui/src/canvas.rs
@@ -1169,8 +1203,23 @@ diff --git a/crates/ui-egui/src/panes/host_project_tests.rs b/crates/ui-egui/src
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project_tests.rs
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,133 @@
 +use super::*;
++
++#[test]
++fn project_word_chinese_text_has_embedded_glyphs_without_system_fonts() {
++    let font = wordcraft_fonts::chinese_fonts().next().expect("RFQ web build must embed a Simplified Chinese font");
++    let db = wordcraft_fonts::FontDb::with_font_dirs(Vec::new());
++    db.set_system_fallback(false);
++    let face = db.face(font.family, font.style);
++    let text = "客户技术要求新能源精密切割产线批阅示例条款原文右侧应答卡片门禁联锁防护打开停止危险运动复位恢复公用设施接口电力冷却水排风注明额定值允许范围安装位置预留维护空间尺寸布局附件原件副本修订批注正式结论确认选择页面字体汉语龘";
++    for ch in text.chars() {
++        assert!(face.covers(ch), "embedded font lacks {ch}");
++    }
++    let shaped = wordcraft_fonts::shape(&face, text, &[], |c| c);
++    assert!(!shaped.is_empty());
++    assert!(shaped.iter().all(|glyph| glyph.gid != 0), "Chinese text must not shape into missing-glyph boxes");
++}
 +
 +fn app(text: &str) -> WordApp {
 +    let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
