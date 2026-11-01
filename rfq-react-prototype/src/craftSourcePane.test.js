@@ -20,7 +20,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
   const container=document.createElement('div');document.body.append(container);const root=createRoot(container);
   const source={projectId:'P',fileId:'F',sourceVersion:'V1'},user={id:'actor',name:'Alex'};
   const ref={id:'file-id',name:'real.docx',fileType:'docx',access:'cap',...source,revision:0};
-  const rows=[{id:'R',projectId:'P',sourceFileId:'F',sourceVersion:'V1',original:'Original source',sourcePage:1}];
+  const rows=[{id:'R',projectId:'P',sourceFileId:'F',sourceVersion:'V1',original:'Original source',sourcePage:1,conclusion:'Comply'}];
   let responseMeta=ref;
   const previousFetch=globalThis.fetch;globalThis.fetch=async url=>url.includes('/download')?new Response(new Blob(['native file bytes'])):new Response(JSON.stringify({code:0,data:responseMeta}));
   const settle=async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));};
@@ -55,9 +55,11 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(new URL(frame.src).pathname,'/craft-editors/wordcraft-classic/index.html');
     assert.equal(container.querySelector('[data-count]')?.textContent,'0 条批注');
     assert.match(container.textContent,/保存原文/);assert.match(container.textContent,/条款摘录/);
+    assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]')?.textContent||'',/Comply/);
     const calls=await connectNative(frame,ref);
     const editorUrl=frame.src;
-    await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:'R2'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});
+    await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:'R2'},responsePreview:{id:'R2',conclusion:'不满足',reason:'当前方案达不到要求'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});
+    assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]').textContent,/当前方案达不到要求/);
     assert.equal(container.querySelector('iframe'),frame);
     assert.equal(frame.src,editorUrl);
     assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);

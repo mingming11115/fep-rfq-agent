@@ -4,6 +4,7 @@ import {FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
 import {FileText,Upload,Download} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftFile,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
+import CraftResponseAdvice from './CraftResponseAdvice';
 import classicTemplate from '../../../demos/craft-review/site/classic.html?raw';
 import '../../../demos/craft-review/site/original-comments.css';
 import './onlyoffice-source.css';
@@ -12,7 +13,7 @@ import './craft-source.css';
 const read=key=>{try{return JSON.parse(localStorage.getItem(key)||'null');}catch{return null;}};
 const emptyComments=[];
 
-export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,children}){
+export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,showResponses=true,responsePreview,onQuote,children}){
   const bindingKey='fep-rfq-craft-source:'+craftSourceKey(source);
   const [reference,setReference]=useState(()=>file?.craft||read(bindingKey));
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
@@ -135,7 +136,10 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     <div className="office-excerpt" hidden={!excerpt}>{children}</div>
     <div className="craft-native-workspace" hidden={excerpt||!bytes}>
       <div className="word-classic-document review-tools" ref={tools}/>
+      <div className="craft-editor-and-advice">
       <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
+      {showResponses&&<CraftResponseAdvice rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} onSelectAnchor={onSelectAnchor} onQuote={onQuote} canEditRow={canEditRow}/>}
+      </div>
     </div>
     {!excerpt&&!bytes&&(loading?<div className="office-missing"><Spin/><p>正在读取项目原件…</p></div>:<div className="office-missing"><Empty description="尚未关联原文件"/><p>原有条款摘录继续保留。上传对应 DOCX / PDF 后，可在这里批阅并同步协作记录。</p>{canManage?<Button type="primary" icon={<Upload size={15}/>} onClick={()=>picker.current?.click()}>上传对应原文件</Button>:<p>请由项目 SR 关联原件；当前身份可查看条款摘录。</p>}</div>)}
     <input ref={picker} type="file" accept=".docx,.pdf" hidden aria-label="上传对应原文件" onChange={attach}/>
