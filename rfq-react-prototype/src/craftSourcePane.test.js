@@ -44,6 +44,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(calls.find(call=>call.type===engine+':open')?.name,meta.name);
     assert.ok(!container.textContent.includes('正在打开原文件'));
     assert.ok(!container.querySelector('.office-loading'));
+    return calls;
   };
   try{
     await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source,user,canManage:true,rows,selectedAnchor:{...source,requirementId:'R'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Existing excerpts')));});
@@ -54,7 +55,13 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(new URL(frame.src).pathname,'/craft-editors/wordcraft-classic/index.html');
     assert.equal(container.querySelector('[data-count]')?.textContent,'0 条批注');
     assert.match(container.textContent,/保存原文/);assert.match(container.textContent,/条款摘录/);
-    await connectNative(frame,ref);
+    const calls=await connectNative(frame,ref);
+    const editorUrl=frame.src;
+    await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:'R2'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});
+    assert.equal(container.querySelector('iframe'),frame);
+    assert.equal(frame.src,editorUrl);
+    assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
+    assert.ok(!container.querySelector('.office-loading'));
     await act(async()=>{root.unmount();});
     const second=createRoot(container);
     responseMeta={...ref,id:'pdf-id',fileId:'PDF',name:'real.pdf',fileType:'pdf'};
@@ -68,6 +75,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     await act(async()=>{third.render(React.createElement(CraftSourcePane,{file:{name:'missing.docx'},source:{...source,fileId:'MISSING'},user,canManage:false,rows,allComments:[],canEditRow:()=>false},React.createElement('div',null,'Existing excerpts')));});
     await act(async()=>await settle());
     assert.match(container.textContent,/尚未关联原文件/);assert.ok(![...container.querySelectorAll('button')].some(b=>b.textContent.includes('上传对应原文件')));
+    assert.equal(container.querySelector('.office-excerpt').hidden,false,'a card from a file without uploaded bytes must show its own source excerpt');
     await act(async()=>third.unmount());
   }finally{globalThis.fetch=previousFetch;await window.happyDOM.cancelAsync();}
 });

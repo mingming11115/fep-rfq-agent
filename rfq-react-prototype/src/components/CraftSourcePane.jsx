@@ -55,7 +55,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
             }
           }
           if(abort.signal.aborted)return;
-          if(!ref){setLoading(false);return;}
+          if(!ref){setExcerpt(true);setLoading(false);return;}
           remember(ref);return;
         }
         const value=assertCraftSource(await craftRequest(`/documents/${ref.id}`,ref,{signal:abort.signal}),source);
@@ -128,6 +128,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
     <div className="office-toolbar"><div className="office-title"><FileText size={17}/><div><strong>{meta?.name||reference?.name||file?.name||'客户原文件'}</strong><small>批阅副本 · {canManage?'可编辑原文':rows.some(row=>canEditRow(row))?'条款批注':'只读'} · 批注与协作记录联动</small></div></div><div className="office-actions"><Button size="small" onClick={()=>setExcerpt(!excerpt)}>{excerpt?'原文件':'条款摘录'}</Button><Button size="small" aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div></div>
     {error&&<Alert type="error" showIcon message={error} action={<Button size="small" onClick={()=>{setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button>}/>}
+    {!loading&&!reference&&excerpt&&<Alert type="info" showIcon message="当前来源文件尚未关联原文件，已显示对应条款摘录" action={canManage?<Button size="small" onClick={()=>picker.current?.click()}>上传对应原文件</Button>:undefined}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
     {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Select size="small" aria-label={`为批注选择条款 ${note.id}`} placeholder="选择条款后同步" value={association[note.nativeKey]} onChange={value=>setAssociation(old=>({...old,[note.nativeKey]:value}))} options={rows.filter(row=>canEditRow(row)).map(row=>({value:row.id,label:`${row.clause||'无编号'} ${row.title||row.original?.slice(0,24)||''}`}))}/><Button size="small" disabled={!association[note.nativeKey]} onClick={()=>editor.current?.associate(note.nativeKey,association[note.nativeKey])}>关联并同步</Button></div>)}</div>}
     {reference&&!excerpt&&<div className="office-clause-status" data-clause-status={sourceStatus}><span role="status">{locationText}</span><Button size="small" disabled={!editorState.ready} onClick={()=>editor.current?.locate().catch(cause=>setError(cause.message))}>定位当前条款</Button></div>}
