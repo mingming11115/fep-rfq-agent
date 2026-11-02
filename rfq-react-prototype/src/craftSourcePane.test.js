@@ -39,15 +39,16 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     // the native message boundary; React and the project bridge stay real.
     const native={},engine=meta.fileType==='pdf'?'pdfcraft':'wordcraft',calls=[];
     Object.defineProperty(frame,'contentWindow',{configurable:true,value:native});
-    let applied=0,outlineVisible=false;
+    let applied=0,outlineVisible=false,editorToolsVisible=false;
     const emit=(type,data)=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:engine+':'+type,...data}}));
-    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,headingOutline:{revision:2,items:[{index:0,level:0,text:'Native document heading'}]},notes:[],pages:[],active:null,source:{status:'unsupported'}});
+    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,editorToolsControlled:engine==='wordcraft',editorToolsVisible,headingOutline:{revision:2,items:[{index:0,level:0,text:'Native document heading'}]},notes:[],pages:[],active:null,source:{status:'unsupported'}});
     native.postMessage=message=>{
       calls.push(message);
       if(message.type===engine+':open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));
       if(message.type===engine+':review'){
         const request=JSON.parse(message.payload);applied=request.request;
         if(request.action==='outline')outlineVisible=request.params.visible;
+        if(request.action==='tools')editorToolsVisible=request.params.visible;
         if(request.action==='save')queueMicrotask(()=>emit('save',{name:meta.name,bytes:new TextEncoder().encode('retried DOCX').buffer,review:snapshot()}));
         queueMicrotask(()=>{emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});
       }
@@ -82,6 +83,21 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='heading'&&JSON.parse(call.payload).params.index===0));
     assert.equal(saves.length,0,'directory navigation never saves the document');
     assert.equal(window.__rfqOfficeUnsaved.dirty,false);
+    assert.equal(new URL(frame.src).searchParams.get('tools'),'host');
+    const editorTools=container.querySelector('[aria-label="编辑工具"]');assert.ok(editorTools);
+    assert.equal(editorTools.getAttribute('aria-pressed'),'false');
+    await act(async()=>{editorTools.click();await settle();});
+    assert.equal(editorTools.getAttribute('aria-pressed'),'true');
+    await act(async()=>{container.querySelector('[aria-label="查看条款摘录"]').click();await settle();});
+    assert.equal(editorTools.disabled,true,'excerpt mode cannot toggle hidden native tools');
+    await act(async()=>{container.querySelector('[aria-label="返回原文件"]').click();await settle();});
+    assert.equal(editorTools.getAttribute('aria-pressed'),'true');
+    assert.equal(editorTools.disabled,false);
+    await act(async()=>{editorTools.click();await settle();});
+    assert.equal(editorTools.getAttribute('aria-pressed'),'false');
+    assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
+    assert.equal(window.__rfqOfficeUnsaved.dirty,false);
+    assert.equal(saves.length,0,'tool visibility never saves the document');
     await act(async()=>{container.querySelector('[data-response-note="R"] .wc-note-body').click();await settle();});
     assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='locate'&&JSON.parse(call.payload).params.id==='R'),'clicking even the current advice must explicitly locate the native source');
     const editorUrl=frame.src;
@@ -132,6 +148,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(new URL(pdfFrame.src).pathname,'/craft-editors/pdfcraft-classic/index.html');
     await connectNative(pdfFrame,responseMeta);
     assert.equal(container.querySelector('button[aria-label="文档目录"]'),null);
+    assert.equal(container.querySelector('[aria-label="编辑工具"]'),null,'PDF has no Word toolbar switch');
     assert.equal(container.querySelector('.office-savebar'),null,'PDF also omits the host operation row');
     await act(async()=>second.unmount());
     const third=createRoot(container);

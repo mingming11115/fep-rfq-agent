@@ -123,13 +123,16 @@ diff --git a/apps/wordcraft-web/src/host.rs b/apps/wordcraft-web/src/host.rs
 diff --git a/apps/wordcraft-web/src/web.rs b/apps/wordcraft-web/src/web.rs
 --- a/apps/wordcraft-web/src/web.rs
 +++ b/apps/wordcraft-web/src/web.rs
-@@ -79,6 +79,16 @@
+@@ -79,6 +79,19 @@
                      // Preferences from an earlier visit (#2132), as the desktop app reads `ui.json`.
                      let stored = stored_prefs();
                      crate::prefs::restore(&mut app, stored.as_deref());
 +                    // The review demo opens the redesigned comment threads on first load.
 +                    if app_bridge.is_some() && query_param("comments").as_deref() == Some("classic") {
 +                        app.enable_host_review();
++                        if query_param("tools").as_deref() == Some("host") {
++                            app.set_host_editor_tools(false);
++                        }
 +                        if query_param("readonly").as_deref() == Some("1") || query_param("body").as_deref() == Some("0") {
 +                            app.set_host_review_permissions(
 +                                query_param("readonly").as_deref() != Some("1"),
@@ -140,7 +143,7 @@ diff --git a/apps/wordcraft-web/src/web.rs b/apps/wordcraft-web/src/web.rs
                      // A region chosen in File › Options replaces the browser's for the first blank
                      // document too (#838).
                      if !sample && app.session.prefs.region.is_some() {
-@@ -99,7 +109,8 @@
+@@ -99,7 +112,8 @@
                          crate::host::Bridge::set_author(&mut app, &author);
                          prefs.keep_own_author(&app.session.author, &own);
                      }
@@ -150,7 +153,7 @@ diff --git a/apps/wordcraft-web/src/web.rs b/apps/wordcraft-web/src/web.rs
                  }),
              )
              .await;
-@@ -134,6 +145,8 @@
+@@ -134,6 +148,8 @@
      inbox: Inbox,
      messages: Rc<RefCell<Vec<String>>>,
      prefs: crate::prefs::PrefsSync,
@@ -159,7 +162,7 @@ diff --git a/apps/wordcraft-web/src/web.rs b/apps/wordcraft-web/src/web.rs
  }
  
  fn local_storage() -> Option<web_sys::Storage> {
-@@ -154,7 +167,13 @@
+@@ -154,7 +170,13 @@
          for msg in msgs {
              self.app.status(msg);
          }
@@ -173,7 +176,7 @@ diff --git a/apps/wordcraft-web/src/web.rs b/apps/wordcraft-web/src/web.rs
          // Store changed preferences straight away: a reload or closed tab runs no exit code (#2132).
          if let Some(json) = self.prefs.changed(&self.app) {
              match local_storage() {
-@@ -197,6 +216,15 @@
+@@ -197,6 +219,15 @@
              }
          }
          self.app.ui(ui);
@@ -849,7 +852,7 @@ diff --git a/crates/ui-egui/src/panes/host_project.rs b/crates/ui-egui/src/panes
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project.rs
-@@ -0,0 +1,352 @@
+@@ -0,0 +1,358 @@
 +//! RFQ clause navigation and bidirectional comment writes; host metadata stays outside DOCX.
 +use super::*;
 +use std::collections::BTreeMap;
@@ -860,6 +863,8 @@ new file mode 100644
 +    pub document: u64,
 +    pub editable: bool,
 +    pub body: bool,
++    pub external_tools: bool,
++    pub tools_visible: bool,
 +    pub targets: Vec<Value>,
 +    pub associations: BTreeMap<String, String>,
 +    pub rules: BTreeMap<String, Value>,
@@ -910,6 +915,7 @@ new file mode 100644
 +            p.selected = None;
 +            p.selection = None;
 +            p.status = "unsupported".into();
++            p.tools_visible = false;
 +        }
 +        let targets = p
 +            .targets
@@ -973,6 +979,9 @@ new file mode 100644
 +        );
 +        if params.get("externalOutline").and_then(Value::as_bool) == Some(true) {
 +            self.session.view.nav_pane = false;
++        }
++        if params.get("externalTools").and_then(Value::as_bool) == Some(true) && !self.comment_drafts.project.external_tools {
++            self.set_host_editor_tools(false);
 +        }
 +        let p = &mut self.comment_drafts.project;
 +        p.targets = targets;
@@ -1360,7 +1369,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,315 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1377,6 +1386,14 @@ new file mode 100644
 +}
 +
 +impl WordApp {
++    /// Host view state only; opening the tools must not change document access or content.
++    pub fn set_host_editor_tools(&mut self, visible: bool) {
++        self.comment_drafts.project.external_tools = true;
++        self.comment_drafts.project.tools_visible = visible;
++        if visible {
++            self.ui.ribbon_collapsed = false;
++        }
++    }
 +    pub fn enable_host_review(&mut self) {
 +        if !self.canvas.host_comments {
 +            let _ = self.session.run("view.zoom", &json!({"value":"pageWidth"}));
@@ -1400,6 +1417,14 @@ new file mode 100644
 +        self.sync_host_project();
 +        match action {
 +            "configure" => self.configure_host_project(&p),
++            "tools" => {
++                let visible = p.get("visible").and_then(Value::as_bool).ok_or("missing tools visibility")?;
++                if !self.canvas.host_comments || !self.comment_drafts.project.external_tools {
++                    return Err("the host tools are not configured".into());
++                }
++                self.set_host_editor_tools(visible);
++                Ok(json!({"visible":visible}))
++            }
 +            "locate" => self.locate_host_clause(p.get("id").and_then(Value::as_str).ok_or("missing clause id")?),
 +            "outline" => {
 +                let visible = p.get("visible").and_then(Value::as_bool).ok_or("missing outline visibility")?;
@@ -1585,7 +1610,8 @@ new file mode 100644
 +        json!({"fileName":self.session.path.as_ref().and_then(|p|p.file_name()).map(|n|n.to_string_lossy().to_string()).or_else(||self.session.file_name.clone()),"source":source,"complete":comment_threads(&self.session.doc.comments).len()<=2000,"document":document.to_string(),"author":self.session.author,"active":active,"notes":notes,"pages":pages,
 +            "sourceRanges":source_ranges,"clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
 +            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks,"outlineVisible":self.session.view.nav_pane,
-+            "headingOutline":{"revision":self.session.rev(),"items":headings}})
++            "headingOutline":{"revision":self.session.rev(),"items":headings},
++            "editorToolsControlled":self.comment_drafts.project.external_tools,"editorToolsVisible":self.comment_drafts.project.external_tools&&self.comment_drafts.project.tools_visible})
 +    }
 +}
 +
@@ -1678,7 +1704,17 @@ diff --git a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
 diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
 --- a/crates/ui-egui/src/ribbon.rs
 +++ b/crates/ui-egui/src/ribbon.rs
-@@ -115,6 +115,11 @@
+@@ -76,6 +76,9 @@
+ /// Draws the Read toolbar or the full ribbon, switching to and from the contextual Equation and
+ /// Outlining tabs and showing the available tab strip.
+ pub fn show(app: &mut WordApp, ui: &mut Ui) {
++    if app.canvas.host_comments && app.comment_drafts.project.external_tools && !app.comment_drafts.project.tools_visible {
++        return;
++    }
+     let t = Tokens::get(ui.ctx());
+     if app.session.view.read_mode {
+         reading_toolbar(app, ui, t);
+@@ -115,6 +118,11 @@
          } else if !tabs.iter().any(|(n, _)| n == ct) {
              tabs.push((ct.to_string(), false));
          }
@@ -1690,7 +1726,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
      }
      {
          let names: Vec<&str> = tabs.iter().map(|(n, _)| n.as_str()).collect();
-@@ -144,8 +149,10 @@
+@@ -144,8 +152,10 @@
                      let share_button = if level < 2 { share_full } else { 30.0 };
                      let editing = crate::widgets::icon_text_button_width(ui, editing_label, regular(12.0), true, labels);
                      let comment = crate::widgets::icon_text_button_width(ui, comments, regular(12.0), false, labels);
@@ -1703,7 +1739,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
                  };
                  let button_levels = [button_widths(0), button_widths(1), button_widths(2)];
                  let labels: Vec<&str> = tabs.iter().map(|(tab, custom)| if *custom { tab.as_str() } else { tl!(tab) }).collect();
-@@ -186,23 +193,25 @@
+@@ -186,23 +196,25 @@
                              let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
                          }
                          ui.add_space(6.0);
@@ -1746,7 +1782,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
                          let comments_button = if plan.buttons == 0 {
                              crate::widgets::icon_text_button(ui, "comment", comments, regular(12.0))
                          } else {
-@@ -264,6 +273,9 @@
+@@ -264,6 +276,9 @@
                              }
                              if resp.clicked() {
                                  let _ = app.run("ui.tab", json!({"tab": tab}));
@@ -1756,7 +1792,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
                              }
                              if resp.double_clicked() && tab != "File" {
                                  let _ = app.run("ui.collapseRibbon", json!({}));
-@@ -299,6 +311,9 @@
+@@ -299,6 +314,9 @@
                                  for (tab, shown) in left_out {
                                      if ui.selectable_label(app.ui.tab == tab, shown).clicked() {
                                          let _ = app.run("ui.tab", json!({"tab": tab}));
@@ -1766,7 +1802,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
                                          ui.close();
                                      }
                                  }
-@@ -404,3 +419,6 @@
+@@ -404,3 +422,6 @@
  
  #[cfg(test)]
  mod tests;
@@ -1777,13 +1813,86 @@ diff --git a/crates/ui-egui/src/ribbon/rfq_tests.rs b/crates/ui-egui/src/ribbon/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/ribbon/rfq_tests.rs
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,198 @@
 +//! RFQ's shared toolbar policy must survive personal settings and ribbon overflow.
 +use super::*;
 +use egui_kittest::kittest::Queryable;
 +use wordcraft_engine::Session;
 +
 +const REMOVED: [&str; 7] = ["Zotero", "Developer", "Mailings", "References", "Layout", "Design", "File"];
++
++#[test]
++fn rfq_host_editor_tools_startup_and_new_documents_default_to_hidden() {
++    let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("First file")), crate::Services::default());
++    app.enable_host_review();
++    app.set_host_review_permissions(false, false);
++    // The web constructor calls this before painting, after restoring old preferences.
++    app.ui.ribbon_collapsed = false;
++    app.set_host_editor_tools(false);
++    assert_eq!(app.host_review_snapshot(1.0)["editorToolsVisible"], false);
++    app.set_host_editor_tools(true);
++    assert_eq!(app.host_review_snapshot(1.0)["editorToolsVisible"], true);
++    let previous = app.session.document_id().to_string();
++    app.session = Session::new(wordcraft_doc::Document::from_text("Next file"));
++    assert_eq!(app.host_review_snapshot(1.0)["editorToolsVisible"], false);
++    assert!(app.host_review_action(&json!({"document":previous,"action":"tools","params":{"visible":true}})).is_err());
++    assert_eq!(app.session.doc.plain_text(wordcraft_doc::StoryRef::Body), "Next file");
++    assert!(!app.session.dirty);
++}
++
++#[test]
++fn rfq_host_editor_tools_toggle_is_view_only_and_has_no_hidden_space() {
++    fn command(app: &mut WordApp, action: &str, params: Value) -> Result<Value, String> {
++        app.host_review_action(&json!({"document":app.session.document_id().to_string(),"action":action,"params":params}))
++    }
++    for width in [340.0, 1600.0] {
++        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Original text")), crate::Services::default());
++        app.enable_host_review();
++        command(&mut app, "configure", json!({"editable":false,"editDocument":false,"externalTools":true})).unwrap();
++        app.session.dirty = false;
++        let before = serde_json::to_value(&app.session.doc).unwrap();
++        let revision = app.session.rev();
++        let history = app.session.undo_depth();
++        assert_eq!(app.host_review_snapshot(1.0)["editorToolsControlled"], true);
++        assert_eq!(app.host_review_snapshot(1.0)["editorToolsVisible"], false);
++        let mut h = egui_kittest::Harness::builder()
++            .with_size(vec2(width, 500.0))
++            .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++            .build_ui_state(
++                |ui, app: &mut WordApp| {
++                    let before = ui.available_rect_before_wrap();
++                    show(app, ui);
++                    if app.host_review_snapshot(1.0)["editorToolsVisible"] == false {
++                        assert_eq!(ui.available_rect_before_wrap(), before, "a hidden ribbon reserves no space");
++                    }
++                },
++                app,
++            );
++        h.run_steps(3);
++        for tab in ["Home", "Insert", "Draw", "Review", "View", "Help", "Comments", "Share"] {
++            assert!(h.query_by_label(tl!(tab)).is_none(), "{tab} is absent by default");
++        }
++        command(h.state_mut(), "tools", json!({"visible":true})).unwrap();
++        h.run_steps(3);
++        assert_eq!(h.state_mut().host_review_snapshot(1.0)["editorToolsVisible"], true);
++        assert!(!h.state().ui.ribbon_collapsed, "the host toggle exposes the actual tools");
++        assert!(h.query_by_label(tl!("Home")).is_some());
++        for tab in REMOVED {
++            assert!(h.query_by_label(tl!(tab)).is_none(), "{tab} stays hidden");
++        }
++        command(h.state_mut(), "configure", json!({"editable":false,"editDocument":false,"externalTools":true})).unwrap();
++        assert_eq!(h.state_mut().host_review_snapshot(1.0)["editorToolsVisible"], true, "refresh keeps the explicit choice");
++        assert!(h.state_mut().run("text.insert", json!({"text":"blocked"})).is_err(), "showing tools grants no write permission");
++        assert!(command(h.state_mut(), "tools", json!({"visible":"invalid"})).is_err());
++        command(h.state_mut(), "tools", json!({"visible":false})).unwrap();
++        h.run_steps(2);
++        assert!(h.query_by_label(tl!("Home")).is_none());
++        assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
++        assert_eq!(h.state().session.rev(), revision);
++        assert_eq!(h.state().session.undo_depth(), history);
++        assert!(!h.state().session.dirty);
++    }
++}
 +
 +#[test]
 +fn rfq_editing_mode_button_is_hidden_for_both_modes_and_narrow_windows() {

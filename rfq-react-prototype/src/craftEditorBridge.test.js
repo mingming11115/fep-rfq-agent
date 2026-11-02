@@ -13,14 +13,15 @@ test('project editor coordinates native and collaboration comments within one so
   const rows=[{id:'R1',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:1,clause:'1',title:'Safety',original:'Exact source'},
     {id:'R2',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:2,clause:'2',original:'Other source'}];
   let context={rows,comments:[],people:[user],canEditRow:row=>row.id==='R1',editDocument:false,selectedAnchor:makeSourceAnchor(rows[0])};
-  let bridge,notes=[],nextId=10,applied=0,configureFailures=0,outlineVisible=false,dirtyCount=0;const calls=[],states=[],errors=[],selected=[],files=[];
+  let bridge,notes=[],nextId=10,applied=0,configureFailures=0,outlineVisible=false,editorToolsVisible=false,dirtyCount=0;const calls=[],states=[],errors=[],selected=[],files=[];
   const frame=document.getElementById('word-frame');
-  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,headingOutline:{revision:7,items:[{index:0,level:0,text:'Real heading'}]},pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
+  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,editorToolsControlled:true,editorToolsVisible,headingOutline:{revision:7,items:[{index:0,level:0,text:'Real heading'}]},pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
   const send=(type,data={},overrides={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+type,...data},...overrides}));
   const native={postMessage(message){
     calls.push(message);if(message.type==='wordcraft:open'){queueMicrotask(()=>send('reviewState',{payload:JSON.stringify(snapshot())}));return;}
     if(message.type!=='wordcraft:review')return;const request=JSON.parse(message.payload);applied=request.request;let result={};
     if(request.action==='outline')outlineVisible=request.params.visible;
+    if(request.action==='tools')editorToolsVisible=request.params.visible;
     if(request.action==='configure'&&configureFailures>0){
       configureFailures--;
       queueMicrotask(()=>{send('reviewResult',{payload:JSON.stringify({request:request.request,ok:false,error:'Configuration rejected'})});send('reviewState',{payload:JSON.stringify(snapshot())});});
@@ -60,6 +61,15 @@ test('project editor coordinates native and collaboration comments within one so
     assert.equal(dirtyCount,before);
     assert.equal(files.length,0);
     assert.equal(context.comments.length,0);
+    assert.equal(calls.filter(c=>c.type==='wordcraft:open').length,1);
+  });
+  await t.test('Word tools are a view-only native toggle',async()=>{
+    const before=dirtyCount;
+    assert.equal(states.at(-1).editorToolsVisible,false);
+    assert.equal(states.at(-1).editorToolsControlled,true);
+    await bridge.setEditorTools(true);await tick();assert.equal(states.at(-1).editorToolsVisible,true);
+    await bridge.setEditorTools(false);await tick();assert.equal(states.at(-1).editorToolsVisible,false);
+    assert.equal(dirtyCount,before);assert.equal(files.length,0);
     assert.equal(calls.filter(c=>c.type==='wordcraft:open').length,1);
   });
   await t.test('host headings keep their source identity and reject stale navigation without saving',async()=>{

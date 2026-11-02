@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Alert,Button,Empty,Select,Spin} from 'antd';
 import {FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
-import {FileText,Upload} from './icons';
+import {FileText,PencilLine,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
 import CraftResponseAdvice from './CraftResponseAdvice';
@@ -19,6 +19,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
   const [dirty,setDirty]=useState(false),[saving,setSaving]=useState(false),[excerpt,setExcerpt]=useState(false),[expanded,setExpanded]=useState(false),[retry,setRetry]=useState(0);
   const [editorState,setEditorState]=useState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
+  const [editorToolsBusy,setEditorToolsBusy]=useState(false);
   const [backup,setBackup]=useState(null),[association,setAssociation]=useState({}),[frameEpoch,setFrameEpoch]=useState(0);
   const frame=useRef(null),overlay=useRef(null),tools=useRef(null),picker=useRef(null),editor=useRef(null),saveQueue=useRef(null);
   const alive=useRef(true),generation=useRef(0),dirtyRef=useRef(false),pendingSaves=useRef(0),abortLoad=useRef(null);
@@ -99,7 +100,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       }});
     saveQueue.current=queue;
     instance.open(meta.name,bytes);
-    frame.current.src=`${import.meta.env.BASE_URL}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0&author=${encodeURIComponent(user?.name||'RFQ 用户')}`;
+    frame.current.src=`${import.meta.env.BASE_URL}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0&author=${encodeURIComponent(user?.name||'RFQ 用户')}${engine==='wordcraft'?'&tools=host':''}`;
     return()=>{abort.abort();queue.dispose();instance.destroy();if(editor.current===instance)editor.current=null;if(saveQueue.current===queue)saveQueue.current=null;};
   },[bytes,meta?.id,reference?.id,user?.id,frameEpoch]);
   useEffect(()=>{editor.current?.refresh();},[allComments,rows,selectedAnchor?.requirementId,activeCommentId,canEditRow,canManage]);
@@ -129,6 +130,13 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     setBytes(null);setMeta(null);setEditorState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
     setFrameEpoch(value=>value+1);setRetry(value=>value+1);
   }
+  async function toggleEditorTools(){
+    const instance=editor.current;if(!instance||editorToolsBusy)return;
+    setEditorToolsBusy(true);
+    try{await instance.setEditorTools(!editorState.editorToolsVisible);}
+    catch(cause){if(alive.current)setError(cause.message);}
+    finally{if(alive.current)setEditorToolsBusy(false);}
+  }
   const sourceStatus=editorState.source?.status||'waiting';
   const fileState=loading?'loading':!reference?'missing':!bytes?'unopened':saving?'saving':dirty?'dirty':'saved';
   const fileStateText={loading:'文件加载中',missing:'未关联原件',unopened:'文件未打开',saving:'文件保存中',dirty:'文件未保存',saved:'文件已保存'}[fileState];
@@ -139,7 +147,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
     <div className={`office-toolbar ${toolbar?'rfq-document-toolbar':''}`} role={toolbar?'toolbar':undefined} aria-label={toolbar?'文档工具栏':undefined}>
       {toolbar?<div className="office-title rfq-document-identity"><div className="rfq-document-file">{toolbar.fileSelector}</div><span className="rfq-document-version">{source.sourceVersion}</span><small className={`rfq-file-state is-${fileState}`} role="status" aria-label="文件保存状态" title={`${fileStateText} · 批阅副本 · ${accessText} · ${fileName}`}><i aria-hidden="true"/><span className="rfq-file-state-label">{fileStateText}</span></small></div>:<div className="office-title"><FileText size={17}/><div><strong>{fileName}</strong><small role="status">批阅副本 · {accessText} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div>}
-      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div>
+      <div className="office-actions">{toolbar?.actions}{toolbar&&meta?.fileType==='docx'&&<Button size="small" className={editorState.editorToolsVisible?'rfq-editor-tools active':'rfq-editor-tools'} aria-label="编辑工具" title={editorState.editorToolsVisible?'收起编辑工具':'展开编辑工具'} aria-pressed={Boolean(editorState.editorToolsVisible)} disabled={!editorState.ready||!editorState.editorToolsControlled||excerpt||editorToolsBusy} loading={editorToolsBusy} onClick={toggleEditorTools}><PencilLine size={14}/><span className="rfq-editor-tools-label">编辑工具</span></Button>}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div>
     </div>
     {directory}
     {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving} onClick={()=>{if(backup&&dirty&&editor.current){editor.current.save().catch(cause=>setError(cause.message));return;}setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button></div>}/>}
