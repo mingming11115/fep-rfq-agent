@@ -108,7 +108,7 @@ function SourceExcerptPane({ file, rows, selectedAnchor, showResponses = true, r
         title={(file?.name || active?.source || '客户要求').replace(/\.[^.]+$/, '')}
         version={selectedAnchor.sourceVersion} subtitle={`客户 RFQ · ${word ? '技术要求' : '要求来源'}`}
         footer={real ? '原文节选 · 完整内容以客户原件为准' : '当前为项目条款摘录，未读取上传 Word 的完整排版'}
-        showAnnotations={showResponses} zoom={zoom}
+        showAnnotations={showResponses} focusCurrentAnnotation zoom={zoom}
         onSelectRow={row => onSelectAnchor(makeSourceAnchor(row))}
         onNewComment={onQuote ? startNewComment : undefined}
         onDiscuss={onQuote ? row => onQuote(row.sourceOriginal ?? row.original, makeSourceAnchor(row)) : undefined}

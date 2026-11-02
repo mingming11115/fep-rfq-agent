@@ -84,7 +84,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.match(header.textContent,/V1/);
     assert.match(header.querySelector('[aria-label="文件保存状态"]').textContent,/文件已保存/);
     assert.ok(container.querySelector('[aria-label="查看条款摘录"]'));
-    assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]')?.textContent||'',/Comply/);
+    assert.match(container.querySelector('[aria-label="原文件旁的应答标注"]')?.textContent||'',/Comply/);
     const {calls,emit,snapshot,setLocation,holdLocate,releaseLocate}=await connectNative(frame,ref);
     assert.equal(container.querySelector('button[aria-label="文档目录"]'),null,'the duplicate source-pane directory entry is removed');
     assert.equal(outlines.at(-1).items[0].text,'Native document heading');
@@ -152,7 +152,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     await act(async()=>{container.querySelector('[aria-label="还原原文件区"]').click();await settle();});
     assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
     await renderRow('R2');
-    assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]').textContent,/当前方案达不到要求/);
+    assert.match(container.querySelector('[aria-label="原文件旁的应答标注"]').textContent,/当前方案达不到要求/);
     assert.equal(container.querySelector('iframe'),frame);
     assert.equal(frame.src,editorUrl);
     assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
