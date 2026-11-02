@@ -49,7 +49,10 @@ for(const engine of ['wordcraft','pdfcraft'])test(`${engine} margin opens a sing
     const count=opened.length;send('reviewState',snapshot());await tick();assert.equal(opened.length,count,'geometry echoes do not reopen editors');
     editRequest++;editing=1;send('reviewState',snapshot());await tick();
     assert.equal(opened.at(-1).id,existing.id);assert.equal(opened.at(-1).options.edit,true);
-    document.querySelector('[data-open-discussion="2"]').click();await tick();
+    const selectsBefore=commands.filter(command=>command.action==='select').length;
+    assert.equal(bridge.openFileComment('native:2',{locate:true}),true);await tick();
+    assert.equal(commands.filter(command=>command.action==='select').length,selectsBefore+1,'a summary in the shared column locates its original native anchor');
+    assert.equal(commands.filter(command=>command.action==='select').at(-1).params.id,2);
     assert.ok(states.at(-1).unlinked.some(note=>note.nativeKey==='native:2'),'an explicitly clicked pre-existing empty note offers association');
     assert.equal(bridge.associate('native:2','R'),true);await tick();
     assert.equal(opened.at(-1).id,context.comments.find(c=>c.nativeRef.key==='native:2').id);

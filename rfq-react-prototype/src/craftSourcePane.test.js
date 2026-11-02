@@ -44,9 +44,9 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     // the native message boundary; React and the project bridge stay real.
     const native={},engine=meta.fileType==='pdf'?'pdfcraft':'wordcraft',calls=[];
     Object.defineProperty(frame,'contentWindow',{configurable:true,value:native});
-    let applied=0,outlineVisible=false,editorToolsVisible=false,locationStatus='unsupported',locationId='R',holdNextLocate=false,pendingLocate=null;
+    let applied=0,outlineVisible=false,editorToolsVisible=false,locationStatus='unsupported',locationId='R',holdNextLocate=false,pendingLocate=null,nativeNotes=[];
     const emit=(type,data)=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:engine+':'+type,...data}}));
-    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,editorToolsControlled:engine==='wordcraft',editorToolsVisible,headingOutline:{revision:2,items:[{index:0,level:0,text:'Native document heading'}]},notes:[],pages:[],active:null,source:{status:locationStatus,selectedId:locationId}});
+    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,editorToolsControlled:engine==='wordcraft',editorToolsVisible,headingOutline:{revision:2,items:[{index:0,level:0,text:'Native document heading'}]},notes:nativeNotes,pages:[],active:null,source:{status:locationStatus,selectedId:locationId}});
     native.postMessage=message=>{
       calls.push(message);
       if(message.type===engine+':open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));
@@ -65,7 +65,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(calls.find(call=>call.type===engine+':open')?.name,meta.name);
     assert.ok(!container.textContent.includes('正在打开原文件'));
     assert.ok(!container.querySelector('.office-loading'));
-    return {calls,emit,snapshot,holdLocate(){holdNextLocate=true;},releaseLocate(){assert.ok(pendingLocate);const respond=pendingLocate;pendingLocate=null;respond();},setLocation(status,id=locationId){locationStatus=status;locationId=id;emit('reviewState',{payload:JSON.stringify(snapshot())});}};
+    return {calls,emit,snapshot,setNotes(notes){nativeNotes=notes;emit('reviewState',{payload:JSON.stringify(snapshot())});},holdLocate(){holdNextLocate=true;},releaseLocate(){assert.ok(pendingLocate);const respond=pendingLocate;pendingLocate=null;respond();},setLocation(status,id=locationId){locationStatus=status;locationId=id;emit('reviewState',{payload:JSON.stringify(snapshot())});}};
   };
   const renderRow=async id=>{await act(async()=>{root.render(React.createElement(CraftSourcePane,{toolbar,directory:directoryPanel,file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:id},responsePreview:{id,conclusion:'不满足',reason:'当前方案达不到要求'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});};
   try{
@@ -83,9 +83,21 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.ok(!header.textContent.includes('real.docx'),'the native file title does not duplicate the selected source');
     assert.match(header.textContent,/V1/);
     assert.match(header.querySelector('[aria-label="文件保存状态"]').textContent,/文件已保存/);
-    assert.ok(container.querySelector('[aria-label="查看条款摘录"]'));
+    assert.ok(!container.querySelector('[aria-label="查看条款摘录"]'));
     assert.match(container.querySelector('[aria-label="原文件旁的应答标注"]')?.textContent||'',/Comply/);
-    const {calls,emit,snapshot,setLocation,holdLocate,releaseLocate}=await connectNative(frame,ref);
+    const {calls,emit,snapshot,setNotes,setLocation,holdLocate,releaseLocate}=await connectNative(frame,ref);
+    const nativeNote={id:1,nativeKey:'word-comment:1',author:'Alex',text:'New native discussion',quote:'Original source',clauseId:'R',color:0,ranges:[],replies:[],resolved:false};
+    await act(async()=>{setNotes([nativeNote]);await settle();});
+    const responseNote=container.querySelector('[data-response-note="R"]');
+    const fileNote=container.querySelector('[data-native-note="word-comment:1"]');
+    assert.ok(fileNote,'new file comments appear alongside response annotations');
+    assert.equal(fileNote.parentElement,responseNote.parentElement,'both kinds of notes use one column and one scrolling list');
+    assert.equal(container.querySelector('.original-comments [data-note]'),null,'the native overlay does not duplicate a second comment column');
+    await act(async()=>{setNotes([{...nativeNote,text:'Updated discussion',resolved:true,replies:[{text:'A reply',author:'Reviewer'}]}]);await settle();});
+    assert.match(container.querySelector('[data-native-note]').textContent,/Updated discussion/);
+    assert.match(container.querySelector('[data-native-note]').textContent,/已解决/);
+    await act(async()=>{setNotes([]);await settle();});
+    assert.equal(container.querySelector('[data-native-note]'),null,'deleted native comments leave the shared list');
     assert.equal(container.querySelector('button[aria-label="文档目录"]'),null,'the duplicate source-pane directory entry is removed');
     assert.equal(outlines.at(-1).items[0].text,'Native document heading');
     await act(async()=>{await outlines.at(-1).navigateHeading({document:ref.id+'-session',revision:2,index:0});await settle();});
@@ -96,10 +108,6 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     const editorTools=container.querySelector('[aria-label="编辑工具"]');assert.ok(editorTools);
     assert.equal(editorTools.getAttribute('aria-pressed'),'false');
     await act(async()=>{editorTools.click();await settle();});
-    assert.equal(editorTools.getAttribute('aria-pressed'),'true');
-    await act(async()=>{container.querySelector('[aria-label="查看条款摘录"]').click();await settle();});
-    assert.equal(editorTools.disabled,true,'excerpt mode cannot toggle hidden native tools');
-    await act(async()=>{container.querySelector('[aria-label="返回原文件"]').click();await settle();});
     assert.equal(editorTools.getAttribute('aria-pressed'),'true');
     assert.equal(editorTools.disabled,false);
     await act(async()=>{editorTools.click();await settle();});
@@ -126,7 +134,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     for(const status of ['missing','ambiguous','page','unsupported']){
       await act(async()=>{setLocation(status,'R');await settle();});await advance(4000);
       assert.equal(container.querySelector('.office-clause-status')?.dataset.clauseStatus,status,'a result requiring verification stays visible');
-      assert.ok(noticeAction('重新定位'));assert.ok(noticeAction('查看摘录'));
+      assert.ok(noticeAction('重新定位'));assert.equal(noticeAction('查看摘录'),undefined);
     }
     const locateCount=()=>calls.filter(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='locate').length;
     const beforeRetry=locateCount();
@@ -135,9 +143,6 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(container.querySelector('.office-clause-status')?.dataset.clauseStatus,'unsupported','warning stays visible while retry is pending');
     assert.equal(noticeAction('重新定位').disabled,true);assert.equal(locateButton.disabled,true);
     await act(async()=>{releaseLocate();await settle();});assert.equal(locateButton.disabled,false);
-    await act(async()=>{noticeAction('查看摘录').click();await settle();});assert.equal(locateButton.disabled,true);
-    assert.equal(Boolean(container.querySelector('.office-clause-status')),false,'excerpt mode hides native location warnings');
-    await act(async()=>{container.querySelector('[aria-label="返回原文件"]').click();await settle();});assert.equal(locateButton.disabled,false);
     assert.equal(container.querySelector('iframe'),frame);assert.equal(saves.length,0);assert.equal(window.__rfqOfficeUnsaved.dirty,false);
     await act(async()=>{setLocation('matched','OTHER');await settle();});
     assert.equal(Boolean(container.querySelector('.office-clause-status')),false,'another clause cannot provide the current success');
@@ -196,11 +201,14 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     await act(async()=>{root.unmount();});
     const second=createRoot(container);
     responseMeta={...ref,id:'pdf-id',fileId:'PDF',name:'real.pdf',fileType:'pdf'};
-    await act(async()=>{second.render(React.createElement(CraftSourcePane,{file:{name:'real.pdf',craft:responseMeta},source:{...source,fileId:'PDF'},user,canManage:true,rows:[],allComments:[],canEditRow:()=>true,onProjectCommentsChange:()=>{}}));});
+    await act(async()=>{second.render(React.createElement(CraftSourcePane,{file:{name:'real.pdf',craft:responseMeta},source:{...source,fileId:'PDF'},user,canManage:true,rows:[{...rows[0],sourceFileId:'PDF'}],selectedAnchor:{...source,fileId:'PDF',requirementId:'R'},allComments:[],canEditRow:()=>true,onProjectCommentsChange:()=>{}}));});
     await act(async()=>await settle());
     const pdfFrame=container.querySelector('iframe');
     assert.equal(new URL(pdfFrame.src).pathname,'/craft-editors/pdfcraft-classic/index.html');
-    await connectNative(pdfFrame,responseMeta);
+    const pdfNative=await connectNative(pdfFrame,responseMeta);
+    await act(async()=>{pdfNative.setNotes([{...nativeNote,nativeKey:'pdf-comment:1'}]);await settle();});
+    assert.equal(container.querySelector('[data-native-note="pdf-comment:1"]').parentElement,container.querySelector('[data-response-note="R"]').parentElement,'PDF uses the same shared comment column');
+    assert.equal(container.querySelector('.original-comments [data-note]'),null);
     assert.equal(container.querySelector('button[aria-label="文档目录"]'),null);
     assert.equal(container.querySelector('[aria-label="编辑工具"]'),null,'PDF has no Word toolbar switch');
     assert.equal(container.querySelector('.office-savebar'),null,'PDF also omits the host operation row');
@@ -209,7 +217,8 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     await act(async()=>{third.render(React.createElement(CraftSourcePane,{file:{name:'missing.docx'},source:{...source,fileId:'MISSING'},user,canManage:false,rows,allComments:[],canEditRow:()=>false},React.createElement('div',null,'Existing excerpts')));});
     await act(async()=>await settle());
     assert.match(container.textContent,/尚未关联原文件/);assert.ok(![...container.querySelectorAll('button')].some(b=>b.textContent.includes('上传对应原文件')));
-    assert.equal(container.querySelector('.office-excerpt').hidden,false,'a card from a file without uploaded bytes must show its own source excerpt');
+    assert.equal(container.querySelector('.office-excerpt'),null,'missing originals show the upload guidance without an excerpt view');
+    assert.match(container.querySelector('.office-missing').textContent,/请由项目 SR 关联原件/);
     await act(async()=>third.unmount());
   }finally{globalThis.fetch=previousFetch;await window.happyDOM.cancelAsync();}
 });
