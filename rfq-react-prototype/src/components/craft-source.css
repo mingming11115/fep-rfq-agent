@@ -34,6 +34,10 @@
 .office-title .rfq-file-state.is-saved{color:#3d936e}
 .office-title .rfq-file-state.is-dirty,.office-title .rfq-file-state.is-unopened{color:#bd7b24}
 .office-title .rfq-file-state.is-saving{color:#1677ff}
+.office-title .rfq-file-state.is-failed{color:#cf3d3d}
+.rfq-file-menu{z-index:1100}
+.rfq-file-menu-save{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.rfq-file-menu-save kbd{font:11px inherit;color:#7b8798;white-space:nowrap}
 .rfq-document-toolbar .office-actions{gap:4px;align-items:center}
 .rfq-document-toolbar .office-actions>.ant-btn{min-width:26px;height:26px;padding:0 5px;font-size:11px;border-color:transparent;box-shadow:none}
 .rfq-document-toolbar .office-actions>.active,.rfq-document-toolbar .is-active{background:#edf3ff;color:#1677ff}

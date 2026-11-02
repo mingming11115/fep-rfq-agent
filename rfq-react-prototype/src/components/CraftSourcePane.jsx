@@ -1,8 +1,8 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {Alert,Button,Empty,Spin} from 'antd';
+import {Alert,Button,Dropdown,Empty,Spin} from 'antd';
 import {AimOutlined,FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
-import {FileText,PencilLine,Upload} from './icons';
-import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftBlob,supportsCraft} from '../craftClient';
+import {FileText,MoreHorizontal,PencilLine,Upload} from './icons';
+import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftFile,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
 import CraftResponseAdvice from './CraftResponseAdvice';
 import {AnnotationFilterView} from './annotationFilterView';
@@ -24,6 +24,8 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const [locationNotice,setLocationNotice]=useState(null),[locationConfirmation,setLocationConfirmation]=useState(0),[locateRequest,setLocateRequest]=useState(null);
   const locationTimer=useRef(null);
   const [backup,setBackup]=useState(null),[frameEpoch,setFrameEpoch]=useState(0);
+  const [moreOpen,setMoreOpen]=useState(false),[requestingSave,setRequestingSave]=useState(false),[saveFailed,setSaveFailed]=useState(false),[downloading,setDownloading]=useState(false),[downloadError,setDownloadError]=useState(null);
+  const moreTrigger=useRef(null),saveRequest=useRef(false),downloadRequest=useRef(false);
   const frame=useRef(null),overlay=useRef(null),tools=useRef(null),picker=useRef(null),editor=useRef(null),saveQueue=useRef(null);
   const alive=useRef(true),generation=useRef(0),dirtyRef=useRef(false),pendingSaves=useRef(0),abortLoad=useRef(null);
   const latest=useRef();latest.current={rows,comments:allComments,people,canEditRow,editDocument:canManage,selectedAnchor,activeCommentId,onProjectCommentsChange,onSelectAnchor,onSelectComment,onUnlinkedComment};
@@ -87,10 +89,10 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
         if(!alive.current)return;
         const blob=new Blob([packet.bytes],{type:meta.fileType==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
         setBackup({blob,name:packet.name});
-        if(!packet.review||packet.review.document!==packet.document){markDirty();setError('无法确认这份批阅稿的来源，已保留本地备份。请下载备份后重新打开项目原件。');return;}
-        const serial=generation.current;pendingSaves.current++;setSaving(true);
+        if(!packet.review||packet.review.document!==packet.document){markDirty();setSaveFailed(true);setError('无法确认这份批阅稿的来源，已保留本地备份。请下载备份后重新打开项目原件。');return;}
+        const serial=generation.current;pendingSaves.current++;setSaving(true);setSaveFailed(false);
         return saveQueue.current.enqueue(packet.bytes,serial,{review:packet.review}).catch(cause=>{
-          if(alive.current){dirtyRef.current=true;setDirty(true);setError(cause.status===409?'原文件已有更新，当前修改已保留。请先下载本地备份，再重新打开最新批阅稿。':cause.message);}
+          if(alive.current){dirtyRef.current=true;setDirty(true);setSaveFailed(true);setError(cause.status===409?'原文件已有更新，当前修改已保留。请先下载本地备份，再重新打开最新批阅稿。':cause.message);}
         }).finally(()=>{pendingSaves.current--;if(alive.current)setSaving(pendingSaves.current>0);});
       }});
     editor.current=instance;
@@ -98,7 +100,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       persist:(ref,content,revision)=>saveCraftReview(ref,content,revision,abort.signal),
       onSaved:(saved,details)=>{
         if(!alive.current)return;
-        setMeta(saved);instance.markSaved(saved,details.review);setError('');
+        setMeta(saved);instance.markSaved(saved,details.review);setError('');setSaveFailed(false);
         if(details.clean&&instance.checkpointCovers(details.review)){dirtyRef.current=false;setDirty(false);if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=false;}
         else{dirtyRef.current=true;setDirty(true);if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=true;}
       }});
@@ -127,11 +129,11 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     catch(cause){if(alive.current&&cause.name!=='AbortError'){setError(cause.message);setLoading(false);}}
   }
   function reopen(){
-    if(saving||loading)return;
+    if(saving||loading||saveRequest.current)return;
     if(dirtyRef.current&&!window.confirm('重新打开会放弃未保存的正文及未关联批注；协作记录中的批注会保留并重新同步。请先下载本地备份；仍要重新打开吗？'))return;
     generation.current++;dirtyRef.current=false;setDirty(false);
     if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=false;
-    setBytes(null);setMeta(null);setEditorState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
+    setBytes(null);setMeta(null);setSaveFailed(false);setEditorState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
     setFrameEpoch(value=>value+1);setRetry(value=>value+1);
   }
   async function toggleEditorTools(){
@@ -141,6 +143,34 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     catch(cause){if(alive.current)setError(cause.message);}
     finally{if(alive.current)setEditorToolsBusy(false);}
   }
+  async function saveFile(){
+    if(!canSaveFile||saveRequest.current||pendingSaves.current)return;
+    saveRequest.current=true;setRequestingSave(true);
+    try{await editor.current.save();}
+    catch(cause){if(alive.current){setSaveFailed(true);setError(cause.message);}}
+    finally{saveRequest.current=false;if(alive.current)setRequestingSave(false);}
+  }
+  function retryFile(){
+    if(saveFailed||backup&&dirty){void saveFile();return;}
+    setError('');if(editor.current)editor.current.retry();else setRetry(value=>value+1);
+  }
+  async function downloadFile(kind){
+    if(!canDownloadFile||downloadRequest.current)return;
+    downloadRequest.current=true;setDownloading(true);setDownloadError(null);
+    try{await downloadCraftFile({...reference,name:meta.name},kind);}
+    catch(cause){if(alive.current)setDownloadError({kind,message:cause.message});}
+    finally{downloadRequest.current=false;if(alive.current)setDownloading(false);}
+  }
+  useEffect(()=>setMoreOpen(false),[excerpt,expanded]);
+  useEffect(()=>{
+    if(!moreOpen)return;
+    const element=frame.current;let owner;
+    const close=()=>setMoreOpen(false);
+    const unbind=()=>{owner?.removeEventListener('pointerdown',close);owner?.removeEventListener('focusin',close);};
+    const bind=()=>{unbind();try{owner=element?.contentDocument;}catch{owner=null;}owner?.addEventListener('pointerdown',close);owner?.addEventListener('focusin',close);};
+    bind();element?.addEventListener('load',bind);
+    return()=>{unbind();element?.removeEventListener('load',bind);};
+  },[moreOpen]);
   function clearLocationNotice(){window.clearTimeout(locationTimer.current);locationTimer.current=null;setLocationNotice(null);}
   async function locateClause(id=latest.current.selectedAnchor?.requirementId){
     const instance=editor.current;
@@ -164,8 +194,10 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     return()=>{window.clearTimeout(timer);if(locationTimer.current===timer)locationTimer.current=null;};
   },[canLocate,sourceStatus,locationKey,locationConfirmation]);
   const showLocationNotice=canLocate&&sourceStatus!=='waiting'&&(sourceStatus!=='matched'||!locating&&locationNotice?.key===locationKey);
-  const fileState=loading?'loading':!reference?'missing':!bytes?'unopened':saving?'saving':dirty?'dirty':'saved';
-  const fileStateText={loading:'文件加载中',missing:'未关联原件',unopened:'文件未打开',saving:'文件保存中',dirty:'文件未保存',saved:'文件已保存'}[fileState];
+  const canSaveFile=Boolean(reference&&bytes&&!loading&&!excerpt&&editorState.ready&&editorState.sessionKey===JSON.stringify([reference.id,frameEpoch])&&(canManage||rows.some(row=>canEditRow(row))));
+  const canDownloadFile=Boolean(reference&&meta&&!loading);
+  const fileState=loading?'loading':!reference?'missing':!bytes?'unopened':saving||requestingSave?'saving':saveFailed?'failed':dirty?'dirty':'saved';
+  const fileStateText={loading:'文件加载中',missing:'未关联原件',unopened:'文件未打开',saving:'文件保存中',failed:'文件保存失败',dirty:'文件未保存',saved:'文件已保存'}[fileState];
   const fileName=meta?.name||reference?.name||file?.name||'客户原文件';
   const accessText=canManage?'可编辑原文':rows.some(row=>canEditRow(row))?'条款批注':'只读';
   const locationText={waiting:'正在连接原文定位…',matched:'已定位当前条款 · 原文与卡片联动',page:'已跳转来源页 · 请核对条款位置',missing:'未找到唯一原文，请核对文件或使用条款摘录',ambiguous:'原文有多处匹配，请核对条款位置',unsupported:'当前原文暂不支持定位'}[sourceStatus]||'正在定位条款…';
@@ -173,10 +205,12 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
     <div className={`office-toolbar ${toolbar?'rfq-document-toolbar':''}`} role={toolbar?'toolbar':undefined} aria-label={toolbar?'文档工具栏':undefined}>
       {toolbar?<div className="office-title rfq-document-identity"><div className="rfq-document-file">{toolbar.fileSelector}</div><span className="rfq-document-version">{source.sourceVersion}</span><small className={`rfq-file-state is-${fileState}`} role="status" aria-label="文件保存状态" title={`${fileStateText} · 批阅副本 · ${accessText} · ${fileName}`}><i aria-hidden="true"/><span className="rfq-file-state-label">{fileStateText}</span></small></div>:<div className="office-title"><FileText size={17}/><div><strong>{fileName}</strong><small role="status">批阅副本 · {accessText} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div>}
-      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label="定位当前条款" title={locating?'正在定位当前条款':'定位当前条款'} disabled={!canLocate||locating} loading={locating} icon={<AimOutlined/>} onClick={()=>locateClause()}/>{toolbar&&meta?.fileType==='docx'&&<Button size="small" className={editorState.editorToolsVisible?'rfq-editor-tools active':'rfq-editor-tools'} aria-label="编辑工具" title={editorState.editorToolsVisible?'收起编辑工具':'展开编辑工具'} aria-pressed={Boolean(editorState.editorToolsVisible)} disabled={!editorState.ready||!editorState.editorToolsControlled||excerpt||editorToolsBusy} loading={editorToolsBusy} onClick={toggleEditorTools}><PencilLine size={14}/><span className="rfq-editor-tools-label">编辑工具</span></Button>}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div>
+      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label="定位当前条款" title={locating?'正在定位当前条款':'定位当前条款'} disabled={!canLocate||locating} loading={locating} icon={<AimOutlined/>} onClick={()=>locateClause()}/>{toolbar&&meta?.fileType==='docx'&&<Button size="small" className={editorState.editorToolsVisible?'rfq-editor-tools active':'rfq-editor-tools'} aria-label="编辑工具" title={editorState.editorToolsVisible?'收起编辑工具':'展开编辑工具'} aria-pressed={Boolean(editorState.editorToolsVisible)} disabled={!editorState.ready||!editorState.editorToolsControlled||excerpt||editorToolsBusy} loading={editorToolsBusy} onClick={toggleEditorTools}><PencilLine size={14}/><span className="rfq-editor-tools-label">编辑工具</span></Button>}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button>
+      <Dropdown open={moreOpen} onOpenChange={setMoreOpen} trigger={['click']} placement="bottomRight" destroyOnHidden overlayClassName="rfq-file-menu" menu={{items:[{key:'save',disabled:!canSaveFile||saving||requestingSave,label:<span className="rfq-file-menu-save"><span>保存批阅稿</span><kbd>Ctrl/Cmd+S</kbd></span>},{type:'divider'},{key:'original',disabled:!canDownloadFile||downloading,label:'下载原件'},{key:'review',disabled:!canDownloadFile||downloading,label:'下载已保存批阅稿'}],onClick:({key})=>{setMoreOpen(false);if(key==='save')void saveFile();else void downloadFile(key);},onKeyDown:event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setMoreOpen(false);moreTrigger.current?.focus();}}}}><Button ref={moreTrigger} size="small" aria-label="更多文件操作" title="更多" aria-haspopup="menu" aria-expanded={moreOpen} icon={<MoreHorizontal size={14}/>}/></Dropdown></div>
     </div>
     {directory}
-    {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving} onClick={()=>{if(backup&&dirty&&editor.current){editor.current.save().catch(cause=>setError(cause.message));return;}setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button></div>}/>}
+    {downloadError&&<Alert type="error" showIcon message={downloadError.message} action={<Button size="small" disabled={downloading||!canDownloadFile} onClick={()=>downloadFile(downloadError.kind)}>重试下载</Button>}/>}
+    {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||requestingSave||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving||requestingSave||Boolean((saveFailed||backup&&dirty)&&!canSaveFile)} onClick={retryFile}>重试</Button></div>}/>}
     {!loading&&!reference&&excerpt&&<Alert type="info" showIcon message="当前来源文件尚未关联原文件，已显示对应条款摘录" action={canManage?<Button size="small" onClick={()=>picker.current?.click()}>上传对应原文件</Button>:undefined}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
     {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Button size="small" onClick={()=>editor.current?.openFileComment(note.nativeKey)}>查看批注</Button></div>)}</div>}
