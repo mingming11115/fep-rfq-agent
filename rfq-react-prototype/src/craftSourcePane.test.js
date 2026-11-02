@@ -29,14 +29,15 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     // the native message boundary; React and the project bridge stay real.
     const native={},engine=meta.fileType==='pdf'?'pdfcraft':'wordcraft',calls=[];
     Object.defineProperty(frame,'contentWindow',{configurable:true,value:native});
-    let applied=0;
+    let applied=0,outlineVisible=false;
     const emit=(type,data)=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:engine+':'+type,...data}}));
-    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,notes:[],pages:[],active:null,source:{status:'unsupported'}});
+    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,notes:[],pages:[],active:null,source:{status:'unsupported'}});
     native.postMessage=message=>{
       calls.push(message);
       if(message.type===engine+':open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));
       if(message.type===engine+':review'){
         const request=JSON.parse(message.payload);applied=request.request;
+        if(request.action==='outline')outlineVisible=request.params.visible;
         queueMicrotask(()=>{emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});
       }
     };
@@ -57,6 +58,14 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.match(container.textContent,/保存原文/);assert.match(container.textContent,/条款摘录/);
     assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]')?.textContent||'',/Comply/);
     const calls=await connectNative(frame,ref);
+    const directory=container.querySelector('button[aria-label="文档目录"]');
+    assert.ok(directory,'Word provides a separate document directory');
+    await act(async()=>{directory.click();await settle();});
+    assert.equal(directory.getAttribute('aria-pressed'),'true');
+    assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='outline'&&JSON.parse(call.payload).params.visible===true));
+    assert.ok(!container.textContent.includes('有修改，尚未保存'));
+    await act(async()=>{directory.click();await settle();});
+    assert.equal(directory.getAttribute('aria-pressed'),'false');
     await act(async()=>{container.querySelector('[data-response-note="R"] .wc-note-body').click();await settle();});
     assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='locate'&&JSON.parse(call.payload).params.id==='R'),'clicking even the current advice must explicitly locate the native source');
     const editorUrl=frame.src;
@@ -74,6 +83,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     const pdfFrame=container.querySelector('iframe');
     assert.equal(new URL(pdfFrame.src).pathname,'/craft-editors/pdfcraft-classic/index.html');
     await connectNative(pdfFrame,responseMeta);
+    assert.equal(container.querySelector('button[aria-label="文档目录"]'),null);
     await act(async()=>second.unmount());
     const third=createRoot(container);
     await act(async()=>{third.render(React.createElement(CraftSourcePane,{file:{name:'missing.docx'},source:{...source,fileId:'MISSING'},user,canManage:false,rows,allComments:[],canEditRow:()=>false},React.createElement('div',null,'Existing excerpts')));});

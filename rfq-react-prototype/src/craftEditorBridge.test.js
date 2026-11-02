@@ -10,16 +10,17 @@ test('project editor coordinates native and collaboration comments within one so
   const document=window.document;document.write(await readFile(new URL('../../demos/craft-review/site/classic.html',import.meta.url),'utf8'));
   Object.assign(globalThis,{window,document,location:window.location,ResizeObserver:class{observe(){}disconnect(){}},requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}});
   const source={projectId:'P',fileId:'F',sourceVersion:'V1'},user={id:'actor',name:'Alex'};
-  const rows=[{id:'R1',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:1,clause:'1',original:'Exact source'},
+  const rows=[{id:'R1',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:1,clause:'1',title:'Safety',original:'Exact source'},
     {id:'R2',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:2,clause:'2',original:'Other source'}];
   let context={rows,comments:[],people:[user],canEditRow:row=>row.id==='R1',editDocument:false,selectedAnchor:makeSourceAnchor(rows[0])};
-  let bridge,notes=[],nextId=10,applied=0,configureFailures=0;const calls=[],states=[],errors=[],selected=[],files=[];
+  let bridge,notes=[],nextId=10,applied=0,configureFailures=0,outlineVisible=false,dirtyCount=0;const calls=[],states=[],errors=[],selected=[],files=[];
   const frame=document.getElementById('word-frame');
-  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
+  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
   const send=(type,data={},overrides={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+type,...data},...overrides}));
   const native={postMessage(message){
     calls.push(message);if(message.type==='wordcraft:open'){queueMicrotask(()=>send('reviewState',{payload:JSON.stringify(snapshot())}));return;}
     if(message.type!=='wordcraft:review')return;const request=JSON.parse(message.payload);applied=request.request;let result={};
+    if(request.action==='outline')outlineVisible=request.params.visible;
     if(request.action==='configure'&&configureFailures>0){
       configureFailures--;
       queueMicrotask(()=>{send('reviewResult',{payload:JSON.stringify({request:request.request,ok:false,error:'Configuration rejected'})});send('reviewState',{payload:JSON.stringify(snapshot())});});
@@ -39,7 +40,7 @@ test('project editor coordinates native and collaboration comments within one so
   bridge=createCraftProjectEditor({frame,root:document.getElementById('original-comments'),tools:document.getElementById('review-tools'),
     source,reference:{id:'backend-file'},revision:0,user,engine:'wordcraft',getContext:()=>context,
     onCommentsChange:update=>{context={...context,comments:typeof update==='function'?update(context.comments):update};},
-    onState:state=>states.push(state),onError:message=>errors.push(message),onDirty:()=>{},onSave:file=>files.push(file),
+    onState:state=>states.push(state),onError:message=>errors.push(message),onDirty:()=>dirtyCount++,onSave:file=>files.push(file),
     onSelectAnchor:anchor=>selected.push(anchor.requirementId),onSelectComment:(id)=>selected.push(id)});
   const tick=async()=>{for(let i=0;i<80;i++)await Promise.resolve();};
   await t.test('only its same-origin iframe can open the file and provide project state',async()=>{
@@ -48,6 +49,18 @@ test('project editor coordinates native and collaboration comments within one so
     send('ready');await tick();assert.equal(calls[0].type,'wordcraft:open');
     const configure=calls.filter(c=>c.type==='wordcraft:review').map(c=>JSON.parse(c.payload)).find(c=>c.action==='configure');
     assert.equal(configure.params.targets[0].page,0);assert.equal(configure.params.targets[0].editable,true);assert.equal(configure.params.targets[1].editable,false);
+    assert.equal(configure.params.targets[0].title,'Safety');
+  });
+  await t.test('a separate outline changes viewing state without dirtying or saving the document',async()=>{
+    const before=dirtyCount;
+    await bridge.setOutline(true);await tick();
+    assert.equal(states.at(-1).outlineVisible,true);
+    await bridge.setOutline(false);await tick();
+    assert.equal(states.at(-1).outlineVisible,false);
+    assert.equal(dirtyCount,before);
+    assert.equal(files.length,0);
+    assert.equal(context.comments.length,0);
+    assert.equal(calls.filter(c=>c.type==='wordcraft:open').length,1);
   });
   await t.test('native text and replies become one collaboration thread and repeated echoes stay idempotent',async()=>{
     notes=[{id:1,nativeKey:'word:1',author:'Alex',text:'Native discussion',quote:'Exact source',clauseId:'R1',resolved:false,color:0,ranges:[],replies:[{id:2,nativeKey:'word:2',author:'Alex',text:'Native reply'}]}];

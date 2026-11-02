@@ -73,7 +73,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
   function state(){
     if(!alive)return;
     const c=context(),merged=snapshot?mergeNativeComments({...c,snapshot}):{unlinked:[],conflicts:[]};
-    const value={ready:Boolean(boundToken),synchronizing:busy,source:snapshot?.source||{status:'waiting'},
+    const value={ready:Boolean(boundToken),synchronizing:busy,outlineVisible:engine==='wordcraft'&&Boolean(snapshot?.outlineVisible),source:snapshot?.source||{status:'waiting'},
       geometry:{selectedId:snapshot?.source?.selectedId,status:snapshot?.source?.status,clip:snapshot?.clip,ranges:snapshot?.sourceRanges||[]},
       unlinked:(merged.unlinked||[]).map(({id,nativeKey,text,author,reason})=>({id,nativeKey,text,author,reason})),conflicts:merged.conflicts||[]};
     const key=JSON.stringify(value);if(key!==lastState){lastState=key;onState(value);}
@@ -81,7 +81,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
   function schedule(){if(!alive||scheduled)return;scheduled=true;queueMicrotask(()=>{scheduled=false;void pump();});}
   function configurationFor(){
     const c=getContext();
-    const targets=craftClauseTargets(source,c.rows,engine).map(({anchor,tag,...target})=>({...target,page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(c.rows.find(r=>r.id===target.id)))}));
+    const targets=craftClauseTargets(source,c.rows,engine).map(({anchor,tag,...target})=>{const row=c.rows.find(r=>r.id===target.id);return {...target,title:row?.title||'',page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(row))};});
     const linked=(c.comments||[]).filter(comment=>comment.nativeRef?.documentId===reference.id&&comment.nativeRef.key&&!comment.nativeDeleted).map(comment=>({nativeKey:comment.nativeRef.key,clauseId:comment.anchor.requirementId,...permissions({nativeKey:comment.nativeRef.key})}));
     for(const [nativeKey,clauseId] of Object.entries(associations))if(!linked.some(item=>item.nativeKey===nativeKey))linked.push({nativeKey,clauseId});
     return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),targets,selectedId:c.selectedAnchor?.requirementId,associations:linked};
@@ -172,6 +172,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     checkpointCovers,
     open(name,bytes){file={name,bytes};sendFile();},refresh(){failedConfiguration='';schedule();},
     save:()=>command('save',{}),setVisible:value=>surface.setVisible(value),
+    setOutline:visible=>engine==='wordcraft'?command('outline',{visible}):Promise.reject(new Error('当前编辑器不支持 Word 文档目录')),
     locate:(id=getContext().selectedAnchor?.requirementId)=>command('locate',{id}),
     retry(){failures.clear();configuration='';failedConfiguration='';schedule();},
     associate(nativeKey,clauseId){

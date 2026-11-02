@@ -1357,7 +1357,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,280 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1378,6 +1378,8 @@ new file mode 100644
 +        if !self.canvas.host_comments {
 +            let _ = self.session.run("view.zoom", &json!({"value":"pageWidth"}));
 +            self.ui.mini_toolbar = false;
++            // Apply the hosted default once; later frames preserve a user's expansion.
++            self.ui.ribbon_collapsed = true;
 +        }
 +        self.canvas.host_comments = true;
 +        self.session.view.comments_pane = false;
@@ -1396,6 +1398,12 @@ new file mode 100644
 +        match action {
 +            "configure" => self.configure_host_project(&p),
 +            "locate" => self.locate_host_clause(p.get("id").and_then(Value::as_str).ok_or("missing clause id")?),
++            "outline" => {
++                let visible = p.get("visible").and_then(Value::as_bool).ok_or("missing outline visibility")?;
++                self.session.run("view.navigationPane", &json!({"value":visible})).map_err(|e| e.to_string())?;
++                self.ui.nav_tab = "headings".into();
++                Ok(json!({"visible":visible}))
++            }
 +            "upsert" => self.upsert_host_comment(&p),
 +            "draft" | "replyDraft" => {
 +                let id = id_of(&p)?;
@@ -1556,7 +1564,7 @@ new file mode 100644
 +        }
 +        json!({"fileName":self.session.path.as_ref().and_then(|p|p.file_name()).map(|n|n.to_string_lossy().to_string()).or_else(||self.session.file_name.clone()),"source":source,"complete":comment_threads(&self.session.doc.comments).len()<=2000,"document":document.to_string(),"author":self.session.author,"active":active,"notes":notes,"pages":pages,
 +            "sourceRanges":source_ranges,"clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
-+            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks})
++            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks,"outlineVisible":self.session.view.nav_pane})
 +    }
 +}
 +
@@ -1646,3 +1654,341 @@ diff --git a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
      pub fn light() -> Self {
          Tokens {
              dark: false,
+diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
+--- a/crates/ui-egui/src/ribbon.rs
++++ b/crates/ui-egui/src/ribbon.rs
+@@ -115,6 +115,11 @@
+         } else if !tabs.iter().any(|(n, _)| n == ct) {
+             tabs.push((ct.to_string(), false));
+         }
++    }
++    // RFQ's hosted editor shares this policy across users. Filter the final list so stored
++    // preferences, Customize Ribbon resets and the overflow menu cannot restore these tabs.
++    if app.canvas.host_comments {
++        tabs.retain(|(name, _)| !["Zotero", "Developer", "Mailings", "References", "Layout", "Design", "File"].contains(&name.as_str()));
+     }
+     {
+         let names: Vec<&str> = tabs.iter().map(|(n, _)| n.as_str()).collect();
+@@ -264,6 +269,9 @@
+                             }
+                             if resp.clicked() {
+                                 let _ = app.run("ui.tab", json!({"tab": tab}));
++                                if app.canvas.host_comments {
++                                    app.ui.ribbon_collapsed = false;
++                                }
+                             }
+                             if resp.double_clicked() && tab != "File" {
+                                 let _ = app.run("ui.collapseRibbon", json!({}));
+@@ -299,6 +307,9 @@
+                                 for (tab, shown) in left_out {
+                                     if ui.selectable_label(app.ui.tab == tab, shown).clicked() {
+                                         let _ = app.run("ui.tab", json!({"tab": tab}));
++                                        if app.canvas.host_comments {
++                                            app.ui.ribbon_collapsed = false;
++                                        }
+                                         ui.close();
+                                     }
+                                 }
+@@ -404,3 +415,6 @@
+ 
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++mod rfq_tests;
+diff --git a/crates/ui-egui/src/ribbon/rfq_tests.rs b/crates/ui-egui/src/ribbon/rfq_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/ui-egui/src/ribbon/rfq_tests.rs
+@@ -0,0 +1,98 @@
++//! RFQ's shared toolbar policy must survive personal settings and ribbon overflow.
++use super::*;
++use egui_kittest::kittest::Queryable;
++use wordcraft_engine::Session;
++
++const REMOVED: [&str; 7] = ["Zotero", "Developer", "Mailings", "References", "Layout", "Design", "File"];
++
++#[test]
++fn rfq_toolbar_starts_collapsed_and_tab_click_expands_it() {
++    let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Review this text")), crate::Services::default());
++    // The hosted default takes precedence over an older expanded browser preference.
++    app.ui.ribbon_collapsed = false;
++    app.enable_host_review();
++    let mut h = egui_kittest::Harness::builder()
++        .with_size(vec2(1600.0, 400.0))
++        .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++        .build_ui_state(|ui, app| show(app, ui), app);
++    h.run_steps(3);
++    assert!(h.state().ui.ribbon_collapsed, "each new hosted editor starts collapsed");
++    h.get_by_label(tl!("Home")).click();
++    h.run_steps(2);
++    assert!(!h.state().ui.ribbon_collapsed, "clicking even the active tab expands its tools");
++    // The web shell enables host review every frame; it must preserve a manual expansion.
++    h.state_mut().enable_host_review();
++    h.run_steps(2);
++    assert!(!h.state().ui.ribbon_collapsed);
++    h.state_mut().run("ui.collapseRibbon", json!({})).unwrap();
++    h.run_steps(2);
++    assert!(h.state().ui.ribbon_collapsed, "the existing collapse command still works");
++    h.get_by_label(tl!("Insert")).click();
++    h.run_steps(2);
++    assert!(!h.state().ui.ribbon_collapsed);
++}
++
++#[test]
++fn rfq_hidden_tabs_stay_absent_after_reset_show_and_stale_selection() {
++    for selected in REMOVED {
++        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Review this text")), crate::Services::default());
++        app.enable_host_review();
++        app.session.ribbon.set_hidden("Zotero", true).unwrap();
++        app.session.ribbon.reset_ribbon();
++        for tab in REMOVED.into_iter().filter(|tab| *tab != "File") {
++            app.session.ribbon.set_hidden(tab, false).unwrap();
++        }
++        // An older browser's selected tab must fall back to a visible one.
++        app.ui.tab = selected.into();
++        let mut h = egui_kittest::Harness::builder()
++            .with_size(vec2(1600.0, 400.0))
++            .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++            .build_ui_state(|ui, app| show(app, ui), app);
++        h.run_steps(3);
++        for tab in REMOVED {
++            assert!(h.query_by_label(tl!(tab)).is_none(), "{tab} is hidden after reset/show; selected {selected}");
++        }
++        for tab in ["Home", "Insert", "Draw", "Review", "View", "Help"] {
++            assert!(h.query_by_label(tl!(tab)).is_some(), "{tab} stays available");
++        }
++        assert_eq!(h.state().ui.tab, "Home");
++    }
++}
++
++#[test]
++fn rfq_more_tabs_menu_keeps_allowed_tabs_without_restoring_removed_ones() {
++    let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Review this text")), crate::Services::default());
++    app.enable_host_review();
++    let mut h = egui_kittest::Harness::builder()
++        .with_size(vec2(340.0, 400.0))
++        .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++        .build_ui_state(|ui, app| show(app, ui), app);
++    h.run_steps(3);
++    h.get_by_label(tl!("More tabs")).click();
++    h.run_steps(2);
++    for tab in REMOVED {
++        assert!(h.query_by_label(tl!(tab)).is_none(), "{tab} must not leak into the overflow menu");
++    }
++    h.get_by_label(tl!("Help")).click();
++    h.run_steps(2);
++    assert_eq!(h.state().ui.tab, "Help");
++    assert!(!h.state().ui.ribbon_collapsed, "a tab chosen from the overflow menu expands too");
++}
++
++#[test]
++fn rfq_keeps_table_context_tabs_and_custom_tabs_clickable() {
++    let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Review this text")), crate::Services::default());
++    app.run("insert.table", json!({"rows": 2, "cols": 2})).unwrap();
++    app.session.ribbon.new_tab(Some("Team"), None).unwrap();
++    app.enable_host_review();
++    let mut h = egui_kittest::Harness::builder()
++        .with_size(vec2(1600.0, 400.0))
++        .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++        .build_ui_state(|ui, app| show(app, ui), app);
++    h.run_steps(3);
++    for tab in ["Table Design", "Table Layout", "Team"] {
++        h.get_by_label(tl!(tab)).click();
++        h.run_steps(2);
++        assert_eq!(h.state().ui.tab, tab);
++    }
++}
+diff --git a/crates/ui-egui/src/panes.rs b/crates/ui-egui/src/panes.rs
+--- a/crates/ui-egui/src/panes.rs
++++ b/crates/ui-egui/src/panes.rs
+@@ -23,6 +23,9 @@
+ mod nav;
+ mod side;
+ mod state;
++
++#[cfg(test)]
++mod rfq_navigation_tests;
+ 
+ #[cfg(test)]
+ pub(crate) use comments::comment_draft;
+diff --git a/crates/ui-egui/src/panes/nav.rs b/crates/ui-egui/src/panes/nav.rs
+--- a/crates/ui-egui/src/panes/nav.rs
++++ b/crates/ui-egui/src/panes/nav.rs
+@@ -39,13 +39,7 @@
+     ui.separator();
+     egui::ScrollArea::vertical().show(ui, |ui| match app.ui.nav_tab.as_str() {
+         "pages" => {
+-            let l = app.session.layout();
+-            for (i, p) in l.pages.iter().enumerate() {
+-                let label = crate::i18n::fmt(tl!("Page {page}"), &[("page", &p.number.to_string())]);
+-                if ui.selectable_label(app.session.page_hint == i, label).clicked() {
+-                    let _ = app.run("edit.goto", json!({"page": i + 1}));
+-                }
+-            }
++            nav_pages(app, ui);
+         }
+         "results" => {
+             let results = app.session.find.results.clone();
+@@ -73,10 +67,15 @@
+         }
+         _ => {
+             let caret = app.session.sel.focus.clone();
+-            let items = nav_headings(&app.session.doc);
++            let items = directory_items(app);
+             let current = items.iter().rposition(|(path, ..)| *path <= caret.path);
+             if items.is_empty() {
+-                ui.label(egui::RichText::new(tl!("Create an interactive outline of your document.\n\nIt's a great way to keep track of where you are or quickly move your content around.\n\nTo get started, go to the Home tab and apply Heading styles to the headings in your document.")).weak());
++                if app.canvas.host_comments {
++                    ui.label(tl!("Pages"));
++                    nav_pages(app, ui);
++                } else {
++                    ui.label(egui::RichText::new(tl!("Create an interactive outline of your document.\n\nIt's a great way to keep track of where you are or quickly move your content around.\n\nTo get started, go to the Home tab and apply Heading styles to the headings in your document.")).weak());
++                }
+             }
+             // A heading has children when the next heading is a deeper level (#1997).
+             let has_children: Vec<bool> = items.iter().enumerate().map(|(i, (_, lv, _))| items.get(i + 1).is_some_and(|n| n.1 > *lv)).collect();
+@@ -104,6 +103,46 @@
+             }
+         }
+     });
++}
++
++fn nav_pages(app: &mut WordApp, ui: &mut Ui) {
++    let layout = app.session.layout();
++    for (i, page) in layout.pages.iter().enumerate() {
++        let label = crate::i18n::fmt(tl!("Page {page}"), &[("page", &page.number.to_string())]);
++        if ui.selectable_label(app.session.page_hint == i, label).clicked() {
++            let _ = app.run("edit.goto", json!({"page": i + 1}));
++        }
++    }
++}
++
++/// The directory is view data only. Never create heading styles or TOC fields in the file.
++fn directory_items(app: &WordApp) -> Vec<(Path, u8, String)> {
++    let headings = nav_headings(&app.session.doc);
++    if !headings.is_empty() || !app.canvas.host_comments {
++        return headings;
++    }
++    let project = &app.comment_drafts.project;
++    if project.document != app.session.document_id() || project.revision != Some(app.session.rev()) {
++        return Vec::new();
++    }
++    let mut items = Vec::new();
++    for target in &project.targets {
++        let Some(id) = target.get("id").and_then(serde_json::Value::as_str) else { continue };
++        let Some(matches) = project.matches.get(id) else { continue };
++        let [(start, _)] = matches.as_slice() else { continue };
++        let number = target.get("no").and_then(serde_json::Value::as_str).unwrap_or("");
++        let title = target
++            .get("title")
++            .and_then(serde_json::Value::as_str)
++            .filter(|s| !s.trim().is_empty())
++            .or_else(|| target.get("quote").and_then(serde_json::Value::as_str))
++            .unwrap_or("");
++        let label = format!("{number} {title}").trim().chars().take(160).collect::<String>();
++        items.push((start.path.clone(), 0, label));
++    }
++    items.sort_by(|a, b| a.0.cmp(&b.0));
++    items.dedup_by(|a, b| a.0 == b.0);
++    items
+ }
+ 
+ /// Which headings the pane shows: those under a collapsed heading (every following heading
+diff --git a/crates/ui-egui/src/panes/rfq_navigation_tests.rs b/crates/ui-egui/src/panes/rfq_navigation_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/ui-egui/src/panes/rfq_navigation_tests.rs
+@@ -0,0 +1,92 @@
++use super::*;
++use egui_kittest::kittest::Queryable;
++use wordcraft_engine::Session;
++
++fn command(app: &mut WordApp, action: &str, params: Value) -> Result<Value, String> {
++    app.host_review_action(&json!({"document":app.session.document_id().to_string(),"action":action,"params":params}))
++}
++
++#[test]
++fn host_directory_navigation_keeps_document_revision_history_and_content_unchanged() {
++    let mut app = WordApp::new(Session::new(Document::from_text("Intro\nSection\nBody")), crate::Services::default());
++    for (text, style) in [("Intro", "Heading 1"), ("Section", "Heading 2")] {
++        app.run("select.text", json!({"text":text})).unwrap();
++        app.run("styles.apply", json!({"style":style})).unwrap();
++    }
++    app.enable_host_review();
++    app.set_host_review_permissions(false, false);
++    app.session.dirty = false;
++    let before = serde_json::to_value(&app.session.doc).unwrap();
++    let revision = app.session.rev();
++    let history = app.session.undo_depth();
++    command(&mut app, "outline", json!({"visible":true})).unwrap();
++    assert!(app.session.view.nav_pane);
++    assert_eq!(app.ui.nav_tab, "headings");
++    assert_eq!(app.host_review_snapshot(1.0)["outlineVisible"], true);
++    let mut h = egui_kittest::Harness::builder()
++        .with_size(vec2(260.0, 500.0))
++        .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++        .build_ui_state(|ui, app| nav(app, ui), app);
++    h.run_steps(3);
++    h.get_by_label("Section").click();
++    h.run_steps(2);
++    assert_eq!(h.state().session.sel.focus.path, Path::top(1));
++    assert!(h.state().canvas.nav_to_caret);
++    command(h.state_mut(), "outline", json!({"visible":false})).unwrap();
++    assert!(!h.state().session.view.nav_pane);
++    assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
++    assert_eq!(h.state().session.rev(), revision);
++    assert_eq!(h.state().session.undo_depth(), history);
++    assert!(!h.state().session.dirty);
++}
++
++#[test]
++fn host_directory_uses_only_uniquely_located_clauses_without_heading_changes() {
++    let mut app = WordApp::new(Session::new(Document::from_text("First clause\nSecond clause\nSecond clause")), crate::Services::default());
++    app.enable_host_review();
++    command(
++        &mut app,
++        "configure",
++        json!({"editable":false,"editDocument":false,"targets":[
++            {"id":"first","no":"S1","title":"Safety","quote":"First clause","editable":false},
++            {"id":"ambiguous","no":"F1","title":"Duplicate","quote":"Second clause","editable":false}
++        ]}),
++    )
++    .unwrap();
++    app.session.dirty = false;
++    let before = serde_json::to_value(&app.session.doc).unwrap();
++    command(&mut app, "outline", json!({"visible":true})).unwrap();
++    let mut h = egui_kittest::Harness::builder()
++        .with_size(vec2(260.0, 500.0))
++        .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++        .build_ui_state(|ui, app| nav(app, ui), app);
++    h.run_steps(3);
++    assert!(h.query_by_label("F1 Duplicate").is_none(), "ambiguous destinations must not be guessed");
++    h.get_by_label("S1 Safety").click();
++    h.run_steps(2);
++    assert_eq!(h.state().session.sel.focus.path, Path::top(0));
++    assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
++    assert!(!h.state().session.dirty);
++}
++
++#[test]
++fn host_directory_without_headings_or_clauses_falls_back_to_pages_readonly() {
++    let mut app = WordApp::new(Session::new(Document::from_text("Plain original text")), crate::Services::default());
++    app.enable_host_review();
++    app.set_host_review_permissions(false, false);
++    app.session.dirty = false;
++    let before = serde_json::to_value(&app.session.doc).unwrap();
++    assert!(command(&mut app, "outline", json!({"visible":"invalid"})).is_err());
++    assert!(!app.session.view.nav_pane);
++    command(&mut app, "outline", json!({"visible":true})).unwrap();
++    let mut h = egui_kittest::Harness::builder()
++        .with_size(vec2(260.0, 500.0))
++        .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++        .build_ui_state(|ui, app| nav(app, ui), app);
++    h.run_steps(3);
++    let page = crate::i18n::fmt(tl!("Page {page}"), &[("page", "1")]);
++    h.get_by_label(&page).click();
++    h.run_steps(2);
++    assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
++    assert!(!h.state().session.dirty);
++}
