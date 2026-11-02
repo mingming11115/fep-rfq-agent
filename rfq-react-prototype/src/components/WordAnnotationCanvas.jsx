@@ -3,6 +3,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown, MessageSquarePlus } from "./icons";
 import { selectSourceResponseAnnotations, SOURCE_ANNOTATION_CONCLUSIONS } from '../responseAdvice';
 import SourceResponseAnnotation from './SourceResponseAnnotation';
+import ResponseAnnotationFilter from './ResponseAnnotationFilter';
 import './source-response-annotation.css';
 
 const palette = [
@@ -12,18 +13,19 @@ const palette = [
 ];
 const noResponses = [];
 
-export default function WordAnnotationCanvas({ rows, responseRows = noResponses, responsePreview, activeId, title, version, subtitle, footer, showAnnotations = true, zoom = 100, onSelectRow, onNewComment, onDiscuss, onOpen, children }) {
+export default function WordAnnotationCanvas({ rows, responseRows = noResponses, responsePreview, activeId, title, version, subtitle, footer, showAnnotations = true, focusCurrentAnnotation = false, zoom = 100, onSelectRow, onNewComment, onDiscuss, onOpen, children }) {
   const root = useRef(null);
   const [formatting, setFormatting] = useState(true), [paths, setPaths] = useState([]);
   const [visibleConclusions, setVisibleConclusions] = useState(SOURCE_ANNOTATION_CONCLUSIONS);
+  const [showAll, setShowAll] = useState(false);
   const notes = useMemo(() => {
     const colors = new Map(rows.map((row, index) => [row.id, palette[index % palette.length]]));
-    return selectSourceResponseAnnotations(rows, { responseRows, responsePreview, conclusions: visibleConclusions })
+    return selectSourceResponseAnnotations(rows, { responseRows, responsePreview, conclusions: visibleConclusions, currentOnly: focusCurrentAnnotation && !showAll, activeId })
       .map(note => ({ ...note, color: colors.get(note.row.id) }));
-  }, [rows, responseRows, responsePreview, visibleConclusions]);
+  }, [rows, responseRows, responsePreview, visibleConclusions, focusCurrentAnnotation, showAll, activeId]);
   const annotationsVisible = showAnnotations && notes.length > 0;
   const byId = new Map(notes.map(note => [note.row.id, note]));
-  const current = rows.find(row => row.id === activeId) || rows[0];
+  const current = rows.find(row => row.id === activeId) || (!focusCurrentAnnotation ? rows[0] : undefined);
   const currentIndex = notes.findIndex(note => note.row.id === current?.id);
   const select = row => { if (row && row.id !== activeId) onSelectRow?.(row); };
   const anchorProps = row => ({
@@ -88,7 +90,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
 
   return <div ref={root} className={`word-classic-document project-word-document${formatting ? '' : ' wc-hide-format'}`}>
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="word-annotations"/>
-    <div className="wc-annotation-filters" role="group" aria-label="按应答结论显示标注">
+    {!focusCurrentAnnotation && <div className="wc-annotation-filters" role="group" aria-label="按应答结论显示标注">
       <span>显示标注：</span>
       {SOURCE_ANNOTATION_CONCLUSIONS.map(conclusion => <label key={conclusion}>
         <UiCheckbox type="checkbox" aria-label={`显示 ${conclusion} 标注`} disabled={!showAnnotations}
@@ -96,14 +98,17 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
           onChange={event => setVisibleConclusions(previous => event.target.checked ? [...previous, conclusion] : previous.filter(value => value !== conclusion))}/>
         {conclusion}
       </label>)}
-    </div>
-    <div className="wc-tools" aria-label="原文应答批注工具栏">
-      <span className="wc-file">应答批注 · {showAnnotations ? notes.length : 0} / {rows.length} 条</span>
+    </div>}
+    <div className="wc-tools" aria-label="原文应答标注工具栏">
+      <span className="wc-file">应答标注 · {showAnnotations ? notes.length : 0} / {rows.length} 条</span>
+      {focusCurrentAnnotation && <button type="button" className="wc-button" disabled={!showAnnotations} aria-pressed={showAll} onClick={()=>setShowAll(!showAll)}>{showAll?'仅看当前条款':'查看全部标注'}</button>}
+      {focusCurrentAnnotation && <ResponseAnnotationFilter value={visibleConclusions} onChange={setVisibleConclusions} disabled={!showAnnotations}/>}
       {onNewComment && <button type="button" className="wc-button" disabled={!current} onMouseDown={event => event.preventDefault()} onClick={onNewComment}><MessageSquarePlus size={14}/>新建批注</button>}
       <button type="button" className="wc-button" aria-label="上一条应答标注" disabled={!showAnnotations || currentIndex <= 0} onClick={() => select(notes[currentIndex - 1]?.row)}><ChevronUp size={14}/></button>
       <button type="button" className="wc-button" aria-label="下一条应答标注" disabled={!showAnnotations || !notes.length || currentIndex >= notes.length - 1} onClick={() => select(notes[currentIndex + 1]?.row)}><ChevronDown size={14}/></button>
       <button type="button" className="wc-button" aria-label="显示编辑标记" aria-pressed={formatting} onClick={() => setFormatting(!formatting)}>¶</button>
     </div>
+    {focusCurrentAnnotation && showAnnotations && !notes.length && <p className="craft-advice-empty" role="status">{showAll?'当前筛选下没有应答标注':current?'当前条款没有符合筛选的应答标注':'请选择条款查看应答标注'}</p>}
     <div className={`wc-canvas${annotationsVisible ? '' : ' wc-without-annotations'}`}>
       <article className="wc-page source-paper word-paper" style={{ '--document-zoom': zoom / 100 }}>
         <div data-word-page-content>
@@ -114,10 +119,10 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
         </div>
       </article>
       {annotationsVisible && <>
-        <aside className="wc-margin" aria-label="与原文对应的应答批注">
+        <aside className="wc-margin" aria-label="与原文对应的应答标注">
           {notes.map(note => <SourceResponseAnnotation key={note.row.id} {...note} active={note.row.id === current?.id} onSelect={select} onDiscuss={onDiscuss} onOpen={onOpen}/>)}
         </aside>
-        <svg className="wc-connectors" aria-label="原文与应答批注的彩色连接线">
+        <svg className="wc-connectors" aria-label="原文与应答标注的彩色连接线">
           {paths.map(path => <path key={path.id} data-response-link={path.id} d={path.d} fill="none" stroke={path.color} strokeWidth="1.15" strokeDasharray={path.active ? undefined : '4 4'}/>)}
         </svg>
       </>}

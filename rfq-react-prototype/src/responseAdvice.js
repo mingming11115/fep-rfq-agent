@@ -4,9 +4,9 @@ const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','�
 export const SOURCE_ANNOTATION_CONCLUSIONS=Object.keys(conclusionLabels);
 const operators={'<=':'≤','>=':'≥','=':'='};
 
-export function selectSourceResponseAnnotations(rows=[], {responseRows=[],responsePreview,conclusions=SOURCE_ANNOTATION_CONCLUSIONS}={}) {
+export function selectSourceResponseAnnotations(rows=[], {responseRows=[],responsePreview,conclusions=SOURCE_ANNOTATION_CONCLUSIONS,currentOnly=false,activeId}={}) {
   const responses=new Map(responseRows.map(row=>[row.id,row]));
-  return rows.map(row=>({row,annotation:buildSourceResponseAnnotation(row,responsePreview?.id===row.id?responsePreview:responses.get(row.id))}))
+  return rows.filter(row=>!currentOnly||row.id===activeId).map(row=>({row,annotation:buildSourceResponseAnnotation(row,responsePreview?.id===row.id?responsePreview:responses.get(row.id))}))
     .filter(note=>conclusions.includes(note.annotation.conclusion));
 }
 

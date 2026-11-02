@@ -24,6 +24,19 @@
 .project-word-document .dw-source-block small{font:10px/1.5 'Segoe UI','PingFang SC',sans-serif;color:#707070}
 .project-word-document .wc-note.source-response-annotation{cursor:pointer}
 .project-word-document .source-response-annotation .wc-note-head{justify-content:flex-end}
+.craft-advice-scope{position:sticky;top:0;z-index:6;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 8px;padding:7px 8px;border-bottom:1px solid #e5e7eb;background:#fff;font-size:11px;color:#687588}
+.craft-advice-scope>strong{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0;font-size:12px;color:#34445b}
+.craft-advice-scope>strong>span{font-size:11px;font-weight:400;color:#687588}
+.craft-advice-scope .wc-button{flex-shrink:0;height:auto;min-height:26px;font-size:11px;white-space:normal;color:#1677ff;cursor:pointer}
+.craft-advice-scope .wc-button:focus-visible{outline:2px solid #5682d7;outline-offset:1px}
+.response-annotation-filter-trigger{display:inline-flex;align-items:center;gap:5px;max-width:100%;cursor:pointer}
+.response-annotation-filter-menu{width:200px;max-width:calc(100vw - 48px);font-size:12px;color:#34445b}
+.response-annotation-filter-menu label{display:flex;align-items:center;gap:8px;min-height:30px;cursor:pointer}
+.response-annotation-filter-menu input{width:14px;height:14px;accent-color:#1677ff}
+.response-annotation-filter-menu footer{display:flex;justify-content:flex-end;gap:12px;margin-top:8px;padding-top:8px;border-top:1px solid #e5e7eb}
+.response-annotation-filter-menu footer button{padding:3px 4px;border:0;background:transparent;color:#1677ff;font-size:12px;cursor:pointer}
+.response-annotation-filter-menu button:disabled{color:#a2aab7;cursor:default}
+.response-annotation-filter-menu :is(button,input):focus-visible,.response-annotation-filter-trigger:focus-visible{outline:2px solid #5682d7;outline-offset:2px}
 @container rfq-word (max-width:430px){
  .project-word-document .wc-canvas{grid-template-columns:minmax(0,1fr)}
  .project-word-document .wc-page.source-paper{min-height:0;border-right:0;padding:43px 30px 40px}

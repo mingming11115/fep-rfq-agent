@@ -12,3 +12,7 @@
 .original-comments .wc-floating{pointer-events:auto}
 .review-tools .wc-tools{padding-right:12px}
 .review-tools .wc-file{font-size:12px}
+.original-comments .wc-note-summary .wc-note-head{gap:6px}
+.original-comments .wc-note-summary .wc-time{margin-left:auto;white-space:nowrap}
+.original-comments .wc-summary-open{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;text-align:left;overflow-wrap:anywhere;cursor:pointer}
+.original-comments .wc-summary-open:focus-visible{outline:2px solid var(--wc-color);outline-offset:2px}

@@ -1,9 +1,9 @@
 import { UiButton } from './AntContent';
 import React from 'react';
-import { Sparkles } from "./icons";
+import { BookOpen, ChevronDown, Sparkles } from "./icons";
 import { makeRequirements } from '../data';
 import { buildResponseAdvice } from '../responseAdvice';
-export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference }) {
+export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference, sourceScope, children }) {
   const original = makeRequirements(project.id).find((item) => item.id === row.id);
   const unchangedSource = !row.sourceRevision && !row.sourceCorrected && original?.original === row.original;
   const fixtures = {
@@ -16,16 +16,14 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
   };
   const check = unchangedSource ? (row.realSource ? bhelFixtures[row.id] : fixtures[row.clause]) : null;
   const advice=buildResponseAdvice(row,suggestion,{check,retrieval});
-  const candidateEvidence = suggestion.evidence?.trim() || '';
-  const supportingEvidence = candidateEvidence && advice.evidence.startsWith(candidateEvidence)
-    ? advice.evidence.slice(candidateEvidence.length).replace(/^；/, '')
-    : advice.evidence;
   return <section className="response-advice" aria-label="AI 应答建议">
     <dl>
       <dt>建议结论</dt><dd className="response-advice-conclusion"><strong>{advice.conclusion}</strong><span className="response-advice-ai" title="基于当前要求与参考依据提供建议"><Sparkles size={12} aria-hidden="true"/>AI 应答建议</span></dd>
-      <dt>建议来源</dt><dd><div>{advice.reference}</div>{advice.evidence&&onOpenReference&&<UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}</dd>
-      {supportingEvidence&&<><dt>核实资料</dt><dd>{supportingEvidence}</dd></>}
     </dl>
+    <details className="response-reference-details" key={JSON.stringify([project.id,row.id,sourceScope?.fileId??row.sourceFileId??row.source,String(sourceScope?.sourceVersion??row.sourceVersion??'1')])}>
+      <summary><BookOpen size={14}/><strong>参考与证据</strong><ChevronDown size={13}/></summary>
+      <div className="response-reference-body"><dl><dt>建议来源</dt><dd>{advice.reference}{advice.evidence&&onOpenReference&&<UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}</dd>{advice.evidence&&<><dt>候选依据</dt><dd>{advice.evidence}</dd></>}</dl>{children}</div>
+    </details>
     {row.previousOriginal&&<details><summary>查看变更前要求</summary><p>{row.previousOriginal}</p></details>}
   </section>;
 }

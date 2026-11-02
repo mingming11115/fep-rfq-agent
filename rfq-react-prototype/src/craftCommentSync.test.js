@@ -53,6 +53,43 @@ test('empty native draft is ignored, and quote-less notes need explicit associat
   assert.equal(merge([], [note({ text: '', replies: [{ id: 5, nativeKey: 'reply-1', author: 'Bob', text: 'Reply' }] })]).comments.length, 1);
 });
 
+test('an explicitly opened empty draft imports only its own native key and valid clause', () => {
+  const opened=note({text:''}),other=note({id:8,nativeKey:'untouched',text:''});
+  const result=merge([], [opened,other], {draftNativeKeys:['native-1']});
+  assert.equal(result.comments.length,1);assert.equal(result.comments[0].nativeRef.key,'native-1');
+  assert.deepEqual(plan(result.comments,[opened,other]),[],'opening a blank editor does not create an upsert loop');
+  const missing=merge([], [note({text:'',clauseId:undefined})], {draftNativeKeys:['native-1']});
+  assert.equal(missing.comments.length,0);assert.equal(missing.unlinked.length,1);
+});
+
+test('a right-side deletion survives old native echoes until removal, then native undo can restore it',()=>{
+  const original=imported(),removed={...original,nativeDeleted:true,nativeRef:{...original.nativeRef,state:'delete-pending'}};
+  const echoed=merge([removed],[note()]).comments[0];assert.equal(echoed.nativeDeleted,true);
+  assert.equal(plan([echoed],[note()])[0].action,'delete');
+  const confirmed=merge([echoed],[]).comments[0];assert.equal(confirmed.nativeRef.state,'deleted');
+  assert.equal(merge([confirmed],[note()]).comments[0].nativeDeleted,undefined);
+});
+
+test('a fresh native comment reusing a deleted key starts a new discussion without reviving old review links',()=>{
+  const previous={...imported(),linkedIssues:{review:'V1'}},deleted={...previous,nativeDeleted:true,nativeRef:{...previous.nativeRef,state:'deleted'}};
+  const result=merge([deleted],[note({text:''})],{draftNativeKeys:['native-1'],freshNativeKeys:['native-1']});
+  assert.equal(result.comments.length,2);
+  assert.equal(result.comments[0].nativeDeleted,true);assert.equal(result.comments[0].nativeRef.key,undefined);
+  assert.deepEqual(result.comments[0].linkedIssues,{review:'V1'});
+  const fresh=result.comments[1];assert.notEqual(fresh.id,previous.id);assert.equal(fresh.text,'');assert.deepEqual(fresh.linkedIssues,{});
+  const saved={...fresh,text:'New discussion'};
+  assert.deepEqual(plan([result.comments[0],saved],[note({text:''})]).map(item=>[item.action,item.params.id]),[['upsert',3]]);
+});
+
+test('manager deletion retains existing native permissions without granting root-text editing',()=>{
+  const other=imported({author:'Bob'}),removed={...other,nativeDeleted:true};
+  assert.equal(plan([removed],[note({author:'Bob'})]).length,0);
+  assert.equal(plan([removed],[note({author:'Bob'})],{editDocument:true})[0].action,'delete');
+  assert.equal(plan([removed],[note({author:'Bob'})],{editDocument:true,canEditRow:()=>false}).length,0);
+  const edited={...other,text:'Disallowed rewrite'};
+  assert.equal(plan([edited],[note({author:'Bob'})],{editDocument:true}).length,0);
+});
+
 test('source tuple and backend document identity isolate imported and existing discussions', () => {
   const old = imported();
   assert.equal(merge([old], [note({ text: 'Other backend' })], { documentId: 'doc-2' }).comments[0].text, 'Check tolerance');

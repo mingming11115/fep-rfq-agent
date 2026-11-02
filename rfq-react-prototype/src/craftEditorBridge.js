@@ -8,11 +8,13 @@ const changed=(a,b)=>JSON.stringify(a)!==JSON.stringify(b);
 const modifying=new Set(['draft','replyDraft','reply','delete','resolve','new','upsert']);
 
 export function createCraftProjectEditor({frame,root,tools,source,reference,revision=0,user,engine,getContext,
-  onCommentsChange,onState=()=>{},onError=()=>{},onDirty=()=>{},onSave=()=>{},onSelectAnchor=()=>{},onSelectComment=()=>{}}){
+  onCommentsChange,onState=()=>{},onError=()=>{},onDirty=()=>{},onSave=()=>{},onSelectAnchor=()=>{},onSelectComment=()=>{},onUnlinkedComment}){
   let alive=true,ready=false,file=null,sent=false,boundToken='',snapshot=null,busy=false,scheduled=false;
   let configuration='',failedConfiguration='',minimumApplied=0,lastMutatingSequence=0,lastActive=null,lastBusinessSelection='',lastState='';
-  const associations={},failures=new Map();
-  const context=()=>({...getContext(),source,documentId:reference.id,revision,engine,actor:user,associations});
+  const associations={},failures=new Map(),draftNativeKeys=new Set(),newDraftKeys=new Set(),freshNativeKeys=new Set();let discussion=null,lastUnlinked='';
+  const discussionScope=()=>JSON.stringify([reference.id,boundToken]);
+  function clearUnlinked(){if(lastUnlinked){lastUnlinked='';onUnlinkedComment?.({scope:discussionScope(),note:null});}}
+  const context=()=>({...getContext(),source,documentId:reference.id,revision,engine,actor:user,associations,draftNativeKeys:[...draftNativeKeys],freshNativeKeys:[...freshNativeKeys]});
   const publish=update=>{
     const current=getContext().comments||[],next=update(current);
     if(changed(current,next))onCommentsChange(update);
@@ -22,11 +24,51 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     const id=comment?.anchor?.requirementId||associations[note.nativeKey]||note.clauseId,row=c.rows.find(row=>row.id===id);
     const canWrite=row?Boolean(c.canEditRow?.(row,comment)):Boolean(c.editDocument);
     const own=comment?comment.createdBy===user.id:note.author===user.name;
-    return {canEdit:canWrite&&own,canReply:canWrite,canResolve:canWrite,canDelete:canWrite&&(own||c.editDocument)};
+    const cancelNew=own&&newDraftKeys.has(note.nativeKey)&&c.rows.some(row=>c.canEditRow?.(row));
+    return {canEdit:canWrite&&own,canReply:canWrite,canResolve:canWrite,canDelete:canWrite&&(own||c.editDocument)||cancelNew};
   }
-  const surface=createOriginalComments({frame,root,tools,namespace:engine,documentFormat:engine==='pdfcraft'?'PDF':'DOCX',supportsFormatting:engine==='wordcraft',
+  function openDiscussion(_id,note,{edit=false,newComment=false}={}){
+    if(!alive||!note?.nativeKey)return;
+    draftNativeKeys.add(note.nativeKey);
+    if(newComment){newDraftKeys.add(note.nativeKey);freshNativeKeys.add(note.nativeKey);}
+    const reused=newComment&&getContext().comments?.some(c=>c.nativeDeleted&&c.nativeRef?.documentId===reference.id&&c.nativeRef.key===note.nativeKey);
+    if(reused)associations[note.nativeKey]=undefined;
+    if(newComment&&(reused||!note.clauseId)&&!associations[note.nativeKey]){
+      const quote=String(note.quote||'').trim().replace(/\s+/g,' '),c=getContext();
+      const matches=quote?officeClauseTargets(source,c.rows).filter(target=>target.quote.trim().replace(/\s+/g,' ').includes(quote)):[];
+      if(matches.length===1&&c.canEditRow?.(c.rows.find(row=>row.id===matches[0].id)))associations[note.nativeKey]=matches[0].id;
+    }
+    discussion={key:note.nativeKey,edit,open:true};lastUnlinked='';schedule();
+  }
+  async function unlinkedAction(key,action,text){
+    if(!alive)throw new Error('编辑器已关闭');
+    const notes=snapshot?.notes.filter(note=>note.nativeKey===key)||[],note=notes[0];
+    if(notes.length!==1||getContext().comments?.some(c=>!c.nativeDeleted&&c.nativeRef?.documentId===reference.id&&c.nativeRef.key===key))throw new Error('批注来源已变化，请重新打开对应讨论');
+    const permission={save:'canEdit',reply:'canReply',resolve:'canResolve',delete:'canDelete'}[action];
+    if(!permission||!snapshot.editable||!permissions(note)[permission])throw new Error('当前身份无权执行此批注操作');
+    onDirty();
+    if(action==='save'){await command('draft',{id:note.id,text});return command('flush',{});}
+    if(action==='reply'){await command('replyDraft',{id:note.id,text});return command('reply',{id:note.id});}
+    const result=await command(action,{id:note.id});
+    if(action==='delete'&&discussion?.key===key){discussion=null;clearUnlinked();}
+    return result;
+  }
+  function showUnlinked(note){
+    if(!onUnlinkedComment)return;
+    if(!note){clearUnlinked();return;}
+    const c=getContext(),{ranges,...content}=note;
+    const allowed=Object.fromEntries(Object.entries(permissions(note)).map(([key,value])=>[key,Boolean(snapshot.editable&&value)]));
+    const value={scope:discussionScope(),note:{...content,...allowed},edit:discussion.edit,open:discussion.open,
+      targets:officeClauseTargets(source,c.rows).filter(target=>c.canEditRow?.(c.rows.find(row=>row.id===target.id))).map(target=>({value:target.id,label:target.no+' '+target.quote.slice(0,36)})),
+      onAction:(action,text)=>unlinkedAction(note.nativeKey,action,text),
+      onAssociate:id=>{if(!alive)throw new Error('编辑器已关闭');return api.associate(note.nativeKey,id);},
+      onClose:()=>{if(!alive||discussion?.key!==note.nativeKey)return;discussion=null;clearUnlinked();}};
+    const signature=JSON.stringify([value.scope,value.note,value.edit,value.targets]);
+    if(signature!==lastUnlinked||value.open){lastUnlinked=signature;discussion.open=false;onUnlinkedComment(value);}
+  }
+  const surface=createOriginalComments({frame,root,tools,namespace:engine,documentFormat:engine==='pdfcraft'?'PDF':'DOCX',supportsFormatting:engine==='wordcraft',summaryOnly:true,
     onStatus:message=>{if(alive)onError(message);},onDirty:()=>{if(alive)onDirty();},
-    onSelect:(_id,note)=>{const c=(getContext().comments||[]).find(c=>c.nativeRef?.documentId===reference.id&&c.nativeRef.key===note?.nativeKey);if(c&&!c.nativeDeleted)onSelectComment(c.id,c.anchor);},
+    onSelect:openDiscussion,
     beforeCommand:(action,params)=>{
       if(!modifying.has(action))return;
       const c=getContext();let blocked;
@@ -65,6 +107,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     return (getContext().comments||[]).every(comment=>{
       const anchor=comment.anchor;
       if(!anchor||anchor.projectId!==source.projectId||anchor.fileId!==source.fileId||String(anchor.sourceVersion)!==String(source.sourceVersion)||(comment.nativeRef?.documentId&&comment.nativeRef.documentId!==reference.id))return true;
+      if(comment.nativeDeleted&&comment.nativeRef?.deletedKey&&!comment.nativeRef.key)return true;
       if(!comment.nativeDeleted&&!String(comment.text||'').trim()&&!(comment.replies||[]).some(reply=>String(reply.text||'').trim()))return true;
       return matchesCheckpoint(comment,review);
     });
@@ -103,8 +146,15 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
         catch(error){failedConfiguration=key;throw error;}
         if(!alive||configuration!==JSON.stringify(configurationFor())||(snapshot.applied||0)<minimumApplied)return;
       }
-      const merged=mergeNativeComments({...context(),snapshot});
-      if(merged.changed)publish(comments=>mergeNativeComments({...context(),comments,snapshot}).comments);
+      const mergeContext={...context(),snapshot},merged=mergeNativeComments(mergeContext);
+      if(merged.changed)publish(comments=>mergeNativeComments({...mergeContext,comments}).comments);
+      freshNativeKeys.clear();
+      if(discussion){
+        const comment=(getContext().comments||[]).find(c=>!c.nativeDeleted&&c.nativeRef?.documentId===reference.id&&c.nativeRef.key===discussion.key);
+        if(comment){const intent=discussion;discussion=null;clearUnlinked();onSelectComment(comment.id,comment.anchor,{edit:intent.edit});}
+        else if(onUnlinkedComment)showUnlinked(snapshot.notes.find(note=>note.nativeKey===discussion.key));
+        else if(!discussion.warned){discussion.warned=true;onError('这条文件批注尚未关联条款，请先选择对应条款后在右侧编辑。');}
+      }
       const operations=planCraftWrites({...context(),snapshot});
       for(const operation of operations){
         if(!alive)return;
@@ -165,12 +215,12 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     }
     if(configuration&&payload.active!==lastActive&&previous){
       const note=payload.notes.find(note=>note.id===payload.active),comment=getContext().comments.find(c=>c.nativeRef?.documentId===reference.id&&c.nativeRef.key===note?.nativeKey);
-      if(comment&&!comment.nativeDeleted)onSelectComment(comment.id,comment.anchor);
+      if(comment&&!comment.nativeDeleted&&discussion?.key!==note?.nativeKey)onSelectComment(comment.id,comment.anchor,{edit:false});
     }
     lastActive=payload.active;schedule();state();
   }
   window.addEventListener('message',receive);
-  return {
+  const api={
     checkpointCovers,
     open(name,bytes){file={name,bytes};sendFile();},refresh(){failedConfiguration='';schedule();},
     save:()=>command('save',{}),setVisible:value=>surface.setVisible(value),
@@ -182,6 +232,12 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       return command('heading',{revision:target.revision,index:target.index});
     },
     locate:(id=getContext().selectedAnchor?.requirementId)=>command('locate',{id}),
+    openFileComment(key){
+      if(!alive)return false;
+      const notes=snapshot?.notes.filter(note=>note.nativeKey===key)||[];
+      if(notes.length!==1)return false;
+      openDiscussion(notes[0].id,notes[0]);return true;
+    },
     retry(){failures.clear();configuration='';failedConfiguration='';schedule();},
     associate(nativeKey,clauseId){
       if(!alive)return false;const c=getContext(),row=c.rows.find(row=>row.id===clauseId),note=snapshot?.notes.find(note=>note.nativeKey===nativeKey);
@@ -200,6 +256,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       }
       state();
     },
-    destroy(){alive=false;window.removeEventListener('message',receive);surface.destroy();},
+    destroy(){alive=false;clearUnlinked();window.removeEventListener('message',receive);surface.destroy();},
   };
+  return api;
 }

@@ -230,7 +230,7 @@ function savedProjection(ref) {
 }
 
 /** Pure native -> collaboration merge. Unassociated notes remain only in the file. */
-export function mergeNativeComments({ comments = [], snapshot, source, documentId, revision, engine, rows = [], actor, people = [], associations = {}, canEditRow }) {
+export function mergeNativeComments({ comments = [], snapshot, source, documentId, revision, engine, rows = [], actor, people = [], associations = {}, draftNativeKeys = [], freshNativeKeys = [], canEditRow }) {
   const unlinked = [], conflicts = [];
   if (!validSnapshot(snapshot, source, documentId)) return { comments, unlinked, conflicts, changed: false };
   const currentRows = scopedRows(rows, source);
@@ -239,8 +239,13 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
   let next = [...comments];
   for (const note of snapshot.notes) {
     const key = keyOf(note);
+    if(freshNativeKeys.includes(key))next=next.map(comment=>{
+      if(!comment.nativeDeleted||comment.nativeRef?.documentId!==documentId||comment.nativeRef.key!==key||!sourceMatches(comment.anchor,source))return comment;
+      const {key:deletedKey,...ref}=comment.nativeRef;
+      return {...comment,nativeRef:{...ref,deletedKey,state:'deleted'}};
+    });
     const bound = next.map((comment, index) => ({ comment, index })).filter(({ comment }) => comment.nativeRef?.documentId === documentId && comment.nativeRef.key === key && sourceMatches(comment.anchor, source));
-    if (!bound.length && !text(note.text).trim() && !(note.replies || []).some(reply => text(reply.text).trim())) continue;
+    if (!bound.length && !draftNativeKeys.includes(key) && !text(note.text).trim() && !(note.replies || []).some(reply => text(reply.text).trim())) continue;
     if (!key || duplicates.has(key)) {
       unlinked.push({ ...note, reason: key ? 'duplicate-native-key' : 'missing-native-key' });
       continue;
@@ -267,11 +272,14 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
       if (pending.length === 1) existing = pending[0];
     }
     if (!existing) {
-      next.push(importNative(note, row, native, context));
+      const imported=importNative(note, row, native, context),baseId=imported.id;
+      for(let suffix=1;next.some(comment=>comment.id===imported.id);suffix++)imported.id=baseId+'-'+suffix;
+      next.push(imported);
       continue;
     }
     const current = existing.comment;
     if (current.nativeDeleted) {
+      if(current.nativeRef.state==='delete-pending')continue;
       // A reappearing key in the session that observed its deletion is native
       // Undo. The same key in a different session can still be an older file.
       if (current.nativeRef.documentToken === snapshot.document) {
@@ -314,7 +322,7 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
     next = next.map(comment => {
       const ref = comment.nativeRef;
       if (ref?.documentId !== documentId || !ref.key || !anchorRow(comment, currentRows, source) || byKey.has(ref.key)) return comment;
-      if (comment.nativeDeleted) return ref.documentToken === snapshot.document ? comment : { ...comment, nativeRef: { ...ref, documentToken: snapshot.document } };
+      if (comment.nativeDeleted) return ref.documentToken === snapshot.document && ref.state==='deleted' ? comment : { ...comment, nativeRef: { ...ref, state:'deleted', documentToken: snapshot.document } };
       const local = businessProjection(comment, context);
       const pending = !ref.base || !same(local, ref.base) || ref.state === 'pending' || ref.state === 'conflict';
       const observed = Boolean(snapshot.document && ref.documentToken === snapshot.document);
@@ -351,7 +359,7 @@ function permittedProjection(comment, native, context) {
 }
 
 /** Pure collaboration -> native command plan; numeric IDs come from this snapshot. */
-export function planCraftWrites({ comments = [], snapshot, source, documentId, revision, rows = [], actor, people = [], canEditRow }) {
+export function planCraftWrites({ comments = [], snapshot, source, documentId, revision, rows = [], actor, people = [], canEditRow, editDocument = false }) {
   if (!validSnapshot(snapshot, source, documentId)) return [];
   const currentRows = scopedRows(rows, source), { byKey, duplicates } = noteIndex(snapshot.notes);
   const context = { actor, people, revision };
@@ -362,7 +370,7 @@ export function planCraftWrites({ comments = [], snapshot, source, documentId, r
     const note = ref?.key ? byKey.get(ref.key) : undefined;
     if (!note && snapshot.complete === false) continue;
     if (comment.nativeDeleted) {
-      if (note && owns(comment.createdBy, actor)) operations.push({ commentId: comment.id, action: 'delete', params: { id: note.id }, nativeKey: ref.key });
+      if (note && (owns(comment.createdBy, actor) || editDocument)) operations.push({ commentId: comment.id, action: 'delete', params: { id: note.id }, nativeKey: ref.key });
       continue;
     }
     if (!note && !ref?.base && !owns(comment.createdBy, actor)) continue;
