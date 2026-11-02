@@ -12,6 +12,8 @@ export default function AnnotationPanel({ people = [], comments, anchor, rows, o
   const panel = useRef();
   const options = filterPeople(people).map(person => ({ value: person.id, label: person.name + ' · ' + person.id }));
   const current = comments.filter(c => !c.nativeDeleted && c.anchor.requirementId === anchor.requirementId && c.anchor.projectId === anchor.projectId && c.anchor.fileId === anchor.fileId && String(c.anchor.sourceVersion) === String(anchor.sourceVersion));
+  const currentRow=resolveSourceAnchor(rows,anchor).row;
+  const clauseLabel=[currentRow?.clause&&'条款 '+currentRow.clause,currentRow?.title].filter(Boolean).join(' ');
   useEffect(() => {
     const target = panel.current?.querySelector('[data-comment-active="true"]'), scroll = panel.current?.closest('.detail-side-content');
     if (target && scroll) scroll.scrollTo({ top: scroll.scrollTop + target.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 20, behavior: 'smooth' });
@@ -39,7 +41,7 @@ export default function AnnotationPanel({ people = [], comments, anchor, rows, o
     setText(''); onClearQuote(); onSelectComment?.(id);
   }
   return <div className="annotation-panel" ref={panel}>
-    <div className="detail-section-intro"><MessageSquare size={17}/><div><strong>围绕原文讨论</strong><span>批注与对外应答分别保存</span></div><span className="count-pill">{current.length}</span></div>
+    <div className="detail-section-intro"><MessageSquare size={17}/><div><strong>当前条款讨论</strong><span>{clauseLabel&&clauseLabel+' · '}批注与对外应答分别保存</span></div><span className="count-pill">{current.length}</span></div>
     {canEdit && quoteDraft && <div className="annotation-compose"><blockquote>{quoteDraft.quote}</blockquote><Mentions className="rfq-mentions" aria-label="新增批注内容" placeholder="写下问题或意见，输入 @ 提及项目成员…" options={options} filterOption={mentionMatches} prefix={['@','＠']} value={text} onChange={setText} autoSize={{minRows:3,maxRows:8}}/><div><span className="muted">已关联所选原文</span><UiButton className="text-link" onClick={()=>{setText('');onClearQuote();}}>取消</UiButton><UiButton className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={add}><Send size={13}/>保存批注</UiButton></div></div>}
     {current.map(c => {
       const resolved = resolveSourceAnchor(rows, c.anchor), selected = activeCommentId === c.id;
