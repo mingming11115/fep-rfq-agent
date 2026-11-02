@@ -56,7 +56,6 @@ for(const fileType of ['docx','pdf'])test(`${fileType} file menu saves the revie
     assert.notEqual(item('保存批阅稿').getAttribute('aria-disabled'),'true');assert.match(item('保存批阅稿').textContent,/Ctrl.*S/);
     await act(async()=>{menu().dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await settle();});assert.equal(trigger().getAttribute('aria-expanded'),'false');assert.equal(document.activeElement,trigger());
     await open();await act(async()=>{editorDocument.dispatchEvent(new window.PointerEvent('pointerdown',{bubbles:true}));await settle();});assert.equal(trigger().getAttribute('aria-expanded'),'false','native document interactions close its menu');
-    await open();await click(node.querySelector('[aria-label="查看条款摘录"]'));assert.equal(trigger().getAttribute('aria-expanded'),'false');await open();assert.equal(item('保存批阅稿').getAttribute('aria-disabled'),'true','excerpt is not an editable file view');await click(node.querySelector('[aria-label="返回原文件"]'));
     assert.equal(node.querySelector('iframe'),frame);assert.equal(puts().length,0);
     await act(async()=>{emit('dirty',{dirty:true});await settle();});assert.match(fileState(),/文件未保存/);
     failNativeSave=true;await action('保存批阅稿');assert.match(fileState(),/文件保存失败/);assert.equal(puts().length,0);

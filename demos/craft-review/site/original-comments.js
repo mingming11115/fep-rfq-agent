@@ -7,7 +7,7 @@ const palette = [
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const overlap = (a,b) => a.y+a.h>b.y && a.y<b.y+b.h && a.x+a.w>b.x && a.x<b.x+b.w;
 
-export function createOriginalComments({frame, onStatus, onDirty, namespace='wordcraft', root=document.getElementById('original-comments'), tools=document.getElementById('review-tools'), documentFormat='DOCX', supportsFormatting=true, beforeCommand, onSelect, summaryOnly=false}) {
+export function createOriginalComments({frame, onStatus, onDirty, namespace='wordcraft', root=document.getElementById('original-comments'), tools=document.getElementById('review-tools'), documentFormat='DOCX', supportsFormatting=true, beforeCommand, onSelect, summaryOnly=false, externalSummaries=false}) {
   let disposed=false;const disposers=[];
   const listen=(owner,type,handler,options)=>{owner.addEventListener(type,handler,options);disposers.push(()=>owner.removeEventListener(type,handler,options));};
   const clip=root.querySelector('[data-native-clip]');
@@ -88,7 +88,7 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
     }
     const focused=document.activeElement, preserve=root.contains(focused)&&focused.matches('textarea');
     const field=preserve?{edit:focused.dataset.editInput,reply:focused.hasAttribute('data-reply-input'),start:focused.selectionStart,end:focused.selectionEnd}:null;
-    margin.innerHTML=snapshot.notes.map(n=>{
+    margin.innerHTML=(externalSummaries?[]:snapshot.notes).map(n=>{
       const color=palette[n.color%3], selected=active===n.id, own=n.author===snapshot.author||n.canEdit===true, isEditing=editing===n.id;
       const allowed=key=>snapshot.editable&&n[key]!==false;
       if(summaryOnly)return `<section class="wc-note wc-note-summary${selected?' wc-note-active':''}" style="--wc-color:${color.ink};--wc-fill:${color.fill}" data-note="${n.id}" aria-label="${esc(author(n.author))}的批注"><div class="wc-note-head"><span class="wc-author">${esc(author(n.author))}</span><span class="wc-time">${n.resolved?'已解决':'未解决'}${n.replies.length?' · '+n.replies.length+' 条回复':''}</span></div><button type="button" class="wc-note-body-button wc-summary-open" data-open-discussion="${n.id}" aria-label="打开右侧讨论：${esc(n.text||'新批注')}">${esc(n.text||'新批注，等待填写')}</button></section>`;
@@ -114,7 +114,7 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
     const view=snapshot.clip;
     Object.assign(clip.style,{left:view.x+'px',top:view.y+'px',width:view.w+'px',height:view.h+'px'});
     const pages=new Map(snapshot.pages.map(p=>[p.page,p]));
-    backgrounds.innerHTML=snapshot.pages.map(p=>`<div class="wc-native-margin" style="left:${p.x+p.w-view.x}px;top:${p.y-view.y}px;width:${p.margin}px;height:${p.h}px"></div>`).join('');
+    backgrounds.innerHTML=externalSummaries?'':snapshot.pages.map(p=>`<div class="wc-native-margin" style="left:${p.x+p.w-view.x}px;top:${p.y-view.y}px;width:${p.margin}px;height:${p.h}px"></div>`).join('');
     const entries=snapshot.notes.map(n=>{
       const ranges=n.ranges.filter(r=>overlap(r,view));
       const onVisiblePage=n.ranges.filter(r=>{const p=pages.get(r.page);return p&&p.y+p.h>view.y&&p.y<view.y+view.h;});

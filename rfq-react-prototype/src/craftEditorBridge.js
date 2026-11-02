@@ -8,7 +8,7 @@ const changed=(a,b)=>JSON.stringify(a)!==JSON.stringify(b);
 const modifying=new Set(['draft','replyDraft','reply','delete','resolve','new','upsert']);
 
 export function createCraftProjectEditor({frame,root,tools,source,reference,revision=0,user,engine,getContext,
-  onCommentsChange,onState=()=>{},onError=()=>{},onDirty=()=>{},onSave=()=>{},onSelectAnchor=()=>{},onSelectComment=()=>{},onUnlinkedComment}){
+  onCommentsChange,onState=()=>{},onError=()=>{},onDirty=()=>{},onSave=()=>{},onSelectAnchor=()=>{},onSelectComment=()=>{},onUnlinkedComment,externalSummaries=false}){
   let alive=true,ready=false,file=null,sent=false,boundToken='',snapshot=null,busy=false,scheduled=false;
   let configuration='',failedConfiguration='',minimumApplied=0,lastMutatingSequence=0,lastActive=null,lastBusinessSelection='',lastState='';
   const associations={},failures=new Map(),draftNativeKeys=new Set(),newDraftKeys=new Set(),freshNativeKeys=new Set();let discussion=null,lastUnlinked='';
@@ -66,7 +66,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     const signature=JSON.stringify([value.scope,value.note,value.edit,value.targets]);
     if(signature!==lastUnlinked||value.open){lastUnlinked=signature;discussion.open=false;onUnlinkedComment(value);}
   }
-  const surface=createOriginalComments({frame,root,tools,namespace:engine,documentFormat:engine==='pdfcraft'?'PDF':'DOCX',supportsFormatting:engine==='wordcraft',summaryOnly:true,
+  const surface=createOriginalComments({frame,root,tools,namespace:engine,documentFormat:engine==='pdfcraft'?'PDF':'DOCX',supportsFormatting:engine==='wordcraft',summaryOnly:true,externalSummaries,
     onStatus:message=>{if(alive)onError(message);},onDirty:()=>{if(alive)onDirty();},
     onSelect:openDiscussion,
     beforeCommand:(action,params)=>{
@@ -120,6 +120,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       editorToolsControlled:engine==='wordcraft'&&Boolean(snapshot?.editorToolsControlled),editorToolsVisible:engine==='wordcraft'&&Boolean(snapshot?.editorToolsVisible),
       documentOutline:{document:boundToken,revision:snapshot?.headingOutline?.revision??null,items:snapshot?.headingOutline?.items||[],ready:Boolean(boundToken),supported:engine==='wordcraft'&&Boolean(snapshot?.headingOutline)},
       geometry:{selectedId:snapshot?.source?.selectedId,status:snapshot?.source?.status,clip:snapshot?.clip,ranges:snapshot?.sourceRanges||[]},
+      nativeNotes:snapshot?.notes||[],nativeActiveId:snapshot?.active,
       unlinked:(merged.unlinked||[]).map(({id,nativeKey,text,author,reason})=>({id,nativeKey,text,author,reason})),conflicts:merged.conflicts||[]};
     const key=JSON.stringify(value);if(key!==lastState){lastState=key;onState(value);}
   }
@@ -232,10 +233,11 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       return command('heading',{revision:target.revision,index:target.index});
     },
     locate:(id=getContext().selectedAnchor?.requirementId)=>command('locate',{id}),
-    openFileComment(key){
+    openFileComment(key,{locate=false}={}){
       if(!alive)return false;
       const notes=snapshot?.notes.filter(note=>note.nativeKey===key)||[];
       if(notes.length!==1)return false;
+      if(locate)void command('select',{id:notes[0].id}).catch(error=>{if(alive)onError(error.message);});
       openDiscussion(notes[0].id,notes[0]);return true;
     },
     retry(){failures.clear();configuration='';failedConfiguration='';schedule();},
