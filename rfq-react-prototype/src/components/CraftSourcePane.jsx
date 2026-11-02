@@ -1,5 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {Alert,Button,Empty,Select,Spin} from 'antd';
+import {Alert,Button,Empty,Spin} from 'antd';
 import {AimOutlined,FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
 import {FileText,PencilLine,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftBlob,supportsCraft} from '../craftClient';
@@ -13,7 +13,7 @@ import './craft-source.css';
 const read=key=>{try{return JSON.parse(localStorage.getItem(key)||'null');}catch{return null;}};
 const emptyComments=[];
 
-export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,showResponses=true,responsePreview,onQuote,onDocumentOutlineChange,toolbar,directory,children}){
+export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,onUnlinkedComment,activeCommentId,showResponses=true,responsePreview,onQuote,onDocumentOutlineChange,toolbar,directory,children}){
   const bindingKey='fep-rfq-craft-source:'+craftSourceKey(source);
   const [reference,setReference]=useState(()=>file?.craft||read(bindingKey));
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
@@ -22,10 +22,10 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const [editorToolsBusy,setEditorToolsBusy]=useState(false);
   const [locationNotice,setLocationNotice]=useState(null),[locationConfirmation,setLocationConfirmation]=useState(0),[locateRequest,setLocateRequest]=useState(null);
   const locationTimer=useRef(null);
-  const [backup,setBackup]=useState(null),[association,setAssociation]=useState({}),[frameEpoch,setFrameEpoch]=useState(0);
+  const [backup,setBackup]=useState(null),[frameEpoch,setFrameEpoch]=useState(0);
   const frame=useRef(null),overlay=useRef(null),tools=useRef(null),picker=useRef(null),editor=useRef(null),saveQueue=useRef(null);
   const alive=useRef(true),generation=useRef(0),dirtyRef=useRef(false),pendingSaves=useRef(0),abortLoad=useRef(null);
-  const latest=useRef();latest.current={rows,comments:allComments,people,canEditRow,editDocument:canManage,selectedAnchor,activeCommentId,onProjectCommentsChange,onSelectAnchor,onSelectComment};
+  const latest=useRef();latest.current={rows,comments:allComments,people,canEditRow,editDocument:canManage,selectedAnchor,activeCommentId,onProjectCommentsChange,onSelectAnchor,onSelectComment,onUnlinkedComment};
   const identity=craftSourceKey(source,user?.id);
   function markDirty(){if(!alive.current)return;generation.current++;dirtyRef.current=true;setDirty(true);if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=true;}
   function publish(update){
@@ -80,7 +80,8 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     const engine=meta.fileType==='pdf'?'pdfcraft':'wordcraft';
     const instance=createCraftProjectEditor({frame:frame.current,root:overlay.current,tools:tools.current,source,reference,revision:meta.revision,user,engine,
       getContext:()=>latest.current,onCommentsChange:publish,onState:value=>{if(alive.current)setEditorState({...value,sessionKey:JSON.stringify([reference.id,frameEpoch])});},onError:message=>{if(alive.current)setError(message);},onDirty:markDirty,
-      onSelectAnchor:anchor=>latest.current.onSelectAnchor?.(anchor),onSelectComment:(id,anchor)=>latest.current.onSelectComment?.(id,anchor),
+      onSelectAnchor:anchor=>latest.current.onSelectAnchor?.(anchor),onSelectComment:(id,anchor,options)=>latest.current.onSelectComment?.(id,anchor,options),
+      onUnlinkedComment:onUnlinkedComment?value=>latest.current.onUnlinkedComment?.(value):undefined,
       onSave:packet=>{
         if(!alive.current)return;
         const blob=new Blob([packet.bytes],{type:meta.fileType==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
@@ -177,7 +178,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving} onClick={()=>{if(backup&&dirty&&editor.current){editor.current.save().catch(cause=>setError(cause.message));return;}setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button></div>}/>}
     {!loading&&!reference&&excerpt&&<Alert type="info" showIcon message="当前来源文件尚未关联原文件，已显示对应条款摘录" action={canManage?<Button size="small" onClick={()=>picker.current?.click()}>上传对应原文件</Button>:undefined}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
-    {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Select size="small" aria-label={`为批注选择条款 ${note.id}`} placeholder="选择条款后同步" value={association[note.nativeKey]} onChange={value=>setAssociation(old=>({...old,[note.nativeKey]:value}))} options={rows.filter(row=>canEditRow(row)).map(row=>({value:row.id,label:`${row.clause||'无编号'} ${row.title||row.original?.slice(0,24)||''}`}))}/><Button size="small" disabled={!association[note.nativeKey]} onClick={()=>editor.current?.associate(note.nativeKey,association[note.nativeKey])}>关联并同步</Button></div>)}</div>}
+    {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Button size="small" onClick={()=>editor.current?.openFileComment(note.nativeKey)}>查看批注</Button></div>)}</div>}
     {showLocationNotice&&<div className="office-clause-status" data-clause-status={sourceStatus} aria-label="定位结果"><span role="status">{locationText}</span>{sourceStatus!=='matched'&&<div className="office-actions"><Button size="small" disabled={locating} loading={locating} onClick={()=>locateClause()}>重新定位</Button><Button size="small" onClick={()=>setExcerpt(true)}>查看摘录</Button></div>}</div>}
     <div className="office-excerpt" hidden={!excerpt}>{children}</div>
     <div className="craft-native-workspace" hidden={excerpt||!bytes}>

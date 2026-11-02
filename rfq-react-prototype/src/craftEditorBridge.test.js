@@ -135,13 +135,12 @@ test('project editor coordinates native and collaboration comments within one so
     assert.deepEqual(context.comments,before);
     assert.equal(files.length,saves);
   });
-  await t.test('a draft typed before an older save packet arrives invalidates that checkpoint immediately',async()=>{
+  await t.test('right-side typing before an older save packet arrives invalidates that checkpoint immediately',async()=>{
     const review={document:'native-session',applied,notes:structuredClone(notes)};
     assert.equal(bridge.checkpointCovers(review),true);
-    const edit=document.querySelector('[data-edit="1"]');edit.click();await tick();
-    const input=document.querySelector('[data-edit-input="1"]');assert.ok(input);
-    input.value='Draft typed after byte capture';input.dispatchEvent(new window.Event('input',{bubbles:true}));
+    context={...context,comments:context.comments.map(comment=>comment.nativeRef.key==='word:1'?{...comment,text:'Draft typed after byte capture'}:comment)};
     assert.equal(bridge.checkpointCovers(review),false);
+    bridge.refresh();await tick();
     send('save',{name:'real.docx',bytes:new Uint8Array([4]).buffer,review});await tick();
     assert.equal(bridge.checkpointCovers(files.at(-1).review),false);
     assert.equal(bridge.checkpointCovers({document:'native-session',applied,notes:structuredClone(notes)}),true);
