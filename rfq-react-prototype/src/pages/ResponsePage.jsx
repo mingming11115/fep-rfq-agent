@@ -81,13 +81,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [outlineOpen, setOutlineOpen] = useState(false), [activeCommentId, setActiveCommentId] = useState(null);
   const [commentEditRequest,setCommentEditRequest]=useState(null),[nativeDiscussion,setNativeDiscussion]=useState(null);
   const detailLayoutRef = useRef(null), detailSideRef = useRef(null);
-  const [paneShare, setPaneShare] = useState(55);
+  const [paneShare, setPaneShare] = useState(()=>window.matchMedia('(min-width:768px)').matches?60:55);
   useEffect(() => { const frame=requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));return()=>cancelAnimationFrame(frame); }, [paneShare, narrowWorkbench]);
   function resizeWithKeyboard(event) {
     if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Enter'].includes(event.key))return;
     event.preventDefault();
     const box=detailLayoutRef.current?.getBoundingClientRect();
-    setPaneShare(current=>resizePanelShare(current,event.key,{span:narrowWorkbench?1100:box?.width||1000,minStart:narrowWorkbench?280:320,minEnd:narrowWorkbench?360:380,vertical:narrowWorkbench}));
+    setPaneShare(current=>resizePanelShare(current,event.key,{span:narrowWorkbench?1100:box?.width||1000,minStart:narrowWorkbench?280:320,minEnd:narrowWorkbench?360:380,vertical:narrowWorkbench,defaultShare:narrowWorkbench?55:60}));
   }
   const allProjectComments = appState.commentsByProject?.[project.id] || [];
   const projectComments = allProjectComments.filter(comment => !comment.nativeDeleted);
