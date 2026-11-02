@@ -6,6 +6,8 @@
 .response-card-stats span{font-size:12px;line-height:1.3}.response-card-stats strong{font-size:12px;line-height:1.3;font-weight:600;font-variant-numeric:tabular-nums}
 .response-card-stats button[aria-pressed=true]{color:#2664e8;border-bottom-color:#2664e8}
 .response-card-query{display:flex;align-items:center;gap:7px;min-width:140px;flex:1 1 180px}
+.response-card-query-popup{width:min(340px,calc(100vw - 48px));min-width:0;flex:none;flex-wrap:wrap;max-height:calc(100dvh - 100px);overflow:auto}
+.response-card-query-popup>.response-filter-popover{width:100%;min-width:0;flex-basis:100%;border-top:1px solid #e8edf3;padding-top:12px;margin-top:5px}
 .response-card-query label{display:block;min-width:0}
 .response-card-query .input{width:100%;min-width:0;font-size:12px;height:34px}
 .response-card-search{flex:1}.response-card-search>div{position:relative}.response-card-search svg{position:absolute;left:10px;top:10px;color:#8b97a8}.response-card-search .input{padding-left:30px}

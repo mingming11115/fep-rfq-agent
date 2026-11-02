@@ -13,7 +13,7 @@ import './craft-source.css';
 const read=key=>{try{return JSON.parse(localStorage.getItem(key)||'null');}catch{return null;}};
 const emptyComments=[];
 
-export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,showResponses=true,responsePreview,onQuote,onDocumentOutlineChange,children}){
+export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,showResponses=true,responsePreview,onQuote,onDocumentOutlineChange,toolbar,directory,children}){
   const bindingKey='fep-rfq-craft-source:'+craftSourceKey(source);
   const [reference,setReference]=useState(()=>file?.craft||read(bindingKey));
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
@@ -130,10 +130,18 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     setFrameEpoch(value=>value+1);setRetry(value=>value+1);
   }
   const sourceStatus=editorState.source?.status||'waiting';
+  const fileState=loading?'loading':!reference?'missing':!bytes?'unopened':saving?'saving':dirty?'dirty':'saved';
+  const fileStateText={loading:'文件加载中',missing:'未关联原件',unopened:'文件未打开',saving:'文件保存中',dirty:'文件未保存',saved:'文件已保存'}[fileState];
+  const fileName=meta?.name||reference?.name||file?.name||'客户原文件';
+  const accessText=canManage?'可编辑原文':rows.some(row=>canEditRow(row))?'条款批注':'只读';
   const locationText={waiting:'正在连接原文定位…',matched:'已定位当前条款 · 原文与卡片联动',page:'已跳转来源页 · 请核对条款位置',missing:'未找到唯一原文，请核对文件或使用条款摘录',ambiguous:'原文有多处匹配，请核对条款位置',unsupported:'当前原文暂不支持定位'}[sourceStatus]||'正在定位条款…';
   return <section className={`office-source craft-source detail-source ${expanded?'office-source-expanded':''}`} aria-label="Word / PDF 原文件批阅">
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
-    <div className="office-toolbar"><div className="office-title"><FileText size={17}/><div><strong>{meta?.name||reference?.name||file?.name||'客户原文件'}</strong><small role="status">批阅副本 · {canManage?'可编辑原文':rows.some(row=>canEditRow(row))?'条款批注':'只读'} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div><div className="office-actions"><Button size="small" onClick={()=>setExcerpt(!excerpt)}>{excerpt?'原文件':'条款摘录'}</Button><Button size="small" aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div></div>
+    <div className={`office-toolbar ${toolbar?'rfq-document-toolbar':''}`} role={toolbar?'toolbar':undefined} aria-label={toolbar?'文档工具栏':undefined}>
+      {toolbar?<div className="office-title rfq-document-identity"><div className="rfq-document-file">{toolbar.fileSelector}</div><span className="rfq-document-version">{source.sourceVersion}</span><small className={`rfq-file-state is-${fileState}`} role="status" aria-label="文件保存状态" title={`${fileStateText} · 批阅副本 · ${accessText} · ${fileName}`}><i aria-hidden="true"/><span className="rfq-file-state-label">{fileStateText}</span></small></div>:<div className="office-title"><FileText size={17}/><div><strong>{fileName}</strong><small role="status">批阅副本 · {accessText} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div>}
+      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div>
+    </div>
+    {directory}
     {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving} onClick={()=>{if(backup&&dirty&&editor.current){editor.current.save().catch(cause=>setError(cause.message));return;}setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button></div>}/>}
     {!loading&&!reference&&excerpt&&<Alert type="info" showIcon message="当前来源文件尚未关联原文件，已显示对应条款摘录" action={canManage?<Button size="small" onClick={()=>picker.current?.click()}>上传对应原文件</Button>:undefined}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}

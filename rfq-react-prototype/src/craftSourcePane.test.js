@@ -22,6 +22,8 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
   const ref={id:'file-id',name:'real.docx',fileType:'docx',access:'cap',...source,revision:0};
   const rows=[{id:'R',projectId:'P',sourceFileId:'F',sourceVersion:'V1',original:'Original source',sourcePage:1,conclusion:'Comply'}];
   let responseMeta=ref,saveFailure=false;const saves=[],outlines=[];
+  const toolbar={fileSelector:React.createElement('select',{'aria-label':'应答来源文件'},React.createElement('option',null,'Customer RFQ.docx')),actions:React.createElement('button',{'aria-label':'展开文档目录'},'目录')};
+  const directoryPanel=React.createElement('aside',{'aria-label':'文件目录'},'Current directory');
   const previousFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{
     if(options?.method==='PUT'){
       saves.push({url,options});
@@ -57,7 +59,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     return {calls,emit,snapshot};
   };
   try{
-    await act(async()=>{root.render(React.createElement(CraftSourcePane,{onDocumentOutlineChange:value=>outlines.push(value),file:{id:'F',name:'real.docx',craft:ref},source,user,canManage:true,rows,selectedAnchor:{...source,requirementId:'R'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Existing excerpts')));});
+    await act(async()=>{root.render(React.createElement(CraftSourcePane,{toolbar,directory:directoryPanel,onDocumentOutlineChange:value=>outlines.push(value),file:{id:'F',name:'real.docx',craft:ref},source,user,canManage:true,rows,selectedAnchor:{...source,requirementId:'R'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Existing excerpts')));});
     await act(async()=>await settle());
     const frame=container.querySelector('iframe');assert.ok(frame);
     // Vite's public directory does not resolve a directory URL to its index:
@@ -66,7 +68,12 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(container.querySelector('[data-count]')?.textContent,'0 条批注');
     assert.equal(Boolean(container.querySelector('.office-savebar')),false,'the bottom file operation row is removed');
     for(const label of ['重开保存稿','原件','批阅版','保存原文'])assert.ok(![...container.querySelectorAll('button')].some(button=>button.textContent===label),label);
-    assert.match(container.textContent,/条款摘录/);
+    const header=container.querySelector('[aria-label="文档工具栏"]');assert.ok(header);
+    assert.equal(header.querySelectorAll('[aria-label="应答来源文件"]').length,1);
+    assert.ok(!header.textContent.includes('real.docx'),'the native file title does not duplicate the selected source');
+    assert.match(header.textContent,/V1/);
+    assert.match(header.querySelector('[aria-label="文件保存状态"]').textContent,/文件已保存/);
+    assert.ok(container.querySelector('[aria-label="查看条款摘录"]'));
     assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]')?.textContent||'',/Comply/);
     const {calls,emit,snapshot}=await connectNative(frame,ref);
     assert.equal(container.querySelector('button[aria-label="文档目录"]'),null,'the duplicate source-pane directory entry is removed');
@@ -78,7 +85,12 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     await act(async()=>{container.querySelector('[data-response-note="R"] .wc-note-body').click();await settle();});
     assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='locate'&&JSON.parse(call.payload).params.id==='R'),'clicking even the current advice must explicitly locate the native source');
     const editorUrl=frame.src;
-    await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:'R2'},responsePreview:{id:'R2',conclusion:'不满足',reason:'当前方案达不到要求'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});
+    await act(async()=>{container.querySelector('[aria-label="放大原文件区"]').click();await settle();});
+    assert.ok(container.querySelector('.office-source-expanded [aria-label="文件目录"]'),'directory is included in the expanded file pane');
+    assert.equal(container.querySelector('iframe'),frame);
+    await act(async()=>{container.querySelector('[aria-label="还原原文件区"]').click();await settle();});
+    assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
+    await act(async()=>{root.render(React.createElement(CraftSourcePane,{toolbar,directory:directoryPanel,file:{id:'F',name:'real.docx',craft:ref},source:{...source},user:{...user},canManage:true,rows:[...rows,{...rows[0],id:'R2',original:'Next source'}],selectedAnchor:{...source,requirementId:'R2'},responsePreview:{id:'R2',conclusion:'不满足',reason:'当前方案达不到要求'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Next excerpt')));await settle();});
     assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]').textContent,/当前方案达不到要求/);
     assert.equal(container.querySelector('iframe'),frame);
     assert.equal(frame.src,editorUrl);

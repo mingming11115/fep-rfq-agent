@@ -23,4 +23,22 @@
 .craft-unlinked .ant-select{width:190px;max-width:45%}
 .office-source-expanded .craft-editor-viewport{min-height:0}
 .craft-source .office-excerpt{min-height:0}
+.rfq-document-toolbar{min-height:44px;height:44px;padding:5px 8px;gap:8px;flex-wrap:nowrap}
+.rfq-document-identity{flex:1;gap:7px;overflow:hidden}
+.rfq-document-identity .rfq-document-file{flex:1;min-width:74px;max-width:240px}
+.rfq-document-file .ant-select{width:100%;min-width:0;font-size:12px}
+.rfq-document-file .ant-select-selector{padding-inline:7px!important}
+.rfq-document-version{flex:none;font-size:11px;color:#7b8798;white-space:nowrap}
+.office-title .rfq-file-state{display:flex;align-items:center;gap:4px;flex:none;margin:0;white-space:nowrap;color:#74818f}
+.rfq-file-state>i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.office-title .rfq-file-state.is-saved{color:#3d936e}
+.office-title .rfq-file-state.is-dirty,.office-title .rfq-file-state.is-unopened{color:#bd7b24}
+.office-title .rfq-file-state.is-saving{color:#1677ff}
+.rfq-document-toolbar .office-actions{gap:4px;align-items:center}
+.rfq-document-toolbar .office-actions>.ant-btn{min-width:26px;height:26px;padding:0 5px;font-size:11px;border-color:transparent;box-shadow:none}
+.rfq-document-toolbar .office-actions>.active,.rfq-document-toolbar .is-active{background:#edf3ff;color:#1677ff}
+.rfq-document-toolbar .count-pill{font-size:10px;min-width:17px;padding:0 3px}
+.craft-source>.detail-outline{top:44px;width:min(310px,90%);z-index:10}
+.craft-source.office-source-expanded{z-index:900}
+@container(max-width:560px){.rfq-file-state-label{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.rfq-document-toolbar{gap:5px;padding-inline:6px}.rfq-document-identity{gap:5px}.rfq-document-toolbar .office-actions{gap:2px}}
 @media(max-width:767px){.craft-source .office-actions .ant-btn{padding-inline:6px}.craft-source .office-toolbar{gap:4px}.craft-editor-viewport{min-height:400px}}
