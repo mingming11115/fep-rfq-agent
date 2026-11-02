@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.DocumentBlockMapper">
+
+    <sql id="columns">id, document_id, block_index, parent_block_id, type, section_path, customer_clause_no,
+        content, source_anchor, provenance, processing_status</sql>
+
+    <select id="findByDocumentIdOrderByBlockIndex" resultType="com.naura.rfq.domain.DocumentBlock">
+        select <include refid="columns"/>
+        from document_block
+        where document_id = #{documentId}
+        order by block_index asc
+    </select>
+
+    <select id="countByDocumentId" resultType="long">
+        select count(*)
+        from document_block
+        where document_id = #{documentId}
+    </select>
+
+    <delete id="deleteByDocumentId">
+        delete from document_block where document_id = #{documentId}
+    </delete>
+
+    <insert id="insert">
+        insert into document_block (id, document_id, block_index, parent_block_id, type, section_path,
+                                    customer_clause_no, content, source_anchor, provenance, processing_status)
+        values (#{id}, #{documentId}, #{blockIndex}, #{parentBlockId}, #{type}, #{sectionPath},
+                #{customerClauseNo}, #{content}, #{sourceAnchor}, #{provenance}, #{processingStatus})
+    </insert>
+</mapper>

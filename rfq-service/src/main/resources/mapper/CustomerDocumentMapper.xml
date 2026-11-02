@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.CustomerDocumentMapper">
+
+    <sql id="columns">id, project_id, name, version, purpose, storage_ref, content_type, size_bytes, sha256,
+        status, uploaded_by, created_at</sql>
+
+    <select id="findById" resultType="com.naura.rfq.domain.CustomerDocument">
+        select <include refid="columns"/>
+        from customer_document
+        where id = #{id}
+    </select>
+
+    <select id="findByProjectIdOrderByCreatedAtDesc" resultType="com.naura.rfq.domain.CustomerDocument">
+        select <include refid="columns"/>
+        from customer_document
+        where project_id = #{projectId}
+        order by created_at desc
+    </select>
+
+    <select id="findByProjectIdAndSha256" resultType="com.naura.rfq.domain.CustomerDocument">
+        select <include refid="columns"/>
+        from customer_document
+        where project_id = #{projectId}
+          and sha256 = #{sha256}
+    </select>
+
+    <select id="findPage" resultType="com.naura.rfq.domain.CustomerDocument">
+        select <include refid="columns"/>
+        from customer_document
+        where project_id = #{projectId}
+        order by ${q.orderBy}
+        limit #{q.size} offset #{q.offset}
+    </select>
+
+    <select id="countByProjectId" resultType="long">
+        select count(*)
+        from customer_document
+        where project_id = #{projectId}
+    </select>
+
+    <insert id="insert">
+        insert into customer_document (id, project_id, name, version, purpose, storage_ref, content_type,
+                                       size_bytes, sha256, status, uploaded_by, created_at)
+        values (#{id}, #{projectId}, #{name}, #{version}, #{purpose}, #{storageRef}, #{contentType},
+                #{sizeBytes}, #{sha256}, #{status}, #{uploadedBy}, #{createdAt})
+    </insert>
+
+    <update id="update">
+        update customer_document
+        set name         = #{name},
+            version      = #{version},
+            purpose      = #{purpose},
+            storage_ref  = #{storageRef},
+            content_type = #{contentType},
+            size_bytes   = #{sizeBytes},
+            sha256       = #{sha256},
+            status       = #{status},
+            uploaded_by  = #{uploadedBy}
+        where id = #{id}
+    </update>
+</mapper>

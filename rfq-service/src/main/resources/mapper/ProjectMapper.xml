@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.ProjectMapper">
+
+    <sql id="columns">id, code, name, customer, bu_id, owner_id, stage, version, created_by, created_at,
+        updated_at</sql>
+
+    <sql id="scopeFilter">
+        <where>
+            <if test="buIds != null">
+                bu_id in
+                <foreach collection="buIds" item="buId" open="(" separator="," close=")">#{buId}</foreach>
+            </if>
+        </where>
+    </sql>
+
+    <select id="findById" resultType="com.naura.rfq.domain.Project">
+        select <include refid="columns"/>
+        from project
+        where id = #{id}
+    </select>
+
+    <select id="findAll" resultType="com.naura.rfq.domain.Project">
+        select <include refid="columns"/>
+        from project
+        order by created_at desc
+    </select>
+
+    <select id="findByIdIn" resultType="com.naura.rfq.domain.Project">
+        select <include refid="columns"/>
+        from project
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="findByBuIdOrderByCreatedAtDesc" resultType="com.naura.rfq.domain.Project">
+        select <include refid="columns"/>
+        from project
+        where bu_id = #{buId}
+        order by created_at desc
+    </select>
+
+    <!-- orderBy 由 PageQuery 的白名单校验生成，只可能是字段名加 asc/desc，不接受外部原文。 -->
+    <select id="findPage" resultType="com.naura.rfq.domain.Project">
+        select <include refid="columns"/>
+        from project
+        <include refid="scopeFilter"/>
+        order by ${q.orderBy}
+        limit #{q.size} offset #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*)
+        from project
+        <include refid="scopeFilter"/>
+    </select>
+
+    <insert id="insert">
+        insert into project (id, code, name, customer, bu_id, owner_id, stage, version, created_by,
+                             created_at, updated_at)
+        values (#{id}, #{code}, #{name}, #{customer}, #{buId}, #{ownerId}, #{stage},
+                coalesce(#{version}, 0), #{createdBy}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <update id="update">
+        update project
+        set code       = #{code},
+            name       = #{name},
+            customer   = #{customer},
+            bu_id      = #{buId},
+            owner_id   = #{ownerId},
+            stage      = #{stage},
+            version    = version + 1,
+            updated_at = #{updatedAt}
+        where id = #{id}
+    </update>
+</mapper>

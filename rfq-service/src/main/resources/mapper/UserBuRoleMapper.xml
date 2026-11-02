@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.UserBuRoleMapper">
+
+    <sql id="columns">id, user_id, bu_id, role, status, created_at</sql>
+
+    <select id="findByUserIdAndStatus" resultType="com.naura.rfq.domain.UserBuRole">
+        select <include refid="columns"/>
+        from user_bu_role
+        where user_id = #{userId}
+          and status = #{status}
+    </select>
+
+    <select id="findByBuIdAndRoleAndStatus" resultType="com.naura.rfq.domain.UserBuRole">
+        select <include refid="columns"/>
+        from user_bu_role
+        where bu_id = #{buId}
+          and role = #{role}
+          and status = #{status}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into user_bu_role (user_id, bu_id, role, status, created_at)
+        values (#{userId}, #{buId}, #{role}, #{status}, #{createdAt})
+    </insert>
+</mapper>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.ParseRunMapper">
+
+    <sql id="columns">id, document_id, status, total_blocks, processed_blocks, requirement_count,
+        issue_count, message, started_at, finished_at, created_by</sql>
+
+    <select id="findById" resultType="com.naura.rfq.domain.ParseRun">
+        select <include refid="columns"/>
+        from parse_run
+        where id = #{id}
+    </select>
+
+    <select id="findByDocumentIdOrderByStartedAtDesc" resultType="com.naura.rfq.domain.ParseRun">
+        select <include refid="columns"/>
+        from parse_run
+        where document_id = #{documentId}
+        order by started_at desc
+    </select>
+
+    <insert id="insert">
+        insert into parse_run (id, document_id, status, total_blocks, processed_blocks,
+                              requirement_count, issue_count, message, started_at, finished_at,
+                              created_by)
+        values (#{id}, #{documentId}, #{status}, #{totalBlocks}, #{processedBlocks},
+                #{requirementCount}, #{issueCount}, #{message}, #{startedAt}, #{finishedAt},
+                #{createdBy})
+    </insert>
+
+    <update id="update">
+        update parse_run
+        set status            = #{status},
+            total_blocks      = #{totalBlocks},
+            processed_blocks  = #{processedBlocks},
+            requirement_count = #{requirementCount},
+            issue_count       = #{issueCount},
+            message           = #{message},
+            started_at        = #{startedAt},
+            finished_at       = #{finishedAt}
+        where id = #{id}
+    </update>
+</mapper>

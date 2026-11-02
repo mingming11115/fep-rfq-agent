@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.BusinessUnitMapper">
+
+    <sql id="columns">id, code, name, created_at</sql>
+
+    <select id="findById" resultType="com.naura.rfq.domain.BusinessUnit">
+        select <include refid="columns"/>
+        from business_unit
+        where id = #{id}
+    </select>
+
+    <select id="findByCode" resultType="com.naura.rfq.domain.BusinessUnit">
+        select <include refid="columns"/>
+        from business_unit
+        where code = #{code}
+    </select>
+
+    <select id="findAll" resultType="com.naura.rfq.domain.BusinessUnit">
+        select <include refid="columns"/>
+        from business_unit
+        order by created_at asc
+    </select>
+
+    <insert id="insert">
+        insert into business_unit (id, code, name, created_at)
+        values (#{id}, #{code}, #{name}, #{createdAt})
+    </insert>
+</mapper>

@@ -1,0 +1,90 @@
+package com.naura.rfq;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.naura.rfq.common.api.PageQuery;
+import com.naura.rfq.domain.AppUser;
+import com.naura.rfq.domain.Project;
+import com.naura.rfq.domain.Requirement;
+import com.naura.rfq.mapper.AppUserMapper;
+import com.naura.rfq.mapper.ProjectMapper;
+import com.naura.rfq.mapper.RequirementMapper;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+/**
+ * 验证 MyBatis 侧真正容易出错的地方：下划线列名到驼峰字段的映射、分页 SQL、
+ * 排序白名单、以及乐观锁更新。全部只读，不写入业务数据。
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+class MapperIntegrationTest {
+
+    @Autowired
+    private AppUserMapper users;
+
+    @Autowired
+    private ProjectMapper projects;
+
+    @Autowired
+    private RequirementMapper requirements;
+
+    @Test
+    void mapsSnakeCaseColumnsToCamelCaseFields() {
+        Optional<AppUser> found = users.findByUsername("sr01");
+
+        assertThat(found).isPresent();
+        AppUser user = found.get();
+        assertThat(user.getId()).isEqualTo("demo-sales");
+        assertThat(user.getDisplayName()).isNotBlank();
+        assertThat(user.getPasswordHash()).startsWith("$2");
+        assertThat(user.getStatus()).isEqualTo("ACTIVE");
+        assertThat(user.isSystemAdmin()).isFalse();
+        assertThat(user.getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    void pagesProjectsAndCountsThem() {
+        PageQuery query = PageQuery.of(1, 10, null, List.of("createdAt"), "createdAt,desc");
+
+        List<Project> page = projects.findPage(null, query);
+        long total = projects.countPage(null);
+
+        assertThat(total).isPositive();
+        assertThat(page).isNotEmpty();
+        assertThat(page).hasSize((int) Math.min(total, 10));
+        assertThat(page.get(0).getBuId()).isNotBlank();
+        assertThat(page.get(0).getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    void scopedPagingFiltersByBusinessUnit() {
+        PageQuery query = PageQuery.of(1, 10, null, List.of("createdAt"), "createdAt,desc");
+
+        long matched = projects.countPage(List.of("BU-FEP"));
+        long unmatched = projects.countPage(List.of("BU-NOT-EXIST"));
+
+        assertThat(matched).isEqualTo(projects.countPage(null));
+        assertThat(projects.findPage(List.of("BU-NOT-EXIST"), query)).isEmpty();
+        assertThat(unmatched).isZero();
+    }
+
+    @Test
+    void rejectsSortFieldOutsideWhitelist() {
+        assertThatThrownBy(() -> PageQuery.of(1, 10, "id desc, (select 1)",
+                List.of("createdAt"), "createdAt,desc"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void optimisticUpdateAffectsNothingWhenVersionIsStale() {
+        Requirement ghost = new Requirement();
+        ghost.setId("REQ-NOT-EXIST");
+        ghost.setVersion(99L);
+
+        assertThat(requirements.updateWithVersion(ghost)).isZero();
+    }
+}
