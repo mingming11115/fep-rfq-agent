@@ -3,6 +3,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown, MessageSquarePlus } from "./icons";
 import { selectSourceResponseAnnotations, SOURCE_ANNOTATION_CONCLUSIONS } from '../responseAdvice';
 import SourceResponseAnnotation from './SourceResponseAnnotation';
+import ResponseAnnotationFilter from './ResponseAnnotationFilter';
 import './source-response-annotation.css';
 
 const palette = [
@@ -89,7 +90,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
 
   return <div ref={root} className={`word-classic-document project-word-document${formatting ? '' : ' wc-hide-format'}`}>
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="word-annotations"/>
-    <div className="wc-annotation-filters" role="group" aria-label="按应答结论显示标注">
+    {!focusCurrentAnnotation && <div className="wc-annotation-filters" role="group" aria-label="按应答结论显示标注">
       <span>显示标注：</span>
       {SOURCE_ANNOTATION_CONCLUSIONS.map(conclusion => <label key={conclusion}>
         <UiCheckbox type="checkbox" aria-label={`显示 ${conclusion} 标注`} disabled={!showAnnotations}
@@ -97,10 +98,11 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
           onChange={event => setVisibleConclusions(previous => event.target.checked ? [...previous, conclusion] : previous.filter(value => value !== conclusion))}/>
         {conclusion}
       </label>)}
-    </div>
+    </div>}
     <div className="wc-tools" aria-label="原文应答标注工具栏">
       <span className="wc-file">应答标注 · {showAnnotations ? notes.length : 0} / {rows.length} 条</span>
       {focusCurrentAnnotation && <button type="button" className="wc-button" disabled={!showAnnotations} aria-pressed={showAll} onClick={()=>setShowAll(!showAll)}>{showAll?'仅看当前条款':'查看全部标注'}</button>}
+      {focusCurrentAnnotation && <ResponseAnnotationFilter value={visibleConclusions} onChange={setVisibleConclusions} disabled={!showAnnotations}/>}
       {onNewComment && <button type="button" className="wc-button" disabled={!current} onMouseDown={event => event.preventDefault()} onClick={onNewComment}><MessageSquarePlus size={14}/>新建批注</button>}
       <button type="button" className="wc-button" aria-label="上一条应答标注" disabled={!showAnnotations || currentIndex <= 0} onClick={() => select(notes[currentIndex - 1]?.row)}><ChevronUp size={14}/></button>
       <button type="button" className="wc-button" aria-label="下一条应答标注" disabled={!showAnnotations || !notes.length || currentIndex >= notes.length - 1} onClick={() => select(notes[currentIndex + 1]?.row)}><ChevronDown size={14}/></button>

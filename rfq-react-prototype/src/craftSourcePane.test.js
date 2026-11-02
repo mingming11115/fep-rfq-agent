@@ -9,7 +9,7 @@ import React,{act} from 'react';
 
 test('project source pane opens the Word/PDF HTML entry, leaves loading after handshake, and preserves read-only fallback',async()=>{
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
-  Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,ShadowRoot:window.ShadowRoot,
+  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,
     DOMParser:window.DOMParser,location:window.location,localStorage:window.localStorage,ResizeObserver:class{observe(){}disconnect(){}},getComputedStyle:window.getComputedStyle.bind(window),
     requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});

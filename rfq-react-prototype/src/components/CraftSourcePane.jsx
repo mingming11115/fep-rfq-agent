@@ -5,6 +5,7 @@ import {FileText,PencilLine,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
 import CraftResponseAdvice from './CraftResponseAdvice';
+import {AnnotationFilterView} from './annotationFilterView';
 import classicTemplate from '../../../demos/craft-review/site/classic.html?raw';
 import '../../../demos/craft-review/site/original-comments.css';
 import './onlyoffice-source.css';
@@ -180,13 +181,15 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
     {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Button size="small" onClick={()=>editor.current?.openFileComment(note.nativeKey)}>查看批注</Button></div>)}</div>}
     {showLocationNotice&&<div className="office-clause-status" data-clause-status={sourceStatus} aria-label="定位结果"><span role="status">{locationText}</span>{sourceStatus!=='matched'&&<div className="office-actions"><Button size="small" disabled={locating} loading={locating} onClick={()=>locateClause()}>重新定位</Button><Button size="small" onClick={()=>setExcerpt(true)}>查看摘录</Button></div>}</div>}
-    <div className="office-excerpt" hidden={!excerpt}>{children}</div>
+    <div className="office-excerpt" hidden={!excerpt}><AnnotationFilterView.Provider value={excerpt}>{children}</AnnotationFilterView.Provider></div>
     <div className="craft-native-workspace" hidden={excerpt||!bytes}>
+      <AnnotationFilterView.Provider value={!excerpt&&Boolean(bytes)}>
       <div className="word-classic-document review-tools" ref={tools}/>
       <div className="craft-editor-and-advice">
       <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
       {showResponses&&<CraftResponseAdvice key={craftSourceKey(source)} rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} geometry={editorState.geometry} frame={frame} onSelectAnchor={anchor=>{const allowed=onSelectAnchor?.(anchor);if(allowed!==false&&editorState.ready)void locateClause(anchor.requirementId);return allowed;}} onQuote={onQuote} canEditRow={canEditRow}/>}
       </div>
+      </AnnotationFilterView.Provider>
     </div>
     {!excerpt&&!bytes&&(loading?<div className="office-missing"><Spin/><p>正在读取项目原件…</p></div>:<div className="office-missing"><Empty description="尚未关联原文件"/><p>原有条款摘录继续保留。上传对应 DOCX / PDF 后，可在这里批阅并同步协作记录。</p>{canManage?<Button type="primary" icon={<Upload size={15}/>} onClick={()=>picker.current?.click()}>上传对应原文件</Button>:<p>请由项目 SR 关联原件；当前身份可查看条款摘录。</p>}</div>)}
     <input ref={picker} type="file" accept=".docx,.pdf" hidden aria-label="上传对应原文件" onChange={attach}/>

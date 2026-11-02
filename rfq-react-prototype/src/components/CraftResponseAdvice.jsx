@@ -2,6 +2,7 @@ import React,{useState,useLayoutEffect,useRef} from 'react';
 import {adviceGeometry} from '../craftAdviceGeometry';
 import {SOURCE_ANNOTATION_CONCLUSIONS,selectSourceResponseAnnotations} from '../responseAdvice';
 import SourceResponseAnnotation from './SourceResponseAnnotation';
+import ResponseAnnotationFilter from './ResponseAnnotationFilter';
 import {makeSourceAnchor} from '../documentAnchors';
 import './source-response-annotation.css';
 
@@ -28,7 +29,7 @@ export default function CraftResponseAdvice({rows,responsePreview,activeId,onSel
   const color=palette[Math.max(0,rows.findIndex(row=>row.id===activeId))%3];
   return <><aside ref={panel} className="craft-response-advice word-classic-document" aria-label="原文件旁的应答标注">
     <header className="craft-advice-scope"><strong>应答标注 <span>{showAll?'全部':'当前'} {notes.length} 条</span></strong><button type="button" className="wc-button" aria-pressed={showAll} onClick={()=>setShowAll(!showAll)}>{showAll?'仅看当前条款':'查看全部标注'}</button></header>
-    <div className="craft-advice-filters" role="group" aria-label="按结论显示应答标注">{SOURCE_ANNOTATION_CONCLUSIONS.map(value=><label key={value}><input type="checkbox" checked={conclusions.includes(value)} onChange={event=>setConclusions(old=>event.target.checked?[...old,value]:old.filter(item=>item!==value))}/>{value}</label>)}</div>
+    <div className="craft-advice-filters"><ResponseAnnotationFilter value={conclusions} onChange={setConclusions} editorFrame={frame}/></div>
     <div className="craft-advice-list">{notes.map(({row,annotation})=><SourceResponseAnnotation key={row.id} row={row} annotation={annotation} color={palette[Math.max(0,rows.findIndex(item=>item.id===row.id))%3]} active={row.id===activeId} onSelect={select} onOpen={select} onDiscuss={onQuote&&canEditRow?.(row)?item=>onQuote(item.sourceOriginal??item.original,makeSourceAnchor(item)):undefined}/>)}</div>
     {!notes.length&&<p className="craft-advice-empty" role="status">{showAll?'当前筛选下没有应答标注':rows.some(row=>row.id===activeId)?'当前条款没有符合筛选的应答标注':'请选择条款查看应答标注'}</p>}
   </aside><svg className="craft-advice-links" aria-label="应答标注与原文联动高亮"><g fill={color['--wc-fill']} fillOpacity=".45">{link.rects.map((r,i)=><rect key={i} x={r.x} y={r.y} width={r.w} height={r.h}/>)}</g>{link.path&&<path d={link.path} fill="none" stroke={color['--wc-color']} strokeWidth="1.15"/>}</svg></>;
