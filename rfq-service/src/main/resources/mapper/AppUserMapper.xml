@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.AppUserMapper">
+
+    <sql id="columns">id, username, password_hash, display_name, email, status, system_admin, created_at</sql>
+
+    <!-- 事业部范围走 exists 子查询，避免 join 造成的重复行；不引入表别名，orderBy 才能直接用白名单字段名。 -->
+    <sql id="pageFilter">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                (username like concat('%', #{keyword}, '%')
+                 or display_name like concat('%', #{keyword}, '%'))
+            </if>
+            <if test="buIds != null">
+                and exists (select 1 from user_bu_role r
+                            where r.user_id = app_user.id and r.status = 'ACTIVE'
+                              and r.bu_id in
+                              <foreach collection="buIds" item="buId" open="(" separator="," close=")">#{buId}</foreach>)
+            </if>
+        </where>
+    </sql>
+
+    <select id="findById" resultType="com.naura.rfq.domain.AppUser">
+        select <include refid="columns"/>
+        from app_user
+        where id = #{id}
+    </select>
+
+    <select id="findByUsername" resultType="com.naura.rfq.domain.AppUser">
+        select <include refid="columns"/>
+        from app_user
+        where username = #{username}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(*)
+        from app_user
+    </select>
+
+    <select id="findPage" resultType="com.naura.rfq.domain.AppUser">
+        select <include refid="columns"/>
+        from app_user
+        <include refid="pageFilter"/>
+        order by ${q.orderBy}
+        limit #{q.size} offset #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*)
+        from app_user
+        <include refid="pageFilter"/>
+    </select>
+
+    <insert id="insert">
+        insert into app_user (id, username, password_hash, display_name, email, status, system_admin,
+                              created_at)
+        values (#{id}, #{username}, #{passwordHash}, #{displayName}, #{email}, #{status},
+                #{systemAdmin}, #{createdAt})
+    </insert>
+
+    <update id="updateProfile">
+        update app_user
+        set display_name = #{displayName},
+            email        = #{email}
+        where id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        update app_user
+        set status = #{status}
+        where id = #{id}
+    </update>
+
+    <update id="updatePassword">
+        update app_user
+        set password_hash = #{passwordHash}
+        where id = #{id}
+    </update>
+
+    <select id="countActiveSystemAdmins" resultType="long">
+        select count(*)
+        from app_user
+        where system_admin = true
+          and status = #{status}
+    </select>
+    <select id="findByIds" resultType="com.naura.rfq.domain.AppUser">
+        select <include refid="columns"/>
+        from app_user
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+</mapper>

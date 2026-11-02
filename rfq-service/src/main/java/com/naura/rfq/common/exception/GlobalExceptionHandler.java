@@ -21,7 +21,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
-        return ResponseEntity.badRequest()
+        HttpStatus status = exception.getCode() == 401 ? HttpStatus.UNAUTHORIZED
+                : exception.getCode() == 403 ? HttpStatus.FORBIDDEN
+                : exception.getCode() == 404 ? HttpStatus.NOT_FOUND
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
                 .body(ApiResponse.error(exception.getCode(), exception.getMessage()));
     }
 

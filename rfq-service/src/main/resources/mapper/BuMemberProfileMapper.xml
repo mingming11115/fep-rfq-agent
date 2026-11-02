@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.BuMemberProfileMapper">
+
+    <sql id="columns">
+        id, user_id, bu_id, can_confirm, can_final_review, resource_qualifications, created_at, updated_at
+    </sql>
+
+    <select id="findByBuId" resultType="com.naura.rfq.domain.BuMemberProfile">
+        select <include refid="columns"/>
+        from bu_member_profile
+        where bu_id = #{buId}
+    </select>
+
+    <select id="findByBuIdAndUserId" resultType="com.naura.rfq.domain.BuMemberProfile">
+        select <include refid="columns"/>
+        from bu_member_profile
+        where bu_id = #{buId}
+          and user_id = #{userId}
+    </select>
+
+    <insert id="upsert" parameterType="com.naura.rfq.domain.BuMemberProfile">
+        insert into bu_member_profile (user_id, bu_id, can_confirm, can_final_review, resource_qualifications)
+        values (#{userId}, #{buId}, #{canConfirm}, #{canFinalReview}, #{resourceQualifications})
+        on duplicate key update
+            can_confirm = values(can_confirm),
+            can_final_review = values(can_final_review),
+            resource_qualifications = values(resource_qualifications)
+    </insert>
+
+    <delete id="deleteByUserId">
+        delete from bu_member_profile where user_id = #{userId}
+    </delete>
+</mapper>

@@ -1,0 +1,30 @@
+package com.naura.rfq.mapper;
+
+import com.naura.rfq.common.api.PageQuery;
+import com.naura.rfq.domain.Project;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+@Mapper
+public interface ProjectMapper {
+
+    Optional<Project> findById(@Param("id") String id);
+
+    List<Project> findAll();
+
+    List<Project> findByIdIn(@Param("ids") Collection<String> ids);
+
+    List<Project> findByBuIdOrderByCreatedAtDesc(@Param("buId") String buId);
+
+    /** buIds 为 null 表示不限制事业部（系统管理员）；空集合不会传进来，调用方需先行拦截。 */
+    List<Project> findPage(@Param("buIds") Collection<String> buIds, @Param("q") PageQuery query);
+
+    long countPage(@Param("buIds") Collection<String> buIds);
+
+    int insert(Project project);
+
+    int update(Project project);
+}

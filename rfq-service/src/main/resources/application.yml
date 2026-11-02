@@ -10,6 +10,35 @@ spring:
       max-file-size: 30MB
       # Migration may contain both a 30 MB original and a 30 MB reviewed file.
       max-request-size: 64MB
+  datasource:
+    url: ${RFQ_DB_URL:jdbc:mysql://127.0.0.1:3306/rfq?useUnicode=true&characterEncoding=utf8&connectionTimeZone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${RFQ_DB_USER:rfq_app}
+    password: ${RFQ_DB_PASSWORD:rfq_app_pwd}
+    hikari:
+      pool-name: rfq-pool
+      maximum-pool-size: 10
+      connection-timeout: 10000
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.naura.rfq.domain
+  configuration:
+    # bu_id -> buId, created_at -> createdAt. Schema and POJO stay in step automatically.
+    map-underscore-to-camel-case: true
+    default-statement-timeout: 30
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+rfq:
+  auth:
+    jwt-secret: ${RFQ_JWT_SECRET:rfq-local-dev-secret-key-please-replace-in-production}
+    token-ttl-minutes: ${RFQ_TOKEN_TTL_MINUTES:480}
+  parse:
+    # Guards against pathological documents; real RFQ files stay far below this.
+    max-blocks: ${RFQ_PARSE_MAX_BLOCKS:5000}
+    max-requirement-chars: ${RFQ_PARSE_MAX_REQUIREMENT_CHARS:4000}
 
 office:
   public-url: ${ONLYOFFICE_PUBLIC_URL:http://127.0.0.1:8082}
