@@ -44,3 +44,4 @@
 @media(max-width:767px){.craft-source .office-actions .ant-btn{padding-inline:6px}.craft-source .office-toolbar{gap:4px}.craft-editor-viewport{min-height:400px}}
 @container(max-width:680px){.rfq-editor-tools-label{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}}
 @container(max-width:430px){.rfq-document-toolbar .office-actions>.ant-btn{padding-inline:3px;min-width:24px}}
+.craft-source .office-clause-status:is([data-clause-status=page],[data-clause-status=unsupported]){background:#fff8e8;color:#936d28}

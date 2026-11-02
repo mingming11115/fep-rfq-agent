@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Alert,Button,Empty,Select,Spin} from 'antd';
-import {FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
+import {AimOutlined,FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
 import {FileText,PencilLine,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
@@ -20,6 +20,8 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const [dirty,setDirty]=useState(false),[saving,setSaving]=useState(false),[excerpt,setExcerpt]=useState(false),[expanded,setExpanded]=useState(false),[retry,setRetry]=useState(0);
   const [editorState,setEditorState]=useState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
   const [editorToolsBusy,setEditorToolsBusy]=useState(false);
+  const [locationNotice,setLocationNotice]=useState(null),[locationConfirmation,setLocationConfirmation]=useState(0),[locateRequest,setLocateRequest]=useState(null);
+  const locationTimer=useRef(null);
   const [backup,setBackup]=useState(null),[association,setAssociation]=useState({}),[frameEpoch,setFrameEpoch]=useState(0);
   const frame=useRef(null),overlay=useRef(null),tools=useRef(null),picker=useRef(null),editor=useRef(null),saveQueue=useRef(null);
   const alive=useRef(true),generation=useRef(0),dirtyRef=useRef(false),pendingSaves=useRef(0),abortLoad=useRef(null);
@@ -77,7 +79,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     tools.current.innerHTML=template.getElementById('review-tools').innerHTML;
     const engine=meta.fileType==='pdf'?'pdfcraft':'wordcraft';
     const instance=createCraftProjectEditor({frame:frame.current,root:overlay.current,tools:tools.current,source,reference,revision:meta.revision,user,engine,
-      getContext:()=>latest.current,onCommentsChange:publish,onState:value=>{if(alive.current)setEditorState(value);},onError:message=>{if(alive.current)setError(message);},onDirty:markDirty,
+      getContext:()=>latest.current,onCommentsChange:publish,onState:value=>{if(alive.current)setEditorState({...value,sessionKey:JSON.stringify([reference.id,frameEpoch])});},onError:message=>{if(alive.current)setError(message);},onDirty:markDirty,
       onSelectAnchor:anchor=>latest.current.onSelectAnchor?.(anchor),onSelectComment:(id,anchor)=>latest.current.onSelectComment?.(id,anchor),
       onSave:packet=>{
         if(!alive.current)return;
@@ -137,7 +139,29 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     catch(cause){if(alive.current)setError(cause.message);}
     finally{if(alive.current)setEditorToolsBusy(false);}
   }
-  const sourceStatus=editorState.source?.status||'waiting';
+  function clearLocationNotice(){window.clearTimeout(locationTimer.current);locationTimer.current=null;setLocationNotice(null);}
+  async function locateClause(id=latest.current.selectedAnchor?.requirementId){
+    const instance=editor.current;
+    if(!canLocate||!instance||!id||(locateRequest?.instance===instance&&locateRequest.id===id))return;
+    const request={instance,id};setLocateRequest(request);clearLocationNotice();
+    const current=()=>alive.current&&editor.current===instance&&latest.current.selectedAnchor?.requirementId===id;
+    try{const result=await instance.locate(id);if(current()&&result?.id===id&&result.status==='matched')setLocationConfirmation(value=>value+1);}
+    catch(cause){if(current())setError(cause.message);}
+    finally{if(alive.current)setLocateRequest(value=>value===request?null:value);}
+  }
+  const targetId=selectedAnchor?.requirementId;
+  const sourceStatus=targetId&&editorState.source?.selectedId===targetId?editorState.source.status||'waiting':'waiting';
+  const locationKey=JSON.stringify([identity,reference?.id,targetId,frameEpoch]);
+  const canLocate=Boolean(reference&&bytes&&!loading&&editorState.ready&&editorState.sessionKey===JSON.stringify([reference.id,frameEpoch])&&targetId&&!excerpt);
+  const locating=Boolean(locateRequest&&locateRequest.id===targetId&&locateRequest.instance===editor.current);
+  useEffect(()=>{
+    if(!canLocate||sourceStatus!=='matched'){setLocationNotice(null);return;}
+    const notice={key:locationKey};setLocationNotice(notice);
+    const timer=window.setTimeout(()=>{if(locationTimer.current===timer)locationTimer.current=null;setLocationNotice(value=>value===notice?null:value);},2000);
+    locationTimer.current=timer;
+    return()=>{window.clearTimeout(timer);if(locationTimer.current===timer)locationTimer.current=null;};
+  },[canLocate,sourceStatus,locationKey,locationConfirmation]);
+  const showLocationNotice=canLocate&&sourceStatus!=='waiting'&&(sourceStatus!=='matched'||!locating&&locationNotice?.key===locationKey);
   const fileState=loading?'loading':!reference?'missing':!bytes?'unopened':saving?'saving':dirty?'dirty':'saved';
   const fileStateText={loading:'文件加载中',missing:'未关联原件',unopened:'文件未打开',saving:'文件保存中',dirty:'文件未保存',saved:'文件已保存'}[fileState];
   const fileName=meta?.name||reference?.name||file?.name||'客户原文件';
@@ -147,20 +171,20 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
     <div className={`office-toolbar ${toolbar?'rfq-document-toolbar':''}`} role={toolbar?'toolbar':undefined} aria-label={toolbar?'文档工具栏':undefined}>
       {toolbar?<div className="office-title rfq-document-identity"><div className="rfq-document-file">{toolbar.fileSelector}</div><span className="rfq-document-version">{source.sourceVersion}</span><small className={`rfq-file-state is-${fileState}`} role="status" aria-label="文件保存状态" title={`${fileStateText} · 批阅副本 · ${accessText} · ${fileName}`}><i aria-hidden="true"/><span className="rfq-file-state-label">{fileStateText}</span></small></div>:<div className="office-title"><FileText size={17}/><div><strong>{fileName}</strong><small role="status">批阅副本 · {accessText} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div>}
-      <div className="office-actions">{toolbar?.actions}{toolbar&&meta?.fileType==='docx'&&<Button size="small" className={editorState.editorToolsVisible?'rfq-editor-tools active':'rfq-editor-tools'} aria-label="编辑工具" title={editorState.editorToolsVisible?'收起编辑工具':'展开编辑工具'} aria-pressed={Boolean(editorState.editorToolsVisible)} disabled={!editorState.ready||!editorState.editorToolsControlled||excerpt||editorToolsBusy} loading={editorToolsBusy} onClick={toggleEditorTools}><PencilLine size={14}/><span className="rfq-editor-tools-label">编辑工具</span></Button>}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div>
+      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label="定位当前条款" title={locating?'正在定位当前条款':'定位当前条款'} disabled={!canLocate||locating} loading={locating} icon={<AimOutlined/>} onClick={()=>locateClause()}/>{toolbar&&meta?.fileType==='docx'&&<Button size="small" className={editorState.editorToolsVisible?'rfq-editor-tools active':'rfq-editor-tools'} aria-label="编辑工具" title={editorState.editorToolsVisible?'收起编辑工具':'展开编辑工具'} aria-pressed={Boolean(editorState.editorToolsVisible)} disabled={!editorState.ready||!editorState.editorToolsControlled||excerpt||editorToolsBusy} loading={editorToolsBusy} onClick={toggleEditorTools}><PencilLine size={14}/><span className="rfq-editor-tools-label">编辑工具</span></Button>}<Button size="small" aria-label={excerpt?'返回原文件':'查看条款摘录'} title={excerpt?'返回原文件':'查看条款摘录'} onClick={()=>setExcerpt(!excerpt)}>{toolbar?<FileText size={14}/>:excerpt?'原文件':'条款摘录'}</Button><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div>
     </div>
     {directory}
     {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving} onClick={()=>{if(backup&&dirty&&editor.current){editor.current.save().catch(cause=>setError(cause.message));return;}setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button></div>}/>}
     {!loading&&!reference&&excerpt&&<Alert type="info" showIcon message="当前来源文件尚未关联原文件，已显示对应条款摘录" action={canManage?<Button size="small" onClick={()=>picker.current?.click()}>上传对应原文件</Button>:undefined}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
     {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Select size="small" aria-label={`为批注选择条款 ${note.id}`} placeholder="选择条款后同步" value={association[note.nativeKey]} onChange={value=>setAssociation(old=>({...old,[note.nativeKey]:value}))} options={rows.filter(row=>canEditRow(row)).map(row=>({value:row.id,label:`${row.clause||'无编号'} ${row.title||row.original?.slice(0,24)||''}`}))}/><Button size="small" disabled={!association[note.nativeKey]} onClick={()=>editor.current?.associate(note.nativeKey,association[note.nativeKey])}>关联并同步</Button></div>)}</div>}
-    {reference&&!excerpt&&<div className="office-clause-status" data-clause-status={sourceStatus}><span role="status">{locationText}</span><Button size="small" disabled={!editorState.ready} onClick={()=>editor.current?.locate().catch(cause=>setError(cause.message))}>定位当前条款</Button></div>}
+    {showLocationNotice&&<div className="office-clause-status" data-clause-status={sourceStatus} aria-label="定位结果"><span role="status">{locationText}</span>{sourceStatus!=='matched'&&<div className="office-actions"><Button size="small" disabled={locating} loading={locating} onClick={()=>locateClause()}>重新定位</Button><Button size="small" onClick={()=>setExcerpt(true)}>查看摘录</Button></div>}</div>}
     <div className="office-excerpt" hidden={!excerpt}>{children}</div>
     <div className="craft-native-workspace" hidden={excerpt||!bytes}>
       <div className="word-classic-document review-tools" ref={tools}/>
       <div className="craft-editor-and-advice">
       <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
-      {showResponses&&<CraftResponseAdvice rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} geometry={editorState.geometry} frame={frame} onSelectAnchor={anchor=>{const allowed=onSelectAnchor?.(anchor);if(allowed!==false&&editorState.ready)editor.current?.locate(anchor.requirementId).catch(cause=>setError(cause.message));return allowed;}} onQuote={onQuote} canEditRow={canEditRow}/>}
+      {showResponses&&<CraftResponseAdvice rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} geometry={editorState.geometry} frame={frame} onSelectAnchor={anchor=>{const allowed=onSelectAnchor?.(anchor);if(allowed!==false&&editorState.ready)void locateClause(anchor.requirementId);return allowed;}} onQuote={onQuote} canEditRow={canEditRow}/>}
       </div>
     </div>
     {!excerpt&&!bytes&&(loading?<div className="office-missing"><Spin/><p>正在读取项目原件…</p></div>:<div className="office-missing"><Empty description="尚未关联原文件"/><p>原有条款摘录继续保留。上传对应 DOCX / PDF 后，可在这里批阅并同步协作记录。</p>{canManage?<Button type="primary" icon={<Upload size={15}/>} onClick={()=>picker.current?.click()}>上传对应原文件</Button>:<p>请由项目 SR 关联原件；当前身份可查看条款摘录。</p>}</div>)}
