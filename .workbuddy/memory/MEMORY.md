@@ -40,3 +40,10 @@
 - 前端：`rfq-react-prototype` 下 `npx vite --host 127.0.0.1 --port 5173 --strictPort`（craft 批阅入口用 5174）。编辑器资源入库后 `npm run dev` 的 predev 也能正常通过。
 - 健康检查：`http://127.0.0.1:48083/actuator/health`
 - 历史坑（已由上游修复）：Windows git 检出把补丁 LF 转 CRLF 导致 prepare 哈希校验失败；master 的 prepare 脚本现已同时接受两种换行，且 `.gitattributes` 强制 `*.patch eol=lf`。
+
+## Git 仓库结构：两端分叉（2026-11-02 20:22 核实）
+- **origin/master 与本地 master 是两条线**，公共祖先 `69932db`。远程只有 10 个 java 文件（仅 `office/` 那套 + common），本地多出的 49 个（`parse/`、`requirement/`、`project/`、`mapper/`、`V1__init.sql`、`MapperIntegrationTest`）来自本地两笔未推送的 `add` 提交。
+- 因此 `git diff master origin/master` 会显示"远程删掉了 3568 行后端代码"——**这是误导**，远端从来没删除，只是本地额外持有完整业务后端。判断前先 `git ls-tree -r --name-only <ref> | grep -c` 数文件，别只看 diff。
+- 远程 2026-11-02 的 8 笔提交全部是前端 UI 改进（文件操作分组、双主区块、注释筛选折叠、当前条款聚焦、右侧评论编辑器、条款定位反馈）+ 设计稿与 plan，**不涉及后端**，合并后无需重启后端 JAR。
+- 拉取做法：先 `git branch backup/pre-pull-<日期>` 备份，再 `git pull --no-rebase --no-edit origin master`；合并后 `npm test`（447 用例）验证，vite 会自动 HMR。
+- 仓库把 `.workbuddy/memory`、`.idea`、`outputs/` 临时产物也提交过，历史里有若干 `add` 空提交标题，属于噪音，不影响代码。

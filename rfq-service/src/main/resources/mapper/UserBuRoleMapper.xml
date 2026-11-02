@@ -4,6 +4,12 @@
 
     <sql id="columns">id, user_id, bu_id, role, status, created_at</sql>
 
+    <select id="findByBuId" resultType="com.naura.rfq.domain.UserBuRole">
+        select <include refid="columns"/>
+        from user_bu_role
+        where bu_id = #{buId}
+    </select>
+
     <select id="findByUserIdAndStatus" resultType="com.naura.rfq.domain.UserBuRole">
         select <include refid="columns"/>
         from user_bu_role
@@ -23,4 +29,41 @@
         insert into user_bu_role (user_id, bu_id, role, status, created_at)
         values (#{userId}, #{buId}, #{role}, #{status}, #{createdAt})
     </insert>
+
+    <select id="findByUserId" resultType="com.naura.rfq.domain.UserBuRole">
+        select <include refid="columns"/>
+        from user_bu_role
+        where user_id = #{userId}
+    </select>
+
+    <select id="findByUserIds" resultType="com.naura.rfq.domain.UserBuRole">
+        select <include refid="columns"/>
+        from user_bu_role
+        where status = #{status}
+          and user_id in
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">#{userId}</foreach>
+    </select>
+
+    <select id="countActiveByBuAndRole" resultType="long">
+        select count(*)
+        from user_bu_role
+        where bu_id = #{buId}
+          and role = #{role}
+          and status = #{status}
+    </select>
+
+    <update id="updateStatus">
+        update user_bu_role
+        set status = #{status}
+        where user_id = #{userId}
+          and bu_id = #{buId}
+          and role = #{role}
+    </update>
+    <update id="updateBuStatus">
+        update user_bu_role
+        set status = #{status}
+        where user_id = #{userId}
+          and bu_id = #{buId}
+    </update>
+
 </mapper>

@@ -7,6 +7,7 @@ import {Modal,EmptyState} from '../components/ui';
 import {personName,canManageBu,getPersonnelContext,getEligiblePersonnel,updateBuMember,getProjectReviewSettings,updateProjectAccess,configureProjectFinalReviewers,assignProjectDuty,updatePlatformDirectory,selectPlatformDirectoryAccounts} from '../personnelDomain';
 import './management-pages.css';
 import PersonPicker from '../components/PersonPicker';
+import {syncBuMember} from '../memberSync';
 
 const Field=({label,children})=><div className="field"><span>{label}</span>{children}</div>;
 const ErrorBox=({error})=>error?<p className="error-notice" role="alert">{error}</p>:null;
@@ -35,7 +36,7 @@ export default function BuAdminPage({appState:state,actorId,onPersonnelAction,on
  const members=state.buPersonnelByBuId[buId]||[],projects=state.projects.filter(p=>p.buId===buId),project=projects.find(p=>p.id===projectId);
  const open=m=>{setEdit(m?{...m,projectIds:projects.filter(p=>p.participantIds?.includes(m.userId)).map(p=>p.id)}:{userId:'',roles:['技术'],enabled:true,canConfirm:true,canFinalReview:true,resourceQualifications:[],projectIds:[]});setReason('');setError('');};
  const run=fn=>{try{if(onPersonnelAction(fn)!==false){setError('');return true;}}catch(e){setError(e.message);}return false;};
- const save=()=>{const {userId,projectIds,...patch}=edit;if(run(s=>{let next=updateBuMember(s,{actorId,buId,userId,patch,reason});if(patch.enabled&&patch.roles.length)for(const p of projects)next=updateProjectAccess(next,{actorId,projectId:p.id,userId,enabled:projectIds.includes(p.id),reason});return next;}))setEdit(null);};
+ const save=async()=>{const {userId,projectIds,codes=[],...rest}=edit;if(!userId){setError('请选择账号');return;}const patch={roles:rest.roles,enabled:rest.enabled,canConfirm:rest.canConfirm,canFinalReview:rest.canFinalReview,resourceQualifications:rest.resourceQualifications};try{await syncBuMember(buId,userId,patch,codes);}catch(e){setError(e.message||'同步到服务器失败');return;}if(run(s=>{let next=updateBuMember(s,{actorId,buId,userId,patch,reason});if(patch.enabled&&patch.roles.length)for(const p of projects)next=updateProjectAccess(next,{actorId,projectId:p.id,userId,enabled:projectIds.includes(p.id),reason});return next;}))setEdit(null);};
  const rows=members.filter(m=>`${personName(state,m.userId)} ${m.userId}`.toLowerCase().includes(query.toLowerCase())&&(filter==='all'||filter==='enabled'&&m.enabled||filter==='confirm'&&m.canConfirm||filter==='review'&&m.canFinalReview||m.roles.includes(filter)));
  if(!bus.length)return <div className="panel panel-body">当前账号没有可管理的BU。</div>;
  return <div className="management-page bu-admin-page"><PageHeading title={<>BU管理</>} description={null} actions={<><UiSelect className="select" aria-label="管理BU" value={buId} onChange={e=>{setBuId(e.target.value);onSelectBu?.(e.target.value);setEdit(null);setError('');}}>{bus.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</UiSelect></>} />
@@ -50,42 +51,5 @@ export default function BuAdminPage({appState:state,actorId,onPersonnelAction,on
  </div>;
 }
 
-export function PlatformAdminPage({appState:state,actorId,onPersonnelAction}){
- const [edit,setEdit]=useState(null),[kind,setKind]=useState('account'),[reason,setReason]=useState(''),[error,setError]=useState('');
- const [buId,setBuId]=useState(()=>state.businessUnits.some(b=>b.id===state.activeBuId)?state.activeBuId:'');
- const accounts=selectPlatformDirectoryAccounts(state),rows=accounts.filter(a=>!buId||a.buIds.includes(buId));
- const selectedBu=state.businessUnits.find(b=>b.id===buId),buName=id=>state.businessUnits.find(b=>b.id===id)?.name||id;
- const open=(type,record)=>{setKind(type);setEdit(record?structuredClone(record):{id:crypto.randomUUID(),name:'',enabled:true,managedBuIds:[]});setReason('');setError('');};
- const save=()=>{try{
-  if(onPersonnelAction(s=>updatePlatformDirectory(s,{actorId,kind,record:edit,reason}))===false)return;
-  if(kind==='bu')setBuId(edit.id);
-  else if(!state.accountsById[edit.id]&&buId&&!edit.managedBuIds?.includes(buId))setBuId('');
-  setEdit(null);
- }catch(e){setError(e.message);}};
- const toggleAccount=id=>{try{
-  if(onPersonnelAction(s=>{const account=s.accountsById[id];if(!account)throw new Error('账号不存在，请刷新后重试');const enabled=!account.enabled;return updatePlatformDirectory(s,{actorId,kind:'account',record:{...account,enabled},reason:`${enabled?'启用':'停用'}账号：${account.name}`});})!==false)setError('');
- }catch(e){setError(e.message);}};
- return <div className="management-page platform-directory">
-  <PageHeading title={<>系统配置与运维</>} description={<>平台账号与BU目录管理。项目业务权限由BU范围和项目授权共同控制。</>} actions={<></>} />
-  <section className="panel">
-   <div className="panel-header"><h2>BU组织</h2><UiButton className="btn" onClick={()=>open('bu')}><Plus size={15}/>新增BU</UiButton></div>
-   <div className="panel-body platform-bu-body">
-    <div className="platform-bu-options" role="group" aria-label="按BU筛选账号">
-     <UiButton className={`btn ${!buId?'is-selected':''}`} aria-pressed={!buId} aria-controls="platform-account-list" onClick={()=>setBuId('')}>全部账号<span>{accounts.length}</span></UiButton>
-     {state.businessUnits.map(b=><UiButton className={`btn ${buId===b.id?'is-selected':''}`} aria-pressed={buId===b.id} aria-controls="platform-account-list" key={b.id} onClick={()=>setBuId(b.id)}>{b.name}<span>{accounts.filter(a=>a.buIds.includes(b.id)).length}</span></UiButton>)}
-    </div>
-    <div className="platform-bu-summary"><span>选择BU，查看下方关联账号。</span>{selectedBu&&<UiButton className="text-link" onClick={()=>open('bu',selectedBu)}>维护当前BU</UiButton>}</div>
-   </div>
-  </section>
-  <section className="panel" id="platform-account-list">
-   <div className="panel-header"><div><h2>账号目录</h2><p className="platform-directory-scope" role="status">{selectedBu?selectedBu.name:'全部BU及平台账号'} · {rows.length} 个账号</p></div><UiButton className="btn btn-primary" onClick={()=>open('account')}><Plus size={15}/>新增账号</UiButton></div>
-   <ErrorBox error={!edit&&error}/>
-   {rows.length?<div className="table-wrap"><BusinessTable className="data-table mg-table"><thead><tr><th>姓名／账号</th><th>所属BU</th><th>管理职责</th><th>状态</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td>{a.name}<small>{a.id}</small></td><td>{a.buIds.map(buName).join('、')||(a.systemAdmin?'平台级':'未归属BU')}</td><td>{a.systemAdmin?'后台管理':a.managedBuIds?.length?`BU管理员 · ${a.managedBuIds.map(buName).join('、')}`:'业务账号'}</td><td><button type="button" className="platform-account-switch" role="switch" aria-label={`账号状态 ${a.name}`} aria-checked={!!a.enabled} disabled={a.id===actorId} title={a.id===actorId?'当前登录账号不能停用':`点击${a.enabled?'停用':'启用'}账号`} onClick={()=>toggleAccount(a.id)}><span className="platform-account-switch-track" aria-hidden="true"/><span>{a.enabled?'启用':'停用'}</span></button></td></tr>)}</tbody></BusinessTable></div>:<EmptyState title="此BU暂无关联账号" description="新增账号时可指定BU管理职责；业务成员由对应BU管理员添加。"/>}
-  </section>
-  {edit&&<Modal title={kind==='bu'?'维护BU':'新增账号'} onClose={()=>setEdit(null)} footer={<><UiButton className="btn" onClick={()=>setEdit(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={save}>保存目录配置</UiButton></>}>
-   <Field label="名称"><UiInput className="input" aria-label="目录名称" value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})}/></Field>
-   {kind==='account'&&<><label className="workspace-check"><UiCheckbox type="checkbox" checked={edit.enabled} onChange={e=>setEdit({...edit,enabled:e.target.checked})}/>启用账号</label><Field label="BU管理职责"><div className="personnel-checks">{state.businessUnits.map(b=><label key={b.id}><UiCheckbox type="checkbox" checked={edit.managedBuIds?.includes(b.id)} onChange={()=>setEdit({...edit,managedBuIds:flip(edit.managedBuIds||[],b.id)})}/>{b.name}</label>)}</div></Field></>}
-   <Field label="变更原因"><UiTextArea className="input" aria-label="目录变更原因" value={reason} onChange={e=>setReason(e.target.value)}/></Field><ErrorBox error={error}/>
-  </Modal>}
- </div>;
-}
+
+export { default as PlatformAdminPage } from './PlatformAdminPage';

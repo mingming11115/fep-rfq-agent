@@ -1,6 +1,41 @@
 const SESSION_KEY = 'fep-rfq-auth';
 const API_BASE = '/api/rfq';
 
+const sessionListeners = new Set();
+
+function broadcastSession() {
+  const snapshot = readSession();
+  for (const listener of sessionListeners) {
+    try { listener(snapshot); } catch { /* 监听方异常不应影响请求链路 */ }
+  }
+}
+
+export function subscribeSession(listener) {
+  sessionListeners.add(listener);
+  return () => sessionListeners.delete(listener);
+}
+
+const LOGIN_IDENTITY_KEY = 'fep-rfq-login-identity';
+
+export function persistLoginIdentity(identity) {
+  try { localStorage.setItem(LOGIN_IDENTITY_KEY, JSON.stringify(identity)); } catch { /* 隐私模式忽略 */ }
+}
+
+/**
+ * App 初始化时读取一次登录身份并清除标记。
+ * 仅在“刚登录”那一刻生效，之后页面内切换演示身份不会被覆盖。
+ */
+export function consumeLoginIdentity() {
+  try {
+    const raw = localStorage.getItem(LOGIN_IDENTITY_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(LOGIN_IDENTITY_KEY);
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function readSession() {
   try {
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
@@ -37,7 +72,10 @@ async function request(path, options = {}) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.code !== 0) {
-    if (response.status === 401) clearSession();
+    if (response.status === 401 && session) {
+      clearSession();
+      broadcastSession();
+    }
     const error = new Error(payload.msg || `请求失败（${response.status}）`);
     error.status = response.status;
     throw error;
@@ -57,6 +95,7 @@ export async function login(username, password) {
     savedAt: Date.now(),
   };
   persistSession(session);
+  broadcastSession();
   return session;
 }
 
@@ -66,11 +105,13 @@ export async function fetchMe() {
 
 export function logout() {
   clearSession();
+  broadcastSession();
 }
 
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body ?? {}) }),
   patch: (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
+  delete: (path) => request(path, { method: 'DELETE' }),
   upload: (path, formData) => request(path, { method: 'POST', body: formData }),
 };

@@ -5,6 +5,7 @@ export default defineConfig({
   server: {
     fs: { allow: [fileURLToPath(new URL('..',import.meta.url))] },
     proxy: {
+      '/api/rfq': { target: process.env.RFQ_API_TARGET || 'http://127.0.0.1:48083', changeOrigin: true },
       '/api/craft': { target: process.env.RFQ_CRAFT_API_TARGET || 'http://127.0.0.1:48083', changeOrigin: true },
       '/api/office': { target: process.env.RFQ_BACKEND_URL || 'http://127.0.0.1:48081', changeOrigin: true },
     },

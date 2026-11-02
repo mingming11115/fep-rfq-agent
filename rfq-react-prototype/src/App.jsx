@@ -1,6 +1,7 @@
 import { UiButton, UiInput } from './components/AntContent';
 import { App as AntApp } from 'antd';
 import RfqAppLayout from './components/RfqAppLayout';
+import { consumeLoginIdentity, logout } from './authClient';
 import BuAdminPage,{ProjectPersonnelPanel,PlatformAdminPage} from './pages/BuAdminPage';
 import {canAccessProject,getPersonnelContext,personName,getProjectFinalReview,getRequiredFinalReviewers,configureProjectFinalReviewers,assignProjectDuty} from './personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomain';
@@ -20,6 +21,7 @@ import ProjectWorkspace from './components/ProjectWorkspace';
 import AdminWorkspace from './components/AdminWorkspace';
 import {upgradePrototypeState,actorIdForRole} from './stateMigration';
 import React,{useEffect,useRef,useState} from 'react';
+import { fetchBuMembers } from './memberSync';
 import {LayoutDashboard,FolderKanban,Layers3,FileSearch,ListChecks,GitPullRequest,FileOutput,History,Settings,BookOpen,ShieldCheck,SlidersHorizontal,ChevronDown,ChevronRight,PanelLeftClose,PanelLeftOpen,HelpCircle,RotateCcw,CheckCircle2,AlertCircle,X,ArrowRight,Search,Bell,Globe,Users} from "./components/icons";
 import {NAV_ITEMS,PRIMARY_NAV,createDemoState} from './data';
 import {applyRequirementEdit,confirmRequirement,importParsedRequirements,correctParsedRequirement,getExportIssues} from './domain';
@@ -56,9 +58,15 @@ function initial(){
  if(Array.isArray(saved?.projects)){
   const upgraded=upgradePrototypeState(withProjectDocuments(withProjectMembers(saved)),demo);
   let next=upgraded;try{next=tidyStoredDemo(localStorage,upgraded);}catch(error){console.error('演示数据备份失败，保留现有数据',error);}
-  return reconcileTasks(invalidatePendingSnapshots(next));
+  return withLoginIdentity(reconcileTasks(invalidatePendingSnapshots(next)));
  }
- return reconcileTasks(tidyDemoState(upgradePrototypeState(withProjectMembers({...demo,activeProjectId:'RFQ-001'}),demo)));
+ return withLoginIdentity(reconcileTasks(tidyDemoState(upgradePrototypeState(withProjectMembers({...demo,activeProjectId:'RFQ-001'}),demo))));
+}
+// 登录身份优先于本机残留身份，但只消费一次：之后页面内切换演示身份不会在刷新时被覆盖。
+function withLoginIdentity(state){
+ const identity=consumeLoginIdentity();
+ if(!identity?.actorId||!identity?.actorRole)return state;
+ return {...state,actorId:identity.actorId,actorRole:identity.actorRole};
 }
 const now=()=>new Date().toLocaleString('zh-CN',{hour12:false});
 const event=(s,action,object='',detail='',result='成功')=>({...s,audit:[{id:`EVT-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,time:now(),actor:personName(s,s.actorId),actorId:s.actorId,role:s.actorRole,buId:s.activeBuId||s.projects.find(p=>p.id===s.activeProjectId)?.buId,action,object,result,detail},...(s.audit||[])].slice(0,500)});
@@ -77,6 +85,8 @@ export default function App(){
  const item=NAV_ITEMS.find(n=>n.key===(page==='reviews'?'response':page)),isProjectPage=item?.section==='项目';
  const pageTitle=DETAIL_PAGES.includes(page)?'RFQ 详情':state.actorRole==='BU管理员'&&page==='projects'?'BU RFQ':page==='dashboard'&&state.actorRole==='BU管理员'?'BU看板':shortLabels[page]||item?.label||'工作台';
  useEffect(()=>{try{localStorage.setItem(STORAGE,JSON.stringify(state));}catch{}},[state]);
+ // BU 成员与资格以后端 MySQL 为准；拉取失败或为空时保留本地演示数据，避免页面空白。
+ useEffect(()=>{let cancelled=false;(async()=>{const buIds=(stateRef.current.businessUnits||[]).map(b=>b.id);if(!buIds.length)return;try{const loaded=await Promise.all(buIds.map(id=>fetchBuMembers(id).then(rows=>[id,rows])));if(cancelled)return;update(s=>{const merged={...s.buPersonnelByBuId};for(const [buId,rows] of loaded){if(rows.length)merged[buId]=rows;}return {...s,buPersonnelByBuId:merged};});}catch(error){console.error('BU 成员加载失败，保留本地演示数据',error);}})();return()=>{cancelled=true;};},[]);
  useEffect(()=>{const handle=()=>{const next=parseWorkRoute(location.hash);const proceed=()=>{routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;if(next.projectId&&stateRef.current.projects.some(p=>p.id===next.projectId))update(s=>({...s,activeProjectId:next.projectId}));setFocusedRequirementId(next.requirementId||null);};if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(proceed,{officeSource:officeRouteSource(stateRef.current,next)})){history.replaceState(null,'',buildWorkRoute(routeRef.current));return;}proceed();};window.addEventListener('hashchange',handle);if(routeRef.current.projectId)handle();return()=>{window.removeEventListener('hashchange',handle);timers.current.forEach(clearTimeout);};},[]);
  useEffect(()=>{document.title=`${pageTitle} · FEP RFQ`;window.scrollTo(0,0);},[page,pageTitle]);
  useEffect(()=>{if(state.actorRole==='后台管理'&&page==='dashboard')rawNavigate('admin',{},true);},[state.actorRole,page]);
@@ -231,6 +241,7 @@ export default function App(){
  identities={identityOptions.map(o=>({value:`${o.id}|${o.role}|${o.buId}`,label:personName(state,o.id)+(!['后台管理','BU管理员'].includes(o.role)?` · ${o.role}`:'')+(o.role==='BU管理员'&&state.accountsById[o.id].managedBuIds.length>1?`（${state.businessUnits.find(b=>b.id===o.buId)?.name}）`:'' )}))}
  onIdentityChange={value=>{const [id,role,buId]=value.split('|');guarded(()=>{update(st=>event({...st,actorId:id,actorRole:role,activeBuId:buId},'切换演示身份',id,'本机人员模拟'));const dest=canAccessPage(role,pageRef.current)?pageRef.current:role==='后台管理'?'admin':'dashboard';rawNavigate(dest,{...(PROJECT_PAGES.includes(dest)?{projectId:project.id}:{}),taskId:undefined,action:undefined});toast(`已切换为${personName(state,id)} · ${role}`);});}}
  pageTitle={pageTitle} isDetail={DETAIL_PAGES.includes(page)} body={body}
+onLogout={logout}
  contentKey={`${state.actorId}-${state.actorRole}-${activeBuId}-${DETAIL_PAGES.includes(page)?'detail':['knowledge','history'].includes(page)?'knowledge':page}-${project.id}`}
  footer={<footer className="app-footer"><span>FEP · RFQ 工作空间</span>{canPerform(state.actorRole,'project:manage')&&<UiButton className="text-link" onClick={()=>setReset(true)}><RotateCcw size={12}/>重置演示</UiButton>}</footer>}>
  {!missingProject&&pageAllowed&&finalReviewOpen&&canPerform(state.actorRole,'snapshot:submit',permissionContext)&&<ExportPage {...common} onSnapshot={onSnapshot} launchOnly onClose={()=>setFinalReviewOpen(false)} onSubmitted={()=>setFinalReviewOpen(false)}/>}

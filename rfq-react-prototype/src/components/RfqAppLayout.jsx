@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import useContentTransition from './useContentTransition';
 import { Avatar, Badge, Button, Grid, Select, Space, Tag, Tooltip, theme } from 'antd';
 import { PageContainer, ProLayout } from '@ant-design/pro-components';
+import { LogoutOutlined } from '@ant-design/icons';
 import { Bell, HelpCircle, Search } from "./icons";
 
 export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, onCollapse, onNavigate, onHome,
-  onSearch, onHelp, pending, identity, identities, actorName, onIdentityChange, pageTitle, isDetail,
+  onSearch, onHelp, pending, identity, identities, actorName, onIdentityChange, onLogout, pageTitle, isDetail,
   contentKey, body, footer, children }) {
   const screens = Grid.useBreakpoint();
   const { token } = theme.useToken();
@@ -35,6 +36,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
         <Tooltip key="help" title="使用指南"><Button type="text" aria-label="使用指南" icon={<HelpCircle size={18}/>} onClick={onHelp}/></Tooltip>,
         <Tooltip key="tasks" title="待办事项"><Badge count={pending} size="small"><Button type="text" aria-label="待办事项" icon={<Bell size={18}/>} onClick={() => onNavigate('tasks')}/></Badge></Tooltip>,
         <Space key="identity" size={6} className="rfq-layout-identity"><Avatar size="small" style={{ background: '#e8f0ff', color: '#1677ff' }}>{actorName?.[0]}</Avatar><Select aria-label="演示身份" value={identity} options={identities} onChange={onIdentityChange} variant="borderless" popupMatchSelectWidth={false} style={{ width: compact ? 112 : 155 }}/></Space>,
+        onLogout ? <Tooltip key="logout" title="退出登录"><Button type="text" aria-label="退出登录" icon={<LogoutOutlined/>} onClick={onLogout}/></Tooltip> : null,
       ].filter(Boolean)} footerRender={isDetail ? false : () => footer}
       token={{ sider: { colorBgMenuItemSelected: token.colorPrimaryBg, colorTextMenuSelected: token.colorPrimary }, pageContainer: { paddingInlinePageContainerContent: 0, paddingBlockPageContainerContent: 0 } }}>
       {isDetail ? <div key={contentKey} ref={contentRef} className="rfq-layout-content rfq-layout-detail">{body}</div> :

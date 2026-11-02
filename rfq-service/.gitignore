@@ -4,6 +4,8 @@
 /.vscode/
 *.iml
 *.log
+*.jar.bak*
+*.bak-*
 .DS_Store
 .env
 .env.*

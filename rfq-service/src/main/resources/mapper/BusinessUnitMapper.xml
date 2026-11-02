@@ -4,6 +4,19 @@
 
     <sql id="columns">id, code, name, created_at</sql>
 
+    <sql id="pageFilter">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                (code like concat('%', #{keyword}, '%')
+                 or name like concat('%', #{keyword}, '%'))
+            </if>
+            <if test="ids != null">
+                and id in
+                <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+            </if>
+        </where>
+    </sql>
+
     <select id="findById" resultType="com.naura.rfq.domain.BusinessUnit">
         select <include refid="columns"/>
         from business_unit
@@ -22,8 +35,36 @@
         order by created_at asc
     </select>
 
+    <select id="findByIdIn" resultType="com.naura.rfq.domain.BusinessUnit">
+        select <include refid="columns"/>
+        from business_unit
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        order by created_at asc
+    </select>
+
+    <select id="findPage" resultType="com.naura.rfq.domain.BusinessUnit">
+        select <include refid="columns"/>
+        from business_unit
+        <include refid="pageFilter"/>
+        order by ${q.orderBy}
+        limit #{q.size} offset #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*)
+        from business_unit
+        <include refid="pageFilter"/>
+    </select>
+
     <insert id="insert">
         insert into business_unit (id, code, name, created_at)
         values (#{id}, #{code}, #{name}, #{createdAt})
     </insert>
+
+    <update id="updateName">
+        update business_unit
+        set name = #{name}
+        where id = #{id}
+    </update>
 </mapper>
