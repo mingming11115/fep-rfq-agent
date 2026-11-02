@@ -74,6 +74,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     if(!alive)return;
     const c=context(),merged=snapshot?mergeNativeComments({...c,snapshot}):{unlinked:[],conflicts:[]};
     const value={ready:Boolean(boundToken),synchronizing:busy,outlineVisible:engine==='wordcraft'&&Boolean(snapshot?.outlineVisible),source:snapshot?.source||{status:'waiting'},
+      documentOutline:{document:boundToken,revision:snapshot?.headingOutline?.revision??null,items:snapshot?.headingOutline?.items||[],ready:Boolean(boundToken),supported:engine==='wordcraft'&&Boolean(snapshot?.headingOutline)},
       geometry:{selectedId:snapshot?.source?.selectedId,status:snapshot?.source?.status,clip:snapshot?.clip,ranges:snapshot?.sourceRanges||[]},
       unlinked:(merged.unlinked||[]).map(({id,nativeKey,text,author,reason})=>({id,nativeKey,text,author,reason})),conflicts:merged.conflicts||[]};
     const key=JSON.stringify(value);if(key!==lastState){lastState=key;onState(value);}
@@ -84,7 +85,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     const targets=craftClauseTargets(source,c.rows,engine).map(({anchor,tag,...target})=>{const row=c.rows.find(r=>r.id===target.id);return {...target,title:row?.title||'',page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(row))};});
     const linked=(c.comments||[]).filter(comment=>comment.nativeRef?.documentId===reference.id&&comment.nativeRef.key&&!comment.nativeDeleted).map(comment=>({nativeKey:comment.nativeRef.key,clauseId:comment.anchor.requirementId,...permissions({nativeKey:comment.nativeRef.key})}));
     for(const [nativeKey,clauseId] of Object.entries(associations))if(!linked.some(item=>item.nativeKey===nativeKey))linked.push({nativeKey,clauseId});
-    return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),targets,selectedId:c.selectedAnchor?.requirementId,associations:linked};
+    return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),externalOutline:true,targets,selectedId:c.selectedAnchor?.requirementId,associations:linked};
   }
   async function command(action,params){
     const pending=surface.command(action,params);minimumApplied=Math.max(minimumApplied,surface.sequence);
@@ -173,6 +174,11 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     open(name,bytes){file={name,bytes};sendFile();},refresh(){failedConfiguration='';schedule();},
     save:()=>command('save',{}),setVisible:value=>surface.setVisible(value),
     setOutline:visible=>engine==='wordcraft'?command('outline',{visible}):Promise.reject(new Error('当前编辑器不支持 Word 文档目录')),
+    navigateHeading:target=>{
+      const outline=snapshot?.headingOutline;
+      if(!alive||engine!=='wordcraft'||!boundToken||target?.document!==boundToken||target.revision!==outline?.revision||!Array.isArray(outline?.items)||!outline.items.some(item=>item.index===target.index))return Promise.reject(new Error('目录已更新，请在当前文件中重新选择文档标题'));
+      return command('heading',{revision:target.revision,index:target.index});
+    },
     locate:(id=getContext().selectedAnchor?.requirementId)=>command('locate',{id}),
     retry(){failures.clear();configuration='';failedConfiguration='';schedule();},
     associate(nativeKey,clauseId){

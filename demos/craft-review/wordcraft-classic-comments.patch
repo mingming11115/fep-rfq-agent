@@ -849,7 +849,7 @@ diff --git a/crates/ui-egui/src/panes/host_project.rs b/crates/ui-egui/src/panes
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project.rs
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,352 @@
 +//! RFQ clause navigation and bidirectional comment writes; host metadata stays outside DOCX.
 +use super::*;
 +use std::collections::BTreeMap;
@@ -971,6 +971,9 @@ new file mode 100644
 +            params.get("editable").and_then(Value::as_bool).unwrap_or(false),
 +            params.get("editDocument").and_then(Value::as_bool).unwrap_or(false),
 +        );
++        if params.get("externalOutline").and_then(Value::as_bool) == Some(true) {
++            self.session.view.nav_pane = false;
++        }
 +        let p = &mut self.comment_drafts.project;
 +        p.targets = targets;
 +        p.revision = None;
@@ -1357,7 +1360,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,280 @@
+@@ -0,0 +1,298 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1403,6 +1406,18 @@ new file mode 100644
 +                self.session.run("view.navigationPane", &json!({"value":visible})).map_err(|e| e.to_string())?;
 +                self.ui.nav_tab = "headings".into();
 +                Ok(json!({"visible":visible}))
++            }
++            "heading" => {
++                if p.get("revision").and_then(Value::as_u64) != Some(self.session.rev()) {
++                    return Err("the document headings have changed".into());
++                }
++                let index = p.get("index").and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok()).ok_or("invalid heading index")?;
++                let (path, _, _) = super::super::nav::nav_headings(&self.session.doc).into_iter().nth(index).ok_or("no such document heading")?;
++                self.run("caret.set", json!({"pos":Pos { story:wordcraft_doc::StoryRef::Body,path,off:0 }}))?;
++                self.canvas.nav_to_caret = true;
++                self.canvas.scroll_to_caret = false;
++                self.canvas.want_focus = true;
++                Ok(json!({"index":index}))
 +            }
 +            "upsert" => self.upsert_host_comment(&p),
 +            "draft" | "replyDraft" => {
@@ -1482,6 +1497,11 @@ new file mode 100644
 +    pub fn host_review_snapshot(&mut self, zoom: f32) -> Value {
 +        let zoom = if zoom.is_finite() { zoom.clamp(0.25, 5.0) } else { 1.0 };
 +        let source = self.host_source_state();
++        let headings: Vec<Value> = super::super::nav::nav_headings(&self.session.doc)
++            .into_iter()
++            .enumerate()
++            .map(|(index, (_, level, text))| json!({"index":index,"level":level,"text":text}))
++            .collect();
 +        let layout = self.session.layout();
 +        let mut starts: BTreeMap<u32, Pos> = BTreeMap::new();
 +        let mut ends: BTreeMap<u32, Pos> = BTreeMap::new();
@@ -1564,7 +1584,8 @@ new file mode 100644
 +        }
 +        json!({"fileName":self.session.path.as_ref().and_then(|p|p.file_name()).map(|n|n.to_string_lossy().to_string()).or_else(||self.session.file_name.clone()),"source":source,"complete":comment_threads(&self.session.doc.comments).len()<=2000,"document":document.to_string(),"author":self.session.author,"active":active,"notes":notes,"pages":pages,
 +            "sourceRanges":source_ranges,"clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
-+            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks,"outlineVisible":self.session.view.nav_pane})
++            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks,"outlineVisible":self.session.view.nav_pane,
++            "headingOutline":{"revision":self.session.rev(),"items":headings}})
 +    }
 +}
 +
@@ -1669,7 +1690,63 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
      }
      {
          let names: Vec<&str> = tabs.iter().map(|(n, _)| n.as_str()).collect();
-@@ -264,6 +269,9 @@
+@@ -144,8 +149,10 @@
+                     let share_button = if level < 2 { share_full } else { 30.0 };
+                     let editing = crate::widgets::icon_text_button_width(ui, editing_label, regular(12.0), true, labels);
+                     let comment = crate::widgets::icon_text_button_width(ui, comments, regular(12.0), false, labels);
+-                    // The gaps (6 + 4 + 8) and the strip's margin.
+-                    spaced(share_button) + spaced(editing) + spaced(comment) + 18.0 + 12.0
++                    // Hosted review omits the mode switch and its gap, leaving room for tabs.
++                    let editing_space = if app.canvas.host_comments { 0.0 } else { spaced(editing) + 4.0 };
++                    // The shared gaps (6 + 8) and the strip's margin.
++                    spaced(share_button) + editing_space + spaced(comment) + 14.0 + 12.0
+                 };
+                 let button_levels = [button_widths(0), button_widths(1), button_widths(2)];
+                 let labels: Vec<&str> = tabs.iter().map(|(tab, custom)| if *custom { tab.as_str() } else { tl!(tab) }).collect();
+@@ -186,23 +193,25 @@
+                             let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
+                         }
+                         ui.add_space(6.0);
+-                        let track = app.session.doc.settings.track_changes;
+-                        let mode = if plan.buttons == 0 {
+-                            crate::widgets::icon_text_menu_button(ui, "pencil", editing_label, regular(12.0))
+-                        } else {
+-                            crate::widgets::icon_only_button(ui, "pencil", editing_label, regular(12.0), true)
+-                        };
+-                        egui::Popup::menu(&mode).show(|ui| {
+-                            if ui.selectable_label(!track, tl!(tl!("Editing — edit the document directly"))).clicked() {
+-                                let _ = app.run("review.trackChanges", json!({"value": false}));
+-                                ui.close();
+-                            }
+-                            if ui.selectable_label(track, tl!(tl!("Reviewing — edits become suggestions"))).clicked() {
+-                                let _ = app.run("review.trackChanges", json!({"value": true}));
+-                                ui.close();
+-                            }
+-                        });
+-                        ui.add_space(4.0);
++                        if !app.canvas.host_comments {
++                            let track = app.session.doc.settings.track_changes;
++                            let mode = if plan.buttons == 0 {
++                                crate::widgets::icon_text_menu_button(ui, "pencil", editing_label, regular(12.0))
++                            } else {
++                                crate::widgets::icon_only_button(ui, "pencil", editing_label, regular(12.0), true)
++                            };
++                            egui::Popup::menu(&mode).show(|ui| {
++                                if ui.selectable_label(!track, tl!(tl!("Editing — edit the document directly"))).clicked() {
++                                    let _ = app.run("review.trackChanges", json!({"value": false}));
++                                    ui.close();
++                                }
++                                if ui.selectable_label(track, tl!(tl!("Reviewing — edits become suggestions"))).clicked() {
++                                    let _ = app.run("review.trackChanges", json!({"value": true}));
++                                    ui.close();
++                                }
++                            });
++                            ui.add_space(4.0);
++                        }
+                         let comments_button = if plan.buttons == 0 {
+                             crate::widgets::icon_text_button(ui, "comment", comments, regular(12.0))
+                         } else {
+@@ -264,6 +273,9 @@
                              }
                              if resp.clicked() {
                                  let _ = app.run("ui.tab", json!({"tab": tab}));
@@ -1679,7 +1756,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
                              }
                              if resp.double_clicked() && tab != "File" {
                                  let _ = app.run("ui.collapseRibbon", json!({}));
-@@ -299,6 +307,9 @@
+@@ -299,6 +311,9 @@
                                  for (tab, shown) in left_out {
                                      if ui.selectable_label(app.ui.tab == tab, shown).clicked() {
                                          let _ = app.run("ui.tab", json!({"tab": tab}));
@@ -1689,7 +1766,7 @@ diff --git a/crates/ui-egui/src/ribbon.rs b/crates/ui-egui/src/ribbon.rs
                                          ui.close();
                                      }
                                  }
-@@ -404,3 +415,6 @@
+@@ -404,3 +419,6 @@
  
  #[cfg(test)]
  mod tests;
@@ -1700,13 +1777,40 @@ diff --git a/crates/ui-egui/src/ribbon/rfq_tests.rs b/crates/ui-egui/src/ribbon/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/ribbon/rfq_tests.rs
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,125 @@
 +//! RFQ's shared toolbar policy must survive personal settings and ribbon overflow.
 +use super::*;
 +use egui_kittest::kittest::Queryable;
 +use wordcraft_engine::Session;
 +
 +const REMOVED: [&str; 7] = ["Zotero", "Developer", "Mailings", "References", "Layout", "Design", "File"];
++
++#[test]
++fn rfq_editing_mode_button_is_hidden_for_both_modes_and_narrow_windows() {
++    for hosted in [false, true] {
++        for track in [false, true] {
++            for width in [340.0, 1600.0] {
++                let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Review this text")), crate::Services::default());
++                app.session.doc.settings.track_changes = track;
++                if hosted {
++                    app.enable_host_review();
++                }
++                app.ui.ribbon_collapsed = true;
++                let mut h = egui_kittest::Harness::builder()
++                    .with_size(vec2(width, 400.0))
++                    .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++                    .build_ui_state(|ui, app| show(app, ui), app);
++                h.run_steps(3);
++                let label = if track { "Reviewing" } else { "Editing" };
++                assert_eq!(h.query_by_label(tl!(label)).is_some(), !hosted, "{label}, hosted={hosted}, width={width}");
++                for kept in ["Comments", "Share"] {
++                    assert!(h.query_by_label(tl!(kept)).is_some(), "{kept} remains available");
++                }
++                assert_eq!(h.state().session.doc.settings.track_changes, track);
++            }
++        }
++    }
++}
 +
 +#[test]
 +fn rfq_toolbar_starts_collapsed_and_tab_click_expands_it() {
@@ -1899,13 +2003,65 @@ diff --git a/crates/ui-egui/src/panes/rfq_navigation_tests.rs b/crates/ui-egui/s
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/rfq_navigation_tests.rs
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,144 @@
 +use super::*;
 +use egui_kittest::kittest::Queryable;
 +use wordcraft_engine::Session;
 +
 +fn command(app: &mut WordApp, action: &str, params: Value) -> Result<Value, String> {
 +    app.host_review_action(&json!({"document":app.session.document_id().to_string(),"action":action,"params":params}))
++}
++
++#[test]
++fn host_unified_directory_exposes_real_headings_and_navigates_readonly() {
++    let mut app = WordApp::new(Session::new(Document::from_text("Repeated\nBody\nRepeated")), crate::Services::default());
++    for (index, style) in [(0, "Heading 1"), (2, "Heading 2")] {
++        app.run("caret.set", json!({"pos":Pos { story:StoryRef::Body,path:Path::top(index),off:0 }})).unwrap();
++        app.run("styles.apply", json!({"style":style})).unwrap();
++    }
++    app.enable_host_review();
++    app.set_host_review_permissions(false, false);
++    app.session.dirty = false;
++    let before = serde_json::to_value(&app.session.doc).unwrap();
++    let revision = app.session.rev();
++    let history = app.session.undo_depth();
++    app.session.view.nav_pane = true;
++    command(&mut app, "configure", json!({"externalOutline":true})).unwrap();
++    let outline = app.host_review_snapshot(1.0)["headingOutline"].clone();
++    assert_eq!(outline["revision"], revision);
++    assert_eq!(outline["items"].as_array().unwrap().len(), 2);
++    assert_eq!(outline["items"][0]["text"], "Repeated");
++    assert_eq!(outline["items"][1]["text"], "Repeated");
++    assert_eq!(outline["items"][1]["index"], 1);
++    assert_eq!(outline["items"][1]["level"], 1);
++    command(&mut app, "heading", json!({"revision":revision,"index":1})).unwrap();
++    assert_eq!(app.session.sel.focus.path, Path::top(2));
++    assert!(app.canvas.nav_to_caret);
++    assert_eq!(serde_json::to_value(&app.session.doc).unwrap(), before);
++    assert_eq!(app.session.rev(), revision);
++    assert_eq!(app.session.undo_depth(), history);
++    assert!(!app.session.dirty);
++    assert!(!app.session.view.nav_pane, "the host directory must not open a second native panel");
++}
++
++#[test]
++fn host_unified_directory_rejects_stale_or_invalid_destinations() {
++    let mut app = WordApp::new(Session::new(Document::from_text("Section\nBody")), crate::Services::default());
++    app.run("styles.apply", json!({"style":"Heading 1"})).unwrap();
++    app.enable_host_review();
++    let revision = app.session.rev();
++    app.run("text.insert", json!({"text":"New "})).unwrap();
++    let selection = app.session.sel.clone();
++    let current_revision = app.session.rev();
++    assert!(command(&mut app, "heading", json!({"revision":revision,"index":0})).is_err());
++    assert!(command(&mut app, "heading", json!({"revision":current_revision,"index":999})).is_err());
++    assert!(command(&mut app, "heading", json!({"revision":current_revision,"index":-1})).is_err());
++    assert_eq!(app.session.sel, selection);
++    let stale = json!({"document":"old-session","action":"heading","params":{"revision":app.session.rev(),"index":0}});
++    assert!(app.host_review_action(&stale).is_err());
++    let plain = &mut WordApp::new(Session::new(Document::from_text("Plain body")), crate::Services::default());
++    plain.enable_host_review();
++    assert_eq!(plain.host_review_snapshot(1.0)["headingOutline"]["items"], json!([]));
 +}
 +
 +#[test]
@@ -1990,5 +2146,99 @@ new file mode 100644
 +    h.get_by_label(&page).click();
 +    h.run_steps(2);
 +    assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
++    assert!(!h.state().session.dirty);
++}
+diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
+--- a/crates/ui-egui/src/chrome.rs
++++ b/crates/ui-egui/src/chrome.rs
+@@ -278,6 +278,10 @@
+ /// Draws the title bar with window dragging, AutoSave, quick access, account, community and search
+ /// controls, and the centred clickable document title.
+ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
++    // The host already owns the document title, identity and file actions.
++    if app.canvas.host_comments {
++        return;
++    }
+     let t = Tokens::get(ui.ctx());
+     // macOS: shorter, so the system's traffic lights are centred in it; the tallest controls
+     // shrink to keep a margin above and below them.
+@@ -764,3 +768,6 @@
+ 
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++mod rfq_tests;
+diff --git a/crates/ui-egui/src/chrome/rfq_tests.rs b/crates/ui-egui/src/chrome/rfq_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/ui-egui/src/chrome/rfq_tests.rs
+@@ -0,0 +1,68 @@
++use super::*;
++use egui_kittest::kittest::Queryable;
++use wordcraft_doc::Document;
++use wordcraft_engine::Session;
++
++#[test]
++fn host_title_row_takes_no_space_while_standalone_keeps_its_controls() {
++    for hosted in [false, true] {
++        let mut app = WordApp::new(Session::new(Document::from_text("Original text")), crate::Services::default());
++        if hosted {
++            app.enable_host_review();
++        }
++        // Older preferences cannot restore any part of the hosted title row.
++        app.ui.show_discord = true;
++        app.ui.quick_access_toolbar = true;
++        let mut h = egui_kittest::Harness::builder()
++            .with_size(vec2(1600.0, 400.0))
++            .with_context_setup(|ctx| ctx.set_fonts(crate::theme::font_definitions(false, false)))
++            .build_ui_state(
++                move |ui, app| {
++                    let before = ui.available_rect_before_wrap();
++                    title_bar(app, ui);
++                    let after = ui.available_rect_before_wrap();
++                    if hosted {
++                        assert_eq!(before, after, "the removed row must not leave a blank band");
++                    } else {
++                        assert!(after.top() > before.top());
++                    }
++                },
++                app,
++            );
++        h.run_steps(3);
++        for label in ["Account", "Search commands and help"] {
++            assert_eq!(h.query_by_label(tl!(label)).is_some(), !hosted, "{label}");
++        }
++    }
++}
++
++#[test]
++fn host_without_title_row_keeps_ribbon_and_original_document() {
++    let mut app = WordApp::new(Session::new(Document::from_text("Original text")), crate::Services::default());
++    app.enable_host_review();
++    app.set_host_review_permissions(false, false);
++    app.session.dirty = false;
++    let before = serde_json::to_value(&app.session.doc).unwrap();
++    let revision = app.session.rev();
++    let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
++        |ui, app: &mut WordApp| {
++            let ctx = ui.ctx().clone();
++            app.logic(&ctx);
++            app.ui(ui);
++        },
++        app,
++    );
++    h.run_steps(4);
++    for label in ["Account", "Search commands and help"] {
++        assert!(h.query_by_label(tl!(label)).is_none(), "{label} must be absent from the full host");
++    }
++    for tab in ["Home", "Insert", "Draw", "Review", "View", "Help"] {
++        assert!(h.query_by_label(tl!(tab)).is_some(), "{tab} remains available");
++    }
++    h.get_by_label(tl!("Home")).click();
++    h.run_steps(2);
++    assert!(!h.state().ui.ribbon_collapsed);
++    assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before);
++    assert_eq!(h.state().session.rev(), revision);
 +    assert!(!h.state().session.dirty);
 +}

@@ -11,7 +11,9 @@ export async function prepareCraftEditor({editor,source,target,patch}){
   try{manifest=JSON.parse(await readFile(path.join(source,'build.json'),'utf8'));}
   catch{throw new Error(`${editor} 编辑器尚未准备，请先运行 npm run craft:build（需要 Rust 1.95 与 wasm-bindgen 0.2.129）。`);}
   const digest=data=>createHash('sha256').update(data).digest('hex');
-  if(manifest.patchSha256!==digest(await readFile(patch)))throw new Error(`${editor} 编辑器补丁已更新，请运行 npm run craft:build。`);
+  const patchBytes=await readFile(patch);
+  // Git on Windows can change only the diff's line endings. Compiled assets remain byte exact.
+  if(![digest(patchBytes),digest(patchBytes.toString('utf8').replace(/\r\n/g,'\n'))].includes(manifest.patchSha256))throw new Error(`${editor} 编辑器补丁已更新，请运行 npm run craft:build。`);
   for(const [name,hash] of Object.entries(manifest.files))if(digest(await readFile(path.join(source,name)))!==hash)throw new Error(`${editor} 编译文件校验失败，请重新构建。`);
   await mkdir(target,{recursive:true});
   for(const item of await readdir(source,{withFileTypes:true}))await cp(path.join(source,item.name),path.join(target,item.name),{recursive:item.isDirectory()});

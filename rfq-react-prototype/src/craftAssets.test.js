@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -22,6 +22,27 @@ test('prepared editor can load its generated nested JavaScript imports',async()=
     const runtime=await import(pathToFileURL(path.join(target,'wordcraft-classic.js')));
     assert.equal(runtime.ready,true);
     await writeFile(path.join(source,'wordcraft-classic.js'),'tampered runtime');
+    await assert.rejects(()=>prepareCraftEditor({editor:'wordcraft',source,target,patch}),/编译文件校验失败/);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('Windows CRLF checkout accepts the same editor patch while changed content still requires a rebuild',async()=>{
+  const directory=await mkdtemp(path.join(tmpdir(),'rfq-craft-windows-'));
+  try{
+    const source=path.join(directory,'source'),target=path.join(directory,'public'),patch=path.join(directory,'editor.patch');
+    await mkdir(source,{recursive:true});
+    const original='--- a/document.rs\n+++ b/document.rs\n@@ -1 +1 @@\n-before\n+after\n';
+    const runtime='compiled editor bytes\r\n';
+    const hash=value=>createHash('sha256').update(value).digest('hex');
+    await writeFile(path.join(source,'editor.wasm'),runtime);
+    await writeFile(path.join(source,'build.json'),JSON.stringify({version:'test',patchSha256:hash(original),files:{'editor.wasm':hash(runtime)}}));
+    await writeFile(patch,original.replace(/\n/g,'\r\n'));
+    await prepareCraftEditor({editor:'wordcraft',source,target,patch});
+    assert.equal(await readFile(path.join(target,'editor.wasm'),'utf8'),runtime,'runtime verification and copying remain byte exact');
+    await writeFile(patch,original.replace('after','different change').replace(/\n/g,'\r\n'));
+    await assert.rejects(()=>prepareCraftEditor({editor:'wordcraft',source,target,patch}),/补丁已更新/);
+    await writeFile(patch,original);
+    await writeFile(path.join(source,'editor.wasm'),runtime.replace(/\r\n/g,'\n'));
     await assert.rejects(()=>prepareCraftEditor({editor:'wordcraft',source,target,patch}),/编译文件校验失败/);
   }finally{await rm(directory,{recursive:true,force:true});}
 });

@@ -1,8 +1,8 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Alert,Button,Empty,Select,Spin} from 'antd';
 import {FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
-import {FileText,Upload,Download} from './icons';
-import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftFile,downloadCraftBlob,supportsCraft} from '../craftClient';
+import {FileText,Upload} from './icons';
+import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
 import CraftResponseAdvice from './CraftResponseAdvice';
 import classicTemplate from '../../../demos/craft-review/site/classic.html?raw';
@@ -13,7 +13,7 @@ import './craft-source.css';
 const read=key=>{try{return JSON.parse(localStorage.getItem(key)||'null');}catch{return null;}};
 const emptyComments=[];
 
-export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,showResponses=true,responsePreview,onQuote,children}){
+export default function CraftSourcePane({file,source,canManage=false,user,rows=[],selectedAnchor,allComments=emptyComments,people=[],canEditRow=()=>false,onProjectCommentsChange,onSelectAnchor,onSelectComment,activeCommentId,showResponses=true,responsePreview,onQuote,onDocumentOutlineChange,children}){
   const bindingKey='fep-rfq-craft-source:'+craftSourceKey(source);
   const [reference,setReference]=useState(()=>file?.craft||read(bindingKey));
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
@@ -83,7 +83,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
         const blob=new Blob([packet.bytes],{type:meta.fileType==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
         setBackup({blob,name:packet.name});
         if(!packet.review||packet.review.document!==packet.document){markDirty();setError('无法确认这份批阅稿的来源，已保留本地备份。请下载备份后重新打开项目原件。');return;}
-        const serial=generation.current;pendingSaves.current++;setSaving(true);setError('');
+        const serial=generation.current;pendingSaves.current++;setSaving(true);
         return saveQueue.current.enqueue(packet.bytes,serial,{review:packet.review}).catch(cause=>{
           if(alive.current){dirtyRef.current=true;setDirty(true);setError(cause.status===409?'原文件已有更新，当前修改已保留。请先下载本地备份，再重新打开最新批阅稿。':cause.message);}
         }).finally(()=>{pendingSaves.current--;if(alive.current)setSaving(pendingSaves.current>0);});
@@ -93,7 +93,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       persist:(ref,content,revision)=>saveCraftReview(ref,content,revision,abort.signal),
       onSaved:(saved,details)=>{
         if(!alive.current)return;
-        setMeta(saved);instance.markSaved(saved,details.review);
+        setMeta(saved);instance.markSaved(saved,details.review);setError('');
         if(details.clean&&instance.checkpointCovers(details.review)){dirtyRef.current=false;setDirty(false);if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=false;}
         else{dirtyRef.current=true;setDirty(true);if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=true;}
       }});
@@ -104,6 +104,15 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   },[bytes,meta?.id,reference?.id,user?.id,frameEpoch]);
   useEffect(()=>{editor.current?.refresh();},[allComments,rows,selectedAnchor?.requirementId,activeCommentId,canEditRow,canManage]);
   useEffect(()=>{editor.current?.setVisible(!excerpt);},[excerpt]);
+  useEffect(()=>{
+    onDocumentOutlineChange?.({sourceKey:craftSourceKey(source),...editorState.documentOutline,
+      ready:loading?false:!bytes||excerpt?true:Boolean(editorState.ready),
+      supported:!excerpt&&meta?.fileType==='docx'&&Boolean(editorState.documentOutline?.supported),
+      navigateHeading:target=>{
+        if(!editor.current)return Promise.resolve(false);
+        return editor.current.navigateHeading(target).catch(cause=>{if(alive.current)setError(cause.message);return false;});
+      }});
+  },[editorState.documentOutline,editorState.ready,loading,bytes,excerpt,meta?.fileType,onDocumentOutlineChange]);
 
   async function attach(event){
     const original=event.target.files?.[0];event.target.value='';if(!original||!canManage)return;
@@ -120,15 +129,12 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     setBytes(null);setMeta(null);setEditorState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
     setFrameEpoch(value=>value+1);setRetry(value=>value+1);
   }
-  const save=()=>{setError('');editor.current?.save().catch(cause=>{if(alive.current)setError(cause.message);});};
-  const download=kind=>downloadCraftFile({...reference,name:meta?.name||reference.name},kind).catch(cause=>setError(cause.message));
   const sourceStatus=editorState.source?.status||'waiting';
   const locationText={waiting:'正在连接原文定位…',matched:'已定位当前条款 · 原文与卡片联动',page:'已跳转来源页 · 请核对条款位置',missing:'未找到唯一原文，请核对文件或使用条款摘录',ambiguous:'原文有多处匹配，请核对条款位置',unsupported:'当前原文暂不支持定位'}[sourceStatus]||'正在定位条款…';
-  const savedAt=meta?.savedAt?new Date(meta.savedAt).toLocaleTimeString('zh-CN',{hour12:false}):'';
   return <section className={`office-source craft-source detail-source ${expanded?'office-source-expanded':''}`} aria-label="Word / PDF 原文件批阅">
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
-    <div className="office-toolbar"><div className="office-title"><FileText size={17}/><div><strong>{meta?.name||reference?.name||file?.name||'客户原文件'}</strong><small>批阅副本 · {canManage?'可编辑原文':rows.some(row=>canEditRow(row))?'条款批注':'只读'} · 批注与协作记录联动</small></div></div><div className="office-actions">{meta?.fileType==='docx'&&<Button size="small" aria-label="文档目录" aria-pressed={Boolean(editorState.outlineVisible)} disabled={!editorState.ready||excerpt} onClick={()=>editor.current?.setOutline(!editorState.outlineVisible).catch(cause=>setError(cause.message))}>目录</Button>}<Button size="small" onClick={()=>setExcerpt(!excerpt)}>{excerpt?'原文件':'条款摘录'}</Button><Button size="small" aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div></div>
-    {error&&<Alert type="error" showIcon message={error} action={<Button size="small" onClick={()=>{setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button>}/>}
+    <div className="office-toolbar"><div className="office-title"><FileText size={17}/><div><strong>{meta?.name||reference?.name||file?.name||'客户原文件'}</strong><small role="status">批阅副本 · {canManage?'可编辑原文':rows.some(row=>canEditRow(row))?'条款批注':'只读'} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div><div className="office-actions"><Button size="small" onClick={()=>setExcerpt(!excerpt)}>{excerpt?'原文件':'条款摘录'}</Button><Button size="small" aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button></div></div>
+    {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving} onClick={()=>{if(backup&&dirty&&editor.current){editor.current.save().catch(cause=>setError(cause.message));return;}setError('');if(editor.current)editor.current.retry();else setRetry(v=>v+1);}}>重试</Button></div>}/>}
     {!loading&&!reference&&excerpt&&<Alert type="info" showIcon message="当前来源文件尚未关联原文件，已显示对应条款摘录" action={canManage?<Button size="small" onClick={()=>picker.current?.click()}>上传对应原文件</Button>:undefined}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
     {!!editorState.unlinked?.length&&!excerpt&&<div className="craft-unlinked" role="status"><strong>{editorState.unlinked.length} 条文件批注待关联条款</strong>{editorState.unlinked.map(note=><div key={note.nativeKey}><span title={note.text}>{note.text||'空白批注'}</span><Select size="small" aria-label={`为批注选择条款 ${note.id}`} placeholder="选择条款后同步" value={association[note.nativeKey]} onChange={value=>setAssociation(old=>({...old,[note.nativeKey]:value}))} options={rows.filter(row=>canEditRow(row)).map(row=>({value:row.id,label:`${row.clause||'无编号'} ${row.title||row.original?.slice(0,24)||''}`}))}/><Button size="small" disabled={!association[note.nativeKey]} onClick={()=>editor.current?.associate(note.nativeKey,association[note.nativeKey])}>关联并同步</Button></div>)}</div>}
@@ -143,6 +149,5 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     </div>
     {!excerpt&&!bytes&&(loading?<div className="office-missing"><Spin/><p>正在读取项目原件…</p></div>:<div className="office-missing"><Empty description="尚未关联原文件"/><p>原有条款摘录继续保留。上传对应 DOCX / PDF 后，可在这里批阅并同步协作记录。</p>{canManage?<Button type="primary" icon={<Upload size={15}/>} onClick={()=>picker.current?.click()}>上传对应原文件</Button>:<p>请由项目 SR 关联原件；当前身份可查看条款摘录。</p>}</div>)}
     <input ref={picker} type="file" accept=".docx,.pdf" hidden aria-label="上传对应原文件" onChange={attach}/>
-    {reference&&<div className="office-savebar"><span role="status">{saving?'正在保存批阅稿…':dirty?'有修改，尚未保存到原文件':savedAt?`已保存 · ${savedAt}`:'原件已关联'}</span><div><Button size="small" disabled={!meta||saving||loading} onClick={reopen}>重开保存稿</Button>{backup&&dirty&&<Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button>}<Button size="small" disabled={!meta} onClick={()=>download('original')}>原件</Button><Button size="small" icon={<Download size={13}/>} disabled={!meta||dirty||saving} onClick={()=>download('review')}>批阅版</Button><Button size="small" type="primary" loading={saving} disabled={!editorState.ready||!(canManage||rows.some(row=>canEditRow(row)))} onClick={save}>保存原文</Button></div></div>}
   </section>;
 }

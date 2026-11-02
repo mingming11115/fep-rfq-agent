@@ -15,7 +15,7 @@ test('project editor coordinates native and collaboration comments within one so
   let context={rows,comments:[],people:[user],canEditRow:row=>row.id==='R1',editDocument:false,selectedAnchor:makeSourceAnchor(rows[0])};
   let bridge,notes=[],nextId=10,applied=0,configureFailures=0,outlineVisible=false,dirtyCount=0;const calls=[],states=[],errors=[],selected=[],files=[];
   const frame=document.getElementById('word-frame');
-  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
+  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,headingOutline:{revision:7,items:[{index:0,level:0,text:'Real heading'}]},pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
   const send=(type,data={},overrides={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+type,...data},...overrides}));
   const native={postMessage(message){
     calls.push(message);if(message.type==='wordcraft:open'){queueMicrotask(()=>send('reviewState',{payload:JSON.stringify(snapshot())}));return;}
@@ -61,6 +61,17 @@ test('project editor coordinates native and collaboration comments within one so
     assert.equal(files.length,0);
     assert.equal(context.comments.length,0);
     assert.equal(calls.filter(c=>c.type==='wordcraft:open').length,1);
+  });
+  await t.test('host headings keep their source identity and reject stale navigation without saving',async()=>{
+    const before=dirtyCount;
+    assert.deepEqual(states.at(-1).documentOutline,{document:'native-session',revision:7,items:[{index:0,level:0,text:'Real heading'}],ready:true,supported:true});
+    await bridge.navigateHeading({document:'native-session',revision:7,index:0});await tick();
+    const request=calls.filter(call=>call.type==='wordcraft:review').map(call=>JSON.parse(call.payload)).find(call=>call.action==='heading');
+    assert.deepEqual(request.params,{revision:7,index:0});
+    await assert.rejects(bridge.navigateHeading({document:'previous-file',revision:7,index:0}),/目录已更新/);
+    await assert.rejects(bridge.navigateHeading({document:'native-session',revision:6,index:0}),/目录已更新/);
+    assert.equal(calls.filter(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='heading').length,1);
+    assert.equal(dirtyCount,before);assert.equal(files.length,0);
   });
   await t.test('native text and replies become one collaboration thread and repeated echoes stay idempotent',async()=>{
     notes=[{id:1,nativeKey:'word:1',author:'Alex',text:'Native discussion',quote:'Exact source',clauseId:'R1',resolved:false,color:0,ranges:[],replies:[{id:2,nativeKey:'word:2',author:'Alex',text:'Native reply'}]}];

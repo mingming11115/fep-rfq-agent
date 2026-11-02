@@ -32,3 +32,15 @@
  .project-detail-workspace .detail-document-column{height:650px}
  .main:has(.project-detail-workspace)>.app-footer{padding-top:10px;padding-bottom:14px}
 }
+
+/* One directory entry, with persistent clause controls and native document headings. */
+.rfq-directory-tabs{display:flex;gap:4px;border-bottom:1px solid #e7ecf3;margin-bottom:10px;flex-shrink:0}
+.rfq-directory-tabs>button{flex:1;border:0;border-bottom:2px solid transparent;background:transparent;padding:9px 6px;font-size:12px;color:#66758c;cursor:pointer}
+.rfq-directory-tabs>button[aria-selected="true"]{color:#1677ff;border-bottom-color:#1677ff}
+.rfq-directory-content{display:flex;flex-direction:column;flex:1;min-height:0}
+.rfq-directory-content[hidden]{display:none}
+.rfq-directory-content>.select{font-size:12px}
+.rfq-document-headings{overflow:auto;min-height:0;flex:1;padding:3px 0 12px}
+.rfq-document-headings>button{display:block;width:100%;border:0;background:transparent;border-radius:4px;text-align:start;padding:10px 8px;overflow-wrap:anywhere;font-size:12px;line-height:1.7;color:#425674;cursor:pointer}
+.rfq-document-headings>button:hover,.rfq-document-headings>button:focus-visible{background:#edf3ff;color:#1677ff}
+.rfq-directory-empty{font-size:12px;line-height:1.9;color:#7d899c;padding:12px 4px}

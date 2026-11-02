@@ -21,8 +21,16 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
   const source={projectId:'P',fileId:'F',sourceVersion:'V1'},user={id:'actor',name:'Alex'};
   const ref={id:'file-id',name:'real.docx',fileType:'docx',access:'cap',...source,revision:0};
   const rows=[{id:'R',projectId:'P',sourceFileId:'F',sourceVersion:'V1',original:'Original source',sourcePage:1,conclusion:'Comply'}];
-  let responseMeta=ref;
-  const previousFetch=globalThis.fetch;globalThis.fetch=async url=>url.includes('/download')?new Response(new Blob(['native file bytes'])):new Response(JSON.stringify({code:0,data:responseMeta}));
+  let responseMeta=ref,saveFailure=false;const saves=[],outlines=[];
+  const previousFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{
+    if(options?.method==='PUT'){
+      saves.push({url,options});
+      if(saveFailure)return new Response(JSON.stringify({code:503,msg:'存储暂不可用'}),{status:503});
+      responseMeta={...responseMeta,revision:responseMeta.revision+1,savedAt:new Date().toISOString()};
+      return new Response(JSON.stringify({code:0,data:responseMeta}));
+    }
+    return url.includes('/download')?new Response(new Blob(['native file bytes'])):new Response(JSON.stringify({code:0,data:responseMeta}));
+  };
   const settle=async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));};
   const connectNative=async(frame,meta)=>{
     // HappyDOM deliberately does not navigate frames in this test. Supply only
@@ -31,13 +39,14 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     Object.defineProperty(frame,'contentWindow',{configurable:true,value:native});
     let applied=0,outlineVisible=false;
     const emit=(type,data)=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:engine+':'+type,...data}}));
-    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,notes:[],pages:[],active:null,source:{status:'unsupported'}});
+    const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,headingOutline:{revision:2,items:[{index:0,level:0,text:'Native document heading'}]},notes:[],pages:[],active:null,source:{status:'unsupported'}});
     native.postMessage=message=>{
       calls.push(message);
       if(message.type===engine+':open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));
       if(message.type===engine+':review'){
         const request=JSON.parse(message.payload);applied=request.request;
         if(request.action==='outline')outlineVisible=request.params.visible;
+        if(request.action==='save')queueMicrotask(()=>emit('save',{name:meta.name,bytes:new TextEncoder().encode('retried DOCX').buffer,review:snapshot()}));
         queueMicrotask(()=>{emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});
       }
     };
@@ -45,27 +54,27 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(calls.find(call=>call.type===engine+':open')?.name,meta.name);
     assert.ok(!container.textContent.includes('正在打开原文件'));
     assert.ok(!container.querySelector('.office-loading'));
-    return calls;
+    return {calls,emit,snapshot};
   };
   try{
-    await act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:'real.docx',craft:ref},source,user,canManage:true,rows,selectedAnchor:{...source,requirementId:'R'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Existing excerpts')));});
+    await act(async()=>{root.render(React.createElement(CraftSourcePane,{onDocumentOutlineChange:value=>outlines.push(value),file:{id:'F',name:'real.docx',craft:ref},source,user,canManage:true,rows,selectedAnchor:{...source,requirementId:'R'},allComments:[],people:[user],canEditRow:()=>true,onProjectCommentsChange:()=>{},onSelectAnchor:()=>{},onSelectComment:()=>{}},React.createElement('div',null,'Existing excerpts')));});
     await act(async()=>await settle());
     const frame=container.querySelector('iframe');assert.ok(frame);
     // Vite's public directory does not resolve a directory URL to its index:
     // it returns the RFQ SPA shell, which never sends the editor ready message.
     assert.equal(new URL(frame.src).pathname,'/craft-editors/wordcraft-classic/index.html');
     assert.equal(container.querySelector('[data-count]')?.textContent,'0 条批注');
-    assert.match(container.textContent,/保存原文/);assert.match(container.textContent,/条款摘录/);
+    assert.equal(Boolean(container.querySelector('.office-savebar')),false,'the bottom file operation row is removed');
+    for(const label of ['重开保存稿','原件','批阅版','保存原文'])assert.ok(![...container.querySelectorAll('button')].some(button=>button.textContent===label),label);
+    assert.match(container.textContent,/条款摘录/);
     assert.match(container.querySelector('[aria-label="原文件旁的话术批注"]')?.textContent||'',/Comply/);
-    const calls=await connectNative(frame,ref);
-    const directory=container.querySelector('button[aria-label="文档目录"]');
-    assert.ok(directory,'Word provides a separate document directory');
-    await act(async()=>{directory.click();await settle();});
-    assert.equal(directory.getAttribute('aria-pressed'),'true');
-    assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='outline'&&JSON.parse(call.payload).params.visible===true));
-    assert.ok(!container.textContent.includes('有修改，尚未保存'));
-    await act(async()=>{directory.click();await settle();});
-    assert.equal(directory.getAttribute('aria-pressed'),'false');
+    const {calls,emit,snapshot}=await connectNative(frame,ref);
+    assert.equal(container.querySelector('button[aria-label="文档目录"]'),null,'the duplicate source-pane directory entry is removed');
+    assert.equal(outlines.at(-1).items[0].text,'Native document heading');
+    await act(async()=>{await outlines.at(-1).navigateHeading({document:ref.id+'-session',revision:2,index:0});await settle();});
+    assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='heading'&&JSON.parse(call.payload).params.index===0));
+    assert.equal(saves.length,0,'directory navigation never saves the document');
+    assert.equal(window.__rfqOfficeUnsaved.dirty,false);
     await act(async()=>{container.querySelector('[data-response-note="R"] .wc-note-body').click();await settle();});
     assert.ok(calls.some(call=>call.type==='wordcraft:review'&&JSON.parse(call.payload).action==='locate'&&JSON.parse(call.payload).params.id==='R'),'clicking even the current advice must explicitly locate the native source');
     const editorUrl=frame.src;
@@ -75,6 +84,33 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(frame.src,editorUrl);
     assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
     assert.ok(!container.querySelector('.office-loading'));
+    // Removing the operation row must retain native/keyboard save and failure recovery.
+    await act(async()=>{emit('dirty',{dirty:true});await settle();});
+    assert.equal(window.__rfqOfficeUnsaved.dirty,true);
+    assert.match(container.querySelector('.office-title').textContent,/未保存/);
+    await act(async()=>{emit('save',{name:ref.name,bytes:new TextEncoder().encode('saved DOCX').buffer,review:snapshot()});await settle();});
+    assert.equal(saves.length,1);
+    assert.equal(saves[0].url,'/api/craft/documents/file-id/review');
+    assert.equal(saves[0].options.headers.get('If-Match'),'"0"');
+    assert.equal(await new Blob([saves[0].options.body]).text(),'saved DOCX');
+    assert.equal(window.__rfqOfficeUnsaved.dirty,false);
+    saveFailure=true;
+    await act(async()=>{emit('dirty',{dirty:true});emit('save',{name:ref.name,bytes:new TextEncoder().encode('local unsaved DOCX').buffer,review:snapshot()});await settle();});
+    assert.equal(saves[1].options.headers.get('If-Match'),'"1"');
+    assert.equal(window.__rfqOfficeUnsaved.dirty,true);
+    assert.match(container.querySelector('[role="alert"]').textContent,/存储暂不可用/);
+    assert.ok([...container.querySelector('[role="alert"]').querySelectorAll('button')].some(button=>button.textContent==='下载本地备份'));
+    assert.equal(container.querySelector('.office-savebar'),null);
+    await act(async()=>{[...container.querySelector('[role="alert"]').querySelectorAll('button')].find(button=>button.textContent.replace(/\s+/g,'')==='重试').click();await settle();});
+    assert.equal(saves.length,3,'Retry after a failed save must retry persistence rather than only synchronize comments');
+    assert.ok(Boolean(container.querySelector('[role="alert"]')),'failure recovery stays available until a save succeeds');
+    assert.ok([...container.querySelector('[role="alert"]').querySelectorAll('button')].some(button=>button.textContent==='下载本地备份'));
+    saveFailure=false;
+    await act(async()=>{[...container.querySelector('[role="alert"]').querySelectorAll('button')].find(button=>button.textContent.replace(/\s+/g,'')==='重试').click();await settle();});
+    assert.equal(saves.length,4);
+    assert.equal(saves[3].options.headers.get('If-Match'),'"1"');
+    assert.equal(window.__rfqOfficeUnsaved.dirty,false);
+    assert.equal(Boolean(container.querySelector('[role="alert"]')),false);
     await act(async()=>{root.unmount();});
     const second=createRoot(container);
     responseMeta={...ref,id:'pdf-id',fileId:'PDF',name:'real.pdf',fileType:'pdf'};
@@ -84,6 +120,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(new URL(pdfFrame.src).pathname,'/craft-editors/pdfcraft-classic/index.html');
     await connectNative(pdfFrame,responseMeta);
     assert.equal(container.querySelector('button[aria-label="文档目录"]'),null);
+    assert.equal(container.querySelector('.office-savebar'),null,'PDF also omits the host operation row');
     await act(async()=>second.unmount());
     const third=createRoot(container);
     await act(async()=>{third.render(React.createElement(CraftSourcePane,{file:{name:'missing.docx'},source:{...source,fileId:'MISSING'},user,canManage:false,rows,allComments:[],canEditRow:()=>false},React.createElement('div',null,'Existing excerpts')));});
