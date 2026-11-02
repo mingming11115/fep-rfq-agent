@@ -17,6 +17,8 @@ PDF 使用原生对象引用识别批注，删除前面的批注后仍能定位�
 
 ## 编译
 
+仓库已包含 `site/wordcraft-classic` 和 `site/pdfcraft-classic` 的预编译资源，普通使用直接 `git pull` 即可。RFQ 前端启动时自动校验并复制资源。只有修改原生源码或补丁时才需要执行以下构建步骤，并将新产物及 `build.json` 一起提交。
+
 需要 Rust 1.95、`wasm32-unknown-unknown` target、Git，以及
 `wasm-bindgen-cli 0.2.129`（与上游 Cargo.lock 一致）。
 
@@ -32,7 +34,7 @@ PDF 脚本校验固定的源码、`pdfcraft-classic-comments.patch` 和官方发
 Word 构建默认校验并内置 Noto Sans CJK SC 和 BIZ UDPGothic，字体及许可的固定版本与
 散列见 `wordcraft-fonts.json`。补丁允许 Web 构建保留中文字体；缺少必须字体时构建失败，
 避免浏览器画布缺字。PDF 仍沿用上游 Web 字体范围，含 BIZ UDPGothic 的常用汉字回退。
-下载缓存、编译产物、导出文件均留在本项目目录，不依赖系统临时目录，也不入 Git。
+下载缓存和导出文件留在本项目的忽略目录，不入 Git。两个 `*-classic` 目录中的运行文件、许可证与构建清单随 Git 分发；属性配置保证 Windows 检出不改变这些文件的字节。
 本机已准备的 `.cache/toolchain` 和 `.cache/wasm-bindgen-*` 会被脚本自动识别，
 后续可直接运行同一条编译命令。
 

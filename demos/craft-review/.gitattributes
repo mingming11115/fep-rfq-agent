@@ -1,2 +1,5 @@
 # Unified diffs preserve blank context lines with a leading space.
 *.patch text eol=lf -whitespace
+# Built resources are checked by byte hash; Windows checkout must preserve them exactly.
+site/wordcraft-classic/** -text -whitespace
+site/pdfcraft-classic/** -text -whitespace

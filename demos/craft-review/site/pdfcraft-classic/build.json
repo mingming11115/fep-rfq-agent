@@ -1,0 +1,28 @@
+{
+  "editor": "pdfcraft",
+  "version": "0.16.1",
+  "patchSha256": "fb996b21002531fd88b332a41fcd404e8f0a23b882699b60b71e0148a24e5146",
+  "files": {
+    "ATTRIBUTION-craft-fonts.md": "aa2aa7eec68c32ac2da6ff7162ca9100ab3680e4c7b98365fc7c74ddd4167d07",
+    "ATTRIBUTION.md": "8795acbd7b23019f5378e5cb19f449e3961f4eb65cfb95f63b8b513211b995b5",
+    "LICENSE-APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "LICENSE-CGATS.txt": "469d87b5fa48f8aaf69e25f4fcac3a309c97dbb7d561b917638abdb640e004d9",
+    "LICENSE-CMAP.txt": "742665db9c8e1bc72603c6d319ca3e90b83bd6d95202f0cd4ef11068a07a9c29",
+    "LICENSE-FOXIT.txt": "b578cdd2345840ada550bd12519533812320d5f1d21cf4c1c7e1b1b0a31c98b7",
+    "LICENSE-MIT": "cd7032ea33b71427f188e34ffb4aee9d6868a57fd196037c5c8b2be03a2a0352",
+    "LICENSE-lucide.txt": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+    "NOTICE": "017e547d49f181b0e62be4579ae5d90a6b831fb8cf5a8522d95813bd5efc2cad",
+    "OFL-DancingScript.txt": "6f090277c00af96651ce6dbcc38ff1591047a3bffef486e80b6a32e8276a8201",
+    "OFL-Inter.txt": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+    "OFL-JetBrainsMono.txt": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+    "OFL-biz-ud-pgothic.txt": "e753d7155d53c747d037a445e584c8ecfca6dd79846db610417e282a736b28bc",
+    "OFL-noto-sans-arabic.txt": "07fc70bfeb985cc1a87a8587d0a0c80bab11c86c9dc3fd95b6f0cb332f983e96",
+    "OFL-noto-sans-devanagari.txt": "a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331",
+    "OFL-noto-sans-hebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
+    "OFL-noto-sans-thai.txt": "2e98fd23a52d253db8612cd5942c8f2ff4111b21d2367050fdca91d8ccc374a0",
+    "index.html": "3d0f8f2cb4a87ca502f77e79db7a0cba6c59139e0263548b27b9e6e35c7c65c9",
+    "pdfcraft-classic.js": "9797c794eff0d30ba0884fed82c5ef66162f051337cd4d4c11d751c839fcb656",
+    "pdfcraft-classic_bg.wasm": "f91ff8af98d77373555e8a763a1425991fac5433066d9d5c5ab61dca0cd0ec71",
+    "snippets/eframe-d31a8450ea12dfc1/inline0.js": "22a98f9d0c5a0532d291bdc9a3050439420b3d11143b4568fcfd3c66fff36995"
+  }
+}

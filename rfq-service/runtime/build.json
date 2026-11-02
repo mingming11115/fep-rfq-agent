@@ -1,0 +1,8 @@
+{
+  "javaVersion": 17,
+  "sourceRevision": "1b0515e3aecdcc362255bcad1e313ae86592e76f",
+  "sourceSha256": "f82fc852e59be556b0f47b51e7ac975060d56697901f9491d23bcbdb6adb2ba5",
+  "files": {
+    "rfq-service.jar": "7308472355b1d519fdb62a33f68dc1e3006e86877348b5d6f97a9aeecb482ab5"
+  }
+}

@@ -2,6 +2,8 @@
 
 ## 原生 Word / PDF 文件接口（2026-11-01）
 
+运行包已随 Git 提供。安装 Java 17+ 后，在仓库根目录执行 `java -jar rfq-service/runtime/rfq-service.jar --server.port=48083 --office.storage-dir=./rfq-service/data/craft` 即可；不需要另外下载 ZIP 或安装 Maven/Docker。运行包及其源码指纹见 `runtime/build.json`，Windows 完整步骤见 [启动说明](../docs/windows-craft-startup.md)。修改后端源码后应重新构建运行包。
+
 `/api/craft` 提供原生编辑器的文件持久化，不需要 ONLYOFFICE 服务或 JWT 密钥。独立演示后端监听 `48083`，使用新的 `rfq-craft-documents` Docker 卷；启动命令见 [项目批阅接入说明](../docs/craft-project-review.md)。
 
 - `POST /documents`：multipart `file` 原件、可选 `review` 批阅稿，以及 `projectId`、`fileId`、`sourceVersion`。返回文档引用与一次性显示的随机访问凭据。

@@ -13,9 +13,15 @@ RFQ-001 的商务 V1.1、技术 V2.0、状态矩阵 V1.0 也提供 Word 批阅�
 
 ## 启动
 
-Windows 使用预编译编辑器及 Java 后端包时，按 [Windows 启动说明](windows-craft-startup.md) 操作；无需在 Windows 安装 Rust、Maven 或 Docker。
+Windows 可直接 `git pull` 获取预编译编辑器及 Java 后端运行包，按 [Windows 启动说明](windows-craft-startup.md) 启动；不需要另外下载 ZIP，也不需要 Rust、Maven 或 Docker。
 
-在仓库根目录构建并启动独立后端：
+可直接在仓库根目录用 Java 17+ 启动后端：
+
+```sh
+java -jar rfq-service/runtime/rfq-service.jar --server.port=48083 --office.storage-dir=./rfq-service/data/craft
+```
+
+也可以构建并启动 Docker 后端：
 
 ```sh
 docker build -t rfq-craft-service:local rfq-service
@@ -33,11 +39,10 @@ docker run -d --name rfq-craft-service-local \
 ```sh
 cd rfq-react-prototype
 npm ci
-npm run craft:build
 npm run dev -- --port 5174
 ```
 
-编辑器构建需要 Rust 1.95、WASM target 与 wasm-bindgen 0.2.129；构建脚本会识别本机已缓存工具。固定版本源码、字体及补丁通过散列校验，具体见 [Demo 构建说明](../demos/craft-review/README.md)。`craft:build` 生成 WASM，并将校验后的资源复制到 `public/craft-editors`。后续 `npm run dev` / `npm run build` 的前置步骤只校验、复制已有资源。产物和缓存不入 Git，干净检出需先执行 `craft:build`。
+Word/PDF 浏览器运行文件和校验清单已纳入 Git，`npm run dev` / `npm run build` 会自动校验并复制到 `public/craft-editors`，干净检出不需要编译。只有修改原生引擎后才需要 Rust 1.95、WASM target 与 wasm-bindgen 0.2.129 执行 `craft:build`，并连同生成资源、清单一起提交；固定源码、字体及补丁仍通过散列校验，见 [Demo 构建说明](../demos/craft-review/README.md)。构建缓存、前端生成副本和导出文件继续不入 Git。
 
 `/api/craft` 默认代理到 `48083`，可用 `RFQ_CRAFT_API_TARGET` 调整；旧文件导入所用 `/api/office` 默认代理到 `48081`，可用 `RFQ_BACKEND_URL` 调整。发布生产构建时，需由部署服务器提供同源 `/api/craft` 路由；开发代理不会打包进静态产物。
 
