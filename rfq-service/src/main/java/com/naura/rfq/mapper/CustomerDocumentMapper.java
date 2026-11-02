@@ -12,6 +12,8 @@ public interface CustomerDocumentMapper {
 
     Optional<CustomerDocument> findById(@Param("id") String id);
 
+    Optional<CustomerDocument> findByIdForUpdate(@Param("id") String id);
+
     List<CustomerDocument> findByProjectIdOrderByCreatedAtDesc(@Param("projectId") String projectId);
 
     List<CustomerDocument> findByProjectIdAndSha256(@Param("projectId") String projectId,

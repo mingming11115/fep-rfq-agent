@@ -1,199 +1,113 @@
-# RFQ 独立后端框架
+# RFQ 后端
 
-## 原生 Word / PDF 文件接口（2026-11-01）
+Java 17 / Spring Boot / MyBatis / MySQL，包含业务鉴权、客户文档上传、DOCX/PDF 读取、规则/模型条款抽取和 OCR。业务接口前缀 `/api/rfq`，返回 `{code,msg,data}`；需要 `Authorization: Bearer <token>`。
 
-运行包已随 Git 提供。安装 Java 17+ 后，在仓库根目录执行 `java -jar rfq-service/runtime/rfq-service.jar --server.port=48083 --office.storage-dir=./rfq-service/data/craft` 即可；不需要另外下载 ZIP 或安装 Maven/Docker。运行包及其源码指纹见 `runtime/build.json`，Windows 完整步骤见 [启动说明](../docs/windows-craft-startup.md)。修改后端源码后应重新构建运行包。
+## 上传与解析（2026-11-03）
 
-`/api/craft` 提供原生编辑器的文件持久化，不需要 ONLYOFFICE 服务或 JWT 密钥。独立演示后端监听 `48083`，使用新的 `rfq-craft-documents` Docker 卷；启动命令见 [项目批阅接入说明](../docs/craft-project-review.md)。
+流程：上传并验证真实文件 → 保存不可变原件及 SHA-256 → 触发解析 → 原生读取文字/表格 → OCR 图片 → 模型或规则抽取 → 校验来源 → 入库。
 
-- `POST /documents`：multipart `file` 原件、可选 `review` 批阅稿，以及 `projectId`、`fileId`、`sourceVersion`。返回文档引用与一次性显示的随机访问凭据。
-- `GET /documents/{id}`：版本、保存时间、来源信息。
-- `GET /documents/{id}/download?kind=original|review`：不可变原件或最新批阅稿。
-- `PUT /documents/{id}/review`：`application/octet-stream`，`If-Match` 为当前 revision；过期版本返回 `409`。
+- DOCX：读取正文、表格、嵌套表格及段落/表格内嵌图片。Word 使用结构锚点，不伪造页码。页眉、页脚、浮动文本框、自动编号标签不在当前读取范围。
+- PDF：读取原生文本；无文字页渲染成图片后 OCR；有文字页中的图片对象单独 OCR，包括 Form 内图片。支持内联图片；不支持矢量路径绘制的混合页图中文字识别。
+- 原件单文件最多 30 MiB，校验真实 DOCX/PDF 内容；拒绝加密或空 PDF、伪造扩展名和损坏文件。上传失败清理暂存文件，事务回滚清理原件。
+- 上传与解析是两个动作，上传完成不会自动解析。解析当前同步执行，请给调用方设置足够超时。
+- 同文档解析与人工条款修改使用数据库锁串行；重解析失败保留已有条款；已人工修改的条款不允许被重解析覆盖，返回 `409`，请上传新文档版本。
+- 同一项目上传时分配递增文档版本。重解析会替换未人工修改的条款并分配新 ID；历史运行记录保留统计信息，不保留独立的旧条款快照。
 
-除上传外均要求 `X-Craft-Access`。只支持 DOCX / PDF，单份 30 MiB；导入两份文件的 multipart 总上限为 64 MiB。新批阅稿发布成功后才更新元数据；失败保留上一版本。原件不随编辑改变。原生保存会失效旧 ONLYOFFICE 会话，阻止旧回调覆盖新版本。
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/auth/login` | `{username,password}`，获取 token |
+| POST | `/projects/{id}/documents` | multipart 字段 `file`，上传 DOCX/PDF |
+| POST | `/projects/{id}/documents/sample` | 生成示例 RFQ，便于验证 |
+| GET | `/projects/{id}/documents?page=1&size=20` | 文档列表 |
+| GET | `/documents/{id}/download` | 下载不可变原件，遵循项目读取权限 |
+| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析 |
+| GET | `/parse-runs/{id}` | 运行状态、实际 extractor、异常数量及说明 |
+| GET | `/documents/{id}/blocks` | 原文内容块、sourceAnchor、provenance、processingStatus |
+| GET | `/projects/{id}/requirements?page=1&size=20` | 解析条款及待人工核对原因 |
+| PATCH | `/requirements/{id}` | 人工修正条款，携带 version 乐观锁版本 |
 
-当前凭据是本机演示的文件访问机制，企业认证与服务端项目成员授权仍待接入。历史 `/api/office` 接口继续保留，用于旧文件导入。
+上传、触发解析和修改条款要求 SR / BU_ADMIN，并校验项目归属；读取遵循既有项目访问权限。完整基础接口见 [接口文档](../docs/RFQ后端接口文档_v0.2.md)。
 
-## ONLYOFFICE 原件批阅（2026-10-30）
+解析状态使用小写 `completed` / `partial` / `failed`。有未识别图片、OCR 文字、模型待核对条款或服务降级时为 `partial`，不表示所有内容已完整提取。`issueCount` 包含待核对条款和处理告警数；`message` 提供摘要，图片等细节通过内容块查询。`provenance=ocr` 区分识别文字与原生文字。条款 `originalText` 保存摘录，`requirementText` 保存抽取后的要求。
 
-现已提供真实 DOCX / PDF 上传、批阅副本、签名编辑器会话、保存回调和下载接口。原始文件保留不变，后续编辑只写入批阅副本。文件及元数据保存在 Docker 命名卷，重启后继续可用。
+## 模型与 OCR 配置
 
-在 `rfq-service` 目录准备 `.env`：
+两者默认关闭、独立开关、独立配置。模型关闭时使用现有规则抽取；模型已开启但连接失败、超时、HTTP 错误、JSON 错误、输出未完整结束、引用不存在、原文引用不匹配或内容块遗漏时，退回规则并记录降级。一次运行首次模型失败后，剩余批次直接使用规则，避免重复等待；已经成功的批次保留。
 
-```bash
-cp .env.example .env
-# 用 openssl rand -hex 32 生成随机密钥，填入 .env 的 ONLYOFFICE_JWT_SECRET。
-docker compose -p rfq-office --profile office up --build -d
+OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续解析；不会生成虚构图片文字。纯扫描件没有可读内容时返回 `partial` 和明确人工核对提示。OCR 识别成功的文字同样需要人工核对数值及单位。模型输出均标记人工核对；程序校验来源摘录不能替代语义审核。
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| RFQ_LLM_ENABLED | false | 模型开关 |
+| RFQ_LLM_URL | 空 | **完整** Chat Completions URL，例如内网 `http://model-gateway:8000/v1/chat/completions` |
+| RFQ_LLM_MODEL | 空 | 模型名称，由实际网关提供 |
+| RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |
+| RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 30s | 连接及整次请求超时 |
+| RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 每批最多原文字符/块数；超大单块退回规则 |
+| RFQ_OCR_ENABLED | false | OCR 开关 |
+| RFQ_OCR_URL / RFQ_OCR_API_KEY | 空 | 完整 OCR 地址、可选 Bearer 密钥 |
+| RFQ_OCR_CONNECT_TIMEOUT / RFQ_OCR_TIMEOUT | 3s / 30s | OCR 连接及整次请求超时 |
+| RFQ_OCR_MAX_IMAGES | 100 | 每份文档图片/扫描页的识别数量上限，超限保留待核对标记 |
+| RFQ_OCR_MAX_IMAGE_PIXELS | 20000000 | PDF 扫描页渲染/图片的像素上限 |
+| RFQ_OCR_MAX_IMAGE_BYTES | 10485760 | 单张识别图片字节上限 |
+| RFQ_PARSE_MAX_BLOCKS | 5000 | 最多处理内容块数；超出时提示内容未完全处理 |
+
+模型接口使用非流式 `model` 和 `messages` 请求，[协议参考](https://developers.openai.com/api/reference/resources/chat)。服务端发送固定系统指令及内容块 JSON；网关返回 `choices[0].message.content` 中的 JSON 字符串，且 `finish_reason=stop`。不依赖特定模型 SDK 或强制 JSON 模式。
+
+模型返回内容示例（blockIndex 为输入内容块编号）：
+
+```json
+{
+  "requirements": [{
+    "blockIndex": 0,
+    "originalText": "1.1 设计压力应不低于 2 MPa。",
+    "requirementText": "设计压力应不低于 2 MPa。",
+    "title": "设计压力",
+    "customerClauseNo": "1.1",
+    "level": 2,
+    "parentClauseNo": "1",
+    "obligation": "mandatory"
+  }],
+  "ignoredBlockIndexes": []
+}
 ```
 
-本机入口：RFQ 后端 `http://127.0.0.1:48081`，ONLYOFFICE `http://127.0.0.1:8082`。首次启动文档服务需稍等，`/healthcheck` 返回 `true` 后即可使用。当前机器已配置并启动，不需要再次覆盖 `.env`。不加 `--profile office` 仍可单独启动后端框架。
+每个输入块必须被要求引用或明确列入 `ignoredBlockIndexes`，原文摘录必须是对应块的连续原文，且未忽略块的全部原文需被摘录覆盖，遗漏块内后文同样触发降级。模型不能忽略规则已识别出的候选条款。当前模型模式不直接接受模型给出的指标 JSON，避免未经验证的结构化数值入库；规则模式仍提供指标提取。
 
-| 配置 | 默认值 / 含义 |
-| --- | --- |
-| `ONLYOFFICE_JWT_SECRET` | 至少 32 字符；后端和文档服务必须一致，勿提交到 Git |
-| `ONLYOFFICE_PUBLIC_URL` | `http://127.0.0.1:8082`，浏览器加载编辑器脚本的地址 |
-| `ONLYOFFICE_INTERNAL_URL` | `http://onlyoffice`，后端在 Docker 网络中访问文档服务的地址 |
-| `ONLYOFFICE_CALLBACK_BASE_URL` | Compose 固定 `http://rfq-service:48081`；本机 Java 启动时需改成文档容器能访问的后端地址 |
-| `ONLYOFFICE_STORAGE_DIR` | Compose 使用 `/app/data/onlyoffice`；本机 Java 默认为 `data/onlyoffice` |
-| `ONLYOFFICE_FRONTEND_ORIGINS` | 可加载条款联动插件的前端来源；默认 `http://127.0.0.1:5173,http://localhost:5173`，部署时填写真实来源 |
+OCR 使用本项目定义的轻量 HTTP JSON 协议，可通过适配服务对接 PaddleOCR、云 OCR 或现有内网 OCR；不是上述服务的原生协议。请求格式：
 
-Vite 已为 `/api/office` 配置同源代理。修改后端端口时，可在启动前端时设置 `RFQ_BACKEND_URL`。浏览器地址、容器内地址与回调地址分别配置，不能把容器中的 `localhost` 当作宿主机。
-
-接口前缀 `/api/office`：
-
-- `GET /status`：配置状态与上传上限。
-- `POST /documents`：multipart 文件及项目、文件、来源版本引用，返回随机文档引用和访问凭据。
-- `GET /documents/{id}`：持久化版本、保存时间、保存错误状态。
-- `POST /documents/{id}/session`：返回签名后的官方 Docs API 配置。
-- `POST /documents/{id}/save`：请求文档服务强制保存，仍须等待回调确认落盘。
-- `GET /documents/{id}/download?kind=original|review`：原件或最新已保存批阅版。
-- `GET /content/{id}?ticket=...`：供文档服务读取的有时限签名地址。
-- `POST /callback/{id}`：JWT 验签后的保存回调，返回 ONLYOFFICE 原生 `{error:0|1}`。
-- `GET /plugin/config.json`、`GET /plugin/{asset}`：社区插件公开资源；session 仅为白名单来源签入插件配置，随机通道隔离不同编辑器。`config.json` 文件名必须保留，9.3 编辑器依赖该名称解析资源目录。插件通过内容控件标签或精确唯一原文定位，不调用收费 Automation API。
-
-除签名内容地址和保存回调外，文档接口使用 `X-Office-Access` 访问凭据。只处理 DOCX / PDF，单文件上限 30 MiB；旧 DOC 请先转换。强制保存保留当前协作 key；最终保存后换用新 key。成功回调的凭据摘要持久化，非连续重复回调也不会回滚已保存版本。
-
-这是本机集成：前端演示身份决定编辑/只读配置，但尚未接入企业认证和后端项目成员权限。保留默认回环端口；正式部署需接入业务认证与授权。原文件批阅下载与正式对外应答导出是两套操作，批阅不会自动更新条款、确认状态或最终评审。
-
-下方为原框架的运行说明；数据库、企业身份和 AI 业务仍未接入。
-
-`rfq-service` 是可独立构建、运行和部署的 Spring Boot 后端项目，位于当前工作区的 `rfq-service/` 目录，与现有 Naura 应用分别维护和启动。
-
-当前使用 Java 17、Spring Boot 3.5.9 和 Maven，版本为 `0.0.1-SNAPSHOT`。应用启动不需要数据库、Redis 或其他外部服务。
-
-## 当前范围
-
-- Spring MVC Web、Bean Validation、Actuator。
-- 通用返回结构 `{code, msg, data}`，成功码为 `0`，以及业务异常与全局异常处理基础能力。
-- `local`、`prod` 两套运行 profile，默认应用端口 `48081`。
-- 仅暴露 `/actuator/health` 和 `/actuator/info` 两个管理端点；健康详情及组件信息隐藏，Actuator 保留标准返回结构。
-
-当前新增上述文档集成 API；仍没有数据库或 Redis 依赖、企业认证实现、AI 或模型服务接入。`/` 没有业务页面或接口，验证启动状态请访问健康端点。
-
-## 项目结构
-
-```text
-rfq-service/
-├── pom.xml
-├── Dockerfile
-├── compose.yaml
-├── .env.example
-├── .dockerignore
-├── .gitignore
-├── README.md
-└── src/
-    ├── main/
-    │   ├── java/com/naura/rfq/
-    │   │   ├── RfqServiceApplication.java
-    │   │   └── common/
-    │   │       ├── api/ApiResponse.java
-    │   │       └── exception/
-    │   │           ├── BusinessException.java
-    │   │           └── GlobalExceptionHandler.java
-    │   └── resources/
-    │       ├── application.yml
-    │       ├── application-local.yml
-    │       └── application-prod.yml
-    └── test/java/com/naura/rfq/
-        ├── FrameworkSmokeTest.java
-        └── ErrorHandlingTest.java
+```json
+{"imageBase64":"不带data:前缀的图片Base64","mimeType":"image/png","anchor":"page-1"}
 ```
 
-## 本机运行
+成功返回 HTTP 2xx 和 `{"text":"识别出的完整文字"}`。空白结果、错误响应或非法 JSON 都按无法识别处理。PDF 扫描页上传 PNG；DOCX 图片保留原始媒体类型。HTTP 响应最多 2 MiB；不跟随重定向，日志与用户提示不包含远端响应正文和密钥。
 
-需要 JDK 17 或更新版本，以及 Maven 3.9 或更新版本。先进入项目目录：
+没有填写真实服务地址和凭据时，可完整使用上传与原生文字/规则解析。当前通过本地 HTTP 假服务验证成功、错误、超时和降级，尚未与指定供应商实网联调。
+
+## 本机运行与验证
+
+需要 JDK 17+、Maven 3.9+、MySQL 8。配置 `RFQ_DB_URL`、`RFQ_DB_USER`、`RFQ_DB_PASSWORD` 和 `RFQ_JWT_SECRET`；默认端口 48081。Flyway 自动建表，并通过 V2 迁移增加实际抽取器记录。首次空库初始化演示账号 `sr01`、`tech01`、`appr01`、`bu01`、`admin`，密码 `Rfq@2026`。
 
 ```bash
 cd rfq-service
-java -version
-mvn -version
-```
-
-默认使用 `local` profile：
-
-```bash
-mvn -B -ntp spring-boot:run
-```
-
-也可以先构建再运行 JAR：
-
-```bash
 mvn -B -ntp verify
 java -jar target/rfq-service.jar
 ```
 
-切换到 `prod` 并修改监听端口：
+测试会使用配置的数据库，新功能集成测试会写入测试文档；请使用独立测试库运行 `verify`。成功的验证产物为 `target/rfq-service.jar`。仓库内 `runtime/rfq-service.jar` 为历史分发包，源码修改不会自动更新该包。
 
-```bash
-SPRING_PROFILES_ACTIVE=prod SERVER_PORT=48082 java -jar target/rfq-service.jar
-```
-
-`SERVER_PORT` 控制应用监听端口，`SPRING_PROFILES_ACTIVE` 选择 profile；未设置时分别为 `48081` 和 `local`。Maven 与 `java -jar` 不会自动读取 Compose 使用的 `.env` 文件，需要在终端显式设置环境变量。
-
-## Docker 部署
-
-需要 Docker Engine 或 Docker Desktop，以及 Docker Compose v2。构建需要启用 BuildKit（Docker Desktop 默认启用），以复用 Maven 依赖缓存。当前工作环境没有预装 Java/Maven，可使用多阶段 Docker 构建完成编译、测试和运行；首次构建需要下载基础镜像和 Maven 依赖。
-
-在项目目录执行：
+`java -jar` 不会自动载入 `.env`。可在终端导出变量，或使用 Spring 配置文件。Compose 自动读取当前目录 `.env`：
 
 ```bash
 cp .env.example .env
-docker compose up --build -d
-docker compose logs --tail=100 -f rfq-service
+# 填写数据库、JWT 和所需模型/OCR 变量；已有 .env 请直接补充，勿覆盖。
+docker compose up --build -d rfq-service
 ```
 
-按 `Ctrl+C` 退出日志跟踪后，后台服务继续运行。检查健康状态：
+Compose 将原件和批阅稿保存在 `/app/data` 的命名卷内。数据库由外部提供，`RFQ_DB_URL` 必须能从容器访问；macOS 本机数据库可用 `host.docker.internal`。健康检查 `GET /actuator/health`，仅开放 health / info 管理端点。
 
-```bash
-curl --fail --silent --show-error http://127.0.0.1:48081/actuator/health
-curl --fail --silent --show-error http://127.0.0.1:48081/actuator/info
-```
+## 原生 Word/PDF 批阅与 ONLYOFFICE
 
-服务正常时，健康端点返回 `{"status":"UP"}`。应用信息端点返回应用名称等基础信息。启动后如果尚未监听端口，稍候再执行健康检查。
+历史批阅接口保留：`/api/craft` 提供原件/批阅稿存储和修订并发控制，`/api/office` 提供 ONLYOFFICE 签名会话和回调。它们与 `/api/rfq` 业务文档是独立的文件记录，不会自动触发解析或同步条款。批阅接口仍沿用各自访问凭据，未接入 `/api/rfq` 的项目业务权限。
 
-停止并移除本项目容器：
-
-```bash
-docker compose down
-```
-
-Compose 的配置变量如下：
-
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `RFQ_HOST_PORT` | `48081` | 宿主机端口；修改后健康检查 URL 也应使用对应端口 |
-| `SPRING_PROFILES_ACTIVE` | `prod` | 容器中启用的 Spring profile，可设为 `local` 或 `prod` |
-| `JAVA_TOOL_OPTIONS` | 空 | 可选 JVM 参数，如 `-XX:MaxRAMPercentage=75.0` |
-
-Compose 固定容器内部 `SERVER_PORT=48081`，并将端口映射到宿主机 `127.0.0.1:${RFQ_HOST_PORT:-48081}`。修改宿主机端口只需更改 `.env` 中的 `RFQ_HOST_PORT`，然后重新运行 `docker compose up --build -d`。
-
-当前尚未实现认证，因此默认仅允许宿主机本地访问。如需对外提供服务，应通过反向代理控制入口，并在代理或后续认证模块中配置访问控制与 TLS。
-
-Dockerfile 的构建阶段使用 Maven 3.9.9 和 JDK 17 执行 `mvn -B -ntp verify`，包含测试；运行阶段只保留 JRE 17 和应用 JAR，以非 root 用户 `10001:10001` 启动。构建产物固定为 `target/rfq-service.jar`，镜像内路径为 `/app/app.jar`。
-
-也可单独构建镜像并启动容器：
-
-```bash
-docker build -t rfq-service:local .
-docker run --rm --name rfq-service -p 127.0.0.1:48081:48081 -e SPRING_PROFILES_ACTIVE=prod rfq-service:local
-```
-
-## 测试与验证
-
-安装本机 JDK/Maven 后，可单独运行测试，或执行包括打包在内的完整验证：
-
-```bash
-mvn -B -ntp test
-mvn -B -ntp verify
-```
-
-Docker 构建也会执行完整 Maven 验证；测试失败会使镜像构建失败。启动后使用前述 `curl` 命令检查健康及应用信息。本机启动若使用了自定义 `SERVER_PORT`，请同步调整 URL。
-
-2026-10-24 已完成验证：Java 17 容器内 `mvn verify` 的 11 项测试全部通过，多阶段镜像构建成功；以 `prod` profile、非 root 用户启动后，健康接口返回 `{"status":"UP"}`，应用信息接口正常，环境管理端点与测试专用路由均返回 404。临时验证容器已停止，后续可按上述命令启动。
-
-## 独立部署与后续扩展
-
-本目录有独立的 `pom.xml`、构建产物、应用配置和 Compose 文件，可整体复制到部署主机后单独构建运行。所有命令均在 `rfq-service/` 内执行，不需要启动现有 Naura 应用，也不需要共享其数据库、环境变量或端口。容器日志输出到标准输出，可通过 `docker compose logs` 查看。
-
-后续 RFQ 业务代码可在 `com.naura.rfq` 下按业务模块新增。通用返回与异常逻辑集中在 `common` 包。需要认证时，再增加安全依赖与认证配置；需要数据库时，再增加数据访问依赖、连接配置及迁移脚本，并按环境提供凭据。环境差异分别放入 `application-local.yml`、`application-prod.yml`，敏感值通过环境变量注入。上述能力当前均未接入。
+ONLYOFFICE 使用 `.env.example` 中的 `ONLYOFFICE_*` 配置和 `docker compose --profile office up --build -d`。操作细节见 [项目批阅接入](../docs/craft-project-review.md) 与 [Windows 原生编辑器启动](../docs/windows-craft-startup.md)。不要将批阅稿保存等同于正式应答导出。

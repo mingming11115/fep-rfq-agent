@@ -32,6 +32,8 @@ public class ParseRun {
 
     private String message;
 
+    private String extractor = "none";
+
     private Instant startedAt;
 
     private Instant finishedAt;

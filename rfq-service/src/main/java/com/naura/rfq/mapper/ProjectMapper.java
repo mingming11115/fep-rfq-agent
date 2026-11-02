@@ -13,6 +13,8 @@ public interface ProjectMapper {
 
     Optional<Project> findById(@Param("id") String id);
 
+    Optional<Project> findByIdForUpdate(@Param("id") String id);
+
     List<Project> findAll();
 
     List<Project> findByIdIn(@Param("ids") Collection<String> ids);

@@ -13,7 +13,14 @@ public record RawBlock(
         List<List<String>> tableRows,
         String sectionPath,
         String clauseNo,
-        String anchor) {
+        String anchor,
+        String provenance,
+        String issue) {
+
+    public RawBlock(int index, String type, String text, List<List<String>> tableRows,
+            String sectionPath, String clauseNo, String anchor) {
+        this(index, type, text, tableRows, sectionPath, clauseNo, anchor, "native", null);
+    }
 
     public static final String PARAGRAPH = "paragraph";
     public static final String TABLE = "table";

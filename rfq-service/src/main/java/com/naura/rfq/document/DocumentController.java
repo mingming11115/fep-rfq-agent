@@ -40,7 +40,6 @@ public class DocumentController {
     private final AccessGuard access;
     private final AuditService audit;
     private final SampleRfqBuilder sampleBuilder;
-    private final ParseService parseService;
 
     public record DocumentView(String id, String projectId, String name, int version, String purpose,
             long sizeBytes, String sha256, String status, String uploadedBy, Instant createdAt) {
@@ -67,11 +66,13 @@ public class DocumentController {
                 total, query.getPage(), query.getSize()));
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/projects/{projectId}/documents")
     public ApiResponse<DocumentView> upload(@PathVariable String projectId,
             @RequestParam("file") MultipartFile file) throws IOException {
         CurrentUser user = CurrentUserHolder.require();
-        Project project = requireProject(projectId);
+        Project project = projects.findByIdForUpdate(projectId)
+                .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
 
@@ -79,13 +80,17 @@ public class DocumentController {
             throw new BusinessException(400, "请选择要上传的文件");
         }
         String name = file.getOriginalFilename() == null ? "unnamed" : file.getOriginalFilename();
+        name = name.replace('\\', '/');
+        name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "");
+        if (name.isBlank() || name.length() > 280) throw new BusinessException(400, "文件名为空或过长");
         String lower = name.toLowerCase(Locale.ROOT);
         String extension = SUPPORTED.stream().filter(lower::endsWith).findFirst()
                 .orElseThrow(() -> new BusinessException(400,
-                        "当前仅支持 DOCX / PDF。DOC 请先另存为 DOCX 再上传：" + name));
+                        "当前仅支持 DOCX / PDF。DOC 请先另存为 DOCX 再上传"));
 
         String documentId = Ids.next("DOC");
         DocumentStorage.StoredFile stored = storage.save(documentId, file, extension);
+        cleanOnRollback(stored);
 
         CustomerDocument document = new CustomerDocument();
         document.setId(documentId);
@@ -108,16 +113,19 @@ public class DocumentController {
         return ApiResponse.success(DocumentView.of(document));
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/projects/{projectId}/documents/sample")
     public ApiResponse<DocumentView> uploadSample(@PathVariable String projectId) throws Exception {
         CurrentUser user = CurrentUserHolder.require();
-        Project project = requireProject(projectId);
+        Project project = projects.findByIdForUpdate(projectId)
+                .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
 
         String documentId = Ids.next("DOC");
         byte[] content = sampleBuilder.build();
         DocumentStorage.StoredFile stored = storage.saveBytes(documentId, ".docx", content);
+        cleanOnRollback(stored);
 
         CustomerDocument document = new CustomerDocument();
         document.setId(documentId);
@@ -138,6 +146,35 @@ public class DocumentController {
         audit.success(user.id(), "载入示例RFQ", "document", document.getId(),
                 document.getName() + "（" + stored.size() + " bytes）");
         return ApiResponse.success(DocumentView.of(document));
+    }
+
+    @GetMapping("/documents/{documentId}/download")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> download(@PathVariable String documentId) throws IOException {
+        CustomerDocument document = documents.findById(documentId).orElseThrow(() -> new BusinessException(404, "文档不存在"));
+        access.requireProject(CurrentUserHolder.require(), requireProject(document.getProjectId()));
+        var path = storage.resolve(document.getStorageRef());
+        if (!java.nio.file.Files.isRegularFile(path)) throw new BusinessException(404, "原件不存在");
+        String type = document.getName().toLowerCase(Locale.ROOT).endsWith(".pdf") ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        return org.springframework.http.ResponseEntity.ok()
+            .header("Cache-Control", "no-store")
+            .header("X-Content-Type-Options", "nosniff")
+            .header("Content-Disposition", org.springframework.http.ContentDisposition.attachment()
+                .filename(document.getName(), java.nio.charset.StandardCharsets.UTF_8).build().toString())
+            .contentType(org.springframework.http.MediaType.parseMediaType(type))
+            .body(new org.springframework.core.io.FileSystemResource(path));
+    }
+
+    private void cleanOnRollback(DocumentStorage.StoredFile file) {
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+            new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        try { storage.delete(file.storageRef()); }
+                        catch (IOException e) { org.slf4j.LoggerFactory.getLogger(DocumentController.class).warn("上传回滚文件清理失败", e); }
+                    }
+                }
+            });
     }
 
     private int nextVersion(String projectId) {        return documents.findByProjectIdOrderByCreatedAtDesc(projectId).stream()

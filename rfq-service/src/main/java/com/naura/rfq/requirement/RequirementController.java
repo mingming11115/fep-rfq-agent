@@ -30,6 +30,7 @@ public class RequirementController {
 
     private final RequirementMapper requirements;
     private final ProjectMapper projects;
+    private final com.naura.rfq.mapper.CustomerDocumentMapper documents;
     private final AccessGuard access;
     private final AuditService audit;
 
@@ -81,6 +82,10 @@ public class RequirementController {
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
 
+        // Use the same document lock as re-parsing so a human edit cannot be lost mid-run.
+        documents.findByIdForUpdate(requirement.getDocumentId())
+            .orElseThrow(() -> new BusinessException(404, "文档不存在"));
+        requirement = requirements.findById(id).orElseThrow(() -> new BusinessException(409, "条款已重新解析，请刷新后重试"));
         if (request.version() != null && !request.version().equals(requirement.getVersion())) {
             throw new BusinessException(409, "条款已被他人修改，请刷新后重试");
         }

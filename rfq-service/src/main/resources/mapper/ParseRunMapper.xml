@@ -3,7 +3,7 @@
 <mapper namespace="com.naura.rfq.mapper.ParseRunMapper">
 
     <sql id="columns">id, document_id, status, total_blocks, processed_blocks, requirement_count,
-        issue_count, message, started_at, finished_at, created_by</sql>
+        issue_count, message, started_at, finished_at, created_by, extractor</sql>
 
     <select id="findById" resultType="com.naura.rfq.domain.ParseRun">
         select <include refid="columns"/>
@@ -21,15 +21,16 @@
     <insert id="insert">
         insert into parse_run (id, document_id, status, total_blocks, processed_blocks,
                               requirement_count, issue_count, message, started_at, finished_at,
-                              created_by)
+                              created_by, extractor)
         values (#{id}, #{documentId}, #{status}, #{totalBlocks}, #{processedBlocks},
                 #{requirementCount}, #{issueCount}, #{message}, #{startedAt}, #{finishedAt},
-                #{createdBy})
+                #{createdBy}, #{extractor})
     </insert>
 
     <update id="update">
         update parse_run
-        set status            = #{status},
+        set extractor         = #{extractor},
+            status            = #{status},
             total_blocks      = #{totalBlocks},
             processed_blocks  = #{processedBlocks},
             requirement_count = #{requirementCount},

@@ -40,7 +40,7 @@ public class ParseService {
     private final RequirementMapper requirements;
     private final ParseRunMapper runs;
     private final List<DocumentBlockReader> readers;
-    private final RequirementExtractor extractor;
+    private final HybridRequirementExtractor extractor;
     private final DocumentStorage storage;
     private final ParseProperties properties;
     private final AuditService audit;
@@ -52,8 +52,13 @@ public class ParseService {
 
     @Transactional
     public ParseRunView run(String documentId, String actorId) {
-        CustomerDocument document = documents.findById(documentId)
+        CustomerDocument document = documents.findByIdForUpdate(documentId)
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
+
+        List<Requirement> previous = requirements.findByDocumentIdOrderBySortOrder(documentId);
+        if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
+            throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
+        }
 
         ParseRun run = new ParseRun();
         run.setId(Ids.next("RUN"));
@@ -67,32 +72,42 @@ public class ParseService {
         documents.update(document);
 
         List<RawBlock> rawBlocks;
+        List<ExtractedRequirement> extracted;
+        List<String> issues = new ArrayList<>();
         try {
             rawBlocks = readBlocks(document);
+            if (rawBlocks.isEmpty()) throw new DocumentReadException("文档没有可读取内容");
+            if (rawBlocks.size() > properties.maxBlocks()) {
+                issues.add("文档内容块超过上限 " + properties.maxBlocks() + "，仅处理前部分内容");
+                rawBlocks = new ArrayList<>(rawBlocks.subList(0, properties.maxBlocks()));
+            }
+            for (RawBlock block : rawBlocks) {
+                if (block.issue() != null) issues.add(block.anchor() + "：" + block.issue());
+            }
+            ExtractionResult result = extractor.extractWithReport(rawBlocks);
+            run.setExtractor(truncate(result.extractor(), 250));
+            issues.addAll(result.issues());
+            extracted = withSourceReview(result.requirements(), rawBlocks);
+            if (extracted.isEmpty() && !previous.isEmpty()) {
+                throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
+            }
         } catch (Exception exception) {
-            log.warn("解析失败 document={} reason={}", documentId, exception.getMessage());
+            log.warn("解析失败 document={} type={}", documentId, exception.getClass().getSimpleName());
             run.setStatus(ParseRun.FAILED);
-            run.setMessage(exception.getMessage());
+            String reason = exception instanceof DocumentReadException ? exception.getMessage() : "解析失败，请检查文档及服务配置；已有结果保留";
+            run.setMessage(truncate(reason, 990));
+            run.setIssueCount(1);
             run.setFinishedAt(Instant.now());
             runs.update(run);
             document.setStatus(CustomerDocument.STATUS_FAILED);
             documents.update(document);
-            audit.failure(actorId, "解析客户文件", "document", documentId, exception.getMessage());
+            audit.failure(actorId, "解析客户文件", "document", documentId, run.getMessage());
             return view(run);
         }
 
-        List<String> issues = new ArrayList<>();
-        if (rawBlocks.size() > properties.maxBlocks()) {
-            issues.add("文档内容块超过上限 " + properties.maxBlocks() + "，仅处理前部分内容");
-            rawBlocks = new ArrayList<>(rawBlocks.subList(0, properties.maxBlocks()));
-        }
-
-        blocks.deleteByDocumentId(documentId);
         requirements.deleteByDocumentId(documentId);
-
+        blocks.deleteByDocumentId(documentId);
         Map<Integer, String> blockIds = persistBlocks(documentId, rawBlocks);
-        List<ExtractedRequirement> extracted = extractor.extract(rawBlocks);
-
         List<Saved> saved = persistRequirements(document, run.getId(), extracted, blockIds);
         linkParents(saved);
 
@@ -118,11 +133,27 @@ public class ParseService {
             run.setMessage(join(issues, "解析完成"));
             document.setStatus(CustomerDocument.STATUS_PARSED);
         }
+        run.setMessage(truncate(run.getMessage(), 990));
         runs.update(run);
         documents.update(document);
         audit.success(actorId, "解析客户文件", "document", documentId,
-                "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + extractor.name());
+                "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
         return view(run);
+    }
+
+    private List<ExtractedRequirement> withSourceReview(List<ExtractedRequirement> candidates, List<RawBlock> source) {
+        Map<Integer, RawBlock> byIndex = new HashMap<>(); source.forEach(b -> byIndex.put(b.index(), b));
+        List<ExtractedRequirement> reviewed = new ArrayList<>();
+        for (var r : candidates) {
+            RawBlock block = byIndex.get(r.blockIndex());
+            if (block == null) throw new IllegalArgumentException("来源块不存在");
+            if (block.issue() == null) { reviewed.add(r); continue; }
+            reviewed.add(new ExtractedRequirement(r.order(), r.blockIndex(), r.sectionPath(), r.customerClauseNo(),
+                r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(), r.metricsJson(),
+                r.conditionsText(), r.obligation(), ExtractedRequirement.NEEDS_REVIEW,
+                (r.reviewReasons() == null ? "" : r.reviewReasons() + "；") + block.issue()));
+        }
+        return reviewed;
     }
 
     private List<RawBlock> readBlocks(CustomerDocument document) throws Exception {
@@ -145,10 +176,10 @@ public class ParseService {
             block.setType(raw.type());
             block.setSectionPath(truncate(raw.sectionPath(), 480));
             block.setCustomerClauseNo(raw.clauseNo());
-            block.setContent(truncate(raw.text(), properties.maxRequirementChars() * 2));
+            block.setContent(raw.text());
             block.setSourceAnchor(raw.anchor());
-            block.setProvenance("native");
-            block.setProcessingStatus(raw.isTable() ? "TABLE" : "READ");
+            block.setProvenance(raw.provenance());
+            block.setProcessingStatus(raw.issue() != null ? "NEEDS_REVIEW" : raw.isTable() ? "TABLE" : "READ");
             blocks.insert(block);
             blockIds.put(raw.index(), block.getId());
         }
@@ -158,12 +189,9 @@ public class ParseService {
     private List<Saved> persistRequirements(CustomerDocument document, String runId,
             List<ExtractedRequirement> extracted, Map<Integer, String> blockIds) {
         List<Saved> saved = new ArrayList<>();
-        String prefix = "REQ-" + document.getId().replaceAll("[^A-Za-z0-9]", "").substring(Math.max(0,
-                document.getId().length() - 4)).toUpperCase();
-        int index = 0;
         for (ExtractedRequirement candidate : extracted) {
             Requirement requirement = new Requirement();
-            requirement.setId(prefix + "-" + String.format("%04d", ++index));
+            requirement.setId(Ids.next("REQ"));
             requirement.setProjectId(document.getProjectId());
             requirement.setDocumentId(document.getId());
             requirement.setParseRunId(runId);
@@ -210,14 +238,14 @@ public class ParseService {
     private ParseRunView view(ParseRun run) {
         return new ParseRunView(run.getId(), run.getDocumentId(), run.getStatus(), run.getTotalBlocks(),
                 run.getProcessedBlocks(), run.getRequirementCount(), run.getIssueCount(), run.getMessage(),
-                run.getStartedAt(), run.getFinishedAt(), extractor.name());
+                run.getStartedAt(), run.getFinishedAt(), run.getExtractor());
     }
 
     private String join(List<String> issues, String fallback) {
         if (issues.isEmpty()) {
             return fallback;
         }
-        return String.join("；", issues) + "；" + fallback;
+        return fallback + "；" + String.join("；", issues.stream().limit(8).toList());
     }
 
     private String truncate(String value, int max) {
