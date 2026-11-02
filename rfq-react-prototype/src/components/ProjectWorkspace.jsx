@@ -1,8 +1,11 @@
 import { UiButton, BusinessTabs } from './AntContent';
-import React from 'react';
+import React,{useEffect,useState} from 'react';
+import {Drawer} from 'antd';
 import { PageContainer } from '@ant-design/pro-components';
-import {ArrowLeft,FileOutput,ShieldCheck} from "./icons";
-export default function ProjectWorkspace({route,summary,project,taskContextError,onExitTask,children,onNavigate,onReturn,finalReviewGate,canSubmitFinalReview,canDownload,onLaunchFinalReview,onViewFinalReview}) {
+import {ArrowLeft,FileOutput,FileText,ShieldCheck} from "./icons";
+export default function ProjectWorkspace({route,summary,project,actorRole,projectInfoPanel,taskContextError,onExitTask,children,onNavigate,onReturn,finalReviewGate,canSubmitFinalReview,canDownload,onLaunchFinalReview,onViewFinalReview}) {
+ const [infoOpen,setInfoOpen]=useState(route.page==='settings');
+ useEffect(()=>setInfoOpen(route.page==='settings'),[route.page,project.id,actorRole]);
  const canExport=!!(canDownload&&finalReviewGate?.canExport);
  const exportReason=canDownload?finalReviewGate?.reason:'应答文档由SR在最终评审通过后导出';
  const snapshot=finalReviewGate?.snapshot;
@@ -13,6 +16,7 @@ export default function ProjectWorkspace({route,summary,project,taskContextError
    title={<h1 className="rfq-page-title" title={project.name}>{project.name}</h1>}
    content={project.processId ? <>关联工艺：{project.modelName} {project.modelRevision} / {project.processCode} · {project.processName}</> : undefined}
    extra={<>
+     {isDetail&&projectInfoPanel&&<UiButton className="btn" aria-haspopup="dialog" aria-expanded={infoOpen} onClick={()=>setInfoOpen(true)}><FileText size={14}/>项目信息</UiButton>}
      {canSubmitFinalReview&&!reviewInProgress&&<UiButton className="btn btn-primary" disabled={!!taskContextError} onClick={onLaunchFinalReview}><ShieldCheck size={14}/>发起最终评审</UiButton>}
      {snapshot&&<UiButton className="btn" onClick={onViewFinalReview}><ShieldCheck size={14}/>{reviewInProgress?'查看最终评审':'评审记录'}</UiButton>}
      <UiButton className="btn" disabled={!canExport} title={exportReason} onClick={()=>onNavigate('export')}><FileOutput size={14}/>导出文档</UiButton>
@@ -22,5 +26,6 @@ export default function ProjectWorkspace({route,summary,project,taskContextError
   {!isDetail&&<BusinessTabs className="tabs project-stage-tabs">{[['documents','RFQ解析'],['response','RFQ细则比对'],['export','导出文档']].map(([key,label])=><button key={key} className={(route.page===key||key==='response'&&route.page==='reviews')?'active':''} disabled={key==='export'&&!canExport} title={key==='export'?exportReason:undefined} onClick={()=>onNavigate(key)}>{label}</button>)}</BusinessTabs>}
   {taskContextError&&<div className="response-notice response-notice-warning"><span>{taskContextError}</span><UiButton className="btn btn-sm" onClick={onExitTask}>进入最新工作上下文</UiButton></div>}
   {children}
+  {isDetail&&projectInfoPanel&&<Drawer title="项目信息" open={infoOpen} onClose={()=>setInfoOpen(false)} width="min(760px, 100vw)" forceRender rootClassName="rfq-project-info-drawer" className="rfq-ant-drawer"><div key={project.id+':'+actorRole}>{projectInfoPanel}</div></Drawer>}
  </div>;
 }

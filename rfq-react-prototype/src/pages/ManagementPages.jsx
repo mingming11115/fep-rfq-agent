@@ -28,7 +28,7 @@ function Errors({ error }) { return error ? <div className="error-notice" role="
 function record(logEvent, action, object, summary, before, after, reason) { logEvent?.(action, object, JSON.stringify({ summary, before, after, reason })); }
 function ImpactList({ requirements, selected, onChange, readOnly = false }) { return <div className="mg-impact-list">{requirements.length ? requirements.map((row) => <label key={row.id}><UiCheckbox type="checkbox" disabled={readOnly} checked={selected.includes(row.id)} onChange={() => onChange(selected.includes(row.id) ? selected.filter((id) => id !== row.id) : [...selected, row.id])}/><span><strong>{row.clause} · {row.title}</strong><small>{row.category} · {row.owner || '未分派'}</small></span><StatusBadge status={row.status}/></label>) : <EmptyState title="当前项目暂无要求条目" description="配置保存后，后续解析的条目将使用新基线。"/>}</div>; }
 
-export function SettingsPage({ project, requirements = [], members = [], actorRole, onProjectChange, onInvalidateRequirements, onMembersChange, toast, navigate, logEvent,appState,actorId,onPersonnelAction }) {
+export function SettingsPage({ project, requirements = [], members = [], actorRole, onProjectChange, onInvalidateRequirements, onMembersChange, toast, navigate, logEvent,appState,actorId,onPersonnelAction,embedded=false }) {
   const [tab, setTab] = useState('basic');
   const [form, setForm] = useState({ name: project.name, customer: project.customer, owner: project.owner, ownerId: project.ownerId||'', deadline: project.deadline, equipment: project.equipment });
   const [reason, setReason] = useState(''), [error, setError] = useState(''), [impact, setImpact] = useState(false), [memberForm, setMemberForm] = useState(null), [memberReason, setMemberReason] = useState('');
@@ -70,7 +70,7 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
     onProjectChange?.({ approvalConfig: approvalDraft, reason }); setReason(''); setError(''); toast?.(incomplete ? '已保存配置草稿，缺项仍会阻止对应确认和审批' : '责任与审批配置已保存');
   };
   const approvalField = (key, label, options = roles) => <Field key={key} label={label}><Select disabled={!canEdit} label={label} value={approvalDraft[key]} onChange={(value) => setApprovalDraft({ ...approvalDraft, [key]: value })} options={[{ value: '', label: '待配置（保存为草稿）' }, ...options]}/></Field>;
-  return <div className="management-page"><Heading title="项目设置" description="明确项目范围、确认责任与审批关系，让每一次变更可追溯。" actions={<StatusBadge status={canEdit ? '项目管理权限' : '只读查看'}/>}/>
+  return <div className="management-page">{embedded?<div className="project-info-permission"><StatusBadge status={canEdit ? '项目管理权限' : '只读查看'}/></div>:<Heading title="项目设置" description="明确项目范围、确认责任与审批关系，让每一次变更可追溯。" actions={<StatusBadge status={canEdit ? '项目管理权限' : '只读查看'}/>}/>}
     <section className="panel"><Tabs value={tab} onChange={(value) => { setTab(value); setError(''); }} items={[["basic", "基本信息"], ["personnel", "人员与最终评审"]]}/>
       <div className="panel-body">
         {tab==='personnel'&&<ProjectPersonnelPanel appState={appState} project={project} requirements={requirements} actorId={actorId} onPersonnelAction={onPersonnelAction}/>}

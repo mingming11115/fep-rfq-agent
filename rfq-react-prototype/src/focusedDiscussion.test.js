@@ -23,7 +23,7 @@ test('collaboration starts on the current clause while project records remain op
   const button=text=>[...node.querySelectorAll('button')].find(button=>button.textContent===text);
   const disclosure=text=>[...node.querySelectorAll('.detail-activity details')].find(group=>group.querySelector('summary')?.textContent.includes(text));
   try{
-    await render();await act(async()=>{button('协作记录').click();await settle();});
+    await render();await act(async()=>{button('讨论').click();await settle();});
     const current=node.querySelector('.annotation-panel');assert.ok(current,'entering collaboration shows discussion without first selecting a comment');
     assert.ok(current.textContent.includes('Current discussion'));assert.ok(!current.textContent.includes('Other discussion'));assert.ok(!current.textContent.includes('Historic discussion'));
     assert.equal(current.querySelectorAll('textarea').length,0,'read-only discussion retains read-only permissions');
