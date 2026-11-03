@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdir} from 'node:fs/promises';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {Window} from 'happy-dom';
+import React,{act} from 'react';
+
+test('history document UI separates metadata, repairs missing answers and enforces independent approval',async()=>{
+ const w=new Window({url:'http://localhost:5173',settings:{disableCSSFileLoading:true,disableJavaScriptFileLoading:true}});
+ const channel=globalThis.MessageChannel;globalThis.MessageChannel=undefined;
+ Object.assign(globalThis,{window:w,document:w.document,localStorage:w.localStorage,CustomEvent:w.CustomEvent,Node:w.Node,Element:w.Element,HTMLElement:w.HTMLElement,HTMLBodyElement:w.HTMLBodyElement,HTMLHtmlElement:w.HTMLHtmlElement,HTMLInputElement:w.HTMLInputElement,HTMLTextAreaElement:w.HTMLTextAreaElement,SVGElement:w.SVGElement,ShadowRoot:w.ShadowRoot,requestAnimationFrame:w.requestAnimationFrame.bind(w),cancelAnimationFrame:w.cancelAnimationFrame.bind(w),getComputedStyle:w.getComputedStyle.bind(w),ResizeObserver:w.ResizeObserver,IS_REACT_ACT_ENVIRONMENT:true});
+ const dir=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(dir,{recursive:true});
+ const out=dir+'history-ui-test.mjs';await build({entryPoints:[fileURLToPath(new URL('./pages/HistoryKnowledgePage.jsx',import.meta.url))],outfile:out,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
+ const {default:Page}=await import(pathToFileURL(out)),{createRoot}=await import('react-dom/client');
+ const state={accountsById:{sr:{enabled:true},bu:{enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'}],projects:[],buPersonnelByBuId:{A:[{userId:'sr',roles:['SR'],enabled:true},{userId:'bu',roles:[],enabled:true,resourceQualifications:['knowledge-publish']}]}};
+ localStorage.setItem('rfq.history.documents.v1:A',JSON.stringify([{id:'D1',buId:'A',name:'客户历史RFQ.docx',version:'V1',metadata:{customer:'客户A',model:'机型A'},scope:'FEP 授权项目',parseStatus:'partial',sources:[{name:'客户历史RFQ.docx',prefix:'main:',blocks:[{type:'paragraph',anchor:'body/1',text:'3.2 要求支持自动上料'}]}],issues:[]}]));
+ localStorage.setItem('rfq.reference.knowledge.v1:A',JSON.stringify([{id:'K1',buId:'A',type:'history',documentId:'D1',version:1,sourceKey:'main:body/1',clauseNo:'3.2',requirement:'要求支持自动上料',answer:'',conditions:'',requirementAnchor:'main:body/1',status:'草稿',scope:'FEP 授权项目',issues:['缺少历史答复'],submitterId:'sr'}]));
+ const host=document.createElement('div');document.body.append(host);const root=createRoot(host),messages=[];
+ const settle=async()=>{for(let n=0;n<5;n++)await new Promise(resolve=>setTimeout(resolve,0));};
+ const click=async text=>act(async()=>{const button=[...document.querySelectorAll('button')].find(node=>node.textContent.replaceAll(' ','')===text.replaceAll(' ',''));assert.ok(button,text);assert.equal(button.disabled,false,text);button.click();await settle();});
+ const render=async(id,role)=>act(async()=>{root.render(React.createElement(Page,{actorId:id,actorRole:role,permissionContext:{state,actorId:id,buId:'A'},toast:message=>messages.push(message)}));await settle();});
+ const type=async(label,value)=>act(async()=>{const input=document.querySelector(`textarea[aria-label="${label}"]`);assert.ok(input);Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype,'value').set.call(input,value);input.dispatchEvent(new w.Event('input',{bubbles:true}));await settle();});
+ try{
+  await render('sr','SR');assert.match(host.textContent,/客户历史RFQ/);await click('查看');
+  assert.match(host.textContent,/客户A/);assert.match(host.textContent,/缺少历史答复/);await click('查看／编辑');
+  assert.ok(document.querySelector('[aria-label="客户要求"]'));assert.equal(document.querySelector('[aria-label="应答结论"]'),null);
+  await act(async()=>{const input=document.querySelector('textarea[aria-label="历史答复"]');Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype,'value').set.call(input,'需配置上料模块 S');input.dispatchEvent(new w.Event('input',{bubbles:true}));await settle();});
+  await click('保存草稿');assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].answer,'需配置上料模块 S');
+  await act(async()=>{const checkbox=host.querySelector('tbody input[type="checkbox"]');assert.ok(checkbox);checkbox.click();await settle();});await click('提交审核');
+  assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].status,'待审核');
+  await render('bu','BU管理员');await click('查看');await act(async()=>{host.querySelector('tbody input[type="checkbox"]').click();await settle();});await click('批准发布');
+  assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].status,'已发布');
+  await click('查看／编辑');await render('sr','SR');
+  assert.equal(document.querySelector('textarea[aria-label="客户要求"]'),null,'identity changes close an existing editor without relying on a React key');
+  await click('查看');await click('查看／编辑');
+  const restricted=JSON.parse(localStorage.getItem('rfq.history.documents.v1:A'));restricted[0].scope='仅当前项目';restricted[0].projectId='P1';
+  localStorage.setItem('rfq.history.documents.v1:A',JSON.stringify(restricted));
+  // Another tab can narrow the parent scope before this tab receives its storage event.
+  await click('修订新版本');await click('保存草稿');
+  assert.equal(JSON.parse(localStorage.getItem('rfq.history.documents.v1:A'))[0].scope,'仅当前项目');
+  assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A')).length,1,'a stale editor cannot publish a restricted clause into a new shared document');
+  await act(async()=>{window.dispatchEvent(new w.CustomEvent('rfq-history-change'));await settle();});
+  assert.equal(document.querySelector('textarea[aria-label="客户要求"]'),null);
+  state.projects=[{id:'P1',name:'项目一',buId:'A',participantIds:['sr']}];
+  localStorage.setItem('rfq.history.documents.v1:A','[]');
+  localStorage.setItem('rfq.reference.knowledge.v1:A',JSON.stringify([{id:'OLD',buId:'A',type:'history',version:1,status:'草稿',scope:'仅当前项目',projectId:'P1',source:'历史项目原来源',requirement:'原要求',answer:'原答复'}]));
+  await render('sr','SR');await act(async()=>{window.dispatchEvent(new w.CustomEvent('rfq-history-change'));await settle();});
+  await click('查看');await click('查看／编辑');await click('保存草稿');
+  let saved=JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'));
+  assert.equal(saved[0].scope,'仅当前项目');assert.equal(saved[0].source,'历史项目原来源');
+  assert.equal(JSON.parse(localStorage.getItem('rfq.history.documents.v1:A'))[0].buId,'A');
+  await click('补录条款');await type('客户要求','新增补录要求');await type('历史答复','补录原答复');await click('保存草稿');
+  saved=JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'));assert.equal(saved.length,2);
+  assert.equal(saved[1].documentId,saved[0].documentId);assert.match(host.textContent,/新增补录要求/);
+ }finally{await act(async()=>root.unmount());await w.happyDOM.cancelAsync();globalThis.MessageChannel=channel;}
+});

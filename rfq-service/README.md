@@ -111,3 +111,9 @@ Compose 将原件和批阅稿保存在 `/app/data` 的命名卷内。数据库�
 历史批阅接口保留：`/api/craft` 提供原件/批阅稿存储和修订并发控制，`/api/office` 提供 ONLYOFFICE 签名会话和回调。它们与 `/api/rfq` 业务文档是独立的文件记录，不会自动触发解析或同步条款。批阅接口仍沿用各自访问凭据，未接入 `/api/rfq` 的项目业务权限。
 
 ONLYOFFICE 使用 `.env.example` 中的 `ONLYOFFICE_*` 配置和 `docker compose --profile office up --build -d`。操作细节见 [项目批阅接入](../docs/craft-project-review.md) 与 [Windows 原生编辑器启动](../docs/windows-craft-startup.md)。不要将批阅稿保存等同于正式应答导出。
+
+## 历史知识文件解析
+
+`POST /api/rfq/history/parse` 接收 multipart `file`、可选 `responseFile`、必填 `buId`。请求使用现有 JWT，服务端校验所属 BU，支持该 BU 的维护角色。文件支持真实 DOCX/PDF、每个不超过 30 MiB，复用原件内容校验及 OCR 读取器；临时文件在读取结束后清理。
+
+响应包含 `metadata`、`clauses`、`sources`、`issues`。条款的 `answer` 合并原文件的答复与结论列，不生成结论字段。配套答复只按唯一编号关联；重复或未关联内容通过来源与异常返回。PDF 历史入口保留逐行唯一锚点，项目 RFQ 的原读取行为保持不变。该接口只做解析，知识草稿／审核仍由当前前端原型保存，不意味着已提供服务器知识库。

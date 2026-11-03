@@ -30,6 +30,15 @@ public class PdfBlockReader implements DocumentBlockReader {
 
     @Override
     public List<RawBlock> read(Path file) throws DocumentReadException {
+        return read(file, false);
+    }
+
+    /** Historical response labels and clause boundaries must retain PDF line breaks. */
+    public List<RawBlock> readForHistory(Path file) throws DocumentReadException {
+        return read(file, true);
+    }
+
+    private List<RawBlock> read(Path file, boolean historyLines) throws DocumentReadException {
         try (PDDocument document = Loader.loadPDF(file.toFile())) {
             PDFTextStripper stripper = new PDFTextStripper();
             stripper.setSortByPosition(true);
@@ -40,7 +49,9 @@ public class PdfBlockReader implements DocumentBlockReader {
                 stripper.setEndPage(page);
                 String pageText = stripper.getText(document);
                 String anchor = "page-" + page;
-                List<String> paragraphs = splitParagraphs(pageText);
+                List<String> paragraphs = historyLines
+                    ? pageText.lines().map(String::trim).filter(line -> !line.isBlank()).toList()
+                    : splitParagraphs(pageText);
                 if (paragraphs.isEmpty()) {
                     if (++images[0] > ocr.maxImages() || !ocr.enabled()) {
                         blocks.add(ocr.pending(blocks.size(), "", anchor, "扫描页 OCR 未启用或超过数量上限，待人工核对"));
@@ -59,7 +70,8 @@ public class PdfBlockReader implements DocumentBlockReader {
                         }
                     }
                 } else {
-                    for (String paragraph : paragraphs) blocks.add(RawBlock.paragraph(blocks.size(), paragraph, "", null, anchor));
+                    for (int index = 0; index < paragraphs.size(); index++) blocks.add(RawBlock.paragraph(blocks.size(), paragraphs.get(index), "", null,
+                        historyLines ? anchor + "/line-" + index : anchor));
                     readImages(document.getPage(page - 1), blocks, images, anchor);
                 }
             }
