@@ -38,6 +38,10 @@ async function scenario(base, mode, headless) {
   let browser, context, page;
   const consoleEvents=[];
   const input = label => page.getByRole('combobox',{name:label,exact:true});
+  const waitClosed = async label => {
+    await page.waitForFunction(name => [...document.querySelectorAll('input[role="combobox"]')]
+      .find(node=>node.getAttribute('aria-label')===name)?.getAttribute('aria-expanded')==='false',label);
+  };
   const open = async label => {
     const field = input(label);
     const wrapper = page.locator('.ant-select').filter({has:field});
@@ -49,7 +53,7 @@ async function scenario(base, mode, headless) {
   const choose = async (label,text) => {
     await open(label);
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({hasText:text}).click({delay:80});
-    await page.waitForTimeout(100);
+    await waitClosed(label);
     assert.equal(await input(label).getAttribute('aria-expanded'),'false',`${name}: ${label} closes after selecting`);
   };
   try {
@@ -62,12 +66,17 @@ async function scenario(base, mode, headless) {
     page.on('console',message=>consoleEvents.push({type:message.type(),text:message.text()}));
     page.on('pageerror',error=>consoleEvents.push({type:'pageerror',text:error.stack}));
     await page.goto(`${base}/windows-dropdown-check.html?mode=controls`);
+    await page.getByRole('heading',{name:'公共下拉控件',exact:true}).waitFor({state:'visible'});
+    await page.waitForLoadState('networkidle');
     result.userAgent = await page.evaluate(()=>navigator.userAgent);
     for(const label of ['基础选择框','通用选择框','选择确认人员']) {
       for(let pass=0;pass<3;pass++) {
         await open(label);
-        if(pass===0) await page.screenshot({path:path.join(directory,`${label}.png`)});
-        await input(label).press('Escape');
+        if(pass===0) await page.screenshot({path:path.join(directory,`control-${['基础选择框','通用选择框','选择确认人员'].indexOf(label)}.png`)});
+        // PersonPicker intentionally intercepts Escape before rc-select's parent
+        // handler. Use an outside click to close every control consistently.
+        await page.getByRole('heading',{name:'公共下拉控件',exact:true}).click();
+        await waitClosed(label);
         assert.equal(await input(label).getAttribute('aria-expanded'),'false');
       }
     }
@@ -86,6 +95,7 @@ async function scenario(base, mode, headless) {
     await open('来源类型');
     await page.screenshot({path:path.join(directory,'source-type-open.png')});
     await input('来源类型').press('Escape');
+    await waitClosed('来源类型');
     await page.getByRole('button',{name:'保存草稿',exact:true}).click();
     const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A')));
     assert.equal(saved.length,1);assert.equal(saved[0].sourceType,'enterprise-standard');
