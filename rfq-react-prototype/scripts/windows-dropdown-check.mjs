@@ -128,10 +128,10 @@ async function scenario(base, mode, headless) {
     await waitClosed('来源类型');
     await page.getByRole('button',{name:'保存草稿',exact:true}).click();
     await page.waitForFunction(()=>Object.keys(localStorage)
-      .filter(key=>key.startsWith('rfq.reference.knowledge.v1:'))
+      .filter(key=>key==='rfq.reference.knowledge.v1'||key.startsWith('rfq.reference.knowledge.v1:'))
       .some(key=>(JSON.parse(localStorage.getItem(key))||[]).some(row=>row.title==='Windows 完整应用测试')));
     const fullAppSaved = await page.evaluate(()=>Object.keys(localStorage)
-      .filter(key=>key.startsWith('rfq.reference.knowledge.v1:'))
+      .filter(key=>key==='rfq.reference.knowledge.v1'||key.startsWith('rfq.reference.knowledge.v1:'))
       .flatMap(key=>JSON.parse(localStorage.getItem(key))||[])
       .find(row=>row.title==='Windows 完整应用测试'));
     assert.equal(fullAppSaved?.sourceType,'enterprise-standard');
