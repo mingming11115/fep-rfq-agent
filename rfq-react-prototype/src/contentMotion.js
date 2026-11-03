@@ -13,11 +13,11 @@ export function playContentMotion(element, { kind = 'panel', direction = 1, dura
     panel: { from: { opacity: 0.4, transform: 'translateY(3px)' }, duration: 150 },
     tab: { from: { opacity: 0.4, transform: `translateX(${offset}px)` }, duration: 150 },
     view: { from: { opacity: 0.35, transform: 'translateY(4px)' }, duration: 180 },
-    'card-in': { from: { opacity: 0, transform: `translateX(${-offset * 2}px)` }, duration: 160 },
-    'card-out': { to: { opacity: 0, transform: `translateX(${offset * 2}px)` }, duration: 140 },
+    'card-in': { from: { opacity: 0 }, duration: 160 },
+    'card-out': { to: { opacity: 0 }, duration: 140 },
   };
   const motion = motions[kind] || motions.panel;
-  const rest = { opacity: 1, transform: 'translate(0, 0)' };
+  const rest = kind === 'card-in' || kind === 'card-out' ? { opacity: 1 } : { opacity: 1, transform: 'translate(0, 0)' };
   const animation = element.animate([motion.from || rest, motion.to || rest], {
     duration: duration ?? motion.duration, easing, fill: kind === 'card-out' ? 'forwards' : 'none',
   });

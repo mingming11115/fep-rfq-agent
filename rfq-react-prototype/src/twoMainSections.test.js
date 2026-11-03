@@ -70,6 +70,36 @@ for(const role of ['SR','最终审批人'])test(`${role} uses two sections and p
   }finally{await h.close();}
 });
 
+test('batch confirmation runs from the directory and retains excluded and failed selections',async()=>{
+  const h=await harness('direct-batch'),{ResponsePage,node,root,settle,click}=h;
+  const confirmations=[];
+  const row={id:'R1',projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'1',clause:'1.1',title:'First clause',original:'Source',conclusion:'Comply',draft:'Answer',status:'待确认',matchLevel:'standard',score:95,version:1};
+  let props={project:{id:'P',name:'Project',buId:'BU'},requirements:[row,{...row,id:'R2',clause:'1.2',title:'Low confidence',score:60},{...row,id:'R3',clause:'1.3',title:'Rejected save'},{...row,id:'R4',sourceFileId:'OTHER',source:'Other.docx',title:'Other file'}],reviews:[],route:{page:'response',projectId:'P',requirementId:'R1',fileId:'F',sourceVersion:'1'},appState:{accountsById:{},commentsByProject:{},membersByProject:{},audit:[]},actorRole:'SR',actorId:'actor',canBusinessAction:()=>true,onAppUpdate:()=>{},navigate:()=>{},toast:()=>{},logEvent:()=>{}};
+  function paint(){root.render(React.createElement(ResponsePage,{...props,onConfirm:(id,version)=>{
+    confirmations.push([id,version]);
+    if(id==='R3')return false;
+    props={...props,requirements:props.requirements.map(item=>item.id===id?{...item,status:'已确认'}:item)};paint();return true;
+  }}));}
+  try{
+    await act(async()=>{paint();await settle();});
+    await click(node.querySelector('[aria-label="展开文档目录"]'));
+    await click(node.querySelector('[aria-label="全选当前筛选条款"]'));
+    await click([...node.querySelectorAll('.detail-outline-footer button')].find(button=>button.textContent.includes('批量确认')));
+    assert.deepEqual(confirmations,[['R1',1],['R3',1]],'one click submits only eligible selected clauses');
+    const result=document.querySelector('.ant-modal');
+    assert.ok(result.textContent.includes('批量确认结果'));
+    assert.ok(result.textContent.includes('不符合标准回复相似度'));
+    assert.ok(result.textContent.includes('确认失败'));
+    const checked=title=>node.querySelector(`[aria-label="选择条款 ${title}"]`).checked;
+    assert.equal(checked('1.1 First clause'),false);
+    assert.equal(checked('1.2 Low confidence'),true);
+    assert.equal(checked('1.3 Rejected save'),true);
+    await click([...result.querySelectorAll('button')].find(button=>button.textContent.replace(/\s/g,'')==='完成'));
+    assert.equal(document.querySelector('.ant-modal'),null,'finishing closes the batch result dialog');
+    assert.deepEqual(confirmations,[['R1',1],['R3',1]],'finishing does not repeat any confirmation');
+  }finally{await h.close();}
+});
+
 test('folded references do not reveal denied or failed candidate evidence',async()=>{
   const h=await harness('restricted');
   try{

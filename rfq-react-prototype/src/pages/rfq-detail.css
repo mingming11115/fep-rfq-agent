@@ -39,6 +39,8 @@
 .rfq-directory-tabs>button[aria-selected="true"]{color:#1677ff;border-bottom-color:#1677ff}
 .rfq-directory-content{display:flex;flex-direction:column;flex:1;min-height:0}
 .rfq-directory-content[hidden]{display:none}
+.detail-outline-footer{flex-wrap:wrap;gap:8px}
+.detail-outline-footer .ant-checkbox-wrapper{margin:0;font-size:12px;white-space:nowrap}
 .rfq-directory-content>.select{font-size:12px}
 .rfq-document-headings{overflow:auto;min-height:0;flex:1;padding:3px 0 12px}
 .rfq-document-headings>button{display:block;width:100%;border:0;background:transparent;border-radius:4px;text-align:start;padding:10px 8px;overflow-wrap:anywhere;font-size:12px;line-height:1.7;color:#425674;cursor:pointer}
