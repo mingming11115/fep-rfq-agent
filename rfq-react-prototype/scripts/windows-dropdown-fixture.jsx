@@ -1,13 +1,16 @@
 import React, {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import '@ant-design/v5-patch-for-react-19';
-import {App, ConfigProvider, Select} from 'antd';
+import {App, Button, ConfigProvider, DatePicker, Dropdown, Select} from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import {KnowledgePage} from '../src/pages/ReferencePages';
 import AdminWorkspace from '../src/components/AdminWorkspace';
 import ThemeBridge from '../src/components/ThemeBridge';
 import {UiSelect} from '../src/components/AntContent';
 import PersonPicker from '../src/components/PersonPicker';
+import BuMetricLabel from '../src/components/BuMetricHelp';
+import {EMPTY_CARD_FILTERS, ResponseCardQuery} from '../src/components/ResponseCardFilters';
+import {Modal, Drawer} from '../src/components/ui';
 import RfqApp from '../src/App';
 import '../src/styles.css';
 import '../src/antd-ui.css';
@@ -38,10 +41,34 @@ function Controls() {
   </main>;
 }
 
+function PopupControls() {
+  const [surface,setSurface] = useState(null), [date,setDate] = useState(''), [menu,setMenu] = useState('');
+  const [filters,setFilters] = useState(EMPTY_CARD_FILTERS), [draft,setDraft] = useState(EMPTY_CARD_FILTERS);
+  const Surface = surface === 'modal' ? Modal : Drawer;
+  return <main style={{padding:32,display:'grid',gap:24,maxWidth:640}}>
+    <h1>浮层兼容性检查</h1>
+    <DatePicker aria-label="兼容性日期" onChange={(_,value)=>setDate(value)}/>
+    <output data-testid="picked-date">{date}</output>
+    <Dropdown trigger={['click']} menu={{items:[{key:'selected',label:'选择菜单项'}],onClick:({key})=>setMenu(key)}}>
+      <Button>兼容性菜单</Button>
+    </Dropdown>
+    <output data-testid="picked-menu">{menu}</output>
+    <BuMetricLabel metric="平均审批时长"/>
+    <ResponseCardQuery filters={filters} draft={draft} sources={['测试来源']} onDraftChange={setDraft} onApply={setFilters}/>
+    <output data-testid="applied-filter">{filters.type}</output>
+    <Button onClick={()=>setSurface('modal')}>打开兼容性弹窗</Button>
+    <Button onClick={()=>setSurface('drawer')}>打开兼容性抽屉</Button>
+    {surface&&<Surface title={surface==='modal'?'兼容性弹窗':'兼容性抽屉'} onClose={()=>setSurface(null)}>
+      <DatePicker aria-label="容器内日期" onChange={(_,value)=>setDate(value)}/>
+      <Select aria-label="容器内选项" style={{width:'100%',marginTop:16}} options={[{value:'a',label:'容器选项一'},{value:'b',label:'容器选项二'}]}/>
+    </Surface>}
+  </main>;
+}
+
 const mode = new URLSearchParams(location.search).get('mode');
 createRoot(document.getElementById('root')).render(
   <ConfigProvider locale={zhCN} theme={{token:{colorPrimary:'#1677ff',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif"}}}>
-    <App><ThemeBridge>{mode === 'controls' ? <Controls/> : mode === 'application' ? <RfqApp/> :
+    <App><ThemeBridge>{mode === 'controls' ? <Controls/> : mode === 'popups' ? <PopupControls/> : mode === 'application' ? <RfqApp/> :
       <AdminWorkspace page="knowledge" actorRole="SR" permissionContext={permissionContext} onNavigate={()=>{}}>
         <KnowledgePage actorId="sr" actorRole="SR" permissionContext={permissionContext} toast={()=>{}}/>
       </AdminWorkspace>

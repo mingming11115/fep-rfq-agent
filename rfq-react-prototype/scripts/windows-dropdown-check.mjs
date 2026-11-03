@@ -31,12 +31,21 @@ function recordEvents() {
   }).observe(document,{subtree:true,attributes:true,attributeFilter:['aria-expanded']});
 }
 
-async function scenario(base, mode, headless) {
-  const name = `${mode}-${headless?'headless':'headed'}`;
+async function scenario(base, mode, headless, reducedMotion) {
+  const name = `${mode}-${headless?'headless':'headed'}-${reducedMotion}`;
   const directory = path.join(results,name); await mkdir(directory,{recursive:true});
   const result = {name, passed:false}; report.scenarios.push(result);
   let browser, context, page;
   const consoleEvents=[];
+  const onScreen = async (locator,label,settle=800) => {
+    await locator.waitFor({state:'visible'});
+    if(settle)await page.waitForTimeout(settle);
+    const popup = await locator.boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(popup && popup.x >= -1 && popup.y >= -1 &&
+      popup.x + popup.width <= viewport.width + 1 && popup.y + popup.height <= viewport.height + 1,
+    `${name}: ${label} must be on screen, got ${JSON.stringify(popup)}`);
+  };
   const input = label => page.getByRole('combobox',{name:label,exact:true});
   const waitClosed = async label => {
     await page.waitForFunction(name => [...document.querySelectorAll('input[role="combobox"]')]
@@ -52,6 +61,7 @@ async function scenario(base, mode, headless) {
     await page.waitForTimeout(800);
     assert.equal(await field.getAttribute('aria-expanded'),'true',`${name}: ${label} must remain open after a full click`);
     assert.equal(await page.locator('.ant-select-dropdown:visible').count(),1,`${name}: ${label} popup must remain visible`);
+    await onScreen(page.locator('.ant-select-dropdown:visible'),`${label} popup`,0);
   };
   const choose = async (label,text) => {
     await open(label);
@@ -62,7 +72,7 @@ async function scenario(base, mode, headless) {
   try {
     browser = await chromium.launch({channel:'chrome',headless});
     result.browser = browser.version();
-    context = await browser.newContext({viewport:{width:1366,height:768},deviceScaleFactor:1.25,locale:'zh-CN',recordVideo:{dir:directory}});
+    context = await browser.newContext({viewport:{width:1366,height:768},deviceScaleFactor:1.25,locale:'zh-CN',reducedMotion,recordVideo:{dir:directory}});
     await context.tracing.start({screenshots:true,snapshots:true,sources:true});
     await context.addInitScript(recordEvents);
     page = await context.newPage(); page.setDefaultTimeout(10000);
@@ -84,6 +94,45 @@ async function scenario(base, mode, headless) {
       }
     }
     await writeFile(path.join(directory,'controls-events.json'),JSON.stringify(await page.evaluate(()=>window.__rfqDropdownEvents),null,2));
+    await page.goto(`${base}/windows-dropdown-check.html?mode=popups`);
+    const heading = page.getByRole('heading',{name:'浮层兼容性检查',exact:true});
+    await heading.waitFor({state:'visible'});
+    const pickDate = async label => {
+      const field = page.getByRole('textbox',{name:label,exact:true});
+      await field.click({delay:80});
+      await onScreen(page.locator('.ant-picker-dropdown:visible'),label);
+      await page.locator('.ant-picker-dropdown:visible').getByText('今天',{exact:true}).click();
+      await page.locator('.ant-picker-dropdown:visible').waitFor({state:'hidden'});
+      assert.match(await field.inputValue(),/^\d{4}-\d{2}-\d{2}$/);
+    };
+    await pickDate('兼容性日期');
+    await page.getByRole('button',{name:'兼容性菜单',exact:true}).click();
+    await onScreen(page.locator('.ant-dropdown:visible'),'action menu');
+    await page.getByRole('menuitem',{name:'选择菜单项',exact:true}).click();
+    assert.equal(await page.getByTestId('picked-menu').textContent(),'selected');
+    const help = page.getByRole('button',{name:'平均审批时长指标说明',exact:true});
+    await help.click();
+    await onScreen(page.locator('.bu-metric-tooltip:visible'),'metric tooltip');
+    await help.press('Escape');
+    await page.locator('.bu-metric-tooltip:visible').waitFor({state:'hidden'});
+    await page.getByRole('button',{name:'筛选应答',exact:true}).click();
+    await onScreen(page.locator('.ant-popover:visible'),'response filters');
+    await choose('事项类型筛选','专项评审');
+    await page.getByRole('button',{name:'应用筛选',exact:true}).click();
+    assert.equal(await page.getByTestId('applied-filter').textContent(),'review');
+    await page.locator('.ant-popover:visible').waitFor({state:'hidden'});
+    for(const surface of ['弹窗','抽屉']) {
+      await page.getByRole('button',{name:`打开兼容性${surface}`,exact:true}).click();
+      const container = page.getByRole('dialog',{name:`兼容性${surface}`,exact:true});
+      await onScreen(container,surface);
+      await pickDate('容器内日期');
+      await choose('容器内选项','容器选项二');
+      await container.locator('.ant-modal-close, .ant-drawer-close').click();
+      await container.waitFor({state:'hidden'});
+      // Closing a surface must release its page-blocking mask as well.
+      await heading.click({timeout:2000});
+    }
+    await writeFile(path.join(directory,'popups-events.json'),JSON.stringify(await page.evaluate(()=>window.__rfqDropdownEvents),null,2));
     await page.goto(`${base}/windows-dropdown-check.html`);
     await page.getByRole('button',{name:'新增标准回复',exact:true}).click();
     await page.getByRole('textbox',{name:'回复标题',exact:true}).fill('Windows 下拉测试');
@@ -155,7 +204,9 @@ try {
   await build({root,logLevel:'warn',build:{outDir:dist,emptyOutDir:true,rollupOptions:{input:path.join(root,'windows-dropdown-check.html')}}});
   production = await preview({root,build:{outDir:dist},preview:{host:'127.0.0.1',port:5174,strictPort:true},logLevel:'warn'});
   for(const [mode,base] of [['dev','http://127.0.0.1:5173'],['production','http://127.0.0.1:5174']]) {
-    for(const headless of [false,true]) await scenario(base,mode,headless);
+    for(const headless of [false,true]) {
+      for(const reducedMotion of ['no-preference','reduce']) await scenario(base,mode,headless,reducedMotion);
+    }
   }
 } catch(error) {
   report.error = error.stack;
@@ -163,4 +214,4 @@ try {
   await dev.close();await production?.close();
   await writeFile(path.join(results,'report.json'),JSON.stringify(report,null,2));
 }
-if(report.error || report.scenarios.length!==4 || report.scenarios.some(result=>!result.passed)) process.exitCode=1;
+if(report.error || report.scenarios.length!==8 || report.scenarios.some(result=>!result.passed)) process.exitCode=1;
