@@ -100,6 +100,7 @@ async function scenario(base, mode, headless) {
     await input('来源类型').press('Escape');
     await waitClosed('来源类型');
     await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A')||'[]').length===1);
     const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A')));
     assert.equal(saved.length,1);assert.equal(saved[0].sourceType,'enterprise-standard');
     assert.equal(saved[0].sourceStandardText,'Windows 口径验证');
@@ -126,6 +127,9 @@ async function scenario(base, mode, headless) {
     await page.getByRole('textbox',{name:'回复标题',exact:true}).click();
     await waitClosed('来源类型');
     await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+    await page.waitForFunction(()=>Object.keys(localStorage)
+      .filter(key=>key.startsWith('rfq.reference.knowledge.v1:'))
+      .some(key=>(JSON.parse(localStorage.getItem(key))||[]).some(row=>row.title==='Windows 完整应用测试')));
     const fullAppSaved = await page.evaluate(()=>Object.keys(localStorage)
       .filter(key=>key.startsWith('rfq.reference.knowledge.v1:'))
       .flatMap(key=>JSON.parse(localStorage.getItem(key))||[])
