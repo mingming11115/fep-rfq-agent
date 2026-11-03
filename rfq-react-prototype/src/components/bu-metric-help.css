@@ -1,0 +1,6 @@
+.bu-metric-label{display:inline-flex;align-items:center;gap:5px;max-width:100%}
+.bu-metric-help{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;z-index:2;width:22px;height:22px;padding:2px;border:0;border-radius:50%;background:transparent;color:#95a5b9;cursor:help;font:inherit;vertical-align:middle}
+.bu-metric-help:hover,.bu-metric-help[aria-expanded=true]{color:#3979d0;background:#eaf2ff}
+.bu-metric-help:focus-visible{outline:2px solid #699ee4;outline-offset:2px}
+.bu-metric-tooltip{max-width:min(330px,calc(100vw - 24px))}
+.bu-metric-tooltip .ant-tooltip-inner{padding:10px 12px;font-size:12px;line-height:1.8;text-align:left}

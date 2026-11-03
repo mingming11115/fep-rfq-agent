@@ -21,7 +21,7 @@
 .workspace-project-card:hover,.workspace-project-card:focus-within{border-color:#91caff;box-shadow:0 2px 8px rgba(0,0,0,.04)}
 .workspace-project-title{font-size:15px;font-weight:600;color:var(--text)}
 .workspace-project-title:hover{color:var(--primary)}
-.workspace-card-actions{gap:12px}
+.workspace-card-actions{gap:12px;flex-wrap:wrap}
 .workspace-todo{padding:16px 24px;transition:background-color var(--motion-fast) var(--motion-ease)}
 .workspace-todo:last-child{border-bottom:0}
 .workspace-todo:not(.is-overdue):hover{background:#fafafa}

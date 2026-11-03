@@ -7,7 +7,7 @@ const stages=['待上传','解析中','评审中','审批完成','已导出'];
 const taskGroups=[
  {label:'起草与修改',kinds:['draft','response-revise']},
  {label:'条款确认',kinds:['confirm','recheck']},
- {label:'评审处理',kinds:['review-process','review-approve','final-approve']},
+ {label:'评审处理',kinds:['review-process','review-approve','final-approve','clarify']},
 ];
 
 // BU management grants access to this overview, not project source or response text.

@@ -222,7 +222,7 @@ export default function App(){
  function changeMembers(members){if(!allow('project:manage'))return false;update(s=>event({...s,membersByProject:{...s.membersByProject,[project.id]:structuredClone(members)}},'调整成员职责',project.id,'当前项目成员与审批配置已更新'));}
  const canBusinessAction=(objectType,objectId,action='save')=>{try{return assertBusinessAction(state,{projectId:project.id,objectType,objectId,action,route});}catch{return false;}};
  const taskContextError=state.tasksById?.[route.taskId]?.objectType==='snapshot'?getTaskContextError(state,route):'';
- const activeBuId=state.activeBuId||getPersonnelBu(state);
+ const activeBuId=(page==='capabilities'&&route.buId)||state.activeBuId||getPersonnelBu(state);
  const permissionContext={state,actorId:state.actorId,buId:activeBuId,...(PROJECT_PAGES.includes(page)?{projectId:project.id}:{} )};
  const roleNavigation=getRoleNavigation(state.actorRole,{state,actorId:state.actorId,buId:activeBuId}),pageAllowed=canAccessPage(state.actorRole,page,permissionContext)&&(!PROJECT_PAGES.includes(page)||canAccessProject(state,state.actorId,project.id));
  const viewState=selectAccessibleState(state,state.actorId),visibleProjects=viewState.projects;

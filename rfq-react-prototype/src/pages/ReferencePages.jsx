@@ -118,7 +118,7 @@ const EVIDENCE = [
   {id:'DOC-015',name:'客户 RFQ 原始要求.xlsx',version:1,group:'项目资料',purpose:'要求来源',model:'Hesper E360R R2',owner:'李明',source:'客户提供 RFQ v1',sourceDate:'2026-10-16',expiry:'2027-10-15',scope:'仅当前项目',status:'有效',conditions:'RFQ-001 当前项目要求来源；不作为能力证明。',location:'Technical Requirements · A1:H46',external:false,checkedBy:'李明 · 2026-10-17',fileType:'XLSX',fileSize:'426 KB',seeded:true,refs:[{id:'REQ-001',title:'RFQ-001 · 原始要求清单',type:'要求',page:'documents'}],history:[{date:'2026-10-17',text:'确认客户要求来源与当前文件版本一致'}]},
 ];
 
-export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent,permissionContext,actorId,appState,onSelectBu}) {
+export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,logEvent,permissionContext,actorId,appState,onSelectBu}) {
   const buId=permissionContext?.buId;
   const canConfigure=canPerform(actorRole,'model:configure',permissionContext);
   const canCreate=canPerform(actorRole,'catalog:create',permissionContext);
@@ -133,7 +133,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
     refresh();window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);
   },[buId,actorId,permissionContext?.state]);
   const [items,setItems,reloadItems]=useSaved('rfq.reference.capabilities.v1',CAPABILITIES,canEdit||canApprove,permissionContext,'capability');
-  const [selection,setSelection]=useState(''),[modelVersion,setModelVersion]=useState('');
+  const [selection,setSelection]=useState(()=>route?.modelId?`model:${route.modelId}`:''),[modelVersion,setModelVersion]=useState('');
   const [series,setSeries]=useState('全部产品系列'),[lifecycle,setLifecycle]=useState('全部生命周期');
   const [query,setQuery]=useState(''),[source,setSource]=useState('全部来源'),[status,setStatus]=useState('全部状态');
   const [drawer,setDrawer]=useState(null),[drawerSection,setDrawerSection]=useState('detail');
@@ -145,7 +145,8 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
   const buName=businessUnits.find(b=>b.id===buId)?.name||buId;
   const latestModels=[...new Set(models.map(m=>m.id))].map(id=>models.filter(m=>m.id===id).sort((a,b)=>b.version-a.version)[0]);
   const tree=buildCapabilityTree({buId,buName,models,processes,capabilities:items,filters:{query,series,lifecycle,source,status}});
-  const activeNode=resolveCapabilityTreeSelection(tree,selection);
+  const missingLinkedModel=route?.modelId&&!models.some(m=>m.id===route.modelId);
+  const activeNode=missingLinkedModel&&selection===`model:${route.modelId}`?tree:resolveCapabilityTreeSelection(tree,selection);
   const actualModelId=activeNode.modelId;
   const versions=models.filter(m=>m.id===actualModelId).sort((a,b)=>b.version-a.version);
   const model=(activeNode.kind==='model'&&versions.find(m=>String(m.version)===modelVersion))||versions[0];
@@ -164,6 +165,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
   const evidenceIsValid=value=>evidence.some(r=>value?.startsWith(`${r.id} v${r.version}`)&&r.status==='有效'&&r.expiry>=today()&&r.purpose==='能力依据');
   const notify=(action,object,detail='')=>{toast?.(`${object} ${action}`);logEvent?.(action,object,`${buName} · ${detail}`);};
   const clearFilters=()=>{setQuery('');setSeries('全部产品系列');setLifecycle('全部生命周期');setSource('全部来源');setStatus('全部状态');};
+  useEffect(()=>{setSelection(route?.modelId?`model:${route.modelId}`:'');setModelVersion('');clearFilters();},[route?.modelId]);
   const chooseModel=id=>{setSelection(`model:${id}`);setModelVersion('');};
   const chooseNode=node=>{setSelection(node.key);setModelVersion('');setPage(1);};
   const selectKey=key=>{const node=findCapabilityTreeNode(tree,key);if(node)chooseNode(node);};
@@ -252,8 +254,9 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,logEvent
     {pageItems.length?<><div className="table-wrap"><BusinessTable className="data-table cap-node-table"><thead><tr><th>能力指标 / 版本</th><th>能力值</th><th>值类型</th><th>状态</th></tr></thead><tbody>{pageItems.map(item=><tr key={`${item.id}:${item.version}`}><td><UiButton className="text-link" onClick={()=>selectKey(`capability:${item.id}:${item.version}`)}>{item.metric}</UiButton><small>{item.id} · v{item.version}{item.validity==='被替代'?' · 历史版本':''}</small></td><td>{item.value||'待补充'}</td><td>{item.valueType}</td><td><Tag>{item.status}</Tag></td></tr>)}</tbody></BusinessTable></div><Paginator total={filtered.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/></>:<Empty>当前工艺下暂无符合条件的能力</Empty>}
   </>;
   return <div className="ref-page">
-    <Heading eyebrow="MODEL CAPABILITY LIBRARY" title="机型与能力边界" actions={businessUnits.length>1?<Select label="机型所属BU" value={buId} onChange={onSelectBu} options={businessUnits.map(b=>({value:b.id,label:b.name}))}/>:<Tag>{buName}</Tag>}/>
+    <Heading eyebrow="MODEL CAPABILITY LIBRARY" title="机型与能力边界" actions={<>{route?.returnKey==='projects'&&<UiButton className="btn" onClick={()=>navigate('projects')}>返回 RFQ 列表</UiButton>}{businessUnits.length>1?<Select label="机型所属BU" value={buId} onChange={id=>{if(route?.buId)navigate('capabilities',null,{buId:id,returnKey:route.returnKey});else onSelectBu(id);}} options={businessUnits.map(b=>({value:b.id,label:b.name}))}/>:<Tag>{buName}</Tag>}</>}/>
     {catalog.error&&<Notice warning>{catalog.error}</Notice>}
+    {missingLinkedModel&&<Notice warning>关联机型不存在或当前身份无权查看，请核对 RFQ 的机型配置。</Notice>}
     <section className="panel ref-cap-panel"><div className="cap-workspace">
       <aside className="cap-directory">
         <div className="cap-directory-head"><h2>机型与工艺目录</h2><UiButton className="text-link" disabled={!canCreate} onClick={()=>openForm(null,'model')}><Plus size={14}/>新建机型</UiButton></div>

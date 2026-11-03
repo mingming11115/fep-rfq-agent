@@ -1,0 +1,2 @@
+# Local runtime dependency link for report generation.
+/outputs/.rfq-progress-build/node_modules

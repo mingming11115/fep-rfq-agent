@@ -3,3 +3,17 @@
 @media(max-width:1050px){.bu-approval-chart-pair{grid-template-columns:1fr}.bu-outcome-body{gap:30px}.bu-outcome-ring{width:197px}.bu-outcome-legend{max-width:230px}}
 @media(max-width:700px){.bu-trend-svg{height:205px}.bu-chart-legend{padding:16px 18px 4px;gap:17px;flex-wrap:wrap}.bu-chart-legend>small{margin-left:0}.bu-trend-canvas{padding:0 8px 0 0}.bu-trend-readout{padding:12px 18px;gap:6px 13px;font-size:10px}.bu-trend-readout>span{width:100%}.bu-trend-readout>span:first-child{font-size:11px}.bu-chart-footer{padding:12px 18px}.bu-outcome-body{gap:12px;padding-left:16px;padding-right:16px}.bu-outcome-ring{width:170px}.bu-outcome-legend{min-width:120px}.bu-chart-empty-overlay{font-size:11px}}
 @media(max-width:480px){.bu-outcome-body{flex-direction:column;gap:4px;padding:14px 12px}.bu-outcome-ring{height:180px}.bu-outcome-legend{width:100%;max-width:none;min-width:0;flex-direction:row;gap:6px}.bu-outcome-legend>button{flex:1;min-width:0;gap:5px 7px}.bu-distribution-canvas .bu-chart-axis{font-size:14px}.bu-distribution-canvas .bu-chart-value{font-size:15px}}
+
+.bu-dashboard .bu-chart-legend{font-size:12px;color:var(--bu-muted)}
+.bu-dashboard .bu-chart-axis{fill:#8c8c8c}
+.bu-dashboard .bu-chart-value{fill:#595959}
+.bu-dashboard .bu-trend-readout{font-size:12px;color:var(--bu-muted);background:var(--bu-fill);border-color:var(--bu-border)}
+.bu-dashboard .bu-trend-readout strong{color:var(--bu-text)}
+.bu-dashboard .bu-trend-readout small{font-size:11px;color:var(--bu-muted)}
+.bu-dashboard .bu-chart-footer{font-size:12px;color:var(--bu-muted);border-color:var(--bu-border)}
+.bu-dashboard .bu-outcome-number{fill:#262626}
+.bu-dashboard .bu-outcome-label{fill:#8c8c8c;font-size:12px}
+.bu-dashboard .bu-outcome-legend>button>span{font-size:13px;color:var(--bu-muted)}
+.bu-dashboard .bu-outcome-legend strong{color:var(--bu-text)}
+.bu-dashboard .bu-outcome-legend .is-attention>span,.bu-dashboard .bu-outcome-legend .is-attention strong,.bu-dashboard .bu-outcome-legend .is-attention em{color:var(--bu-danger)}
+.bu-dashboard .bu-outcome-legend small,.bu-dashboard .bu-outcome-legend em{font-size:12px;color:var(--bu-muted)}

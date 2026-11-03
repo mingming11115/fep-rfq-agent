@@ -66,6 +66,14 @@ test('switching managed BU replaces all projects tasks and personnel totals',()=
  assert.equal(result.stats.enabledMembers,0);
 });
 
+test('legacy clarification tasks remain included in review distribution and pending totals',()=>{
+ const state=fixture();
+ state.tasksById.clarification={id:'clarification',projectId:'P',assigneeId:'sr',kind:'clarify',status:'待处理'};
+ const result=selectors.selectBuDashboard(state,{now});
+ assert.equal(result.stats.pendingTasks,4);
+ assert.deepEqual(result.taskGroups.map(group=>group.count),[1,2,1]);
+});
+
 test('an empty managed BU returns zero statistics and empty personnel without NaN',()=>{
  const result=selectors.selectBuDashboard(fixture(),{buId:'C',now});
  assert.deepEqual(result.stats,{projects:0,active:0,overdueProjects:0,pendingTasks:0,overdueTasks:0,totalRequirements:0,confirmedRequirements:0,confirmationRate:0,enabledMembers:0});

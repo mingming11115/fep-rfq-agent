@@ -2,7 +2,7 @@ import {canPerform} from './permissions.js';
 export const PROJECT_PAGES=['documents','response','reviews','export','versions','settings'];
 export const ADMIN_PAGES=['bu-admin','admin','knowledge','history','capabilities','audit'];
 const pages=['dashboard','tasks','projects','analysis',...PROJECT_PAGES,...ADMIN_PAGES];
-const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload'];
+const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload','buId','modelId'];
 export function parseWorkRoute(hash='') {
  const [path,query='']=hash.replace(/^#\/?/,'').split('?');const route={page:pages.includes(path)?path:'dashboard'};
  const params=new URLSearchParams(query);for(const key of fields)if(params.has(key))route[key]=params.get(key);

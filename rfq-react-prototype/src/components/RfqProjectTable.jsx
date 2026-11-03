@@ -5,7 +5,7 @@ import { ProTable } from '@ant-design/pro-components';
 import { StatusBadge } from './ui';
 import { getProjectSummary } from '../projectSelectors';
 
-export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, onOpenProject, onTransfer, onDelete, viewControl }) {
+export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, onOpenProject, onOpenModel, onTransfer, onDelete, viewControl }) {
   const data = rows.map(project => ({ ...project, summary: getProjectSummary(appState, project.id, appState.actorId) }));
   const columns = [
     { title: '项目 / 客户', dataIndex: 'name', width: 260, render: (_, p) => <><Button type="link" onClick={() => onOpenProject(p.id, 'view')}>{p.name}</Button><small className="rfq-table-meta">{p.id} · {p.customer || '客户待补充'}</small></> },
@@ -14,8 +14,9 @@ export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, 
     { title: '评审 / 重新确认', key: 'reviews', width: 140, render: (_, p) => p.summary.reviews + ' / ' + p.summary.rechecks },
     { title: '负责人', dataIndex: 'owner', width: 100 },
     { title: '截止日期', dataIndex: 'deadline', valueType: 'date', width: 130, sorter: (a, b) => String(a.deadline || '').localeCompare(String(b.deadline || '')) },
-    { title: '操作', key: 'actions', width: 145, fixed: 'right', render: (_, p) => <Space size={8}>
+    { title: '操作', key: 'actions', width: 220, fixed: 'right', render: (_, p) => <Space size={12}>
       <Button type="link" onClick={() => onOpenProject(p.id, isBuAdmin ? 'response' : 'continue')}>{isBuAdmin ? '查看RFQ' : '继续处理'}</Button>
+      <Button type="link" title={p.modelId ? [p.modelName, p.modelRevision].filter(Boolean).join(' · ') : '该 RFQ 尚未绑定机型'} onClick={() => onOpenModel(p)}>查看机型</Button>
       <Dropdown trigger={['click']} menu={{ items: [
         { key:'settings',label:isBuAdmin?'项目配置':'编辑项目',onClick:()=>onOpenProject(p.id,'settings') },
         ...(canManage && p.ownerId===appState.actorId ? [
@@ -30,5 +31,5 @@ export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, 
     headerTitle={<Typography.Text type="secondary">{rows.length} 个项目</Typography.Text>} toolBarRender={()=>viewControl?[viewControl]:[]}
     options={{ reload: false, density: true, setting: true, fullScreen: true }}
     columnsState={{ persistenceKey: 'rfq-project-columns:' + appState.actorId, persistenceType: 'localStorage' }}
-    scroll={{ x: 1100 }} pagination={{ defaultPageSize: 10, showSizeChanger: true, showTotal: total => '共 ' + total + ' 个项目' }}/>
+    scroll={{ x: 1175 }} pagination={{ defaultPageSize: 10, showSizeChanger: true, showTotal: total => '共 ' + total + ' 个项目' }}/>
 }
