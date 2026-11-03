@@ -24,8 +24,21 @@ test('all four roles can create, save, submit and open knowledge imports while p
  const settle=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));};
  const button=text=>[...document.querySelectorAll('button')].find(node=>node.textContent.replaceAll(' ','')===text);
  const click=async text=>act(async()=>{const node=button(text);assert.ok(node,text);assert.equal(node.disabled,false,text);node.click();await settle();});
- const type=async(label,value)=>act(async()=>{const field=[...document.querySelectorAll('label.field')].find(node=>node.querySelector('span')?.textContent.startsWith(label));const input=field?.querySelector('input,textarea');assert.ok(input,label);Object.getOwnPropertyDescriptor(input.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new window.Event('input',{bubbles:true}));await settle();});
- const choose=async(label,text)=>act(async()=>{const input=document.querySelector(`input[aria-label="${label}"]`);assert.ok(input,label);input.closest('.ant-select').querySelector('.ant-select-selector').dispatchEvent(new window.MouseEvent('mousedown',{bubbles:true}));await settle();const option=[...document.querySelectorAll('.ant-select-item-option')].find(node=>!node.closest('.ant-select-dropdown-hidden')&&node.textContent.includes(text));assert.ok(option,`${label}: ${text}`);option.click();await settle();});
+ const type=async(label,value)=>act(async()=>{const input=document.querySelector(`input[aria-label="${label}"],textarea[aria-label="${label}"]`);assert.ok(input,label);Object.getOwnPropertyDescriptor(input.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new window.Event('input',{bubbles:true}));await settle();});
+ const choose=async(label,text)=>act(async()=>{
+  const input=document.querySelector(`input[aria-label="${label}"]`);assert.ok(input,label);
+  assert.ok([...document.querySelectorAll('label')].some(node=>node.control===input),`${label}: the field label remains associated with its input`);
+  const selector=input.closest('.ant-select').querySelector('.ant-select-selector');
+  let inputClicks=0;const countInputClick=()=>inputClicks++;
+  input.addEventListener('click',countInputClick);
+  try{
+   selector.dispatchEvent(new window.MouseEvent('mousedown',{bubbles:true,cancelable:true}));await settle();
+   selector.dispatchEvent(new window.MouseEvent('mouseup',{bubbles:true,cancelable:true}));selector.click();await settle();
+   assert.equal(inputClicks,0,`${label}: clicking the selector must not also activate its input through an enclosing label`);
+   assert.equal(input.getAttribute('aria-expanded'),'true',`${label}: the dropdown stays open after a complete click`);
+  }finally{input.removeEventListener('click',countInputClick);}
+  const option=[...document.querySelectorAll('.ant-select-item-option')].find(node=>!node.closest('.ant-select-dropdown-hidden')&&node.textContent.includes(text));assert.ok(option,`${label}: ${text}`);option.click();await settle();
+ });
  const conditionInput=()=>document.querySelector('input[aria-label="适用条件"]');
  const tags=()=>[...document.querySelectorAll('.knowledge-condition-tags .ant-select-selection-item')].map(tag=>tag.title);
  const addCondition=async value=>{
@@ -49,7 +62,7 @@ test('all four roles can create, save, submit and open knowledge imports while p
    assert.equal(JSON.parse(localStorage.getItem(storageKey)).length,0);
    await type('回复标题',`${role}维护的知识`);await type('客户要求','要求支持自动上料');await type('标准回复','Comply，支持自动上料。');
    const dialog=document.querySelector('[role="dialog"]');
-   assert.equal([...dialog.querySelectorAll('label.field')].some(field=>field.textContent.includes('知识类型')),false,'the standard reply entry cannot silently become a history record');
+   assert.equal([...dialog.querySelectorAll('.knowledge-editor-field > label')].some(field=>field.textContent.includes('知识类型')),false,'the standard reply entry cannot silently become a history record');
    if(role==='SR'){
     await choose('来源类型','历史文档');await choose('选择历史文档','共享能力报告.pdf');
    }else if(role==='BU管理员'){

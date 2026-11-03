@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useId, useRef } from 'react';
 import { Modal, Select } from 'antd';
 import { UiButton, UiInput, UiTextArea, UiSelect } from './AntContent';
 import PersonPicker from './PersonPicker';
@@ -7,10 +7,14 @@ import { conditionTags, conditionText } from '../knowledgeConditions';
 import './knowledge-editor.css';
 
 function EditorField({ label, required = false, children }) {
-  return <label className="field knowledge-editor-field">
-    <span>{label}{required && <b className="ref-required" aria-hidden="true"> *</b>}</span>
-    {children}
-  </label>;
+  const generatedId = useId();
+  const controlId = children.props.id || generatedId;
+  // Keep compound controls outside the label so native label activation cannot
+  // forward a second click to Select's internal input.
+  return <div className="field knowledge-editor-field">
+    <label htmlFor={controlId}>{label}{required && <b className="ref-required" aria-hidden="true"> *</b>}</label>
+    {React.cloneElement(children, { id: controlId })}
+  </div>;
 }
 
 export default function KnowledgeEditor({ form, isNew, error, onChange, onSave, onClose, sourceOptions = {documents:[],people:[]} }) {
