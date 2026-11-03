@@ -1,0 +1,46 @@
+name: Windows Chrome dropdown diagnostics
+
+on:
+  push:
+    branches: [codex/windows-dropdown-diagnostics]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chrome:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: rfq-react-prototype
+        shell: pwsh
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: rfq-react-prototype/package-lock.json
+      - name: Install application dependencies
+        run: npm ci --ignore-scripts
+      - name: Install browser test tools separately
+        run: |
+          $toolsPath = Join-Path $env:RUNNER_TEMP 'rfq-browser-tools'
+          npm install --prefix $toolsPath --no-package-lock --ignore-scripts playwright@1.64.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "RFQ_BROWSER_TOOLS=$toolsPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RFQ_DROPDOWN_RESULTS=$(Join-Path $env:RUNNER_TEMP 'rfq-dropdown-results')" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Test real Chrome on Windows in dev and production
+        run: node scripts/windows-dropdown-check.mjs
+      - name: Preserve screenshots, video, traces and event logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-chrome-dropdown-results
+          path: ${{ runner.temp }}/rfq-dropdown-results
+          if-no-files-found: warn
+          retention-days: 7
