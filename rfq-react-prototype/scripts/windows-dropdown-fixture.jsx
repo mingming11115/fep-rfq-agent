@@ -8,6 +8,7 @@ import AdminWorkspace from '../src/components/AdminWorkspace';
 import ThemeBridge from '../src/components/ThemeBridge';
 import {UiSelect} from '../src/components/AntContent';
 import PersonPicker from '../src/components/PersonPicker';
+import RfqApp from '../src/App';
 import '../src/styles.css';
 import '../src/antd-ui.css';
 import '../src/ui-polish.css';
@@ -37,10 +38,10 @@ function Controls() {
   </main>;
 }
 
-const controls = new URLSearchParams(location.search).get('mode') === 'controls';
+const mode = new URLSearchParams(location.search).get('mode');
 createRoot(document.getElementById('root')).render(
   <ConfigProvider locale={zhCN} theme={{token:{colorPrimary:'#1677ff',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif"}}}>
-    <App><ThemeBridge>{controls ? <Controls/> :
+    <App><ThemeBridge>{mode === 'controls' ? <Controls/> : mode === 'application' ? <RfqApp/> :
       <AdminWorkspace page="knowledge" actorRole="SR" permissionContext={permissionContext} onNavigate={()=>{}}>
         <KnowledgePage actorId="sr" actorRole="SR" permissionContext={permissionContext} toast={()=>{}}/>
       </AdminWorkspace>

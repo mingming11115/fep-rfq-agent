@@ -42,10 +42,13 @@ async function scenario(base, mode, headless) {
     await page.waitForFunction(name => [...document.querySelectorAll('input[role="combobox"]')]
       .find(node=>node.getAttribute('aria-label')===name)?.getAttribute('aria-expanded')==='false',label);
   };
-  const open = async label => {
+  const open = async (label,point='center') => {
     const field = input(label);
     const wrapper = page.locator('.ant-select').filter({has:field});
-    await wrapper.locator('.ant-select-selector').click({delay:80});
+    const selector = wrapper.locator('.ant-select-selector');
+    const box = await selector.boundingBox();
+    const position = point==='center' ? undefined : {x:point==='left'?8:box.width-8,y:box.height/2};
+    await selector.click({delay:80,position});
     await page.waitForTimeout(800);
     assert.equal(await field.getAttribute('aria-expanded'),'true',`${name}: ${label} must remain open after a full click`);
     assert.equal(await page.locator('.ant-select-dropdown:visible').count(),1,`${name}: ${label} popup must remain visible`);
@@ -59,7 +62,7 @@ async function scenario(base, mode, headless) {
   try {
     browser = await chromium.launch({channel:'chrome',headless});
     result.browser = browser.version();
-    context = await browser.newContext({viewport:{width:1366,height:768},locale:'zh-CN',recordVideo:{dir:directory}});
+    context = await browser.newContext({viewport:{width:1366,height:768},deviceScaleFactor:1.25,locale:'zh-CN',recordVideo:{dir:directory}});
     await context.tracing.start({screenshots:true,snapshots:true,sources:true});
     await context.addInitScript(recordEvents);
     page = await context.newPage(); page.setDefaultTimeout(10000);
@@ -100,6 +103,35 @@ async function scenario(base, mode, headless) {
     const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A')));
     assert.equal(saved.length,1);assert.equal(saved[0].sourceType,'enterprise-standard');
     assert.equal(saved[0].sourceStandardText,'Windows 口径验证');
+    await writeFile(path.join(directory,'editor-events.json'),JSON.stringify(await page.evaluate(()=>window.__rfqDropdownEvents),null,2));
+    await page.route('**/api/rfq/business-units/*/members',route=>route.fulfill({json:{code:0,data:[]}}));
+    await page.goto(`${base}/windows-dropdown-check.html?mode=application#/knowledge`);
+    await page.getByRole('button',{name:'新增标准回复',exact:true}).waitFor({state:'visible'});
+    await open('演示身份');
+    await page.getByRole('heading',{name:'标准回复库',exact:true}).click();
+    await waitClosed('演示身份');
+    await page.getByRole('button',{name:'新增标准回复',exact:true}).click();
+    for(const point of ['center','left','right']) {
+      await open('来源类型',point);
+      await page.getByRole('textbox',{name:'回复标题',exact:true}).click();
+      await waitClosed('来源类型');
+    }
+    await page.getByRole('textbox',{name:'回复标题',exact:true}).fill('Windows 完整应用测试');
+    await page.getByRole('textbox',{name:'客户要求',exact:true}).fill('测试客户要求');
+    await page.getByRole('textbox',{name:'标准回复',exact:true}).fill('测试标准回复');
+    await choose('来源类型','企业标准口径');
+    await page.getByRole('textbox',{name:'口径说明',exact:true}).fill('Windows 完整应用口径');
+    await open('来源类型','right');
+    await page.screenshot({path:path.join(directory,'full-app-source-open.png')});
+    await page.getByRole('textbox',{name:'回复标题',exact:true}).click();
+    await waitClosed('来源类型');
+    await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+    const fullAppSaved = await page.evaluate(()=>Object.keys(localStorage)
+      .filter(key=>key.startsWith('rfq.reference.knowledge.v1:'))
+      .flatMap(key=>JSON.parse(localStorage.getItem(key))||[])
+      .find(row=>row.title==='Windows 完整应用测试'));
+    assert.equal(fullAppSaved?.sourceType,'enterprise-standard');
+    assert.equal(fullAppSaved?.sourceStandardText,'Windows 完整应用口径');
     result.passed = true;
   } catch(error) {
     result.error = error.stack;
