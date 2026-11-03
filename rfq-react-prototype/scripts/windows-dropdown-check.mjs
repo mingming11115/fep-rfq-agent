@@ -35,15 +35,8 @@ async function scenario(base, mode, headless) {
   const name = `${mode}-${headless?'headless':'headed'}`;
   const directory = path.join(results,name); await mkdir(directory,{recursive:true});
   const result = {name, passed:false}; report.scenarios.push(result);
-  const browser = await chromium.launch({channel:'chrome',headless});
-  result.browser = browser.version();
-  const context = await browser.newContext({viewport:{width:1366,height:768},locale:'zh-CN',recordVideo:{dir:directory}});
-  await context.tracing.start({screenshots:true,snapshots:true,sources:true});
-  await context.addInitScript(recordEvents);
-  const page = await context.newPage(); page.setDefaultTimeout(10000);
+  let browser, context, page;
   const consoleEvents=[];
-  page.on('console',message=>consoleEvents.push({type:message.type(),text:message.text()}));
-  page.on('pageerror',error=>consoleEvents.push({type:'pageerror',text:error.stack}));
   const input = label => page.getByRole('combobox',{name:label,exact:true});
   const open = async label => {
     const field = input(label);
@@ -60,6 +53,14 @@ async function scenario(base, mode, headless) {
     assert.equal(await input(label).getAttribute('aria-expanded'),'false',`${name}: ${label} closes after selecting`);
   };
   try {
+    browser = await chromium.launch({channel:'chrome',headless});
+    result.browser = browser.version();
+    context = await browser.newContext({viewport:{width:1366,height:768},locale:'zh-CN',recordVideo:{dir:directory}});
+    await context.tracing.start({screenshots:true,snapshots:true,sources:true});
+    await context.addInitScript(recordEvents);
+    page = await context.newPage(); page.setDefaultTimeout(10000);
+    page.on('console',message=>consoleEvents.push({type:message.type(),text:message.text()}));
+    page.on('pageerror',error=>consoleEvents.push({type:'pageerror',text:error.stack}));
     await page.goto(`${base}/windows-dropdown-check.html?mode=controls`);
     result.userAgent = await page.evaluate(()=>navigator.userAgent);
     for(const label of ['基础选择框','通用选择框','选择确认人员']) {
@@ -92,12 +93,13 @@ async function scenario(base, mode, headless) {
     result.passed = true;
   } catch(error) {
     result.error = error.stack;
-    await page.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});
+    await page?.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});
   } finally {
-    await writeFile(path.join(directory,'events.json'),JSON.stringify(await page.evaluate(()=>window.__rfqDropdownEvents).catch(()=>[]),null,2));
+    const events = page ? await page.evaluate(()=>window.__rfqDropdownEvents).catch(()=>[]) : [];
+    await writeFile(path.join(directory,'events.json'),JSON.stringify(events,null,2));
     await writeFile(path.join(directory,'console.json'),JSON.stringify(consoleEvents,null,2));
-    await context.tracing.stop({path:path.join(directory,'trace.zip')});
-    await context.close();await browser.close();
+    await context?.tracing.stop({path:path.join(directory,'trace.zip')}).catch(()=>{});
+    await context?.close();await browser?.close();
     console.log(JSON.stringify(result));
   }
 }
