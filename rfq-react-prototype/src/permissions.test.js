@@ -3,6 +3,43 @@ import assert from 'node:assert/strict';
 import * as policy from './permissions.js';
 const sales = '销售负责人', tech = '技术确认人', approver = '最终审批人';
 
+function knowledgeContext(actorId) {
+ const state={actorId,accountsById:{
+  sr:{enabled:true},tech:{enabled:true},bu:{enabled:true,managedBuIds:['A']},system:{enabled:true,systemAdmin:true},
+ },businessUnits:[{id:'A'},{id:'B'}],buPersonnelByBuId:{A:[
+  {userId:'sr',roles:['SR'],enabled:true},
+  {userId:'tech',roles:['技术'],enabled:true},
+  {userId:'bu',roles:[],enabled:true,resourceQualifications:['knowledge-publish']},
+ ],B:[]},projects:[]};
+ return {state,actorId,buId:'A'};
+}
+
+test('every active role can maintain knowledge and reach both library pages',()=>{
+ for(const [actorId,role] of [['sr','SR'],['tech','技术'],['bu','BU管理员'],['system','后台管理']]){
+  const context=knowledgeContext(actorId);
+  assert.equal(policy.canPerform(role,'knowledge:edit',context),true,role);
+  for(const page of ['knowledge','history'])assert.equal(policy.canAccessPage(role,page,context),true,`${role}: ${page}`);
+  assert.equal(policy.getRoleNavigation(role,context).some(item=>item.page==='knowledge'),true,role);
+  assert.equal(policy.canPerform(role,'resource:approve',context),role==='BU管理员',role);
+  assert.equal(policy.canPerform(role,'resource:edit',context),role==='技术',`${role}: capability editing`);
+ }
+});
+
+test('knowledge maintenance still rejects disabled accounts and unrelated business units',()=>{
+ for(const [actorId,role] of [['sr','SR'],['tech','技术'],['bu','BU管理员'],['system','后台管理']]){
+  const context=knowledgeContext(actorId);
+  if(role!=='后台管理')assert.equal(policy.canPerform(role,'knowledge:edit',{...context,buId:'B'}),false,role);
+  assert.equal(policy.canPerform(role,'knowledge:edit',{...context,buId:'missing'}),false,role);
+  context.state.accountsById[actorId].enabled=false;
+  assert.equal(policy.canPerform(role,'knowledge:edit',context),false,role);
+  assert.equal(policy.canAccessPage(role,'knowledge',context),false,role);
+ }
+ assert.equal(policy.canPerform('unknown','knowledge:edit'),false);
+ const context=knowledgeContext('sr');
+ context.state.buPersonnelByBuId.A[0].enabled=false;
+ assert.equal(policy.canPerform('SR','knowledge:edit',context),false);
+});
+
 test('BU administrators can browse their RFQ pages without gaining response or approval operations',()=>{
  const state={actorId:'bu',accountsById:{bu:{enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'},{id:'B'}],projects:[{id:'P',buId:'A',participantIds:[]},{id:'OTHER',buId:'B',participantIds:[]}],buPersonnelByBuId:{A:[],B:[]}};
  const context={state,actorId:'bu',buId:'A',projectId:'P'};

@@ -1,11 +1,12 @@
 import {canAccessProject,getPersonnelContext} from './personnelDomain.js';
 
 export const resourceStorageKey=(base,buId)=>buId==='BU-DEMO'?base:`${base}:${buId||'unassigned'}`;
-const projectOrigin=row=>row.projectId||[row.source,row.sourceLocation,row.conditions,...(row.refs||[]).map(r=>r.title)].join(' ').match(/RFQ-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/)?.[0];
+const projectOrigin=row=>row.projectId||row.sourceProjectId||[row.source,row.sourceLocation,row.conditions,...(row.refs||[]).map(r=>r.title)].join(' ').match(/RFQ-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/)?.[0];
 export function selectReadableResources(rows,context,kind='knowledge') {
  if(!context?.state||!context.actorId||!context.buId)return [];
  const {state,actorId,buId}=context,c=getPersonnelContext(state,actorId,buId);
- if(!c.enabled&&!c.managed)return [];
+ const sharedKnowledgeAdmin=c.account?.enabled&&c.account.systemAdmin&&state.businessUnits?.some(b=>b.id===buId)&&['knowledge','evidence'].includes(kind);
+ if(!c.enabled&&!c.managed&&!sharedKnowledgeAdmin)return [];
  return rows.filter(row=>{
   if((row.buId||'BU-DEMO')!==buId)return false;
   if(kind==='catalog')return true;

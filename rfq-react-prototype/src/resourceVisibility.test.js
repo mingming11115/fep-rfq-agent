@@ -12,3 +12,22 @@ test('BU storage and filtering do not expose another BU or an unbound project-on
  const items=[{id:'a',buId:'A',status:'已发布'},{id:'b',buId:'BU-DEMO',status:'已发布'},{id:'unbound',scope:'仅当前项目'}];
  assert.deepEqual(selectReadableResources(items,{...ctx,buId:'A'}).map(x=>x.id),['a']);assert.equal(resourceStorageKey('resources','A'),'resources:A');assert.equal(resourceStorageKey('resources','BU-DEMO'),'resources');
 });
+
+test('platform administrators can maintain shared knowledge and select shared evidence without opening private project records',()=>{
+ const adminState={...state,accountsById:{admin:{enabled:true,systemAdmin:true}}};
+ const context={state:adminState,actorId:'admin',buId:'BU-DEMO'};
+ const rows=[
+  {id:'shared-draft',status:'草稿',scope:'FEP 授权项目'},
+  {id:'shared-published',status:'已发布',scope:'FEP 授权项目'},
+  {id:'project-draft',status:'草稿',source:'RFQ-001',scope:'FEP 授权项目'},
+  {id:'project-file',status:'有效',scope:'仅当前项目',projectId:'RFQ-001'},
+  {id:'other-bu',buId:'A',status:'已发布'},
+ ];
+ assert.deepEqual(selectReadableResources(rows,context).map(row=>row.id),['shared-draft','shared-published']);
+ const evidence=[{id:'shared',status:'有效',scope:'FEP 授权项目'},{id:'private',status:'有效',scope:'仅当前项目',projectId:'RFQ-001'}];
+ assert.deepEqual(selectReadableResources(evidence,context,'evidence').map(row=>row.id),['shared']);
+ assert.deepEqual(selectReadableResources(rows,context,'capability'),[]);
+ assert.deepEqual(selectReadableResources(rows,{...context,buId:'missing'}),[]);
+ adminState.accountsById.admin.enabled=false;
+ assert.deepEqual(selectReadableResources(rows,context),[]);
+});

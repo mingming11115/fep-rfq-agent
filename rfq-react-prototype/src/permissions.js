@@ -7,6 +7,7 @@ const modernPermissions={
  'review:process':['SR','技术'],'review:clarify':['SR'],'review:communicate':['SR'],'review:approve':['SR','技术'],
  'snapshot:submit':['SR'],'snapshot:approve':['SR','技术'],'export:configure':['SR'],'export:download':['SR'],
  'analysis:view':['SR','技术'],'analysis:run':['SR','技术'],'resource:edit':['技术'],'evidence:manage':['技术'],
+ 'knowledge:edit':modernRoles,
  'resource:approve':['BU管理员'],'model:configure':['BU管理员'],'catalog:create':['SR','BU管理员'],'audit:view':['BU管理员','后台管理'],'system:manage':['后台管理'],'bu:manage':['BU管理员'],
 };
 function modernCan(role,action,context){
@@ -15,6 +16,7 @@ function modernCan(role,action,context){
  if(!context)return true;
  const {state,actorId=state?.actorId,projectId,requirementId,buId=state?.projects?.find(p=>p.id===projectId)?.buId}=context;
  if(!state||!state.accountsById?.[actorId]?.enabled)return false;
+ if(action==='knowledge:edit'&&!state.businessUnits?.some(b=>b.id===buId))return false;
  if(role==='后台管理')return !!state.accountsById[actorId].systemAdmin;
  if(role==='BU管理员'){
   if(!canManageBu(state,actorId,buId))return false;
@@ -52,6 +54,7 @@ const permissions = {
   'export:configure': [sales], 'export:download': [sales],
   'analysis:view': [sales, technical], 'analysis:run': [sales, technical],
   'resource:edit': [technical], 'evidence:manage': [technical], 'resource:approve': [approver],
+  'knowledge:edit': roles,
   'audit:view': [approver], 'system:manage': [],
 };
 const sharedPages = ['dashboard','tasks','projects','documents','response','reviews','export','versions','settings','knowledge','history','capabilities'];
@@ -65,6 +68,7 @@ export function assertRequirementPatch(role, current, patch,context) {
 }
 export function canAccessPage(role, page,context) {
   if(modernRoles.includes(role)){
+   if(['knowledge','history'].includes(page))return modernCan(role,'knowledge:edit',context);
    if(role==='后台管理')return ['admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
    if(role==='BU管理员'){
     const rfqPages=['documents','response','reviews','versions','settings','export'];
@@ -84,7 +88,7 @@ export function canAccessPage(role, page,context) {
 export function getRoleNavigation(role,context) {
   if(modernRoles.includes(role)){
    const base=[{key:'dashboard',page:'dashboard',label:role==='BU管理员'?'BU看板':'工作台'}];
-   const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'projects',page:'projects',label:'BU RFQ'},{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:role==='技术'?'知识库维护':'知识库'}];
+   const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'knowledge',page:'knowledge',label:'知识库'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'projects',page:'projects',label:'BU RFQ'},{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:'知识库'}];
    return [...base,...items].filter(n=>canAccessPage(role,n.page,context));
   }
   if (!roles.includes(role)) return [];

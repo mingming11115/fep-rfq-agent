@@ -1,0 +1,30 @@
+.knowledge-editor-modal .ant-modal-content { padding: 24px; }
+.knowledge-editor-modal .ant-modal-title { font-size: 18px; line-height: 28px; }
+.knowledge-editor-modal .ant-modal-header { margin-bottom: 0; }
+.knowledge-editor-modal .ant-modal-body { padding: 8px 2px 0; }
+.knowledge-editor-modal .ant-modal-footer { margin-top: 18px; padding-top: 16px; border-top: 1px solid #edf0f4; }
+.knowledge-editor { color: #334155; }
+.knowledge-editor-intro { color: #86909c; font-size: 12px; line-height: 20px; margin: 0 0 18px; }
+.knowledge-editor-content { display: grid; gap: 16px; }
+.knowledge-editor .knowledge-editor-field { display: flex; flex-direction: column; gap: 7px; margin: 0; font-size: 13px; }
+.knowledge-editor .knowledge-editor-field > span { color: #344054; font-weight: 500; line-height: 20px; }
+.knowledge-editor .ant-input { font-size: 13px; line-height: 22px; }
+.knowledge-editor textarea.ant-input { resize: vertical; }
+.knowledge-editor-context { padding: 18px 0; margin-top: 18px; border-top: 1px solid #edf0f4; }
+.knowledge-condition-tags { width: 100%; }
+.knowledge-condition-tags .ant-select-selector { min-height: 40px; padding: 4px 8px !important; }
+.knowledge-condition-tags .ant-select-selection-item { height: auto; max-width: 100%; }
+.knowledge-condition-tags .ant-select-selection-item-content { white-space: normal; overflow-wrap: anywhere; }
+.knowledge-condition-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.knowledge-condition-list .ant-tag { margin-inline-end: 0; white-space: normal; overflow-wrap: anywhere; }
+.knowledge-editor-source-section { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid #edf0f4; }
+.knowledge-editor-source { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.knowledge-editor .ant-select { width: 100%; }
+.knowledge-editor-legacy-source { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.knowledge-editor-help { margin: 14px 0 0; color: #86909c; font-size: 12px; line-height: 20px; }
+.knowledge-editor-error { margin: 0 0 16px; padding: 9px 12px; border-radius: 4px; background: #fff2f0; color: #cf1322; font-size: 12px; line-height: 20px; }
+@media (max-width: 600px) {
+  .knowledge-editor-modal .ant-modal-content { padding: 18px 16px; }
+  .knowledge-editor-modal .ant-modal-body { max-height: calc(100dvh - 164px) !important; }
+  .knowledge-editor-source { grid-template-columns: 1fr; }
+}
