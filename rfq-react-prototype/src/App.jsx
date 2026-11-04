@@ -1,3 +1,4 @@
+import {readGenericCatalog,resolveGroupBinding} from './genericCatalog';
 import { UiButton, UiInput } from './components/AntContent';
 import { App as AntApp } from 'antd';
 import RfqAppLayout from './components/RfqAppLayout';
@@ -130,13 +131,13 @@ export default function App(){
   try{
    assertPermission(current.actorRole,'project:create',context);
    if(['name','ownerId','deadline'].some(key=>!form[key]?.trim()))throw new Error('请填写项目名称、负责人和截止时间');
-   const catalog=readRfqCatalog(localStorage,context),binding=resolveRfqProcessBinding({...catalog,buId,modelId:form.modelId,processId:form.processId});
+   const catalog=readRfqCatalog(localStorage,context),binding=form.groupId?resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog),form.groupId,buId):resolveRfqProcessBinding({...catalog,buId,modelId:form.modelId,processId:form.processId});
    const id=`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number(p.id.match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
    const {technicalMode,srId,technicalIds,technicalRepresentativeId,...projectForm}=form;
    const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId,technicalMode,srId,technicalIds,technicalRepresentativeId});
    const p={...projectForm,...binding,id,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:1};
-   update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.modelName} ${p.modelRevision} / ${p.processCode} ${p.processName}`));
-   toast('项目已关联工艺，请上传资料或载入示例 RFQ');rawNavigate('documents');return true;
+   update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.groupPath||[p.modelName,p.modelRevision,p.processCode,p.processName].filter(Boolean).join(" / ")}`));
+   toast('项目已关联目录，请上传资料或载入示例 RFQ');rawNavigate('documents');return true;
   }catch(error){toast(error.message,'error');return false;}
  }
  function businessAllowed(objectType,objectId,action='save',expectedVersion,expectedRound){try{assertBusinessAction(stateRef.current,{projectId:stateRef.current.activeProjectId,objectType,objectId,action,route:routeRef.current,expectedVersion,expectedRound});return true;}catch(e){toast(e.message,'error');return false;}}

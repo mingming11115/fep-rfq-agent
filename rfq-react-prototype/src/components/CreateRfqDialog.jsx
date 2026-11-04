@@ -1,7 +1,9 @@
+import {Select as AntSelect} from 'antd';
+import {readGenericCatalog,resolveGroupBinding,nodeEnabled,nodePath} from '../genericCatalog';
 import { UiButton, UiInput } from './AntContent';
 import React,{useEffect,useState} from 'react';
 import { Alert, Form } from 'antd';
-import { ModalForm, ProFormDatePicker, ProFormRadio, ProFormText } from '@ant-design/pro-components';
+import { ModalForm, ProFormDatePicker, ProFormText } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import {formDate} from '../antdAdapters';
 import {Plus} from "./icons";
@@ -24,14 +26,14 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  const context={state:appState,actorId:appState.actorId,buId};
  const [catalog,setCatalog]=useState(()=>{try{return readRfqCatalog(localStorage,context);}catch(e){return {models:[],processes:[],error:e.message};}});
  const [form,setForm]=useState(empty),[error,setError]=useState(''),[modelDraft,setModelDraft]=useState(null),[processDraft,setProcessDraft]=useState(null),[modelError,setModelError]=useState(''),[processError,setProcessError]=useState('');
+ const [groups]=useState(()=>{try{return readGenericCatalog(localStorage,buId,catalog);}catch(e){return {nodes:[],schema:{levels:[]},error:e.message};}});
+ const [useGroups,setUseGroups]=useState(true);
  const [formApi]=Form.useForm();
  useEffect(()=>{formApi.setFieldsValue({...form,deadline:form.deadline?dayjs(form.deadline):undefined});},[form,formApi]);
  function changeValues(changed,values){
   setForm(current=>{
    const next={...current,...values,deadline:formDate(values.deadline)};
    if('ownerId' in changed){next.ownerId=changed.ownerId||'';next.owner=next.ownerId?personName(appState,next.ownerId):'';if(!current.srId||current.srId===current.ownerId)next.srId=srCandidates.some(p=>p.userId===next.ownerId)?next.ownerId:'';}
-   if('technicalMode' in changed)next.technicalRepresentativeId='';
-   if('technicalIds' in changed&&!next.technicalIds?.includes(current.technicalRepresentativeId))next.technicalRepresentativeId='';
    return next;
   });setError('');
  }
@@ -46,7 +48,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
  const canCreate=canPerform(appState.actorRole,'catalog:create',context);
  const srCandidates=getEligiblePersonnel(appState,{buId,duty:'final-review',side:'sr'}).filter(p=>!form.technicalIds.includes(p.userId));
  const technicalCandidates=getEligiblePersonnel(appState,{buId,duty:'final-review',side:'technical'}).filter(p=>p.userId!==form.srId);
- const change=(key,value)=>{setForm(current=>({...current,[key]:value,...(key==='modelId'?{processId:''}:key==='technicalMode'?{technicalRepresentativeId:''}:{})}));setError('');};
+ const change=(key,value)=>{setForm(current=>({...current,[key]:value,...(key==='modelId'?{processId:''}:{})}));setError('');};
  function changeOwner(ownerId){
   setForm(current=>({...current,ownerId,owner:ownerId?personName(appState,ownerId):'',...(!current.srId||current.srId===current.ownerId?{srId:srCandidates.some(p=>p.userId===ownerId)?ownerId:''}:{})}));setError('');
  }
@@ -73,6 +75,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
   if(!form.name.trim()||!form.ownerId||!form.deadline)return setError('请填写项目名称、负责人和截止时间');
   try{
    createProjectPersonnel(appState,{...form,buId});
+   if(useGroups){resolveGroupBinding(groups,form.groupId,buId);if(onCreateProject(form)===false)return false;onClose();return true;}
    if(!form.processId){if(canCreate)newProcess();else setError('请选择具体工艺，或联系BU管理员补充工艺目录');return false;}
    const latest=readRfqCatalog(localStorage,context);setCatalog(latest);
    resolveRfqProcessBinding({...latest,modelId:form.modelId,processId:form.processId,buId});
@@ -89,17 +92,17 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject,onCata
     <Form.Item name="ownerId" label="负责人" rules={[{required:true,message:'请选择本BU的负责人'}]}><PersonPicker label="负责人" people={getProjectOwnerCandidates(appState,{buId})} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无有效SR，请联系BU管理员添加"/></Form.Item>
     <ProFormDatePicker name="deadline" label="客户截止日期" width="lg" fieldProps={{style:{width:'100%'},'aria-label':'客户截止日期'}} rules={[{required:true,message:'请选择客户截止日期'}]}/>
    </div>
-   <ProFormRadio.Group name="technicalMode" label="最终评审规则" formItemProps={{htmlFor:null}} fieldProps={{'aria-label':'最终评审规则'}} options={[{value:'all',label:'所有指定技术成员均通过'},{value:'representative',label:'指定技术负责人代表通过'}]}/>
    <div className="rfq-create-grid">
     <Form.Item name="srId" label="SR方最终评审人"><PersonPicker label="SR方最终评审人" people={srCandidates} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的SR"/></Form.Item>
     <Form.Item name="technicalIds" label="技术组评审成员"><PersonPicker label="技术组评审成员" multiple people={technicalCandidates} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的技术人员"/></Form.Item>
-    {form.technicalMode==='representative'&&<Form.Item name="technicalRepresentativeId" label="技术负责人"><PersonPicker label="技术负责人" people={technicalCandidates.filter(p=>form.technicalIds.includes(p.userId))} resolveName={id=>personName(appState,id)} emptyLabel="请先选择技术组评审成员"/></Form.Item>}
    </div>
-   <div className="rfq-process-fields">
+   <Field label="关联目录"><AntSelect value={useGroups?'group':'legacy'} options={[{value:'group',label:'通用分组'},{value:'legacy',label:'原机型与工艺'}]} onChange={v=>{setUseGroups(v==='group');setForm(f=>({...f,groupId:''}));}}/></Field>
+   {useGroups?<Field label="关联分组" required><AntSelect showSearch optionFilterProp="label" style={{width:'100%'}} value={form.groupId||undefined} placeholder="选择分组" options={groups.nodes.filter(n=>nodeEnabled(groups,n.id)).map(n=>({value:n.id,label:nodePath(groups,n.id)}))} onChange={id=>change('groupId',id)}/>{groups.error&&<Alert type="error" message={groups.error}/>}</Field>:<div className="rfq-process-fields">
     <div className="rfq-catalog-heading"><strong>关联工艺 *</strong><div className="rfq-tree-actions"><UiButton type="button" className="btn btn-sm" disabled={!canCreate} onClick={newModel}><Plus size={14}/>新建机型</UiButton><UiButton type="button" className="btn btn-sm" disabled={!canCreate} onClick={newProcess}><Plus size={14}/>新建工艺</UiButton></div></div>
     <div className="rfq-catalog-tree"><CapabilityTree root={tree} selectedKey={selectedKey} onSelect={selectProcessNode} terminalKinds={['process']} ariaLabel="选择RFQ关联工艺" emptyLabels={{bu:'暂无机型，请先新建机型',model:'暂无启用工艺，可新建工艺'}} revealSelection/></div>
     {(selectedProcess||selectedModel)&&<div className="rfq-tree-selection" role="status" aria-label="已选工艺">{selectedProcess?<>已选工艺：<strong>{selectedModel?.name} {selectedModel?.revision} / {selectedProcess.code} · {selectedProcess.name}</strong></>:<>已选机型：{selectedModel.name} {selectedModel.revision} · 请继续选择具体工艺</>}</div>}
    </div>
+   }
    {(error||catalog.error)&&<Alert className="rfq-form-error" type="error" showIcon message={error||catalog.error}/>}
   </ModalForm>
   {processDraft&&<Modal title="新建工艺" onClose={()=>setProcessDraft(null)} footer={<><UiButton className="btn" onClick={()=>setProcessDraft(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveProcess}>保存并选用工艺</UiButton></>}>

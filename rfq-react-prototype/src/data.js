@@ -8,7 +8,7 @@ export const NAV_ITEMS = [
   { key: 'analysis', label: 'AI分析记录', section: '全局' },
   { key: 'dashboard', label: '个人工作台与待办', section: '全局' },
   { key: 'projects', label: '项目列表', section: '全局' },
-  { key: 'capabilities', label: '机型能力边界', section: '全局' },
+  { key: 'capabilities', label: '分组与能力配置', section: '全局' },
   { key: 'documents', label: 'RFQ解析', section: '项目' },
   { key: 'response', label: 'RFQ细则比对', section: '项目' },
   { key: 'export', label: '导出文档', section: '项目' },
