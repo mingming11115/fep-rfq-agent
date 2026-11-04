@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from 'react';
-import {Alert,Form,Select} from 'antd';
+import {Alert,Form,TreeSelect} from 'antd';
 import {ModalForm,ProFormDatePicker,ProFormText} from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import {formDate} from '../antdAdapters';
@@ -33,7 +33,7 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject}){
  }
  return <ModalForm title="新建 RFQ 项目" open form={formApi} width={760} className="rfq-create-form" layout="vertical" onOpenChange={open=>{if(!open)onClose();}} onValuesChange={changeValues} onFinish={create} modalProps={{maskClosable:false,centered:true,styles:{body:{maxHeight:'calc(100dvh - 220px)',overflowY:'auto',paddingTop:12}}}} submitter={{searchConfig:{submitText:'创建并上传资料',resetText:'取消'},resetButtonProps:{onClick:onClose},submitButtonProps:{disabled:!enabledGroups.length}}}>
   <div className="rfq-create-grid"><ProFormText name="name" label="项目名称" placeholder="请输入项目名称" rules={[{required:true,whitespace:true,message:'请填写项目名称'}]}/><ProFormText name="customer" label="客户名称" placeholder="请输入客户名称"/><Form.Item name="ownerId" label="负责人" rules={[{required:true,message:'请选择本BU的负责人'}]}><PersonPicker label="负责人" people={getProjectOwnerCandidates(appState,{buId})} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无有效SR，请联系BU管理员添加"/></Form.Item><ProFormDatePicker name="deadline" label="客户截止日期" width="lg" fieldProps={{style:{width:'100%'},'aria-label':'客户截止日期'}} rules={[{required:true,message:'请选择客户截止日期'}]}/></div>
-  <Form.Item name="groupId" label="关联分组" rules={[{required:true,message:'请选择当前BU的分组'}]}><Select aria-label="关联分组" showSearch optionFilterProp="label" placeholder="请选择分组" options={enabledGroups.map(n=>({value:n.id,label:nodePath(groups,n.id)}))}/></Form.Item>
+  <Form.Item name="groupId" label="关联分组" getValueProps={value=>({value:value||undefined})} rules={[{required:true,message:'请选择当前BU的分组'}]}><TreeSelect aria-label="关联分组" showSearch treeLine treeDefaultExpandAll treeNodeFilterProp="label" treeNodeLabelProp="label" placeholder="请选择分组" treeDataSimpleMode={{id:'id',pId:'parentId',rootPId:''}} treeData={enabledGroups.map(n=>({id:n.id,parentId:n.parentId||'',value:n.id,title:n.name,label:nodePath(groups,n.id)}))}/></Form.Item>
   {!enabledGroups.length&&<Alert type="info" showIcon message="当前BU暂无启用分组，请联系BU管理员在知识库中配置分组。"/>}
   <div className="rfq-create-grid"><Form.Item name="srId" label="SR方最终评审人"><PersonPicker label="SR方最终评审人" people={srCandidates} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的SR"/></Form.Item><Form.Item name="technicalIds" label="技术组评审成员"><PersonPicker label="技术组评审成员" multiple people={technicalCandidates} resolveName={id=>personName(appState,id)} emptyLabel="本BU暂无具有最终评审资格的技术人员"/></Form.Item></div>
   {(error||groups.error)&&<Alert className="rfq-form-error" type="error" showIcon message={error||groups.error}/>}
