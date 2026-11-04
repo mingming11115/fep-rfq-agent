@@ -3,3 +3,11 @@
 
 # Recoverable local snapshots of old worktree changes.
 /outputs/worktree-archive-*/
+
+# Local development service logs.
+/backend-dev*.log
+/rfq-react-prototype/frontend-dev*.log
+
+# Browser diagnostic dependencies and generated screenshots.
+/.workbuddy/browser-test/node_modules/
+/.workbuddy/browser-test/*.png
