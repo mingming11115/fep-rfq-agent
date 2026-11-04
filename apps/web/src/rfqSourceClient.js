@@ -1,0 +1,28 @@
+import {api as defaultApi} from './authClient.js';
+
+export async function uploadRfqSource(projectId,original,file,api=defaultApi){
+ try{await api.get(`/projects/${encodeURIComponent(projectId)}`);}catch(error){throw new Error(`无法上传到当前后端项目：${error.message}。请确认项目已在后端创建且当前账号有权限。`);}
+ const body=new FormData();body.append('file',original,file.name);
+ const saved=await api.upload(`/projects/${encodeURIComponent(projectId)}/documents`,body);
+ return {...file,backendDocumentId:saved.id,backendProjectId:projectId,backendVersion:saved.version,status:'排队中'};
+}
+export async function parseRfqSource(projectId,file,api=defaultApi){
+ if(!file.backendDocumentId)throw new Error('此文件尚未关联后端原件，请重新上传后解析');
+ if(file.backendProjectId&&file.backendProjectId!==projectId)throw new Error('文件所属项目不一致');
+ const run=await api.post(`/documents/${encodeURIComponent(file.backendDocumentId)}/parse-runs`);
+ if(!['completed','partial'].includes(run.status))throw new Error(run.message||'解析未完成，请重试');
+ const rows=[];
+ for(let page=1,total=1;page<=total;page++){
+  const result=await api.get(`/projects/${encodeURIComponent(projectId)}/requirements?page=${page}&size=100`);
+  total=result.totalPages||1;
+  for(const row of result.list||[])if(row.documentId===file.backendDocumentId)rows.push({
+   id:row.id,backendDocumentId:row.documentId,clause:row.customerClauseNo||'',title:row.title||'',
+   original:row.originalText,requirementText:row.requirementText,sourceOriginal:row.originalText,
+   source:file.name,sourceFileId:file.id,sourceVersion:file.version,sectionPath:row.sectionPath?[row.sectionPath]:[],
+   category:'技术',status:'待确认',conclusion:'',draft:'',matchLevel:'none',score:0,evidence:'',
+   parserNote:row.reviewReasons||'',version:row.version,backendVersion:row.version,
+  });
+ }
+ if(rows.length!==run.requirementCount)throw new Error('条款查询数量与解析结果不一致，请刷新后重试');
+ return {run,rows};
+}

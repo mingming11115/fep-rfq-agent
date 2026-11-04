@@ -1,6 +1,9 @@
 import {canPerform} from './permissions.js';
 export const PROJECT_PAGES=['documents','response','reviews','export','versions','settings'];
 export const ADMIN_PAGES=['bu-admin','admin','knowledge','history','capabilities','audit'];
+export function getProjectEntryPage(state,projectId,destination='response') {
+ return destination;
+}
 const pages=['dashboard','tasks','projects','analysis',...PROJECT_PAGES,...ADMIN_PAGES];
 const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload','buId','modelId','groupId'];
 export function parseWorkRoute(hash='') {
@@ -27,3 +30,4 @@ export function getSourceUploadExitRoute(route, submitted=false) {
 }
 export function saveReturnContext(key,context,storage=globalThis.sessionStorage){try{storage?.setItem(`rfq.return:${key}`,JSON.stringify(context));}catch{}}
 export function readReturnContext(key,storage=globalThis.sessionStorage){try{return JSON.parse(storage?.getItem(`rfq.return:${key}`)||'null');}catch{return null;}}
+

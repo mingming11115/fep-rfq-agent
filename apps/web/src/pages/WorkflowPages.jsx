@@ -1,3 +1,4 @@
+import {parseRfqSource} from '../rfqSourceClient';
 import { UiTag, UiButton, PageHeading, BusinessTabs, BusinessTable, UiInput, UiTextArea, UiSelect, UiCheckbox } from '../components/AntContent';
 import ResponseReviewPanel from '../components/ResponseReviewPanel';
 import {getReviewActorIds,hasReviewConfirmation} from '../confirmationPolicy';
@@ -70,7 +71,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
     const missing = parsed.filter((row) => !requirements.some((current) => current.id === row.id));
     if (missing.length) onImport(missing);
     setFiles((old) => {
-      const next = old.map((file) => file.status === '待核对' && parsed.some((row) => row.sourceFileId === file.id) ? { ...file, status: '完成' } : file);
+      const next = old.map((file) => file.status === '待核对' && !file.backendDocumentId && parsed.some((row) => row.sourceFileId === file.id) ? { ...file, status: '完成' } : file);
       return next.some((file, i) => file !== old[i]) ? next : old;
     });
   }, [parsed, requirements, onImport]);
@@ -107,38 +108,25 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
     logEvent('加载解析示例', project.id, '补齐多版本模拟资料及条目来源，保留已有文件和编辑');
     toast(project.id === BHEL_ID ? '已载入BHEL真实RFQ：40条精选要求及原PDF，保留已有编辑' : '已补齐示例：已包含 Safety / Facility 与模块组合两份 Word 示例，以及历史版本和失败案例');
   }
-  function scheduleParse(file) {
-    if(!canManage)return;
-    if(file.demoParsePreview)return;
-    if (running.current.has(file.id)) return;
+  async function scheduleParse(file) {
+    if(!canManage||file.demoParsePreview||running.current.has(file.id))return;
     running.current.add(file.id);
-    const runId=uid('RUN'),startedAt=new Date().toISOString();
-    const finish=(status,counts={})=>onAnalysisRun({id:runId,fileId:file.id,sourceVersion:file.version,type:'parse',status,startedAt,endedAt:new Date().toISOString(),successCount:0,failedCount:0,needsHumanCount:0,previousRunId:file.lastRunId,...counts});
-    const fail = !/\.(pdf|docx?|xlsx?|csv|txt)$/i.test(file.name);
-    timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '处理中', parseStage: 'extracting', error: '' } : f)), 350));
-    if (!fail && file.purpose === '要求来源') {
-      for (const [delay, parseStage] of [[1250, 'comparing'], [2250, 'generating']]) {
-        timers.current.push(setTimeout(() => setFiles((old) => old.map((f) => f.id === file.id ? { ...f, parseStage } : f)), delay));
-      }
-    }
-    timers.current.push(setTimeout(() => {
-      running.current.delete(file.id);
-      if (fail) { finish('失败',{failedCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '失败', lastRunId:runId, error: '解析器仅支持 PDF、Word、Excel、CSV、TXT；请转换格式或手动补录。' } : f)); logEvent('解析失败', file.id, '不支持的文件格式'); return; }
-      if (file.purpose !== '要求来源') { finish('完成',{successCount:1}); setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成' } : f)); return; }
-      const previous = parsedRef.current.filter((row) => row.sourceFileId === file.id);
-      const rows = previous.length ? previous : project.id === BHEL_ID && file.realSource ? makeDocumentDemo(project.id).parsed : makeRequirements(project.id).slice(0, 4).map((r, index) => ({ ...r, id: `${file.id}-R${index + 1}`, clause: `${index + 1}.1`, status: '待确认', source: file.name, sourceOriginal: r.original, sourceVersion: file.version, sourcePage: index + 2, sourceFileId: file.id, sectionPath: [], confirmedAt: undefined, confirmedBy: undefined, parserNote: '模拟解析结果：未读取原文件，章节待识别', version: 1 }));
-      setParsed((old) => old.some((r) => r.sourceFileId === file.id) ? old : [...old, ...rows]);
-      setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '完成', parseStage: 'completed', parsedCount: rows.length, lastRunId:runId, parsedAt: now(), error: '' } : f));
-      finish('完成',{successCount:rows.length,needsHumanCount:rows.filter(r=>r.matchLevel==='none').length});
-      setActiveId(rows[0]?.id); logEvent('模拟解析完成', file.id, `${rows.length} 条要求已完成应答项对比，自动进入细则比对`);
-    }, !fail && file.purpose === '要求来源' ? 2600 : 1250));
+    setFiles(old=>old.map(f=>f.id===file.id?{...f,status:'处理中',parseStage:'extracting',error:''}:f));
+    try {
+      const {run,rows}=await parseRfqSource(project.id,file);
+      setParsed(old=>[...old.filter(row=>row.sourceFileId!==file.id),...rows]);
+      setFiles(old=>old.map(f=>f.id===file.id?{...f,status:run.status==='partial'?'待核对':'完成',parseStage:'completed',parsedCount:rows.length,lastRunId:run.id,parsedAt:now(),error:run.message||''}:f));
+      onAnalysisRun({id:run.id,fileId:file.id,sourceVersion:file.version,type:'parse',status:run.status==='partial'?'待核对':'完成',startedAt:run.startedAt,endedAt:run.finishedAt,successCount:rows.length,failedCount:0,needsHumanCount:run.issueCount});
+      setActiveId(rows[0]?.id);logEvent('后端解析完成',file.id,`${rows.length} 条要求已从数据库读取`);
+    }catch(error){setFiles(old=>old.map(f=>f.id===file.id?{...f,status:'失败',error:error.message}:f));toast(error.message,'error');}
+    finally{running.current.delete(file.id);}
   }
   function reparse(file) {
     if(!canManage)return;
     if (running.current.has(file.id)) return;
     setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '排队中', parseStage: 'queued', error: '' } : f));
     scheduleParse(file); logEvent('重新解析资料', file.id, '保留已修改条款及已有应答，不重复导入');
-    toast('已重新进入模拟解析队列，保留已修改字段与已有应答');
+    toast('已请求后端重新解析；人工修改由后端校验保护');
   }
   function correctRow(row, patch, reason) {
     if(!canManage)return '当前身份无来源修正权限';
@@ -153,7 +141,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
     setFiles(nextFiles);onFilesChange?.(project.id,nextFiles);
     incoming.forEach(scheduleParse);closeUpload(true);
     logEvent('上传资料元数据',project.id,`${incoming.length} 个文件；${incoming[0].purpose}；${incoming[0].version}`);
-    toast('资料已保存；DOCX / PDF 可打开原件批阅，条款解析仍为模拟');
+    toast('原件已上传，正在请求后端解析');
   }
   function openEditor(sourceFile = null) {
     if(!canManage)return;
@@ -172,7 +160,7 @@ export function DocumentsPage({ actorRole, route, project, requirements = [], ap
   return <div className="flow-page">
     <PageHeading title={<>RFQ 解析</>} description={<>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</>} actions={<>{canManage&&<div className="page-actions"><UiButton className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />历史批注示例</UiButton><UiButton className="btn" onClick={()=>openEditor()}>人工补录</UiButton><UiButton className="btn" onClick={loadSample}><FileText size={16} />载入示例</UiButton><UiButton className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</UiButton></div>}</>} />{!canManage&&<Notice>来源文件与解析结果为只读；上传、重新解析及修正由SR处理。</Notice>}
     {wordCommentsOpen && canManage && <WordCommentsPrototype projectId={project.id} onClose={() => setWordCommentsOpen(false)} />}
-    <Notice>{project.id === BHEL_ID ? '真实RFQ · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件仍使用模拟解析。' : 'DOCX / PDF 原文件已接入文档服务，可在详情左侧批阅；条款解析仍为模拟结果。仅“要求来源”生成要求条目。'}</Notice>
+    <Notice>{project.id === BHEL_ID ? '真实RFQ · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件通过后端解析，条款从数据库读取。' : '新上传 DOCX / PDF 由后端解析并保存条款；解析警告需人工核对。演示资料仍为预置示例。'}</Notice>
     <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
     {files.length > 0 ? <DocumentWorkbench readOnly={!canManage} files={files} rows={parsed} responseRows={requirements} imported={imported} selectedId={activeId} onSelect={setActiveId} onCorrect={correctRow} onReparse={reparse} onSupplement={openEditor} onContinue={(id) => navigate('response', id)} /> : <section className="panel"><NoRows title="上传第一份 RFQ，自动抽取要求条款"><span>支持 DOC、DOCX，兼容 PDF、Excel、CSV 和 TXT；载入示例可体验不同客户章节。</span>{canManage&&<UiButton className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={15}/>上传并解析</UiButton>}</NoRows></section>}
     <details className="panel dw-file-records"><summary>文件与版本记录<span>{files.length} 份资料 · 查看历史版本和失败任务</span></summary><BusinessTabs className="tabs"><button className={fileTab === '文件清单' ? 'active' : ''} onClick={() => setFileTab('文件清单')}>文件清单 <span>{files.length}</span></button><button className={fileTab === '版本记录' ? 'active' : ''} onClick={() => setFileTab('版本记录')}>文件版本</button></BusinessTabs>

@@ -12,6 +12,7 @@ export function playContentMotion(element, { kind = 'panel', direction = 1, dura
     page: { from: { opacity: 0, transform: 'translateY(5px)' }, duration: 180 },
     panel: { from: { opacity: 0.4, transform: 'translateY(3px)' }, duration: 150 },
     tab: { from: { opacity: 0.4, transform: `translateX(${offset}px)` }, duration: 150 },
+    'rfq-tab': { from: { opacity: 0.82 }, duration: 120 },
     view: { from: { opacity: 0.35, transform: 'translateY(4px)' }, duration: 180 },
     'card-in': { from: { opacity: 0 }, duration: 160 },
     'card-out': { to: { opacity: 0 }, duration: 140 },
@@ -26,3 +27,4 @@ export function playContentMotion(element, { kind = 'panel', direction = 1, dura
   animation.finished.then(release, release);
   return animation;
 }
+

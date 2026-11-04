@@ -46,6 +46,44 @@ class DocumentUploadHttpTest {
         jdbc.update("delete from customer_document where project_id=?",project);jdbc.update("delete from audit_event where object_id=?",project);
         jdbc.update("delete from project_member where project_id=?",project);jdbc.update("delete from project where id=?",project);
     }
+    @Test void realHttpUploadParseQueryAndDatabaseRoundtrip() throws Exception {
+        String token=token(), project=project(token);
+        var output=new java.io.ByteArrayOutputStream();
+        try(var pdf=new org.apache.pdfbox.pdmodel.PDDocument()) {
+            var page=new org.apache.pdfbox.pdmodel.PDPage(); pdf.addPage(page);
+            try(var content=new org.apache.pdfbox.pdmodel.PDPageContentStream(pdf,page)) {
+                content.beginText();
+                content.setFont(new org.apache.pdfbox.pdmodel.font.PDType1Font(org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA),12);
+                content.newLineAtOffset(50,700);
+                content.showText("1.1 The system shall support 300 mm wafers."); content.endText();
+            }
+            pdf.save(output);
+        }
+        byte[] bytes=output.toByteArray();
+        try {
+            var uploaded=client.send(upload(token,project,HttpRequest.BodyPublishers.ofByteArray(bytes)),HttpResponse.BodyHandlers.ofString());
+            assertThat(uploaded.statusCode()).isEqualTo(200);
+            String id=json.readTree(uploaded.body()).path("data").path("id").asText();
+            var parsed=post("/documents/"+id+"/parse-runs",token,Map.of());
+            assertThat(parsed.path("status").asText()).isEqualTo("completed");
+            int count=parsed.path("requirementCount").asInt();
+            assertThat(count).isPositive();
+            assertThat(jdbc.queryForObject("select count(*) from requirement where document_id=?",Integer.class,id)).isEqualTo(count);
+            assertThat(jdbc.queryForObject("select original_text from requirement where document_id=? limit 1",String.class,id)).contains("300 mm");
+            var queried=client.send(request("/projects/"+project+"/requirements",token).GET().build(),HttpResponse.BodyHandlers.ofString());
+            assertThat(queried.statusCode()).isEqualTo(200);
+            assertThat(queried.body()).contains(id,"300 mm");
+            var download=client.send(request("/documents/"+id+"/download",token).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(download.statusCode()).isEqualTo(200);
+            assertThat(download.body()).isEqualTo(bytes);
+            System.out.println("UPLOAD_E2E document="+id+" requirements="+count+" original=300 mm; HTTP query and SQL verified");
+        } finally {
+            jdbc.update("delete from requirement where project_id=?",project);
+            jdbc.update("delete from document_block where document_id in (select id from customer_document where project_id=?)",project);
+            jdbc.update("delete from parse_run where document_id in (select id from customer_document where project_id=?)",project);
+            clean(project);
+        }
+    }
     @Test void realMultipartLimitReturnsUnified413BeforeWritingBusinessData() throws Exception {
         String token=token(),project=project(token);
         try {

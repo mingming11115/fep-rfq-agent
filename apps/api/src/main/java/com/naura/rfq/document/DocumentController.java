@@ -165,7 +165,10 @@ public class DocumentController {
     public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> download(@PathVariable String documentId) throws IOException {
         CustomerDocument document = documents.findById(documentId).orElseThrow(() -> new BusinessException(404, "文档不存在"));
         access.requireProject(CurrentUserHolder.require(), requireProject(document.getProjectId()));
-        var path = storage.verifiedFile(document.getStorageRef(),document.getSizeBytes(),document.getSha256());
+        byte[] original;
+        try (var lease = storage.open(document.getStorageRef(),document.getSizeBytes(),document.getSha256())) {
+            original = java.nio.file.Files.readAllBytes(lease.path());
+        }
         String type = canonicalType(document.getName());
         return org.springframework.http.ResponseEntity.ok()
             .header("Cache-Control", "no-store")
@@ -175,7 +178,7 @@ public class DocumentController {
             .contentType(org.springframework.http.MediaType.parseMediaType(type))
             .contentLength(document.getSizeBytes())
             .eTag("\""+document.getSha256().toLowerCase(Locale.ROOT)+"\"")
-            .body(new org.springframework.core.io.FileSystemResource(path));
+            .body(new org.springframework.core.io.ByteArrayResource(original));
     }
 
     private void cleanOnRollback(DocumentStorage.StoredFile file) {

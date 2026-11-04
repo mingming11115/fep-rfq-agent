@@ -105,16 +105,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.equal(saves.length,0,'directory navigation never saves the document');
     assert.equal(window.__rfqOfficeUnsaved.dirty,false);
     assert.equal(new URL(frame.src).searchParams.get('tools'),'host');
-    const editorTools=container.querySelector('[aria-label="编辑工具"]');assert.ok(editorTools);
-    assert.equal(editorTools.getAttribute('aria-pressed'),'false');
-    await act(async()=>{editorTools.click();await settle();});
-    assert.equal(editorTools.getAttribute('aria-pressed'),'true');
-    assert.equal(editorTools.disabled,false);
-    await act(async()=>{editorTools.click();await settle();});
-    assert.equal(editorTools.getAttribute('aria-pressed'),'false');
-    assert.equal(calls.filter(call=>call.type==='wordcraft:open').length,1);
-    assert.equal(window.__rfqOfficeUnsaved.dirty,false);
-    assert.equal(saves.length,0,'tool visibility never saves the document');
+    assert.equal(container.querySelector('[aria-label="编辑工具"]'),null,'RFQ review has no editor tools entry');
     const locateButton=header.querySelector('[aria-label="定位当前条款"]');assert.ok(locateButton,'locating is available in the top toolbar');
     await act(async()=>{setLocation('matched','R');await settle();});
     assert.equal(container.querySelector('.office-clause-status')?.dataset.clauseStatus,'matched');

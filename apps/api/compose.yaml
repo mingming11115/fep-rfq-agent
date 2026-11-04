@@ -9,6 +9,11 @@ services:
       SERVER_PORT: "48081"
       JAVA_TOOL_OPTIONS: "${JAVA_TOOL_OPTIONS:-}"
       RFQ_STORAGE_DIR: /app/data/rfq-files
+      RFQ_STORAGE_TYPE: "${RFQ_STORAGE_TYPE:-local}"
+      RFQ_MINIO_ENDPOINT: "${RFQ_MINIO_ENDPOINT:-}"
+      RFQ_MINIO_BUCKET: "${RFQ_MINIO_BUCKET:-rfq-files}"
+      RFQ_MINIO_ACCESS_KEY: "${RFQ_MINIO_ACCESS_KEY:-}"
+      RFQ_MINIO_SECRET_KEY: "${RFQ_MINIO_SECRET_KEY:-}"
       RFQ_DB_URL: "${RFQ_DB_URL:-jdbc:mysql://host.docker.internal:3306/rfq?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false}"
       RFQ_DB_USER: "${RFQ_DB_USER:-rfq_app}"
       RFQ_DB_PASSWORD: "${RFQ_DB_PASSWORD:-rfq_app_pwd}"

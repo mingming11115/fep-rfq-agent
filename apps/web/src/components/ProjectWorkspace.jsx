@@ -14,7 +14,7 @@ export default function ProjectWorkspace({route,summary,project,actorRole,projec
  const header=<PageContainer className="rfq-project-heading" ghost breadcrumb={false}
    onBack={onReturn} backIcon={<ArrowLeft size={16}/>}
    title={<h1 className="rfq-page-title" title={project.name}>{project.name}</h1>}
-   content={project.processId ? <>关联工艺：{project.modelName} {project.modelRevision} / {project.processCode} · {project.processName}</> : undefined}
+
    extra={<>
      {isDetail&&projectInfoPanel&&<UiButton className="btn" aria-haspopup="dialog" aria-expanded={infoOpen} onClick={()=>setInfoOpen(true)}><FileText size={14}/>项目信息</UiButton>}
      {canSubmitFinalReview&&!reviewInProgress&&<UiButton className="btn btn-primary" disabled={!!taskContextError} onClick={onLaunchFinalReview}><ShieldCheck size={14}/>发起最终评审</UiButton>}
