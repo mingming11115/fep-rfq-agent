@@ -1,7 +1,8 @@
 import {api,readSession} from './authClient.js';
 import {resourceStorageKey} from './resourceVisibility.js';
 import {historyFiles} from './historyFiles.js';
-import {HISTORY_DOCUMENT_KEY,HISTORY_KNOWLEDGE_KEY,mergeHistoryParse} from './historyKnowledge.js';
+import {versionFamily} from './historyVersions.js';
+import {HISTORY_DOCUMENT_KEY,HISTORY_KNOWLEDGE_KEY,mergeHistoryParse,selectHistoryResources} from './historyKnowledge.js';
 
 const jobs=new Map();
 const uploads=new Map();
@@ -24,18 +25,30 @@ async function fingerprint(file,responseFile){
  const digest=async source=>source?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await source.arrayBuffer())),n=>n.toString(16).padStart(2,'0')).join(''):'';
  return `${await digest(file)}:${await digest(responseFile)}`;
 }
-export async function startHistoryUpload({file,responseFile,buId,actor,legacy=[]},{files=historyFiles,parse=api.upload}={}){
+export async function startHistoryUpload({file,responseFile,buId,actor,legacy=[],previousDocumentId,versionLabel,changeNote,permissionContext},{files=historyFiles,parse=api.upload}={}){
  const previous=uploads.get(buId)||Promise.resolve();
- const pending=previous.catch(()=>{}).then(()=>upload({file,responseFile,buId,actor,legacy},{files,parse}));
+ const pending=previous.catch(()=>{}).then(()=>upload({file,responseFile,buId,actor,legacy,previousDocumentId,versionLabel,changeNote,permissionContext},{files,parse}));
  uploads.set(buId,pending);
  try{return await pending;}finally{if(uploads.get(buId)===pending)uploads.delete(buId);}
 }
-async function upload({file,responseFile,buId,actor,legacy},{files,parse}){
+async function upload({file,responseFile,buId,actor,legacy,previousDocumentId,versionLabel,changeNote,permissionContext},{files,parse}){
  if(!actor.canEdit)throw new Error('当前身份无上传权限');
  if(!supported(file)||responseFile&&!supported(responseFile))throw new Error('请选择非空 DOCX／PDF 文件，每个文件不超过 30 MiB');
- const hash=await fingerprint(file,responseFile),snapshot=readHistorySnapshot(buId,legacy),duplicate=snapshot.documents.find(doc=>doc.fingerprint===hash);
+ const hash=await fingerprint(file,responseFile),snapshot=readHistorySnapshot(buId,legacy);
+ const parent=previousDocumentId?snapshot.documents.find(doc=>doc.id===previousDocumentId):null;
+ if(previousDocumentId&&!parent)throw new Error('关联文档不存在，请重新选择');
+ if(parent&&permissionContext&&!selectHistoryResources(snapshot,permissionContext).documents.some(doc=>doc.id===parent.id))throw new Error('关联文档范围已变化或无权访问，请重新选择');
+ const family=parent?versionFamily(parent):null;
+ const siblings=parent?snapshot.documents.filter(doc=>versionFamily(doc)===family):[];
+ const revision=parent?Math.max(...siblings.map(doc=>Number(doc.revision)||1))+1:1;
+ const label=versionLabel?.trim()||`V${revision}`;
+ const readableIds=permissionContext?new Set(selectHistoryResources(snapshot,permissionContext).documents.map(doc=>doc.id)):null;
+ const duplicate=snapshot.documents.find(doc=>doc.fingerprint===hash&&(!readableIds||readableIds.has(doc.id))&&(!parent||versionFamily(doc)===family));
  if(duplicate){await files.put(buId,duplicate.id,{file,responseFile});return {document:duplicate,duplicate:true};}
+ if(siblings.some(doc=>doc.version===label))throw new Error('该 RFQ 已有相同版本标识，请填写不同版本');
  const document={id:`HD-${crypto.randomUUID()}`,buId,name:file.name,responseName:responseFile?.name||'',version:'V1',metadata:{},scope:'FEP 授权项目',parseStatus:'parsing',fingerprint:hash,createdAt:new Date().toISOString(),uploadedBy:actor.name||actor.id,uploadedById:actor.id,sources:[],issues:[]};
+ Object.assign(document,{familyId:family||document.id,previousDocumentId:parent?.id,revision,version:label,versionEdited:!!parent||!!versionLabel?.trim(),changeNote:changeNote?.trim()||''});
+ if(parent)Object.assign(document,{scope:parent.scope,projectId:parent.projectId,metadata:{...parent.metadata,fileVersion:undefined}});
  await files.put(buId,document.id,{file,responseFile});
  try{writeHistorySnapshot(buId,{...snapshot,documents:[document,...snapshot.documents]});}
  catch(error){await files.delete(buId,document.id);throw error;}
