@@ -1,2 +1,5 @@
 # Local runtime dependency link for report generation.
 /outputs/.rfq-progress-build/node_modules
+
+# Recoverable local snapshots of old worktree changes.
+/outputs/worktree-archive-*/

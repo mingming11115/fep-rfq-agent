@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1380" viewBox="0 0 1600 1380" role="img" aria-labelledby="title desc">
+<title id="title">RFQ 平台目标技术架构：企业内网部署</title>
+<desc id="desc">Web 工作台通过统一入口访问模块化业务后端。后端负责项目、应答、批注、任务、评审、知识、版本和批准快照，向异步队列提交文档、比对、索引和导出任务。文档 Worker 处理原 Word、结构锚点、OCR 与模板导出；智能 Worker 按标准回复、历史 RFQ、机型能力顺序检索，使用本地模型生成建议并保留引用。业务数据库、文件存储与可重建知识索引位于内网，权限、审计及批准快照控制整个流程。这是目标架构，当前代码仍为交互原型。</desc>
+<defs>
+  <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#444444"/></marker>
+  <marker id="asyncArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#444444"/></marker>
+  <style>
+    text{font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;fill:#111111;font-size:20px}
+    .title{font-size:38px;font-weight:600;letter-spacing:1px}.subtitle{font-size:21px;fill:#555555}.boundary{font-size:19px;font-weight:500;fill:#333333}.heading{font-size:24px;font-weight:600}.body{font-size:20px;fill:#333333}.small{font-size:18px;fill:#555555}.chip{font-size:19px;font-weight:500}.tag{font-size:17px;font-weight:500;fill:#444444}.wire{fill:none;stroke:#444444;stroke-width:2;stroke-linejoin:round;marker-end:url(#arrow)}.asyncWire{fill:none;stroke:#444444;stroke-width:2.3;stroke-dasharray:8 6;stroke-linejoin:round;marker-end:url(#asyncArrow)}.wireLabel{font-size:17px;fill:#444444}.policy{font-size:19px;fill:#333333}
+  </style>
+</defs>
+<rect width="1600" height="1380" fill="#ffffff"/>
+<rect x="38" y="35" width="8" height="59" rx="4" fill="#111111"/>
+<text x="64" y="68" class="title">RFQ 平台技术架构</text>
+<text x="65" y="104" class="subtitle">原 Word 驱动的解析、应答、评审与导出</text>
+<rect x="1264" y="42" width="272" height="40" rx="20" fill="#f2f2f2"/>
+<text x="1400" y="69" text-anchor="middle" class="tag">目标架构 · 完全内网运行</text>
+<rect x="28" y="133" width="1544" height="1166" rx="16" fill="#fff" stroke="#777777" stroke-width="1.7" stroke-dasharray="8 6"/>
+<rect x="58" y="120" width="320" height="30" fill="#ffffff"/>
+<text x="72" y="142" class="boundary">企业内网部署边界</text>
+
+<rect x="64" y="176" width="1472" height="126" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="87" y="210" class="heading">交互层 · RFQ Web 工作台（React）</text>
+<text x="1512" y="209" class="small" text-anchor="end">原 Word 预览 / 选区批注 / 条款联动</text>
+<rect x="88" y="234" width="220" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="198.0" y="262" class="chip" text-anchor="middle">工作台 · 快捷发起</text>
+<rect x="320" y="234" width="195" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="417.5" y="262" class="chip" text-anchor="middle">任务中心</text>
+<rect x="527" y="234" width="190" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="622.0" y="262" class="chip" text-anchor="middle">我的 RFQ</text>
+<rect x="729" y="234" width="190" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="824.0" y="262" class="chip" text-anchor="middle">RFQ 台账</text>
+<rect x="931" y="234" width="220" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="1041.0" y="262" class="chip" text-anchor="middle">AI 分析记录</text>
+<rect x="1163" y="234" width="349" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="1337.5" y="262" class="chip" text-anchor="middle">知识能力维护 / 管理后台</text>
+<rect x="64" y="337" width="1472" height="64" rx="10" fill="#f5f5f5" stroke="#777777" stroke-width="1.5"/>
+<text x="87" y="377" class="heading">统一接入层</text>
+<text x="1512" y="377" class="body" text-anchor="end">HTTPS / 静态资源 / API 路由 / 内网认证与会话</text>
+<path d="M800 302 V337" class="wire"/>
+<path d="M594 401 V443" class="wire"/>
+<rect x="64" y="443" width="1060" height="218" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="88" y="480" class="heading">业务后端 · 模块化应用</text>
+<text x="1099" y="479" class="small" text-anchor="end">同步 API / 事务与状态流转</text>
+<rect x="88" y="499" width="320" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="248.0" y="527" class="chip" text-anchor="middle">项目 / 文件 / 原始条款</text>
+<rect x="420" y="499" width="320" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="580.0" y="527" class="chip" text-anchor="middle">应答 / 原文锚点 / 批注</text>
+<rect x="752" y="499" width="348" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="926.0" y="527" class="chip" text-anchor="middle">任务 / 评审 / 客户澄清</text>
+<rect x="88" y="552" width="320" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="248.0" y="580" class="chip" text-anchor="middle">知识 / 机型 / 能力审核</text>
+<rect x="420" y="552" width="320" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="580.0" y="580" class="chip" text-anchor="middle">版本 / 批准快照 / 复核</text>
+<rect x="752" y="552" width="348" height="42" rx="6" fill="#ffffff" stroke="#aaaaaa" stroke-width="1.5"/>
+<text x="926.0" y="580" class="chip" text-anchor="middle">模板映射 / 导出授权</text>
+<text x="88" y="633" class="small">业务约束：项目权限 · 并发版本校验 · 人工确认 · 独立审批 · 操作留痕</text>
+<rect x="1180" y="443" width="356" height="218" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="1203" y="480" class="heading">异步任务队列</text>
+<text x="1203" y="519" class="body">解析 / 比对 / 索引 / 导出</text>
+<text x="1203" y="554" class="body">任务状态 / 依赖与调度</text>
+<text x="1203" y="589" class="body">Worker 执行重试与幂等</text>
+<text x="1203" y="633" class="small">长任务不阻塞页面操作</text>
+<path d="M1124 516 H1180" class="wire"/>
+<text x="1152" y="501" class="wireLabel" text-anchor="middle">任务</text>
+<path d="M1358 661 V708 H286 V748" class="asyncWire"/>
+<path d="M1358 661 V708 H844 V748" class="asyncWire"/>
+<circle cx="1358" cy="708" r="3" fill="#444444"/>
+<text x="1290" y="695" class="wireLabel" text-anchor="middle">异步派发</text>
+<rect x="64" y="748" width="444" height="248" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="88" y="787" class="heading">文档处理 Worker</text>
+<text x="88" y="826" class="body">DOC 转换 / DOCX 段落与表格</text>
+<text x="88" y="862" class="body">PDF 解析 / 扫描页本地 OCR</text>
+<text x="88" y="898" class="body">预览生成 / 章节与原文锚点</text>
+<text x="88" y="934" class="body">Word / Excel 模板渲染</text>
+<text x="88" y="973" class="small">正式导出绑定获批快照</text>
+<rect x="564" y="748" width="560" height="248" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="588" y="787" class="heading">比对与生成 Worker</text>
+<text x="588" y="826" class="body">标准回复 → 历史 RFQ → 机型能力</text>
+<text x="588" y="862" class="body">权限及有效性过滤 / 关键词与向量检索</text>
+<text x="588" y="898" class="body">单位换算 / 参数、配置与条件规则校验</text>
+<text x="588" y="934" class="body">应答建议与来源引用 / 变更影响分析</text>
+<text x="588" y="973" class="small">知识候选抽取；审核发布后更新索引</text>
+<rect x="1180" y="748" width="356" height="248" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="1203" y="787" class="heading">内网模型推理</text>
+<text x="1203" y="833" class="body">Embedding · 向量化</text>
+<text x="1203" y="874" class="body">Reranker · 候选重排</text>
+<text x="1203" y="915" class="body">LLM · 结构抽取与生成</text>
+<text x="1203" y="973" class="small">模型与依赖受控离线导入</text>
+<path d="M1124 850 H1180" class="wire"/>
+<text x="1152" y="833" class="wireLabel" text-anchor="middle">调用</text>
+<path d="M64 612 H43 V1018 H160 V1064" class="wire"/>
+<rect x="90.5" y="1016" width="169" height="25" rx="4" fill="#fff"/>
+<text x="175" y="1035" class="wireLabel" text-anchor="middle">受控上传 / 下载</text>
+<path d="M1124 615 H1152 V840 M1152 860 V1028 H1040 V1064" fill="none" stroke="#444444" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M1152 840 Q1168 850 1152 860" fill="none" stroke="#444444" stroke-width="2"/>
+<text x="1096" y="1019" class="wireLabel" text-anchor="middle">事务读写</text>
+<rect x="64" y="1064" width="444" height="148" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="88" y="1102" class="heading">文件与制品存储</text>
+<text x="88" y="1139" class="body">原始 Word / PDF / 附件 / 预览文件</text>
+<text x="88" y="1176" class="small">证据版本 / 导出文件 / 内容指纹</text>
+<rect x="564" y="1064" width="560" height="148" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="588" y="1102" class="heading">业务关系数据库</text>
+<text x="588" y="1139" class="body">项目 / 条款与锚点 / 批注 / 应答 / 评审</text>
+<text x="588" y="1176" class="small">知识与能力版本 / 批准快照 / 审计 / 任务状态</text>
+<rect x="1180" y="1064" width="356" height="148" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+<text x="1203" y="1102" class="heading">知识检索索引</text>
+<text x="1203" y="1139" class="body">关键词索引 / 向量索引</text>
+<text x="1203" y="1176" class="small">来源 ID 与版本；可重建</text>
+<path d="M286 996 V1064" class="wire"/>
+<text x="312" y="1051" class="wireLabel">原件与制品</text>
+<path d="M450 996 V1046 H660 V1064" class="wire"/>
+<text x="558" y="1036" class="wireLabel" text-anchor="middle">结构与定位</text>
+<path d="M844 996 V1064" class="wire"/>
+<text x="862" y="1051" class="wireLabel">结果与引用</text>
+<path d="M1090 996 V1047 H1358 V1064" class="wire"/>
+<text x="1362" y="1037" class="wireLabel" text-anchor="middle">检索 / 索引更新</text>
+<rect x="64" y="1242" width="1472" height="42" rx="6" fill="#f5f5f5" stroke="#999999" stroke-width="1.5"/>
+<text x="800" y="1270" class="policy" text-anchor="middle">贯穿全流程：项目与资料权限 · 来源版本追溯 · AI 调用记录 · 日志监控 · 备份恢复 · 内网运行</text>
+<line x1="69" y1="1326" x2="114" y2="1326" stroke="#444444" stroke-width="2"/>
+<text x="124" y="1332" class="small">同步调用 / 数据访问</text>
+<line x1="378" y1="1326" x2="423" y2="1326" stroke="#444444" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="433" y="1332" class="small">异步任务</text>
+<text x="1536" y="1332" class="small" text-anchor="end">逻辑模块不等于独立微服务；产品与硬件选型需样本验证</text>
+<text x="64" y="1364" class="small">建设范围：当前仓库为 React 交互原型；图中业务后端、真实文档处理、模型推理及集中存储属于目标架构。</text>
+</svg>

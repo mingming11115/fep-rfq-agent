@@ -115,6 +115,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [adoption, setAdoption] = useState(null);
   const [reviewForm, setReviewForm] = useState(null);
   const [inlineReviewId, setInlineReviewId] = useState(() => reviews.find(r => r.requirementId === initialRow?.id && !['已关闭', '已取消'].includes(r.status))?.id || null), [inlineReviewAction,setInlineReviewAction] = useState(null);
+  const inlineReviewRef = useRef(null);
+  const [inlineReviewFocusRequest, setInlineReviewFocusRequest] = useState(0);
   const [cardFilters, setCardFilters] = useState(EMPTY_CARD_FILTERS);
   const [cardFilterDraft, setCardFilterDraft] = useState(EMPTY_CARD_FILTERS);
   const [deferredCards, setDeferredCards] = useState([]);
@@ -139,7 +141,25 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const openReview = linkedReviews.find(review => !['已关闭','已取消'].includes(review.status));
   const closedReview = linkedReviews.find(review => review.status === '已关闭');
   const reassessing = !openReview && (active?.status === '已确认' || !!closedReview);
-  function openInlineReview(id, action = null) { const issue = reviews.find(item => item.id === id); const row = requirements.find(item => item.id === issue?.requirementId) || active; guardedDetail(() => { if (row && row.id !== active?.id) hydrate(row); revealCard(row); setDetailTab('response'); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(id); setInlineReviewAction(action); }, row); }
+  useEffect(() => {
+    if (!inlineReviewFocusRequest) return;
+    inlineReviewRef.current?.focus({ preventScroll: true });
+    inlineReviewRef.current?.scrollIntoView({ block: 'start', inline: 'nearest' });
+  }, [inlineReviewFocusRequest]);
+  function openInlineReview(id, action = null) {
+    const issue = reviews.find(item => item.id === id);
+    const row = requirements.find(item => item.id === issue?.requirementId) || active;
+    if (inlineReviewId === id && inlineReviewAction === action && row?.id === active?.id && detailTab === 'response' && !reviewForm) {
+      setInlineReviewFocusRequest(value => value + 1);
+      return;
+    }
+    guardedDetail(() => {
+      if (row && row.id !== active?.id) hydrate(row);
+      revealCard(row); setDetailTab('response'); setReviewForm(null); reviewFormRef.current = null;
+      setInlineReviewId(id); setInlineReviewAction(action);
+      setInlineReviewFocusRequest(value => value + 1);
+    }, row);
+  }
   function startAssessment() { if(reassessing&&closedReview)openInlineReview(closedReview.id,'reopen');else startReview(reassessing?'rereview':'review'); }
   const [capabilityForm, setCapabilityForm] = useState(null);
   const [savedCandidate, setSavedCandidate] = useState(null);
@@ -415,7 +435,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) guardedDetail(() => setInlineReviewId(null)); else openInlineReview(issue.id); } else startAssessment(); }}>评审<ChevronDown size={13}/></UiButton></div></div>
         {!!linkedReviews.length && <div className="rfq-linked-reviews"><div className="rfq-section-title"><strong>问题处理记录</strong><span>{linkedReviews.length} 项</span></div>{linkedReviews.map((review) => <button key={review.id} className="rfq-review-link" onClick={() => openInlineReview(review.id)}><span><b>{review.title}</b><small>{review.owner} · 截止 {review.deadline || '未设置'}</small></span><StatusBadge status={review.status}/><ChevronRight size={14}/></button>)}</div>}
-    {inlineReviewId && <ReviewsPage appState={appState} project={project} requirements={requirements} reviews={reviews} actorRole={actorRole} actorId={actorId} canBusinessAction={canBusinessAction} toast={toast} navigate={navigate} logEvent={logEvent} onUpdateReview={onUpdateReview} onAdoptReview={onAdoptReview} onConfirmReviewed={onConfirmReviewed} embedded inline registerNavigationGuard={registerIssueGuard} key={inlineReviewId} initialAction={inlineReviewAction} initialReviewId={inlineReviewId} onCloseEmbedded={() => {setInlineReviewId(null);setInlineReviewAction(null);}}/>}
+    {inlineReviewId && <div ref={inlineReviewRef} role="region" aria-label="当前评审事项" tabIndex={-1}><ReviewsPage appState={appState} project={project} requirements={requirements} reviews={reviews} actorRole={actorRole} actorId={actorId} canBusinessAction={canBusinessAction} toast={toast} navigate={navigate} logEvent={logEvent} onUpdateReview={onUpdateReview} onAdoptReview={onAdoptReview} onConfirmReviewed={onConfirmReviewed} embedded inline registerNavigationGuard={registerIssueGuard} key={inlineReviewId} initialAction={inlineReviewAction} initialReviewId={inlineReviewId} onCloseEmbedded={() => {setInlineReviewId(null);setInlineReviewAction(null);}}/></div>}
     {reviewForm && <InlineReviewSurface
       title={reviewForm.kind === 'rereview' ? '重新评审' : reviewForm.kind === 'reject' ? '明确拒绝匹配并建立偏离' : '评审'}
       width={620} onClose={() => setReviewForm(null)}

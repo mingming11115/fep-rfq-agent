@@ -8,6 +8,7 @@ import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomai
 import {invalidatePendingSnapshots,currentProjectScope,checkSnapshotValidity} from './snapshotDomain';
 import {getFinalReviewGate} from './finalReviewFlow';
 import {tidyDemoState,tidyStoredDemo} from './demoCleanup';
+import {addReviewScenarioDemos,addStoredReviewScenarioDemos} from './demoReviewScenarios';
 import {officeRouteSource} from './officeClauseLink';
 import {migrateFepDemoCatalog} from './fepDemoCatalog';
 import {canPerform,assertPermission,assertRequirementPatch,canAccessPage,getRoleNavigation} from './permissions';
@@ -59,9 +60,10 @@ function initial(){
  if(Array.isArray(saved?.projects)){
   const upgraded=upgradePrototypeState(withProjectDocuments(withProjectMembers(saved)),demo);
   let next=upgraded;try{next=tidyStoredDemo(localStorage,upgraded);}catch(error){console.error('演示数据备份失败，保留现有数据',error);}
+  try{next=addStoredReviewScenarioDemos(localStorage,next);}catch(error){console.error('评审场景演示数据补入失败，保留现有数据',error);}
   return withLoginIdentity(reconcileTasks(invalidatePendingSnapshots(next)));
  }
- return withLoginIdentity(reconcileTasks(tidyDemoState(upgradePrototypeState(withProjectMembers({...demo,activeProjectId:'RFQ-001'}),demo))));
+ return withLoginIdentity(reconcileTasks(addReviewScenarioDemos(tidyDemoState(upgradePrototypeState(withProjectMembers({...demo,activeProjectId:'RFQ-001'}),demo)))));
 }
 // 登录身份优先于本机残留身份，但只消费一次：之后页面内切换演示身份不会在刷新时被覆盖。
 function withLoginIdentity(state){
@@ -95,7 +97,7 @@ export default function App(){
  function allow(action){try{assertPermission(stateRef.current.actorRole,action,{state:stateRef.current,actorId:stateRef.current.actorId,projectId:action==='project:create'?undefined:stateRef.current.activeProjectId,buId:stateRef.current.activeBuId||stateRef.current.projects.find(p=>p.id===stateRef.current.activeProjectId)?.buId});return true;}catch(error){toast(error.message,'error');return false;}}
  function resetDemoData(){
   if(!allow('project:manage'))return;
-  const seed=createDemoState(),demo=tidyDemoState(upgradePrototypeState(seed,seed)),ids=new Set([...stateRef.current.projects,...demo.projects].map(p=>p.id));
+  const seed=createDemoState(),demo=addReviewScenarioDemos(tidyDemoState(upgradePrototypeState(seed,seed))),ids=new Set([...stateRef.current.projects,...demo.projects].map(p=>p.id));
   const related={};
   try{
    for(const id of ids)for(const key of [`fep-rfq-documents:${id}`,`fep-rfq-export-history:${id}`])related[key]=localStorage.getItem(key);
@@ -103,7 +105,7 @@ export default function App(){
   }catch{toast('本机演示数据备份失败，请释放浏览器存储后重试','error');return;}
   for(const p of demo.projects){localStorage.removeItem(`fep-rfq-documents:${p.id}`);localStorage.removeItem(`fep-rfq-export-history:${p.id}`);sessionStorage.removeItem(`rfq.export.settings.${p.id}`);}
   delete window.__rfqRequestNavigation;
-  update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，五种RFQ状态各一条；应答按3种处理状态×5种结论保留15条示例');
+  update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，保留五种RFQ状态与15条应答矩阵，并补入三套评审阶段 mock');
  }
  function rawNavigate(key,details={},replace=false){const next={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...details};routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;setFocusedRequirementId(next.requirementId||null);history[replace?'replaceState':'pushState'](null,'',buildWorkRoute(next));}
  function guarded(action,options){if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(action,options))return false;action();return true;}
