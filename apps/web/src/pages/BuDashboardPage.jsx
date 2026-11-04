@@ -34,7 +34,7 @@ export default function BuDashboardPage({appState:state,onSelectBu,navigate}){
    <Select aria-label="看板BU" value={bu.id} options={bus.map(b=>({value:b.id,label:b.name}))} onChange={value=>{reset();onSelectBu(value);}}/>
    <Button type="primary" icon={<SlidersHorizontal size={15}/>} onClick={()=>navigate('bu-admin')}>BU人员与规则</Button>
   </div>}/>
-  <Alert className="bu-data-notice" type={isMock?'info':'success'} showIcon message={<Space wrap><Tag color={isMock?'blue':'green'}>{isMock?'模拟数据':'当前数据'}</Tag><span>{isMock?'模拟项目仅用于看板演示，可切换当前数据查看实际进度。':`${bu.name} · 根据已保存的项目与任务统计`}</span></Space>}/>
+  <Alert className="bu-data-notice" type={isMock?'info':'success'} showIcon message={<Space wrap><Tag color={isMock?'blue':'green'}>{isMock?'模拟数据':'当前数据'}</Tag><span>{isMock?'模拟项目仅用于看板，可切换当前数据查看实际进度。':`${bu.name} · 根据已保存的项目与任务统计`}</span></Space>}/>
   <div className="bu-metric-grid bu-dashboard-stats">{cards.map(card=><BuStatisticCard key={card.filter} {...card} selected={activeTab==='projects'&&filters.focus===card.filter} onFilter={()=>filterProjects(card.filter)}/>)}</div>
   <Tabs className="bu-dashboard-tabs" activeKey={activeTab} onChange={setActiveTab} items={[
    {key:'approval',label:'审批分析',children:<BuApprovalPanel key={dataMode} data={approval} onPeriodChange={setApprovalPeriodDays} onConfigureProject={isMock?null:id=>navigate('bu-admin',null,{projectId:id})}/>},

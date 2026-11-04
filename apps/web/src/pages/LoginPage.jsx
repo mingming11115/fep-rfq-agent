@@ -92,7 +92,7 @@ export default function LoginPage({ onLogin }) {
         <section className="login-panel">
           <div className="login-panel-head">
             <h2>登录工作空间</h2>
-            <p>使用企业账号登录。演示环境可直接选择下方任一角色进入。</p>
+            <p>使用企业账号登录。环境可直接选择下方任一角色进入。</p>
           </div>
 
           {error && <Alert className="login-error" type="error" showIcon message={error} />}
@@ -124,7 +124,7 @@ export default function LoginPage({ onLogin }) {
 
           <div className="login-demo">
             <div className="login-demo-head">
-              <span>演示账号</span>
+              <span>快捷登录账号</span>
               <small>统一密码 {DEMO_PASSWORD}</small>
             </div>
             <div className="login-demo-grid">

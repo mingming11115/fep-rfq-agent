@@ -15,7 +15,7 @@ export function validateCatalog(c){
  if(!c.buId||!c.schema?.title?.trim()||!c.schema.levels.length)fail('请填写配置名称并保留至少一个层级');
  const levelIds=new Set(),nodeIds=new Set();
  for(const l of c.schema.levels){if(!l.id||levelIds.has(l.id)||!l.name?.trim())fail('层级名称不能为空，标识不能重复');levelIds.add(l.id);const ids=new Set();for(const f of l.fields||[]){if(!f.id||ids.has(f.id)||!f.name?.trim()||!fieldTypes.includes(f.type))fail('字段名称、标识或类型无效');ids.add(f.id);if(['select','multiselect'].includes(f.type)&&(!f.options?.length||new Set(f.options).size!==f.options.length||f.options.some(o=>!o.trim())))fail('选项不能为空或重复');}}
- for(const n of c.nodes){if(!n.id||nodeIds.has(n.id)||!n.name?.trim())fail('分组名称不能为空，标识不能重复');nodeIds.add(n.id);const index=c.schema.levels.findIndex(l=>l.id===n.levelId);if(index<0)fail('已有数据的层级不能移除，请停用');const parent=c.nodes.find(p=>p.id===n.parentId);if(n.parentId&&!parent)fail('上级分组不存在');if(parent&&c.schema.levels.findIndex(l=>l.id===parent.levelId)>=index)fail('上级必须位于更高层级');nodePath(c,n.id);}
+ for(const n of c.nodes){if(!n.id||nodeIds.has(n.id)||!n.name?.trim())fail('分组名称不能为空，标识不能重复');nodeIds.add(n.id);const index=c.schema.levels.findIndex(l=>l.id===n.levelId);if(index<0)fail('已有数据的层级不能移除，请停用');const parent=c.nodes.find(p=>p.id===n.parentId);if(n.parentId&&!parent)fail('上级分组不存在');nodePath(c,n.id);let depth=1,current=parent;while(current){depth++;current=c.nodes.find(p=>p.id===current.parentId);}if(depth>4)fail('Group nesting cannot exceed 4');}
  return c;
 }
 export function saveNode(c,node){

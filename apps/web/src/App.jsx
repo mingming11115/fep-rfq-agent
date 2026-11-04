@@ -60,13 +60,13 @@ function initial(){
  const demo=createDemoState();
  if(Array.isArray(saved?.projects)){
   const upgraded=upgradePrototypeState(withProjectDocuments(withProjectMembers(saved)),demo);
-  let next=upgraded;try{next=tidyStoredDemo(localStorage,upgraded);}catch(error){console.error('演示数据备份失败，保留现有数据',error);}
-  try{next=addStoredReviewScenarioDemos(localStorage,next);}catch(error){console.error('评审场景演示数据补入失败，保留现有数据',error);}
+  let next=upgraded;try{next=tidyStoredDemo(localStorage,upgraded);}catch(error){console.error('数据备份失败，保留现有数据',error);}
+  try{next=addStoredReviewScenarioDemos(localStorage,next);}catch(error){console.error('评审场景数据补入失败，保留现有数据',error);}
   return withLoginIdentity(reconcileTasks(invalidatePendingSnapshots(next)));
  }
  return withLoginIdentity(reconcileTasks(addReviewScenarioDemos(tidyDemoState(upgradePrototypeState(withProjectMembers({...demo,activeProjectId:'RFQ-001'}),demo)))));
 }
-// 登录身份优先于本机残留身份，但只消费一次：之后页面内切换演示身份不会在刷新时被覆盖。
+// 登录身份优先于本机残留身份，但只消费一次：之后页面内切换当前身份不会在刷新时被覆盖。
 function withLoginIdentity(state){
  const identity=consumeLoginIdentity();
  if(!identity?.actorId||!identity?.actorRole)return state;
@@ -89,8 +89,8 @@ export default function App(){
  const item=NAV_ITEMS.find(n=>n.key===(page==='reviews'?'response':page)),isProjectPage=item?.section==='项目';
  const pageTitle=DETAIL_PAGES.includes(page)?'RFQ 详情':state.actorRole==='BU管理员'&&page==='projects'?'BU RFQ':page==='dashboard'&&state.actorRole==='BU管理员'?'BU看板':shortLabels[page]||item?.label||'工作台';
  useEffect(()=>{try{localStorage.setItem(STORAGE,JSON.stringify(state));}catch{}},[state]);
- // BU 成员与资格以后端 MySQL 为准；拉取失败或为空时保留本地演示数据，避免页面空白。
- useEffect(()=>{let cancelled=false;(async()=>{const buIds=(stateRef.current.businessUnits||[]).map(b=>b.id);if(!buIds.length)return;try{const loaded=await Promise.all(buIds.map(id=>fetchBuMembers(id).then(rows=>[id,rows])));if(cancelled)return;update(s=>{const merged={...s.buPersonnelByBuId};for(const [buId,rows] of loaded){if(rows.length)merged[buId]=rows;}return {...s,buPersonnelByBuId:merged};});}catch(error){console.error('BU 成员加载失败，保留本地演示数据',error);}})();return()=>{cancelled=true;};},[]);
+ // BU 成员与资格以后端 MySQL 为准；拉取失败或为空时保留本地数据，避免页面空白。
+ useEffect(()=>{let cancelled=false;(async()=>{const buIds=(stateRef.current.businessUnits||[]).map(b=>b.id);if(!buIds.length)return;try{const loaded=await Promise.all(buIds.map(id=>fetchBuMembers(id).then(rows=>[id,rows])));if(cancelled)return;update(s=>{const merged={...s.buPersonnelByBuId};for(const [buId,rows] of loaded){if(rows.length)merged[buId]=rows;}return {...s,buPersonnelByBuId:merged};});}catch(error){console.error('BU 成员加载失败，保留本地数据',error);}})();return()=>{cancelled=true;};},[]);
  useEffect(()=>{const handle=()=>{const next=parseWorkRoute(location.hash);const proceed=()=>{routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;if(next.projectId&&stateRef.current.projects.some(p=>p.id===next.projectId))update(s=>({...s,activeProjectId:next.projectId}));setFocusedRequirementId(next.requirementId||null);};if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(proceed,{officeSource:officeRouteSource(stateRef.current,next)})){history.replaceState(null,'',buildWorkRoute(routeRef.current));return;}proceed();};window.addEventListener('hashchange',handle);if(routeRef.current.projectId)handle();return()=>{window.removeEventListener('hashchange',handle);timers.current.forEach(clearTimeout);};},[]);
  useEffect(()=>{document.title=`${pageTitle} · FEP RFQ`;window.scrollTo(0,0);},[page,pageTitle]);
  useEffect(()=>{if(state.actorRole==='后台管理'&&page==='dashboard')rawNavigate('admin',{},true);},[state.actorRole,page]);
@@ -103,7 +103,7 @@ export default function App(){
   try{
    for(const id of ids)for(const key of [`fep-rfq-documents:${id}`,`fep-rfq-export-history:${id}`])related[key]=localStorage.getItem(key);
    localStorage.setItem('fep-rfq-demo-before-reset',JSON.stringify({savedAt:new Date().toISOString(),state:stateRef.current,related}));
-  }catch{toast('本机演示数据备份失败，请释放浏览器存储后重试','error');return;}
+  }catch{toast('本机数据备份失败，请释放浏览器存储后重试','error');return;}
   for(const p of demo.projects){localStorage.removeItem(`fep-rfq-documents:${p.id}`);localStorage.removeItem(`fep-rfq-export-history:${p.id}`);sessionStorage.removeItem(`rfq.export.settings.${p.id}`);}
   delete window.__rfqRequestNavigation;
   update(()=>withProjectMembers({...demo,activeProjectId:'RFQ-001'}));setReset(false);rawNavigate('projects');toast('已备份原数据，保留五种RFQ状态与15条应答矩阵，并补入三套评审阶段 mock');
@@ -243,15 +243,15 @@ export default function App(){
  onNavigate={navigate} onHome={()=>navigate(state.actorRole==='后台管理'?homePage:'projects')} onSearch={()=>setGlobalSearch(true)} onHelp={()=>setHelp(true)} pending={pending}
  actorName={personName(state,state.actorId)} identity={`${state.actorId}|${state.actorRole}|${activeBuId}`}
  identities={identityOptions.map(o=>({value:`${o.id}|${o.role}|${o.buId}`,label:personName(state,o.id)+(!['后台管理','BU管理员'].includes(o.role)?` · ${o.role}`:'')+(o.role==='BU管理员'&&state.accountsById[o.id].managedBuIds.length>1?`（${state.businessUnits.find(b=>b.id===o.buId)?.name}）`:'' )}))}
- onIdentityChange={value=>{const [id,role,buId]=value.split('|');guarded(()=>{update(st=>event({...st,actorId:id,actorRole:role,activeBuId:buId},'切换演示身份',id,'本机人员模拟'));const dest=canAccessPage(role,pageRef.current)?pageRef.current:role==='后台管理'?'admin':'dashboard';rawNavigate(dest,{...(PROJECT_PAGES.includes(dest)?{projectId:project.id}:{}),taskId:undefined,action:undefined});toast(`已切换为${personName(state,id)} · ${role}`);});}}
+ onIdentityChange={value=>{const [id,role,buId]=value.split('|');guarded(()=>{update(st=>event({...st,actorId:id,actorRole:role,activeBuId:buId},'切换当前身份',id,'本机人员模拟'));const dest=canAccessPage(role,pageRef.current)?pageRef.current:role==='后台管理'?'admin':'dashboard';rawNavigate(dest,{...(PROJECT_PAGES.includes(dest)?{projectId:project.id}:{}),taskId:undefined,action:undefined});toast(`已切换为${personName(state,id)} · ${role}`);});}}
  pageTitle={pageTitle} isDetail={DETAIL_PAGES.includes(page)} body={body}
 onLogout={logout}
  contentKey={`${state.actorId}-${state.actorRole}-${activeBuId}-${DETAIL_PAGES.includes(page)?'detail':['knowledge','history'].includes(page)?'knowledge':page}-${project.id}`}
- footer={<footer className="app-footer"><span>FEP · RFQ 工作空间</span>{canPerform(state.actorRole,'project:manage')&&<UiButton className="text-link" onClick={()=>setReset(true)}><RotateCcw size={12}/>重置演示</UiButton>}</footer>}>
+ footer={<footer className="app-footer"><span>FEP · RFQ 工作空间</span>{canPerform(state.actorRole,'project:manage')&&<UiButton className="text-link" onClick={()=>setReset(true)}><RotateCcw size={12}/>重置数据</UiButton>}</footer>}>
  {!missingProject&&pageAllowed&&finalReviewOpen&&canPerform(state.actorRole,'snapshot:submit',permissionContext)&&<ExportPage {...common} onSnapshot={onSnapshot} launchOnly onClose={()=>setFinalReviewOpen(false)} onSubmitted={()=>setFinalReviewOpen(false)}/>}
  {!missingProject&&pageAllowed&&DETAIL_PAGES.includes(page)&&shouldOpenSourceUpload(route,state.actorRole)&&<SourceUploadDialog project={project} files={state.documentsByProject[project.id]||[]} onSubmit={uploadFromDetail} onClose={()=>{const next=getSourceUploadExitRoute(route,false);rawNavigate(next.page,next);}}/>}
- {help&&<Drawer title="从这里开始体验" onClose={()=>setHelp(false)}><div className="guide-intro"><span className="brand-mark">F</span><h2>一次完整的 RFQ 应答流程</h2><p>所有页面均可点击。默认案例使用真实BHEL RFQ，供应商应答与评审为演示设定。浏览器会保存你的操作进展。</p></div><div className="flow-steps">{[['projects','新建项目','填写基本信息，明确负责人并关联工艺。'],['documents','解析客户 RFQ','上传文件元数据，或载入示例，解析后自动进入工作台。'],['response','RFQ细则比对','逐条完善应答，必要时邀请评审人共同确认。'],['export','生成并导出','内部草稿随时下载；正式版需独立批准快照。']].map(([key,title,desc],i)=><button key={key} onClick={()=>{setHelp(false);navigate(key);}}><b>{i+1}</b><span><strong>{title}</strong><small>{desc}</small></span><ArrowRight size={17}/></button>)}</div><div className="inline-notice">顶部“演示身份”可切换SR、技术组成员、BU管理员和后台管理人员。此版本不连接实际 OCR、模型或企业后端。</div></Drawer>}
- {reset&&canPerform(state.actorRole,'project:manage')&&<Modal title="重置核心演示数据" onClose={()=>setReset(false)} footer={<><UiButton className="btn" onClick={()=>setReset(false)}>取消</UiButton><UiButton className="btn btn-primary" onClick={resetDemoData}>重置核心数据</UiButton></>}><p>备份当前本机演示数据，并恢复为五种状态各一条示例。知识、机型和资料维护中的独立演示记录继续保留。</p></Modal>}
+ {help&&<Drawer title="从这里开始体验" onClose={()=>setHelp(false)}><div className="guide-intro"><span className="brand-mark">F</span><h2>一次完整的 RFQ 应答流程</h2><p>所有页面均可点击。默认案例使用真实BHEL RFQ，供应商应答与评审为设定。浏览器会保存你的操作进展。</p></div><div className="flow-steps">{[['projects','新建项目','填写基本信息，明确负责人并关联工艺。'],['documents','解析客户 RFQ','上传文件元数据，或载入示例，解析后自动进入工作台。'],['response','RFQ细则比对','逐条完善应答，必要时邀请评审人共同确认。'],['export','生成并导出','内部草稿随时下载；正式版需独立批准快照。']].map(([key,title,desc],i)=><button key={key} onClick={()=>{setHelp(false);navigate(key);}}><b>{i+1}</b><span><strong>{title}</strong><small>{desc}</small></span><ArrowRight size={17}/></button>)}</div><div className="inline-notice">顶部“当前身份”可切换SR、技术组成员、BU管理员和后台管理人员。此版本不连接实际 OCR、模型或企业后端。</div></Drawer>}
+ {reset&&canPerform(state.actorRole,'project:manage')&&<Modal title="重置核心数据" onClose={()=>setReset(false)} footer={<><UiButton className="btn" onClick={()=>setReset(false)}>取消</UiButton><UiButton className="btn btn-primary" onClick={resetDemoData}>重置核心数据</UiButton></>}><p>备份当前本机数据，并恢复为五种状态各一条示例。知识、机型和资料维护中的独立记录继续保留。</p></Modal>}
  {globalSearch&&<Modal title="搜索页面和项目" onClose={()=>setGlobalSearch(false)}><UiInput autoFocus className="input" aria-label="搜索关键词" placeholder="输入页面名、项目名或项目编号" value={search} onChange={e=>setSearch(e.target.value)}/><div className="search-results">{NAV_ITEMS.map(n=>n.key==='dashboard'&&state.actorRole==='BU管理员'?{...n,label:'BU看板'}:n).filter(n=>canAccessPage(state.actorRole,n.key,permissionContext)&&n.label.includes(search)).map(n=><button key={n.key} onClick={()=>{setGlobalSearch(false);navigate(n.key);}}>{n.label}<ChevronRight size={15}/></button>)}{visibleProjects.filter(p=>`${p.name}${p.id}`.includes(search)).map(p=><button key={p.id} onClick={()=>{setGlobalSearch(false);selectProject(p.id,'response');}}>{p.id} · {p.name}<ChevronRight size={15}/></button>)}</div></Modal>}
  </RfqAppLayout>;
 }
