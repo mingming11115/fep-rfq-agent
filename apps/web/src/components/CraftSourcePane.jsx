@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Alert,Button,Dropdown,Empty,Spin} from 'antd';
 import {AimOutlined,FullscreenOutlined,FullscreenExitOutlined} from '@ant-design/icons';
-import {FileText,MoreHorizontal,PencilLine,Upload} from './icons';
+import {FileText,MoreHorizontal,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftFile,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
 import CraftResponseAdvice from './CraftResponseAdvice';
@@ -20,7 +20,6 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
   const [dirty,setDirty]=useState(false),[saving,setSaving]=useState(false),[expanded,setExpanded]=useState(false),[retry,setRetry]=useState(0);
   const [editorState,setEditorState]=useState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
-  const [editorToolsBusy,setEditorToolsBusy]=useState(false);
   const [locationNotice,setLocationNotice]=useState(null),[locationConfirmation,setLocationConfirmation]=useState(0),[locateRequest,setLocateRequest]=useState(null);
   const locationTimer=useRef(null);
   const [backup,setBackup]=useState(null),[frameEpoch,setFrameEpoch]=useState(0);
@@ -135,13 +134,6 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     setBytes(null);setMeta(null);setSaveFailed(false);setEditorState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
     setFrameEpoch(value=>value+1);setRetry(value=>value+1);
   }
-  async function toggleEditorTools(){
-    const instance=editor.current;if(!instance||editorToolsBusy)return;
-    setEditorToolsBusy(true);
-    try{await instance.setEditorTools(!editorState.editorToolsVisible);}
-    catch(cause){if(alive.current)setError(cause.message);}
-    finally{if(alive.current)setEditorToolsBusy(false);}
-  }
   async function saveFile(){
     if(!canSaveFile||saveRequest.current||pendingSaves.current)return;
     saveRequest.current=true;setRequestingSave(true);
@@ -204,7 +196,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     <link rel="stylesheet" href={`${import.meta.env.BASE_URL}word-comments.css`} precedence="craft-comments"/>
     <div className={`office-toolbar ${toolbar?'rfq-document-toolbar':''}`} role={toolbar?'toolbar':undefined} aria-label={toolbar?'文档工具栏':undefined}>
       {toolbar?<div className="office-title rfq-document-identity"><div className="rfq-document-file">{toolbar.fileSelector}</div><span className="rfq-document-version">{source.sourceVersion}</span><small className={`rfq-file-state is-${fileState}`} role="status" aria-label="文件保存状态" title={`${fileStateText} · 批阅副本 · ${accessText} · ${fileName}`}><i aria-hidden="true"/><span className="rfq-file-state-label">{fileStateText}</span></small></div>:<div className="office-title"><FileText size={17}/><div><strong>{fileName}</strong><small role="status">批阅副本 · {accessText} · 批注与协作记录联动{saving?' · 保存中':dirty?' · 有未保存修改':''}</small></div></div>}
-      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label="定位当前条款" title={locating?'正在定位当前条款':'定位当前条款'} disabled={!canLocate||locating} loading={locating} icon={<AimOutlined/>} onClick={()=>locateClause()}/>{toolbar&&meta?.fileType==='docx'&&<Button size="small" className={editorState.editorToolsVisible?'rfq-editor-tools active':'rfq-editor-tools'} aria-label="编辑工具" title={editorState.editorToolsVisible?'收起编辑工具':'展开编辑工具'} aria-pressed={Boolean(editorState.editorToolsVisible)} disabled={!editorState.ready||!editorState.editorToolsControlled||editorToolsBusy} loading={editorToolsBusy} onClick={toggleEditorTools}><PencilLine size={14}/><span className="rfq-editor-tools-label">编辑工具</span></Button>}<Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button>
+      <div className="office-actions">{toolbar?.actions}<Button size="small" aria-label="定位当前条款" title={locating?'正在定位当前条款':'定位当前条款'} disabled={!canLocate||locating} loading={locating} icon={<AimOutlined/>} onClick={()=>locateClause()}/><Button size="small" title={expanded?'还原原文件区':'放大原文件区'} aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(!expanded)}>{expanded?<FullscreenExitOutlined/>:<FullscreenOutlined/>}</Button>
       <Dropdown open={moreOpen} onOpenChange={setMoreOpen} trigger={['click']} placement="bottomRight" destroyOnHidden overlayClassName="rfq-file-menu" menu={{items:[{key:'save',disabled:!canSaveFile||saving||requestingSave,label:<span className="rfq-file-menu-save"><span>保存批阅稿</span><kbd>Ctrl/Cmd+S</kbd></span>},{type:'divider'},{key:'original',disabled:!canDownloadFile||downloading,label:'下载原件'},{key:'review',disabled:!canDownloadFile||downloading,label:'下载已保存批阅稿'}],onClick:({key})=>{setMoreOpen(false);if(key==='save')void saveFile();else void downloadFile(key);},onKeyDown:event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setMoreOpen(false);moreTrigger.current?.focus();}}}}><Button ref={moreTrigger} size="small" aria-label="更多文件操作" title="更多" aria-haspopup="menu" aria-expanded={moreOpen} icon={<MoreHorizontal size={14}/>}/></Dropdown></div>
     </div>
     {directory}

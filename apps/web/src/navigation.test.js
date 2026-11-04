@@ -1,6 +1,14 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {parseWorkRoute,buildWorkRoute,saveReturnContext,readReturnContext} from './navigation.js';
 import * as navigation from './navigation.js';
+test('RFQs keep the requested new detail page even before upload',()=>{
+ const state={requirementsByProject:{ready:[{id:'R'}]}};
+ for(const entry of ['settings','response']){
+  assert.equal(navigation.getProjectEntryPage(state,'new',entry),entry);
+  assert.equal(navigation.getProjectEntryPage(state,'ready',entry),entry);
+ }
+ assert.equal(navigation.getProjectEntryPage(state,'ready','documents'),'documents');
+});
 test('legacy routes and stable clause identities survive route round trip',()=>{
  for(const page of ['documents','response','reviews','export','settings','knowledge'])assert.equal(parseWorkRoute(`#/${page}`).page,page);
  const route={page:'response',projectId:'P',fileId:'F-2',sourceVersion:'v1',requirementId:'无编号-2',taskId:'T-2',returnKey:'export:P'};
@@ -36,3 +44,4 @@ test('cancel returns to the same project detail and successful upload consumes i
  assert.deepEqual(submitted,{page:'documents',projectId:'P',returnKey:'projects'});
  assert.equal(navigation.shouldOpenSourceUpload(submitted,'销售负责人'),false);
 });
+

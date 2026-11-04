@@ -19,9 +19,19 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentStorage {
     private static final long MAX_BYTES = 30L * 1024 * 1024;
     private final Path root;
+    private final String type, bucket;
+    private final MinioObjectStore remote;
 
-    public DocumentStorage(@Value("${rfq.storage-dir:./data/rfq-files}") String directory) {
+    public DocumentStorage(String directory) { this(directory, "local", "rfq-files", null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DocumentStorage(@Value("${rfq.storage-dir:./data/rfq-files}") String directory,
+            @Value("${rfq.storage-type:local}") String type,
+            @Value("${rfq.minio.bucket:rfq-files}") String bucket, MinioObjectStore remote) {
         root = Path.of(directory).toAbsolutePath().normalize();
+        if (!java.util.List.of("local", "minio").contains(type)) throw new IllegalArgumentException("存储类型必须为 local 或 minio");
+        if (!bucket.matches("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")) throw new IllegalArgumentException("MinIO bucket 无效");
+        this.type = type; this.bucket = bucket; this.remote = remote;
     }
     public record StoredFile(String storageRef, long size, String sha256) { }
 
@@ -52,6 +62,20 @@ public class DocumentStorage {
                 if (count == 0) throw new BusinessException(400, "请选择要上传的文件");
             }
             validate(pending, extension);
+            if ("minio".equals(type)) {
+                // A fresh key avoids overwriting an original, even on an upload retry.
+                String key = id + "/" + java.util.UUID.randomUUID() + "/source" + extension;
+                long size = Files.size(pending);
+                try {
+                    remote.put(bucket, key, pending);
+                    Files.delete(pending); Files.delete(folder);
+                }
+                catch (IOException e) {
+                    try { remote.delete(bucket, key); } catch (IOException cleanup) { e.addSuppressed(cleanup); }
+                    throw e;
+                }
+                return new StoredFile("minio:" + bucket + "/" + key, size, HexFormat.of().formatHex(digest.digest()));
+            }
             Files.move(pending, target);
             return new StoredFile(root.relativize(target).toString().replace('\\', '/'),
                 Files.size(target), HexFormat.of().formatHex(digest.digest()));
@@ -76,6 +100,7 @@ public class DocumentStorage {
         }
     }
     public Path resolve(String ref) {
+        if (ref.startsWith("minio:")) throw new IllegalArgumentException("MinIO 原件必须通过 open 读取");
         Path path = root.resolve(ref).normalize();
         if (!path.startsWith(root) || path.equals(root)) throw new IllegalArgumentException("非法的存储路径");
         return path;
@@ -105,11 +130,48 @@ public class DocumentStorage {
         } catch(java.nio.file.NoSuchFileException exception) { throw new BusinessException(404,"原件不存在"); }
     }
     public void delete(String ref) throws IOException {
+        if (ref.startsWith("minio:")) {
+            String[] location = remoteLocation(ref);
+            remote.delete(location[0], location[1]); return;
+        }
         Path file = resolve(ref);
         Files.deleteIfExists(file); Files.deleteIfExists(file.getParent());
     }
     private MessageDigest sha256() {
         try { return MessageDigest.getInstance("SHA-256"); }
         catch (Exception e) { throw new IllegalStateException("SHA-256 不可用", e); }
+    }
+
+    public record FileLease(Path path, boolean temporary) implements AutoCloseable {
+        @Override public void close() throws IOException { if (temporary) Files.deleteIfExists(path); }
+    }
+    private String[] remoteLocation(String ref) {
+        String[] location = ref.substring(6).split("/", 2);
+        if (location.length != 2 || !location[0].matches("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
+                || !location[1].matches("[A-Za-z0-9_-]+/[a-f0-9-]{36}/source\\.(docx|pdf)"))
+            throw new BusinessException(409, "MinIO 原件记录无效");
+        return location;
+    }
+    public FileLease open(String ref, Long size, String hash) throws IOException {
+        if (ref == null || !ref.startsWith("minio:")) return new FileLease(verifiedFile(ref, size, hash), false);
+        String[] location = remoteLocation(ref);
+        if (size == null || size <= 0 || size > MAX_BYTES || hash == null || !hash.matches("(?i)[0-9a-f]{64}"))
+            throw new BusinessException(409, "原件完整性信息缺失");
+        Path temp = Files.createTempFile("rfq-original-", location[1].endsWith(".pdf") ? ".pdf" : ".docx");
+        try {
+            MessageDigest digest = sha256(); long count = 0;
+            try (var input = new DigestInputStream(remote.get(location[0], location[1]), digest);
+                    var output = Files.newOutputStream(temp)) {
+                byte[] buffer = new byte[8192]; int read;
+                while ((read = input.read(buffer)) != -1) {
+                    count += read;
+                    if (count > size) throw new BusinessException(409, "原件大小校验失败");
+                    output.write(buffer, 0, read);
+                }
+            }
+            if (count != size || !hash.equalsIgnoreCase(HexFormat.of().formatHex(digest.digest())))
+                throw new BusinessException(409, "原件完整性校验失败");
+            return new FileLease(temp, true);
+        } catch (IOException | RuntimeException e) { Files.deleteIfExists(temp); throw e; }
     }
 }

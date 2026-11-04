@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
@@ -63,6 +63,6 @@ public class DocumentController {
                 .contentType(MediaType.parseMediaType(download.contentType()))
                 .contentLength(download.sizeBytes())
                 .eTag("\"" + download.sha256().toLowerCase(Locale.ROOT) + "\"")
-                .body(new FileSystemResource(download.path()));
+                .body(new ByteArrayResource(download.content()));
     }
 }

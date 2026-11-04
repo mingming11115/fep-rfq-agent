@@ -172,13 +172,15 @@ public class ParseService {
     }
 
     private List<RawBlock> readBlocks(CustomerDocument document) throws Exception {
-        Path file = storage.resolve(document.getStorageRef());
+        try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
+        Path file = lease.path();
         DocumentBlockReader reader = readers.stream()
                 .filter(candidate -> candidate.supports(document.getName(), document.getContentType()))
                 .findFirst()
                 .orElseThrow(() -> new DocumentReadException(
                         "暂不支持该文件格式：" + document.getName() + "（当前支持 DOCX / PDF）"));
         return reader.read(file);
+        }
     }
 
     private Map<Integer, String> persistBlocks(String documentId, List<RawBlock> rawBlocks) {

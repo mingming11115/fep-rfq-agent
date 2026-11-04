@@ -32,7 +32,13 @@ mybatis:
     baseline-on-migrate: true
 
 rfq:
+  storage-type: ${RFQ_STORAGE_TYPE:local}
   storage-dir: ${RFQ_STORAGE_DIR:./data/rfq-files}
+  minio:
+    endpoint: ${RFQ_MINIO_ENDPOINT:}
+    bucket: ${RFQ_MINIO_BUCKET:rfq-files}
+    access-key: ${RFQ_MINIO_ACCESS_KEY:}
+    secret-key: ${RFQ_MINIO_SECRET_KEY:}
   auth:
     jwt-secret: ${RFQ_JWT_SECRET:rfq-local-dev-secret-key-please-replace-in-production}
     token-ttl-minutes: ${RFQ_TOKEN_TTL_MINUTES:480}

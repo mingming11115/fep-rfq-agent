@@ -33,3 +33,11 @@ Spring 组件与配置扫描；MyBatis 别名和查询对象全限定名；跨�
 - 完整 Maven verify：125 项通过，0 失败/错误/跳过；使用临时容器 `rfq-mvc-test-db` 和 `/tmp` 文件目录。
 - 独立审查未发现 Critical/Important 问题；指出的历史响应模型依赖适配器问题已通过迁移条款记录修正。最后重新编译全部生产/测试代码，执行架构与历史解析定向 verify：9/9 通过并打包成功；11 个历史条款 JSON 字段一致。
 - JUnit 报告与日志保存在 `.local/backend-mvc-20261104/`，最终 JAR 为 `apps/api/target/rfq-service.jar`。临时 MySQL 容器已删除；既有运行服务与分发包未替换。
+
+## 推送时同步远程更新
+
+- 首次推送被拒绝：远程 master 新增 `e5d7a9e`（原件上传接线及 MinIO 存储）。保留远程全部功能并合并，新增 MinIO 适配器和测试统一迁入 `storage` 包。
+- 下载保持远程实现的校验字节与临时文件租约清理语义：Service 读取校验后的内容并关闭租约，Controller 组装 `ByteArrayResource` 响应；响应元数据与 Range/HEAD 协议保持一致。
+- 合并审查未发现问题；前端文件与远程 `e5d7a9e` 完全一致。
+- 首次合并回归在完成 126 项后测试 JVM 被系统终止（退出码 137，无断言失败）。随后使用 Maven 256 MiB、测试 JVM 512 MiB、每个测试类独立 JVM 的方式，在干净临时数据库中重跑完整 `verify`：132 项通过，0 失败/错误/跳过，打包成功。
+- 合并后的 JUnit 报告及日志保存在 `.local/backend-mvc-20261104/merged-surefire-reports/` 与 `merged-verify.log`；最终 JAR 已更新至 `apps/api/target/rfq-service.jar`。

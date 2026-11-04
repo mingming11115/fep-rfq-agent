@@ -15,7 +15,7 @@ import {migrateFepDemoCatalog} from './fepDemoCatalog';
 import {canPerform,assertPermission,assertRequirementPatch,canAccessPage,getRoleNavigation} from './permissions';
 import {reconcileTasks,selectMyTasks,applyTaskAction,assertBusinessAction,getTaskContextError,isTaskPending,startTaskForObject,transferBusinessTask,confirmProjectRequirement} from './taskDomain';
 import {getProjectSummary,selectAccessibleState} from './projectSelectors';
-import {parseWorkRoute,buildWorkRoute,PROJECT_PAGES,ADMIN_PAGES,shouldOpenSourceUpload,getSourceUploadExitRoute} from './navigation';
+import {parseWorkRoute,buildWorkRoute,getProjectEntryPage,PROJECT_PAGES,ADMIN_PAGES,shouldOpenSourceUpload,getSourceUploadExitRoute} from './navigation';
 import {removeProject,restoreProject,addProjectSources,handoverProject,createProjectReviewSettings,createProjectPersonnel,updateProjectSettings} from './projectDomain';
 import {readRfqCatalog,resolveRfqProcessBinding} from './rfqProcessBinding';
 import SourceUploadDialog from './components/SourceUploadDialog';
@@ -111,7 +111,7 @@ export default function App(){
  function rawNavigate(key,details={},replace=false){const next={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...details};routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;setFocusedRequirementId(next.requirementId||null);history[replace?'replaceState':'pushState'](null,'',buildWorkRoute(next));}
  function guarded(action,options){if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(action,options))return false;action();return true;}
  function navigate(key,requirementId,details={}){const current=routeRef.current;const context=PROJECT_PAGES.includes(key)&&current.projectId===stateRef.current.activeProjectId?{taskId:current.taskId,action:current.action,returnKey:current.returnKey}:{};const target={page:validPage(key),...(PROJECT_PAGES.includes(key)?{projectId:stateRef.current.activeProjectId||project.id}:{}),...context,...(requirementId?{requirementId}:{}),...details};return guarded(()=>rawNavigate(key,target),{officeSource:officeRouteSource(stateRef.current,target)});}
- function selectProject(id,destination='response',details={}){guarded(()=>{update(s=>({...s,activeProjectId:id}));rawNavigate(destination,{projectId:id,returnKey:'projects',...details});});}
+ function selectProject(id,destination='response',details={}){guarded(()=>{update(s=>({...s,activeProjectId:id}));const entry=getProjectEntryPage(stateRef.current,id,destination);const needsUpload=DETAIL_PAGES.includes(entry)&&!stateRef.current.documentsByProject?.[id]?.length&&canPerform(stateRef.current.actorRole,'source:manage');rawNavigate(entry,{projectId:id,returnKey:'projects',...(needsUpload?{upload:'true'}:{}),...details});});}
  function taskAction(id,action){const s=stateRef.current,t=s.tasksById[id];try{if(action.type==='transfer'){update(st=>event(transferBusinessTask(st,{taskId:id,to:action.to,reason:action.reason}),'转办任务',id,action.reason));return true;}const next=applyTaskAction(t,{...action,actorId:s.actorId,objectVersion:t?.objectVersion,at:new Date().toISOString()},s);update(s=>event({...s,tasksById:{...s.tasksById,[id]:next}},action.type==='transfer'?'转办任务':'接手任务',id,action.reason||''));return true;}catch(e){toast(e.message,'error');return false;}}
  function openTask(task,mode='view',returnKey='tasks'){guarded(()=>{const t=stateRef.current.tasksById[task.id];if(!t||!canAccessProject(stateRef.current,stateRef.current.actorId,t.projectId)){toast('任务不存在，请刷新后查看','error');return;}if(mode==='start'&&!taskAction(t.id,{type:'start'}))return;update(s=>({...s,activeProjectId:t.projectId}));rawNavigate(t.objectType==='requirement'||t.kind==='response-revise'?'response':t.objectType==='review'?'reviews':'export',{projectId:t.projectId,requirementId:t.requirementId,reviewId:t.reviewId,snapshotId:t.snapshotId,taskId:t.id,action:mode,returnKey});});}
  function openProject(id,mode='view',details={}){if(mode==='continue'){const task=selectMyTasks(stateRef.current,{actorId:stateRef.current.actorId,projectId:id})[0];if(task){openTask(task,'start','projects');return;}}selectProject(id,['documents','settings','versions'].includes(mode)?mode:mode==='view'?'settings':'response',details);}
@@ -120,8 +120,8 @@ export default function App(){
  function uploadFromDetail(incoming){
   if(!allow('source:manage'))return false;
   const pid=routeRef.current.projectId||stateRef.current.activeProjectId;
-  try{update(s=>event(addProjectSources(s,pid,incoming),'上传资料元数据',pid,`${incoming.length} 个文件已进入模拟解析队列`));}catch(error){toast(error.message,'error');return false;}
-  const next=getSourceUploadExitRoute(routeRef.current,true);rawNavigate(next.page,next);toast('文件已进入模拟解析队列');return true;
+  try{update(s=>event(addProjectSources(s,pid,incoming),'上传资料元数据',pid,`${incoming.length} 个文件已上传，等待后端解析`));}catch(error){toast(error.message,'error');return false;}
+  const next={...getSourceUploadExitRoute(routeRef.current,true),page:'documents',projectId:pid};rawNavigate(next.page,next);toast('原件已上传，进入解析页面');return true;
  }
  function transferProject(id,to,reason){try{update(st=>event(handoverProject(st,{projectId:id,to,reason}),'移交项目负责人',id,reason));return true;}catch(e){toast(e.message,'error');return false;}}
  function analysisRun(run){update(s=>({...s,analysisRuns:appendAnalysisRun(s.analysisRuns,{...run,projectId:project.id})}));}
@@ -255,3 +255,5 @@ onLogout={logout}
  {globalSearch&&<Modal title="搜索页面和项目" onClose={()=>setGlobalSearch(false)}><UiInput autoFocus className="input" aria-label="搜索关键词" placeholder="输入页面名、项目名或项目编号" value={search} onChange={e=>setSearch(e.target.value)}/><div className="search-results">{NAV_ITEMS.map(n=>n.key==='dashboard'&&state.actorRole==='BU管理员'?{...n,label:'BU看板'}:n).filter(n=>canAccessPage(state.actorRole,n.key,permissionContext)&&n.label.includes(search)).map(n=><button key={n.key} onClick={()=>{setGlobalSearch(false);navigate(n.key);}}>{n.label}<ChevronRight size={15}/></button>)}{visibleProjects.filter(p=>`${p.name}${p.id}`.includes(search)).map(p=><button key={p.id} onClick={()=>{setGlobalSearch(false);selectProject(p.id,'response');}}>{p.id} · {p.name}<ChevronRight size={15}/></button>)}</div></Modal>}
  </RfqAppLayout>;
 }
+
+

@@ -140,9 +140,12 @@ public class DocumentService {
     public DocumentDownload download(CurrentUser user, String documentId) throws IOException {
         CustomerDocument document = documents.findById(documentId).orElseThrow(() -> new BusinessException(404, "文档不存在"));
         access.requireProject(user, requireProject(document.getProjectId()));
-        var path = storage.verifiedFile(document.getStorageRef(),document.getSizeBytes(),document.getSha256());
+        byte[] original;
+        try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
+            original = java.nio.file.Files.readAllBytes(lease.path());
+        }
         String type = canonicalType(document.getName());
-        return new DocumentDownload(path, document.getName(), type, document.getSizeBytes(), document.getSha256());
+        return new DocumentDownload(original, document.getName(), type, document.getSizeBytes(), document.getSha256());
     }
 
     private void cleanOnRollback(DocumentStorage.StoredFile file) {

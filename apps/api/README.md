@@ -165,3 +165,20 @@ ONLYOFFICE 使用 `.env.example` 中的 `ONLYOFFICE_*` 配置和 `docker compose
 `POST /api/rfq/history/parse` 接收 multipart `file`、可选 `responseFile`、必填 `buId`。请求使用现有 JWT，服务端校验所属 BU，支持该 BU 的维护角色。文件支持真实 DOCX/PDF、每个不超过 30 MiB，复用原件内容校验及 OCR 读取器；临时文件在读取结束后清理。
 
 响应包含 `metadata`、`clauses`、`sources`、`issues`。条款的 `answer` 合并原文件的答复与结论列，不生成结论字段。配套答复只按唯一编号关联；重复或未关联内容通过来源与异常返回。PDF 历史入口保留逐行唯一锚点，项目 RFQ 的原读取行为保持不变。该接口只做解析，知识草稿／审核仍由当前前端原型保存，不意味着已提供服务器知识库。
+# RFQ 原件存储切换
+
+默认 `RFQ_STORAGE_TYPE=local`，原件存储在 `RFQ_STORAGE_DIR`（默认 `./data/rfq-files`）。使用 MinIO 时设置以下环境变量后重启后端：
+
+```dotenv
+RFQ_STORAGE_TYPE=minio
+RFQ_MINIO_ENDPOINT=http://localhost:9000
+RFQ_MINIO_BUCKET=rfq-files
+RFQ_MINIO_ACCESS_KEY=your-access-key
+RFQ_MINIO_SECRET_KEY=your-secret-key
+```
+
+需预先创建私有 bucket，账号具备对应对象的读、写、删除权限。密钥通过部署环境注入，不提交到仓库。使用 MinIO Java SDK：[官方接口说明](https://docs.min.io/aistor/developers/sdk/java/api/)。
+
+开关只决定新 RFQ 原件的写入位置。旧本地路径保持不变，MinIO 原件记录 `minio:bucket/key`，下载、解析、回滚清理按记录路由；切回 local 后仍需保留 MinIO 连接配置以读取旧 MinIO 文件。没有自动迁移，也不会在 MinIO 出错时静默回退到本地。切换 bucket 后旧文件仍读取记录中的 bucket；更换 endpoint 时需确保旧对象在新 endpoint 可用。
+
+MinIO 上传先在本地验证格式及大小，读取时通过临时文件验证 SHA-256 和大小，解析结束即清理。后端仍需本地临时磁盘空间。本开关不涉及独立的 OnlyOffice 存储。

@@ -16,7 +16,7 @@ export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, 
     { title: '截止日期', dataIndex: 'deadline', valueType: 'date', width: 130, sorter: (a, b) => String(a.deadline || '').localeCompare(String(b.deadline || '')) },
     { title: '操作', key: 'actions', width: 220, fixed: 'right', render: (_, p) => <Space size={12}>
       <Button type="link" onClick={() => onOpenProject(p.id, isBuAdmin ? 'response' : 'continue')}>{isBuAdmin ? '查看RFQ' : '继续处理'}</Button>
-      <Button type="link" title={p.groupPath || (p.modelId ? [p.modelName, p.modelRevision].filter(Boolean).join(' · ') : '该 RFQ 尚未绑定目录')} onClick={() => onOpenModel(p)}>查看关联目录</Button>
+      <Button type="link" title={p.groupPath || (p.modelId ? [p.modelName, p.modelRevision].filter(Boolean).join(' · ') : '该 RFQ 尚未绑定目录')} onClick={() => onOpenModel(p)}>查看关联组</Button>
       <Dropdown trigger={['click']} menu={{ items: [
         { key:'settings',label:isBuAdmin?'项目配置':'编辑项目',onClick:()=>onOpenProject(p.id,'settings') },
         ...(canManage && p.ownerId===appState.actorId ? [
