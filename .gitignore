@@ -1,13 +1,23 @@
-# Local runtime dependency link for report generation.
-/outputs/.rfq-progress-build/node_modules
+# Dependencies and generated build outputs
+**/node_modules/
+**/dist/
+**/target/
+**/__pycache__/
+/apps/web/public/craft-editors/
 
-# Recoverable local snapshots of old worktree changes.
-/outputs/worktree-archive-*/
+# Local runtime files, editor settings and credentials
+/.local/
+**/.idea/
+**/.vscode/
+*.iml
+*.log
+.DS_Store
+**/.DS_Store
+**/.env
+**/.env.*
+!**/.env.example
+/apps/api/data/
 
-# Local development service logs.
-/backend-dev*.log
-/rfq-react-prototype/frontend-dev*.log
-
-# Browser diagnostic dependencies and generated screenshots.
-/.workbuddy/browser-test/node_modules/
-/.workbuddy/browser-test/*.png
+# Temporary Office lock files and browser artifacts
+~$*
+/tests/browser/*.png

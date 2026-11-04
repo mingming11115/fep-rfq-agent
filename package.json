@@ -1,0 +1,16 @@
+{
+  "name": "fep-rfq-agent",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "dev:api": "node scripts/api.mjs dev",
+    "test": "node scripts/check-layout.mjs && npm run test:tools && npm run test:web && npm run test:editors",
+    "test:web": "node --test --test-concurrency=1 apps/web/src/*.test.js",
+    "test:editors": "node --test packages/craft-editors/tests/*.test.mjs",
+    "test:api": "node scripts/api.mjs test",
+    "build": "npm --prefix apps/web run build",
+    "build:api": "node scripts/api.mjs build",
+    "check:layout": "node scripts/check-layout.mjs",
+    "test:tools": "node --test scripts/*.test.mjs"
+  }
+}

@@ -28,7 +28,7 @@
 
 ### Task 1: Runnable backend and error contracts
 
-**Files:** `rfq-service/pom.xml`, `src/main/java/com/naura/rfq/**`, `src/main/resources/application*.yml`, `src/test/java/com/naura/rfq/**`.
+**Files:** `apps/api/pom.xml`, `src/main/java/com/naura/rfq/**`, `src/main/resources/application*.yml`, `src/test/java/com/naura/rfq/**`.
 
 **Interfaces:** Produces `RfqServiceApplication`, `ApiResponse<T>`, `BusinessException`, and `GlobalExceptionHandler`; HTTP health at `/actuator/health` and info at `/actuator/info`.
 
@@ -38,7 +38,7 @@
 
 ### Task 2: Independent deployment and documentation
 
-**Files:** `rfq-service/Dockerfile`, `compose.yaml`, `.env.example`, `.gitignore`, `.dockerignore`, `README.md`.
+**Files:** `apps/api/Dockerfile`, `compose.yaml`, `.env.example`, `.gitignore`, `.dockerignore`, `README.md`.
 
 **Interfaces:** Consumes a Maven build producing `target/rfq-service.jar`; exposes container port `48081` and supports `SPRING_PROFILES_ACTIVE` and `JAVA_TOOL_OPTIONS`.
 

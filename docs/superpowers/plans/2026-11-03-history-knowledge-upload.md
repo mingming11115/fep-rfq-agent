@@ -28,7 +28,7 @@
 
 ### Task 1: 后端真实文件抽取
 
-**Files:** Create `rfq-service/src/main/java/com/naura/rfq/history/HistoryExtractor.java`, `HistoryParseController.java`; test `rfq-service/src/test/java/com/naura/rfq/history/HistoryParsingTest.java`.
+**Files:** Create `apps/api/src/main/java/com/naura/rfq/history/HistoryExtractor.java`, `HistoryParseController.java`; test `apps/api/src/test/java/com/naura/rfq/history/HistoryParsingTest.java`.
 
 **Interfaces:** POST `/api/rfq/history/parse`, multipart `file`, optional `responseFile`, `buId`; result `{metadata, clauses, sources, issues}`. Clause fields `{key,clauseNo,section,requirement,answer,conditions,evidence,feedback,requirementAnchor,answerAnchor,issues}`; sources `{name,blocks}`. Anchors prefixed `main:` or `answer:`.
 
@@ -39,7 +39,7 @@
 
 ### Task 2: 文档与条款状态
 
-**Files:** Create `rfq-react-prototype/src/historyKnowledge.js`, `historyKnowledge.test.js`, `historyFiles.js`, `historyClient.js`.
+**Files:** Create `apps/web/src/historyKnowledge.js`, `historyKnowledge.test.js`, `historyFiles.js`, `historyClient.js`.
 
 **Interfaces:** `mergeHistoryParse(document,result,actor)` preserves source-key identity and edited fields; `historyClauseIssues(clause)`, `filterHistoryDocuments(documents,clauses,query)`, `transitionHistoryClauses(clauses,ids,action,actor)` validate whole-batch permission before transitions. `historyFiles` stores source blobs by BU + document ID. Client starts async parse jobs independent from page mount and writes parse results into existing BU knowledge storage.
 
@@ -50,7 +50,7 @@
 
 ### Task 3: 历史 RFQ 页面
 
-**Files:** Create `rfq-react-prototype/src/pages/HistoryKnowledgePage.jsx`, `history-knowledge.css`, `historyKnowledgeUi.test.js`; modify `App.jsx`, `ReferencePages.jsx` only for integration and legacy entry compatibility.
+**Files:** Create `apps/web/src/pages/HistoryKnowledgePage.jsx`, `history-knowledge.css`, `historyKnowledgeUi.test.js`; modify `App.jsx`, `ReferencePages.jsx` only for integration and legacy entry compatibility.
 
 **Interfaces:** `HistoryKnowledgePage` takes existing common props and renders document table → detail; upload creates async job, detail handles metadata, clauses, selection, review and source panel. Existing `KnowledgePage` routes history type to this page so legacy callers remain supported.
 

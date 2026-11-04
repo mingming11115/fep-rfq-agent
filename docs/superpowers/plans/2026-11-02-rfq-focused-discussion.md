@@ -32,11 +32,11 @@
 **Interfaces:** Existing page/annotation props and project record callbacks remain compatible. Native disclosure roots are stable per project, and each summary includes its group label and count.
 
 - [x] Write and run a real ResponsePage regression covering default current discussion without selecting a comment, source scoping, independent disclosure state, project record refresh, cross-clause navigation and zero business writes.
-  Run: `node --test src/focusedDiscussion.test.js` in rfq-react-prototype.
+  Run: `node --test src/focusedDiscussion.test.js` in apps/web.
   Expected: FAIL because default current discussion is absent and project records are always expanded.
 - [x] Implement unconditional current discussion when no unlinked thread is selected; add independent, accessible record disclosures and small responsive styles.
 - [x] Run focused/full frontend tests and production build; verify default, expanded, keyboard and narrow views in the real browser, then independently review. Fix important review findings with regression coverage.
-  Run: `npm test`, `npm run build` in rfq-react-prototype.
+  Run: `npm test`, `npm run build` in apps/web.
   Expected: all pass; existing bundle-size notice may remain.
 - [x] Record checks and evidence; independent review allows merge with one deferred minor (historical-route direct coverage).
 

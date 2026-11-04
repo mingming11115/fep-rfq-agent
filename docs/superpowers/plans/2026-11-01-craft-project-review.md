@@ -24,7 +24,7 @@
 
 ### Task 1: 文件保存接口
 
-Files: `rfq-service/src/main/java/com/naura/rfq/office/CraftDocumentController.java`,
+Files: `apps/api/src/main/java/com/naura/rfq/office/CraftDocumentController.java`,
 `OfficeDocumentService.java`, `src/test/java/com/naura/rfq/office/CraftDocumentIntegrationTest.java`。
 Interfaces: POST `/api/craft/documents` multipart `file`, optional `review`, source 三元组；
 GET metadata/download；PUT `/documents/{id}/review` binary + `If-Match`；使用 `X-Craft-Access`。
@@ -48,7 +48,7 @@ snapshot `source:{selectedId,status}`。未定位不随意锚定，返回可解�
 
 ### Task 3: 业务批注协调器
 
-Files: `rfq-react-prototype/src/craftCommentSync.js`, `.test.js`。
+Files: `apps/web/src/craftCommentSync.js`, `.test.js`。
 Interfaces: 纯函数读取来源、条款、业务 comments、native snapshot，输出业务 patch 与原生操作；
 业务记录新增 `nativeRef:{documentId,key,engine,revision,state}`，回复分别保留 native key；
 保留 `createdBy`,`mentionedUserIds`,`linkedIssues`。未关联不得创建业务记录。

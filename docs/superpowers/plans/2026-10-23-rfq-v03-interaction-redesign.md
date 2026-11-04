@@ -10,7 +10,7 @@
 
 **Tech Stack:** React 19、Vite 7、lucide-react、Node 内置测试；浏览器验收使用当前会话可用的浏览器工具。
 
-**Spec:** [交互设计 V0.3](../../../FEP销售RFQ提效Agent_交互设计_v0.3.md)，包括第 16 节 WF-00～WF-19 草图和 IX-01～IX-18 验收场景。
+**Spec:** [交互设计 V0.3](../../product/FEP销售RFQ提效Agent_交互设计_v0.3.md)，包括第 16 节 WF-00～WF-19 草图和 IX-01～IX-18 验收场景。
 
 ## 实施范围
 
@@ -43,7 +43,7 @@
 
 ## 基线和验收方式
 
-2026-10-23 已运行 `npm test`：28 项通过，0 失败。现有测试位于 `rfq-react-prototype/src/domain.test.js`。后续新增测试分别放入对应 `*.test.js`，测试命令改为 `node --test src/*.test.js`，确保新旧测试同时执行。
+2026-10-23 已运行 `npm test`：28 项通过，0 失败。现有测试位于 `apps/web/src/domain.test.js`。后续新增测试分别放入对应 `*.test.js`，测试命令改为 `node --test src/*.test.js`，确保新旧测试同时执行。
 
 纯逻辑使用 Node 测试，页面布局与实际点击使用浏览器验收。每个任务先写最小失败测试，再实施、运行对应测试并检查改动。代码提交只包含本任务文件；不依赖清空 localStorage 验证。
 
@@ -54,11 +54,11 @@
 ### Task 1 数据升级和演示身份
 
 **Files:**
-- Create: `rfq-react-prototype/src/stateMigration.js`
-- Test: `rfq-react-prototype/src/stateMigration.test.js`
-- Modify: `rfq-react-prototype/src/App.jsx` 的 `initial`、`update` 及身份切换。
-- Modify: `rfq-react-prototype/src/data.js` 的演示成员数据。
-- Modify: `rfq-react-prototype/package.json` 的测试命令。
+- Create: `apps/web/src/stateMigration.js`
+- Test: `apps/web/src/stateMigration.test.js`
+- Modify: `apps/web/src/App.jsx` 的 `initial`、`update` 及身份切换。
+- Modify: `apps/web/src/data.js` 的演示成员数据。
+- Modify: `apps/web/package.json` 的测试命令。
 
 **Interfaces:**
 - Produces: `upgradePrototypeState(previous, demo)`，返回升级后的应用状态，包含 `schemaVersion: 2`、`actorId`、`tasksById`、`analysisRuns` 和 `navigationContext`，保留全部既有字段。
@@ -75,11 +75,11 @@
 ### Task 2 统一任务和项目摘要
 
 **Files:**
-- Create: `rfq-react-prototype/src/taskDomain.js`
-- Create: `rfq-react-prototype/src/projectSelectors.js`
-- Test: `rfq-react-prototype/src/taskDomain.test.js`
-- Test: `rfq-react-prototype/src/projectSelectors.test.js`
-- Modify: `rfq-react-prototype/src/App.jsx` 的条款、评审和快照动作接入。
+- Create: `apps/web/src/taskDomain.js`
+- Create: `apps/web/src/projectSelectors.js`
+- Test: `apps/web/src/taskDomain.test.js`
+- Test: `apps/web/src/projectSelectors.test.js`
+- Modify: `apps/web/src/App.jsx` 的条款、评审和快照动作接入。
 
 **Interfaces:**
 - Produces: `reconcileTasks(state, { at })`，保留历史任务并按业务对象、版本、节点、轮次生成或更新有效任务，返回应用状态。
@@ -111,13 +111,13 @@ assert.throws(() => applyTaskAction(task, { type: 'confirm', actorId: 'demo-tech
 ### Task 3 五入口外壳和导航上下文
 
 **Files:**
-- Create: `rfq-react-prototype/src/navigation.js`
-- Create: `rfq-react-prototype/src/components/ProjectWorkspace.jsx`
-- Create: `rfq-react-prototype/src/components/AdminWorkspace.jsx`
-- Test: `rfq-react-prototype/src/navigation.test.js`
-- Modify: `rfq-react-prototype/src/App.jsx`
-- Modify: `rfq-react-prototype/src/data.js`
-- Modify: `rfq-react-prototype/src/styles.css`
+- Create: `apps/web/src/navigation.js`
+- Create: `apps/web/src/components/ProjectWorkspace.jsx`
+- Create: `apps/web/src/components/AdminWorkspace.jsx`
+- Test: `apps/web/src/navigation.test.js`
+- Modify: `apps/web/src/App.jsx`
+- Modify: `apps/web/src/data.js`
+- Modify: `apps/web/src/styles.css`
 
 **Interfaces:**
 - Produces: `parseWorkRoute(hash)`、`buildWorkRoute(route)`，route 字段为 `page, projectId, fileId, sourceVersion, requirementId, reviewId, snapshotId, taskId, returnKey`。
@@ -146,14 +146,14 @@ assert.equal(parseWorkRoute('#/documents').page, 'documents');
 ### Task 4 工作台 任务中心 我的 RFQ 和分析记录
 
 **Files:**
-- Create: `rfq-react-prototype/src/pages/TasksPage.jsx`
-- Create: `rfq-react-prototype/src/pages/AnalysisRecordsPage.jsx`
-- Create: `rfq-react-prototype/src/analysisDomain.js`
-- Test: `rfq-react-prototype/src/analysisDomain.test.js`
-- Modify: `rfq-react-prototype/src/pages/DashboardPage.jsx`
-- Modify: `rfq-react-prototype/src/pages/ProjectsPage.jsx`
-- Modify: `rfq-react-prototype/src/pages/WorkflowPages.jsx` 的模拟解析事件。
-- Create: `rfq-react-prototype/src/pages/workspace-pages.css`
+- Create: `apps/web/src/pages/TasksPage.jsx`
+- Create: `apps/web/src/pages/AnalysisRecordsPage.jsx`
+- Create: `apps/web/src/analysisDomain.js`
+- Test: `apps/web/src/analysisDomain.test.js`
+- Modify: `apps/web/src/pages/DashboardPage.jsx`
+- Modify: `apps/web/src/pages/ProjectsPage.jsx`
+- Modify: `apps/web/src/pages/WorkflowPages.jsx` 的模拟解析事件。
+- Create: `apps/web/src/pages/workspace-pages.css`
 
 **Interfaces:**
 - `TasksPage` 消费 `selectMyTasks`，通过 `onTaskAction(taskId, action)` 开始办理或转办，通过 `onOpenTask(taskId, mode)` 查看或办理。
@@ -184,14 +184,14 @@ assert.equal(next.find(run => run.id === 'RUN-2').status, '完成');
 ### Task 5 原文主视图和文件版本锚点
 
 **Files:**
-- Create: `rfq-react-prototype/src/documentAnchors.js`
-- Create: `rfq-react-prototype/src/components/SourceDocumentPane.jsx`
-- Create: `rfq-react-prototype/src/components/RequirementOutline.jsx`
-- Test: `rfq-react-prototype/src/documentAnchors.test.js`
-- Modify: `rfq-react-prototype/src/pages/ResponsePage.jsx`
-- Modify: `rfq-react-prototype/src/components/DocumentWorkbench.jsx`
-- Modify: `rfq-react-prototype/src/components/document-workbench.css`
-- Modify: `rfq-react-prototype/src/pages/response-page.css`
+- Create: `apps/web/src/documentAnchors.js`
+- Create: `apps/web/src/components/SourceDocumentPane.jsx`
+- Create: `apps/web/src/components/RequirementOutline.jsx`
+- Test: `apps/web/src/documentAnchors.test.js`
+- Modify: `apps/web/src/pages/ResponsePage.jsx`
+- Modify: `apps/web/src/components/DocumentWorkbench.jsx`
+- Modify: `apps/web/src/components/document-workbench.css`
+- Modify: `apps/web/src/pages/response-page.css`
 
 **Interfaces:**
 - Produces: `makeSourceAnchor(row)` 返回 `{ projectId, fileId, sourceVersion, requirementId, locator }`。
@@ -218,15 +218,15 @@ assert.equal(resolveSourceAnchor([{ ...rows[1], sourceVersion: 'v2' }], makeSour
 ### Task 6 批注 评审和澄清闭环
 
 **Files:**
-- Create: `rfq-react-prototype/src/commentDomain.js`
-- Create: `rfq-react-prototype/src/reviewDomain.js`
-- Create: `rfq-react-prototype/src/components/ClarificationPanel.jsx`
-- Test: `rfq-react-prototype/src/commentDomain.test.js`
-- Test: `rfq-react-prototype/src/reviewDomain.test.js`
-- Modify: `rfq-react-prototype/src/components/WordCommentsPrototype.jsx`
-- Modify: `rfq-react-prototype/public/word-comments.html`
-- Modify: `rfq-react-prototype/src/pages/WorkflowPages.jsx` 的 ReviewsPage。
-- Modify: `rfq-react-prototype/src/pages/ResponsePage.jsx`
+- Create: `apps/web/src/commentDomain.js`
+- Create: `apps/web/src/reviewDomain.js`
+- Create: `apps/web/src/components/ClarificationPanel.jsx`
+- Test: `apps/web/src/commentDomain.test.js`
+- Test: `apps/web/src/reviewDomain.test.js`
+- Modify: `apps/web/src/components/WordCommentsPrototype.jsx`
+- Modify: `apps/web/public/word-comments.html`
+- Modify: `apps/web/src/pages/WorkflowPages.jsx` 的 ReviewsPage。
+- Modify: `apps/web/src/pages/ResponsePage.jsx`
 
 **Interfaces:**
 - Produces: `promoteCommentToIssue(comment, { kind, actor, at })`，kind 为 `review` 或 `clarification`；返回关联提案，重复转换复用已有事项标识。
@@ -259,13 +259,13 @@ assert.throws(() => applyReviewProposal({ ...requirement, version: 3 }, proposal
 ### Task 7 变更复核 冻结快照和精确返回
 
 **Files:**
-- Create: `rfq-react-prototype/src/snapshotDomain.js`
-- Test: `rfq-react-prototype/src/snapshotDomain.test.js`
-- Modify: `rfq-react-prototype/src/domain.js`
-- Modify: `rfq-react-prototype/src/rfqWorkflow.js`
-- Modify: `rfq-react-prototype/src/components/RfqRevisionPanel.jsx`
-- Modify: `rfq-react-prototype/src/pages/WorkflowPages.jsx` 的 ExportPage。
-- Modify: `rfq-react-prototype/src/pages/ManagementPages.jsx` 的版本与设置入口。
+- Create: `apps/web/src/snapshotDomain.js`
+- Test: `apps/web/src/snapshotDomain.test.js`
+- Modify: `apps/web/src/domain.js`
+- Modify: `apps/web/src/rfqWorkflow.js`
+- Modify: `apps/web/src/components/RfqRevisionPanel.jsx`
+- Modify: `apps/web/src/pages/WorkflowPages.jsx` 的 ExportPage。
+- Modify: `apps/web/src/pages/ManagementPages.jsx` 的版本与设置入口。
 
 **Interfaces:**
 - Produces: `snapshotFingerprint({ rows, sourceVersions, configuration, template, mapping, attachments })`，稳定序列化全部批准范围，不仅比较答复正文。
@@ -293,9 +293,9 @@ assert.notEqual(snapshotFingerprint(base), snapshotFingerprint({ ...base, mappin
 ### Task 8 全流程验收和交付
 
 **Files:**
-- Modify: `rfq-react-prototype/README.md`
-- Modify: `rfq-react-prototype/启动说明.md`
-- Modify: `rfq-react-prototype/演示汇报.md`
+- Modify: `apps/web/README.md`
+- Modify: `apps/web/启动说明.md`
+- Modify: `apps/web/演示汇报.md`
 - Create: `docs/RFQ交互改造验证_2026-10-23.md`
 - Create: `docs/prototype-updates/2026-10-23-v03-*.png`，仅保存实际页面截图。
 

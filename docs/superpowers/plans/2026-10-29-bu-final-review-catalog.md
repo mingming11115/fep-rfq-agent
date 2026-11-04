@@ -29,7 +29,7 @@
 
 ### Task 1: Final-review configuration and BU naming
 
-**Files:** `personnelDomain.js`, `projectReviewSettings.test.js`, `pages/BuAdminPage.jsx`, `permissions.js`, `pages/BuDashboardPage.jsx` under `rfq-react-prototype/src`.
+**Files:** `personnelDomain.js`, `projectReviewSettings.test.js`, `pages/BuAdminPage.jsx`, `permissions.js`, `pages/BuDashboardPage.jsx` under `apps/web/src`.
 
 - [x] Add tests for changing a project's mode with its reviewer configuration, validation, isolation, and snapshot invalidation; run RED.
 - [x] Extend `configureProjectFinalReviewers` with optional `technicalMode`; retain the saved mode when omitted and increase its version only when changed.
@@ -38,7 +38,7 @@
 
 ### Task 2: Catalog editing and deletion
 
-**Files:** `modelProcessDomain.js`, `modelProcessDomain.test.js`, `rfqProcessBinding.js`, `rfqProcessBinding.test.js`, `components/CapabilityTree.jsx`, `components/capability-tree.css`, `pages/ReferencePages.jsx` under `rfq-react-prototype/src`.
+**Files:** `modelProcessDomain.js`, `modelProcessDomain.test.js`, `rfqProcessBinding.js`, `rfqProcessBinding.test.js`, `components/CapabilityTree.jsx`, `components/capability-tree.css`, `pages/ReferencePages.jsx` under `apps/web/src`.
 
 - [x] Add tests for model/process cascade deletion, single capability-version deletion, BU isolation, unauthorized deletion, fresh storage reads, empty catalogs, and write rollback; run RED.
 - [x] Implement `removeCatalogNode(catalog, {context,kind,id,version})` and `deleteRfqCatalogRecord(storage, context, kind, record)`; persist all affected records while preserving foreign BU entries.

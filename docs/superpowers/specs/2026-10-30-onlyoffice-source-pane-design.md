@@ -10,7 +10,7 @@
 
 ## 现状与约束
 
-- `rfq-react-prototype` 使用 React 19、Vite、Ant Design，业务状态及演示身份保存在浏览器。详情由 `ResponsePage` 的左右两栏组成，左侧 `SourceDocumentPane` 展示条款摘录、应用批注及模拟 Word 排版。
+- `apps/web` 使用 React 19、Vite、Ant Design，业务状态及演示身份保存在浏览器。详情由 `ResponsePage` 的左右两栏组成，左侧 `SourceDocumentPane` 展示条款摘录、应用批注及模拟 Word 排版。
 - `SourceUploadDialog` 通过 `uploadMetadata` 丢弃文件二进制；当前上传、解析均是模拟流程。历史元数据不能恢复出原始 Word。
 - `rfq-service` 为 Spring Boot 3.5.9 / Java 17 独立后端，目前只有框架与健康接口，没有文件存储、业务账号或认证。
 - 本机已有 OTHER 项目的 ONLYOFFICE 9.3.1 服务，`http://127.0.0.1:8081/healthcheck` 返回 `true`。不修改其配置、容器或数据。接入配置允许连接已有服务；也提供 RFQ 独立服务的可选启动配置。

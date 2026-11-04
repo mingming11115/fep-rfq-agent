@@ -1,4 +1,4 @@
-﻿# 通用分组与能力配置 Implementation Plan
+# 通用分组与能力配置 Implementation Plan
 
 Goal: 各 BU 独立配置名称、层级和字段，RFQ 可选择通用分组。
 Architecture: 增加 BU 隔离的目录 schema 与节点；兼容现有机型工艺和能力审批资料。

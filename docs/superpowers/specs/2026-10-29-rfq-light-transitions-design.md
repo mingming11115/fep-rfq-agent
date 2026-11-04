@@ -18,4 +18,4 @@
 - 独立代码审查未发现范围内问题；确认减少动态效果分支与既有 CSS 规则生效路径。最终页面无控制台 error/warn。
 - 原有依赖块体积警告仍存在，本次未新增依赖。
 
-![应答工作区](../../prototype-updates/2026-10-29-light-transitions.jpg)
+![应答工作区](../../archive/prototype-updates/2026-10-29-light-transitions.jpg)

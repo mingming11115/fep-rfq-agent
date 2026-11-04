@@ -28,7 +28,7 @@
 
 ### Task 1: 更新展示并验证
 
-**Files:** Modify `rfq-react-prototype/src/pages/ResponsePage.jsx` and `rfq-react-prototype/src/components/AssessmentPanel.jsx`.
+**Files:** Modify `apps/web/src/pages/ResponsePage.jsx` and `apps/web/src/components/AssessmentPanel.jsx`.
 
 - [x] 更新页签、标题、候选证据字段名称。
 - [x] 将应答建议的完整证据文本改为摘要入口；入口打开当前条款的候选页签。用于参数核实的独有资料继续显示。

@@ -34,12 +34,12 @@
 **Interfaces:** ProjectWorkspace receives projectInfoPanel and retains its children while the controlled drawer closes; SettingsPage gains embedded=false to avoid repeating the page heading in the drawer. AssessmentPanel accepts children for the existing evidence edit field and sourceScope from the effective activeSourceAnchor; its reference disclosure is keyed by project/row/effective source.
 
 - [x] Add real ProjectWorkspace/SettingsPage/ResponsePage integration cases for editable/read-only views: two tabs, header drawer, draft retention, explicit saves, reference scoping and legacy/empty routes. Add denied/failed candidate rendering coverage.
-  Run: `node --test src/twoMainSections.test.js` in rfq-react-prototype.
+  Run: `node --test src/twoMainSections.test.js` in apps/web.
   Expected: FAIL because there are three main tabs and no information drawer.
 - [x] Implement controlled drawer and App wiring; map two main views, fold references and provide the current evidence field without bypassing existing edit/save rules. Update discussion-label regression.
 - [x] Run focused/full tests and build; browser-check actual header, drawer, reference/discussion, keyboard and narrow views with no business writes; obtain one independent read-only review and fix important findings with RED→GREEN.
-  Run: `npm test`, `npm run build` in rfq-react-prototype.
+  Run: `npm test`, `npm run build` in apps/web.
   Expected: green suite/build; existing chunk-size warning may remain.
 - [ ] Record evidence, commit item9 alone, merge local master and rerun tests before asking about item10.
 
-Evidence: [verification](../../prototype-updates/2026-11-02-two-sections-verification.md). Integration checkbox remains pending until the task-done gate records the committed local master result in the execution ledger.
+Evidence: [verification](../../archive/prototype-updates/2026-11-02-two-sections-verification.md). Integration checkbox remains pending until the task-done gate records the committed local master result in the execution ledger.

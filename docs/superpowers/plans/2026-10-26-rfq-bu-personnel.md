@@ -67,11 +67,11 @@ buReviewSettingsByBuId: {
 ### Task 1: 统一人员与资格模型及兼容迁移
 
 **Files:**
-- Create: `rfq-react-prototype/src/personnelDomain.js`
-- Create: `rfq-react-prototype/src/personnelDomain.test.js`
-- Modify: `rfq-react-prototype/src/stateMigration.js`
-- Modify: `rfq-react-prototype/src/data.js`
-- Test: `rfq-react-prototype/src/stateMigration.test.js`
+- Create: `apps/web/src/personnelDomain.js`
+- Create: `apps/web/src/personnelDomain.test.js`
+- Modify: `apps/web/src/stateMigration.js`
+- Modify: `apps/web/src/data.js`
+- Test: `apps/web/src/stateMigration.test.js`
 
 **Interfaces:**
 - `getPersonnelContext(state, actorId, buId)` → `{account, member, managed, enabled}`，缺失对象以无资格处理。
@@ -82,7 +82,7 @@ buReviewSettingsByBuId: {
 - `upgradePrototypeState(previous, demo)`沿用入口，返回包含上述统一状态及旧ID兼容映射的新版本状态。
 
 - [x] **Step 1:** 添加失败测试：两个BU、两名同角色人员、停用账号、缺失账号、无项目参与权、最终评审资格但没有确认资格均准确过滤；跨BU管理员不可管理，SR及技术不可编辑名单；三人技术组在全员模式生成三名必需技术评审人，代表模式仅生成组内指定负责人，空组、重复成员和无效负责人拒绝。
-- [x] **Step 2:** 在`rfq-react-prototype`执行`node --test src/personnelDomain.test.js src/stateMigration.test.js`，记录新测试失败原因。
+- [x] **Step 2:** 在`apps/web`执行`node --test src/personnelDomain.test.js src/stateMigration.test.js`，记录新测试失败原因。
 - [x] **Step 3:** 实现上述接口和迁移：保留`demo-sales`等旧ID；当前角色销售负责人→SR、技术确认人→技术；旧最终审批人映射为保留ID的技术人员并具有确认及最终评审资格。历史记录原称谓不改写。只有明确的旧演示用户和示例项目获得示例BU，不将未知账号提升为业务人员。
 - [x] **Step 4:** 增加迁移幂等断言，确认原应答、来源、历史快照和导出记录不丢失。重复执行Step 2命令，要求全部通过。
 - [x] **Step 5:** 复核仅涉及本任务文件及既有导航改动未被覆盖，再保存独立变更；不包含工作区其他未提交修改。
@@ -90,15 +90,15 @@ buReviewSettingsByBuId: {
 ### Task 2: BU 管理后台与受约束的项目选人
 
 **Files:**
-- Create: `rfq-react-prototype/src/pages/BuAdminPage.jsx`
-- Modify: `rfq-react-prototype/src/personnelDomain.js`
-- Modify: `rfq-react-prototype/src/pages/ManagementPages.jsx`
-- Modify: `rfq-react-prototype/src/pages/management-pages.css`
-- Modify: `rfq-react-prototype/src/components/AdminWorkspace.jsx`
-- Modify: `rfq-react-prototype/src/navigation.js`
-- Modify: `rfq-react-prototype/src/App.jsx`
-- Test: `rfq-react-prototype/src/personnelDomain.test.js`
-- Test: `rfq-react-prototype/src/navigation.test.js`
+- Create: `apps/web/src/pages/BuAdminPage.jsx`
+- Modify: `apps/web/src/personnelDomain.js`
+- Modify: `apps/web/src/pages/ManagementPages.jsx`
+- Modify: `apps/web/src/pages/management-pages.css`
+- Modify: `apps/web/src/components/AdminWorkspace.jsx`
+- Modify: `apps/web/src/navigation.js`
+- Modify: `apps/web/src/App.jsx`
+- Test: `apps/web/src/personnelDomain.test.js`
+- Test: `apps/web/src/navigation.test.js`
 
 **Interfaces:**
 - Consumes: Task 1人员上下文、候选范围与分派校验接口。
@@ -117,30 +117,30 @@ buReviewSettingsByBuId: {
 ### Task 3: 四角色权限及主流程接入
 
 **Files:**
-- Modify: `rfq-react-prototype/src/permissions.js`
-- Modify: `rfq-react-prototype/src/taskDomain.js`
-- Modify: `rfq-react-prototype/src/reviewDomain.js`
-- Modify: `rfq-react-prototype/src/rfqWorkflow.js`
-- Modify: `rfq-react-prototype/src/projectSelectors.js`
-- Modify: `rfq-react-prototype/src/snapshotDomain.js`
-- Modify: `rfq-react-prototype/src/App.jsx`
-- Modify: `rfq-react-prototype/src/pages/ResponsePage.jsx`
-- Modify: `rfq-react-prototype/src/pages/WorkflowPages.jsx`
-- Modify: `rfq-react-prototype/src/pages/DashboardPage.jsx`
-- Modify: `rfq-react-prototype/src/pages/TasksPage.jsx`
-- Modify: `rfq-react-prototype/src/pages/ProjectsPage.jsx`
-- Modify: `rfq-react-prototype/src/pages/ReferencePages.jsx`
-- Modify: `rfq-react-prototype/src/components/AssessmentPanel.jsx`
-- Modify: `rfq-react-prototype/src/components/ClarificationPanel.jsx`
-- Modify: `rfq-react-prototype/src/components/RfqRevisionPanel.jsx`
-- Modify: `rfq-react-prototype/src/components/AnnotationPanel.jsx`
-- Modify: `rfq-react-prototype/src/components/ProjectWorkspace.jsx`
-- Test: `rfq-react-prototype/src/permissions.test.js`
-- Test: `rfq-react-prototype/src/taskDomain.test.js`
-- Test: `rfq-react-prototype/src/reviewDomain.test.js`
-- Test: `rfq-react-prototype/src/projectSelectors.test.js`
-- Test: `rfq-react-prototype/src/snapshotDomain.test.js`
-- Test: `rfq-react-prototype/src/requirementWorkflow.test.js`
+- Modify: `apps/web/src/permissions.js`
+- Modify: `apps/web/src/taskDomain.js`
+- Modify: `apps/web/src/reviewDomain.js`
+- Modify: `apps/web/src/rfqWorkflow.js`
+- Modify: `apps/web/src/projectSelectors.js`
+- Modify: `apps/web/src/snapshotDomain.js`
+- Modify: `apps/web/src/App.jsx`
+- Modify: `apps/web/src/pages/ResponsePage.jsx`
+- Modify: `apps/web/src/pages/WorkflowPages.jsx`
+- Modify: `apps/web/src/pages/DashboardPage.jsx`
+- Modify: `apps/web/src/pages/TasksPage.jsx`
+- Modify: `apps/web/src/pages/ProjectsPage.jsx`
+- Modify: `apps/web/src/pages/ReferencePages.jsx`
+- Modify: `apps/web/src/components/AssessmentPanel.jsx`
+- Modify: `apps/web/src/components/ClarificationPanel.jsx`
+- Modify: `apps/web/src/components/RfqRevisionPanel.jsx`
+- Modify: `apps/web/src/components/AnnotationPanel.jsx`
+- Modify: `apps/web/src/components/ProjectWorkspace.jsx`
+- Test: `apps/web/src/permissions.test.js`
+- Test: `apps/web/src/taskDomain.test.js`
+- Test: `apps/web/src/reviewDomain.test.js`
+- Test: `apps/web/src/projectSelectors.test.js`
+- Test: `apps/web/src/snapshotDomain.test.js`
+- Test: `apps/web/src/requirementWorkflow.test.js`
 
 **Interfaces:**
 - Consumes: Tasks 1、2的统一状态和分派接口。
@@ -163,17 +163,17 @@ buReviewSettingsByBuId: {
 ### Task 4: 历史兼容与浏览器验收
 
 **Files:**
-- Modify: `rfq-react-prototype/README.md`
+- Modify: `apps/web/README.md`
 - Modify: `FEP销售RFQ提效Agent_PRD_v0.2.md`（仅当前角色及权限章节，历史产品名称不做机械替换）
 - Modify: `FEP销售RFQ提效Agent_交互设计_v0.3.md`（当前角色、BU后台和主流程，保留历史版本说明）
 - Create: `docs/RFQ四角色与BU人员范围验证_2026-10-26.md`
-- Test: `rfq-react-prototype/src/stateMigration.test.js`
-- Test: `rfq-react-prototype/src/navigation.test.js`
+- Test: `apps/web/src/stateMigration.test.js`
+- Test: `apps/web/src/navigation.test.js`
 
 **Interfaces:** 消费前述最终状态与业务接口；无新增产品接口。
 
 - [x] **Step 1:** 增加真实形状的旧本机状态迁移回归：包含旧审批身份、未完成任务、已批准快照、独立知识记录及用户项目；核对ID、历史原值、文件与导航顺序均保留。旧单人审批保留历史但不伪造双方签署，不能用于新的正式导出；旧待审批任务重新配置双方人员并提交新会签轮次。
-- [x] **Step 2:** 在`rfq-react-prototype`执行`npm test`、`npm run build`；在仓库根执行`git diff --check`。记录实际结果及既有警告，不扩展无关修复。
+- [x] **Step 2:** 在`apps/web`执行`npm test`、`npm run build`；在仓库根执行`git diff --check`。记录实际结果及既有警告，不扩展无关修复。
 - [x] **Step 3:** 在隔离的浏览器演示存储中验收两个BU及一个至少三名成员的技术组：BU管理员维护范围并选全员模式→SR分派条款→SR及技术成员按分工确认→SR提交→SR通过且只有两名技术通过时不可导出→最后一名通过后SR正式导出。再验证代表模式，仅指定负责人有技术方最终任务，负责人和SR均通过才可导出；补验技术先通过的相反顺序。
 - [x] **Step 4:** 验收停用和改派、跨BU拒绝、无项目权限直达拒绝、旧任务失效、退回重新提交和来源变化后旧批准不可导出。不得重置用户当前浏览器存储。
 - [x] **Step 5:** 更新文档及验证记录，只宣称实际完成的交互和测试；交付时明确这是本机原型权限，生产授权仍需服务端实现。

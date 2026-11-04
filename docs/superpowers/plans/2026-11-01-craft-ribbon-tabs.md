@@ -20,7 +20,7 @@
 
 ### Task 1: 原生工具栏显示策略与构建
 
-**Files:** 修改 `demos/craft-review/wordcraft-classic-comments.patch`；更新 `docs/craft-project-review.md` 和验证记录。
+**Files:** 修改 `packages/craft-editors/wordcraft-classic-comments.patch`；更新 `docs/craft-project-review.md` 和验证记录。
 **Interfaces:** WordCraft `ribbon::show` 形成的标签列表用于常规标签和更多菜单；引擎命令和宿主消息协议不变。
 
 - [x] 写原生 UI 回归：七个标签不出现，显式 show / reset / 旧选中态及窄屏均不恢复，其他标签与表格上下文仍可用。
@@ -58,7 +58,7 @@
 
 ### Task 5: 去掉含 Discord 的 Word 顶部整行、编辑按钮及宿主底部文件操作行
 
-**Files:** 原生补丁中的 `crates/ui-egui/src/chrome.rs`、`ribbon.rs` 与对应 `rfq_tests.rs`；`rfq-react-prototype/src/components/CraftSourcePane.jsx` 及 `craftSourcePane.test.js`；操作说明及验证记录。
+**Files:** 原生补丁中的 `crates/ui-egui/src/chrome.rs`、`ribbon.rs` 与对应 `rfq_tests.rs`；`apps/web/src/components/CraftSourcePane.jsx` 及 `craftSourcePane.test.js`；操作说明及验证记录。
 **Interfaces:** 根据已有 `app.canvas.host_comments` 统一跳过 `title_bar` 和编辑模式按钮渲染；不增加偏好或桥接协议，不改变编辑权限或修订设置。
 
 - [x] 原生回归先验证宿主模式标题行缺失、没有留白；独立模式标题行保留；完整宿主仍有工具栏标签且文档不变。

@@ -28,22 +28,22 @@
 ### Task 1: One right-side editor with native margin summaries
 
 **Files:**
-- Modify: demos/craft-review/site/original-comments.js, original-comments.css
-- Modify: rfq-react-prototype/src/craftEditorBridge.js, craftCommentSync.js
-- Modify: rfq-react-prototype/src/components/AnnotationPanel.jsx, CraftSourcePane.jsx, SourceDocumentPane.jsx
-- Create: rfq-react-prototype/src/components/UnlinkedCommentPanel.jsx (right-side real file thread before clause association)
-- Modify: rfq-react-prototype/src/pages/ResponsePage.jsx
-- Test: rfq-react-prototype/src/craftEditorBridge.test.js, craftCommentSync.test.js; new annotationPanel.test.js; shared original-comments tests
+- Modify: packages/craft-editors/site/original-comments.js, original-comments.css
+- Modify: apps/web/src/craftEditorBridge.js, craftCommentSync.js
+- Modify: apps/web/src/components/AnnotationPanel.jsx, CraftSourcePane.jsx, SourceDocumentPane.jsx
+- Create: apps/web/src/components/UnlinkedCommentPanel.jsx (right-side real file thread before clause association)
+- Modify: apps/web/src/pages/ResponsePage.jsx
+- Test: apps/web/src/craftEditorBridge.test.js, craftCommentSync.test.js; new annotationPanel.test.js; shared original-comments tests
 - Docs: feature guide and item 5 verification record/screenshots
 
 **Interfaces:** `createOriginalComments({summaryOnly=false,onSelect(id,note,{edit,newComment})})`; `createCraftProjectEditor.onSelectComment(id,anchor,{edit})`; `mergeNativeComments({draftNativeKeys=[]})`; `AnnotationPanel({editRequest,canManage})`.
 
 - [x] Write failing integration tests for margin summary routing, explicit native blank drafts/unique association, ambiguity/read-only/stale messages and right-side editing/permissions. Preserve existing standalone surface tests.
-  Run: `node --test src/craftEditorBridge.test.js src/craftCommentSync.test.js src/annotationPanel.test.js` in rfq-react-prototype.
+  Run: `node --test src/craftEditorBridge.test.js src/craftCommentSync.test.js src/annotationPanel.test.js` in apps/web.
   Expected: new assertions fail because project margin still edits inline and lacks right-side edit intent.
 - [x] Implement optional margin summaries, explicit draft routing after native merge, and right-side edit/delete/cancel behavior; propagate intent through the existing page without remounting the native editor.
 - [x] Run focused tests, complete frontend suite, shared comment surface suite and production build.
-  Run: `npm test`, `node --test demos/craft-review/tests/*.test.mjs` from repo root for shared suite, `npm run build` from frontend.
+  Run: `npm test`, `node --test packages/craft-editors/tests/*.test.mjs` from repo root for shared suite, `npm run build` from frontend.
   Expected: all pass; existing bundle-size notices may remain.
 - [x] Verify real browser new comment, margin click, right edit/reply/resolve/cancel and narrow layout with disposable demonstration data, then restore test-created content. Independently review against the spec and Review Focus; fix important findings with red-to-green coverage.
 - [x] Update guide and verification record.

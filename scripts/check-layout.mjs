@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {existsSync,readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));
+for(const relative of ['README.md','package.json','apps/web/package.json','apps/api/pom.xml','packages/craft-editors/site/wordcraft-classic/build.json','packages/craft-editors/site/pdfcraft-classic/build.json','tests/browser/package.json','docs/product','docs/api','docs/development'])assert.ok(existsSync(path.join(root,relative)),`Missing ${relative}`);
+for(const old of ['rfq-react-prototype','rfq-service','demos','.workbuddy','naura-ai','naura-ai-ui','output','outputs'])assert.ok(!existsSync(path.join(root,old)),`Unexpected old directory ${old}`);
+const prepare=readFileSync(path.join(root,'apps/web/scripts/prepare-craft-editors.mjs'),'utf8');assert.match(prepare,/packages\/craft-editors/);
+const vite=readFileSync(path.join(root,'apps/web/vite.config.js'),'utf8');assert.match(vite,/\.\.\/\.\./);
+console.log('Project layout checks passed');

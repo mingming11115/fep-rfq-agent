@@ -46,4 +46,4 @@
 - Browser export: confirmed count updated to 1/6, unresolved and unimported rows remained blockers, formal export was disabled, and internal CSV draft generation succeeded.
 - Browser capability library: both main tabs and manual candidate drawer opened successfully.
 - Review fixes: per-project member storage, missing responsibility/final approval checks, route guards and stacked-overlay focus/keyboard handling.
-- Restored core demo data after testing; HTTP preview remains running at `http://127.0.0.1:5173/`. Preview screenshot is `rfq-react-prototype/preview.png`.
+- Restored core demo data after testing; HTTP preview remains running at `http://127.0.0.1:5173/`. Preview screenshot is `apps/web/preview.png`.

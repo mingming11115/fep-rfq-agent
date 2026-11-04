@@ -34,11 +34,11 @@
 **Interfaces:** selectSourceResponseAnnotations gains optional currentOnly=false and activeId; existing callers keep all-row behavior. WordAnnotationCanvas gains focusCurrentAnnotation=false; SourceExcerptPane passes true. Native advice uses current-only unless its scope toggle is expanded. Source identities keep existing file/version remount boundaries.
 
 - [x] Add real component regressions for native and project excerpt paths: selected note only, all-file toggle, current-clause updates, edited preview, filtering/missing selection, source change reset, native iframe identity/no saves, existing menu/discussion boundaries. Protect the default all-row model used by document processing with existing model tests.
-  Run: `node --test src/responseAnnotationScope.test.js` in rfq-react-prototype.
+  Run: `node --test src/responseAnnotationScope.test.js` in apps/web.
   Expected: FAIL because both existing renderers display all notes by default.
 - [x] Add focused selection and scope controls, opt project excerpts in, rename labels, and update existing accessible-name assertions.
 - [x] Run focused/full tests and production build; verify native default/all/current controls, clause navigation, excerpt, keyboard and narrow layout in the browser, then obtain one independent read-only review.
-  Run: `npm test`, `npm run build` in rfq-react-prototype.
+  Run: `npm test`, `npm run build` in apps/web.
   Expected: all pass, existing chunk-size notice may remain.
 - [x] Record checks/evidence and complete independent review (no remaining findings).
 

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1120" viewBox="0 0 1680 1120"><title>PG-10  资料与证据管理</title><rect x="0" y="0" width="1680" height="1120" rx="0" fill="#f5f7fa" stroke="#f5f7fa"/><rect x="0" y="0" width="200" height="1120" rx="0" fill="#ffffff" stroke="#e5e7eb"/><rect x="0" y="0" width="200" height="76" rx="0" fill="#ffffff" stroke="#ffffff"/><rect x="20" y="22" width="32" height="32" rx="8" fill="#165dff" stroke="#165dff"/><text x="27" y="45" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" font-weight="600" fill="#fff">F</text><text x="64" y="44" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#1d2129">FEP RFQ</text><rect x="200" y="0" width="1480" height="76" rx="0" fill="#ffffff" stroke="#e5e7eb"/><text x="228" y="45" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#86909c">销售协作  /  PG-10  资料与证据管理</text><text x="1340" y="45" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#86909c">内网工作空间</text><rect x="1500" y="20" width="32" height="32" rx="16" fill="#e8f0ff" stroke="#e8f0ff"/><text x="1509" y="43" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#165dff">李</text><text x="1545" y="44" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#1d2129">李明  ▾</text><a href="pg08-workbench.svg"><rect x="27" y="119" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="133" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">个人工作台</text></a><a href="pg01-projects.svg"><rect x="27" y="181" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="195" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">项目列表</text></a><a href="pg14-model-capabilities.svg"><rect x="27" y="243" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="257" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">机型能力边界</text></a><a href="pg02-documents.svg"><rect x="27" y="305" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="319" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">RFQ 解析</text></a><a href="pg03-response-workbench.svg"><rect x="27" y="367" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="381" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">RFQ 细则确认</text></a><a href="pg04-reviews.svg"><rect x="27" y="429" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="443" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">评审与偏离</text></a><a href="pg05-export.svg"><rect x="27" y="491" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="505" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">草稿与导出</text></a><a href="pg11-versions.svg"><rect x="27" y="553" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="567" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">版本记录</text></a><a href="pg09-project-settings.svg"><rect x="27" y="615" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="629" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">项目设置</text></a><a href="pg06-knowledge.svg"><rect x="27" y="677" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="691" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">知识与结果</text></a><a href="pg10-evidence.svg"><rect x="12" y="724" width="176" height="44" rx="6" fill="#e8f0ff" stroke="#e8f0ff"/><rect x="12" y="734" width="3" height="24" rx="1" fill="#165dff" stroke="#165dff"/><rect x="27" y="739" width="12" height="12" rx="3" fill="#165dff" stroke="#165dff"/><text x="51" y="753" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="600" fill="#165dff">资料与证据</text></a><a href="pg12-audit.svg"><rect x="27" y="801" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="815" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">审计记录</text></a><a href="pg13-admin.svg"><rect x="27" y="863" width="12" height="12" rx="3" fill="#ffffff" stroke="#a9b1bf"/><text x="51" y="877" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" font-weight="400" fill="#4e5969">系统配置</text></a><path d="M20 940h160" stroke="#edf0f3"/><text x="24" y="974" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" font-weight="400" fill="#86909c">FEP 事业部</text><text x="24" y="1004" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="14" font-weight="400" fill="#a9b1bf">销售 RFQ 应答协作</text><text x="24" y="1090" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="13" font-weight="400" fill="#a9b1bf">原型预览 · 模拟数据</text>
+<text xmlns="http://www.w3.org/2000/svg" x="230" y="140" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="28" font-weight="600" fill="#1d2129">PG-10  资料与证据管理</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="230" y="181" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#64748b">内部依据与拟对外附件分开管理；上传成功不等于有效证据。</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="230" y="210" width="1420" height="68" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="222" width="120" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="264" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">项目资料</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="384" y="222" width="162" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="400" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">共享能力资料</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="562" y="222" width="162" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="578" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">有效状态筛选</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="740" y="222" width="120" height="44" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="756" y="251" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">引用关系</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="230" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="254" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#1d2129">资料列表  /  模拟数据</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">DOC-012 v2  /  能力测试报告  /  有效</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">适用范围：设备 A，标准配置</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">DOC-009 v1  /  配置清单  /  待核对</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">DOC-004 v1  /  历史报告  /  已撤销</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="248" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="260" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">支持按产品范围、用途与有效期筛选</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="254" y="864" width="110" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="268" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">导入资料</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="378" y="864" width="150" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="392" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">关联当前条目</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="950" y="300" width="700" height="650" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="974" y="346" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="600" fill="#1d2129">DOC-012 v2  /  资料详情</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="968" y="374" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="420" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">来源：内网测试记录  /  已专业核对</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="506" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">定位：报告第 8 页  /  指标表</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="968" y="546" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">条件：标准配置，指定测试工况</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="678" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">引用：REQ-021、K-018（按权限展示）</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="968" y="718" width="664" height="72" rx="4" fill="#f8fafc" stroke="#f8fafc" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="980" y="764" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" font-weight="400" fill="#1d2129">外发标记：内部证据，未列为外发附件</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="974" y="864" width="110" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="988" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">定位预览</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="1098" y="864" width="110" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="1112" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">更新版本</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="1222" y="864" width="130" height="48" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="1236" y="895" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" font-weight="400" fill="#1d2129">停用／撤销</text>
+
+<rect xmlns="http://www.w3.org/2000/svg" x="230" y="975" width="1420" height="60" rx="8" fill="#edf3ff" stroke="#e5e7eb" />
+
+<text xmlns="http://www.w3.org/2000/svg" x="248" y="1013" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" font-weight="400" fill="#1d2129">已引用资料保留版本；条件变化、过期或撤销后触发相关条目复核。</text>
+
+<text xmlns="http://www.w3.org/2000/svg" x="230" y="1098" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="15" font-weight="400" fill="#64748b">页面原型 · 模拟数据 · 用于布局与流程评审</text>
+</svg>

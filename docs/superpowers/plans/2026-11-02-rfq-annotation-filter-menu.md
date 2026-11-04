@@ -33,11 +33,11 @@
 **Interfaces:** ResponseAnnotationFilter({value,onChange,disabled=false,editorFrame}) consumes the existing conclusion array, emits new arrays, and owns only popup state. AnnotationFilterView supplies native/excerpt visibility; hidden owners close their portals while preserving selections. Optional editorFrame provides same-origin pointer/focus/load dismissal without consuming editor events. WordAnnotationCanvas enables compact filters only when focusCurrentAnnotation is true.
 
 - [x] Extend real native/excerpt regressions: no inline checkboxes when closed; trigger summary; popup five options; clear, partial selection, all; reopen persistence; Escape focus; existing scope/preview/source reset and no saves remain covered.
-  Run: `node --test src/responseAnnotationScope.test.js` in rfq-react-prototype.
+  Run: `node --test src/responseAnnotationScope.test.js` in apps/web.
   Expected: FAIL because no compact trigger exists.
 - [x] Implement the shared popup, integrate the two project renderers, and add compact responsive styles. Reuse installed Popover's controlled open, afterOpenChange and destroyOnHidden APIs.
 - [x] Run focused/full tests and build, then browser-check native/excerpt, keyboard/outside dismissal, empty/all/subsets, expanded and narrow views. Obtain one fresh read-only review; fix important findings with regression coverage.
-  Run: `npm test`, `npm run build` in rfq-react-prototype.
+  Run: `npm test`, `npm run build` in apps/web.
   Expected: green suite/build, existing chunk-size notice may remain.
 - [x] Record evidence; two Important dismissal findings fixed in one RED→GREEN pass, no deferred minors.
 

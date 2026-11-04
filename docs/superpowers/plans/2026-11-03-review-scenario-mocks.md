@@ -28,7 +28,7 @@
 
 ### Task 1: Append and persist valid review scenarios
 
-**Files:** Create `rfq-react-prototype/src/demoReviewScenarios.js`, `rfq-react-prototype/src/demoReviewScenarios.test.js`; modify `rfq-react-prototype/src/App.jsx` and the prototype README.
+**Files:** Create `apps/web/src/demoReviewScenarios.js`, `apps/web/src/demoReviewScenarios.test.js`; modify `apps/web/src/App.jsx` and the prototype README.
 
 **Interfaces:** `addReviewScenarioDemos(state, {at}?)` returns original or augmented state; `addStoredReviewScenarioDemos(storage, state, {at}?)` backs up and persists additions atomically.
 

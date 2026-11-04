@@ -26,7 +26,7 @@
 
 ### Task 1: 当前项目最终评审门禁
 
-**Files:** Create `rfq-react-prototype/src/finalReviewFlow.js` and `finalReviewFlow.test.js`.
+**Files:** Create `apps/web/src/finalReviewFlow.js` and `finalReviewFlow.test.js`.
 
 **Interfaces:** `getFinalReviewGate(state, projectId)` returns `{canExport, snapshot, reason}`; consumes current project scope, latest snapshot and SR/technical votes.
 

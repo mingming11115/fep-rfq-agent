@@ -32,9 +32,9 @@
 
 **Interfaces:** Call editor.current.save() for explicit menu save; existing onSave/queue/onSaved handles persistence and checkpoints. Call downloadCraftFile({...reference,name:meta.name},kind) with kind original/review. Controlled menu open state and native request busy state stay local to CraftSourcePane. Response save status gains aria-label and explicit response wording.
 
-- [x] Write real CraftSourcePane tests for DOCX/PDF menu save/download, explicit endpoints/bytes/revision, pending/error/retry/backup and permissions. Existing real ResponsePage integration verifies independent response status/save. Run `node --test src/fileActions.test.js src/twoMainSections.test.js` in rfq-react-prototype; expect missing More/status behavior to fail.
+- [x] Write real CraftSourcePane tests for DOCX/PDF menu save/download, explicit endpoints/bytes/revision, pending/error/retry/backup and permissions. Existing real ResponsePage integration verifies independent response status/save. Run `node --test src/fileActions.test.js src/twoMainSections.test.js` in apps/web; expect missing More/status behavior to fail.
 - [x] Implement menu, guarded save/download requests and file failure status without changing native save/queue. Make response state explicit. Verify menu Esc/focus, iframe dismissal and view changes, with no view writes.
 - [x] Run focused suite, `npm test` and `npm run build`; expect green. Browser-check menu, keyboard, expanded viewport and labels without business writes; save screenshots. Obtain one final read-only independent review, fix Important/Critical once via RED→GREEN, ledger rulings/minors.
-- [ ] Record verification, commit item10 alone and merge local master. Run task-done with `npm --prefix rfq-react-prototype test` before asking item11.
+- [ ] Record verification, commit item10 alone and merge local master. Run task-done with `npm --prefix apps/web test` before asking item11.
 
-Evidence: [verification](../../prototype-updates/2026-11-02-file-actions-verification.md). Integration is recorded by task-done after the single item commit and local master merge; no extra bookkeeping commit.
+Evidence: [verification](../../archive/prototype-updates/2026-11-02-file-actions-verification.md). Integration is recorded by task-done after the single item commit and local master merge; no extra bookkeeping commit.

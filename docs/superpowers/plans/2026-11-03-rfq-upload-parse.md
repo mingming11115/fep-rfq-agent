@@ -31,4 +31,4 @@
 - 独立代码审查发现三项 P2：块内摘录遗漏、HTTP 请求没有整体时限、PDF 内联图片遗漏。新增三个回归测试分别观察失败，再修复为完整原文覆盖、可取消的异步请求总时限、PDF 图形流图片遍历。
 - 最终 Maven `verify`: 52 tests, 0 failures, 0 errors, BUILD SUCCESS。使用 Docker Maven/JDK17，独立 `rfq_parse_test` MySQL 库，不写现有业务库。
 - 白盒边界：模型响应通过来源及覆盖校验仍需人工语义核对；HTTP OCR 为本文定义的协议，尚无供应商实网联调；解析为同步接口。
-- 当前 checkout 含用户已有前端工作，按桌面规则复用并只修改后端；不自动提交、推送或更新历史分发包。验证 JAR 复制至 `rfq-service/target/rfq-service.jar`。
+- 当前 checkout 含用户已有前端工作，按桌面规则复用并只修改后端；不自动提交、推送或更新历史分发包。验证 JAR 复制至 `apps/api/target/rfq-service.jar`。

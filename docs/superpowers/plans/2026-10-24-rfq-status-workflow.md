@@ -27,7 +27,7 @@
 
 ### Task 1: 项目汇总及文件同步
 
-**Files:** Modify `rfq-react-prototype/src/projectSelectors.js`, `src/snapshotDomain.js`, `src/App.jsx`, `src/pages/WorkflowPages.jsx`; Test `src/projectSelectors.test.js`, `src/snapshotDomain.test.js`。
+**Files:** Modify `apps/web/src/projectSelectors.js`, `src/snapshotDomain.js`, `src/App.jsx`, `src/pages/WorkflowPages.jsx`; Test `src/projectSelectors.test.js`, `src/snapshotDomain.test.js`。
 
 **Interfaces:** `getProjectSummary(state, projectId, actorId)` 返回新阶段；`state.documentsByProject[projectId]` 为文件元数据数组；`onFilesChange(projectId, files)` 同步独立资料存储。
 
@@ -36,11 +36,11 @@
 
 ### Task 2: 任务迁移、结果及退回闭环
 
-**Files:** Modify `src/taskDomain.js`, `src/stateMigration.js`, `src/pages/TasksPage.jsx`, `src/App.jsx`, `src/pages/WorkflowPages.jsx`, `src/components/ui.jsx`；Create `src/taskStatus.js`；Test `src/taskDomain.test.js`, `src/stateMigration.test.js`。路径均相对 `rfq-react-prototype/`。
+**Files:** Modify `src/taskDomain.js`, `src/stateMigration.js`, `src/pages/TasksPage.jsx`, `src/App.jsx`, `src/pages/WorkflowPages.jsx`, `src/components/ui.jsx`；Create `src/taskStatus.js`；Test `src/taskDomain.test.js`, `src/stateMigration.test.js`。路径均相对 `apps/web/`。
 
 **Interfaces:** 任务字段 `status` 为中文标准值、`result` 为独立结果；`startTaskForObject(state, context)` 标记有效保存；退回快照使用 `response-revise` 任务，新快照 `revisionOf` 关联已退回快照。
 
 - [x] 添加并运行失败测试：旧任务迁移、保存继续处理、提交/批准/退回结果、取消不计已处理、最终退回生成可重新提交的修改任务。
 - [x] 实现状态迁移、结果记录、退回修改及任务三列展示，同步设计稿和 README。
-- [x] 运行 `npm --prefix rfq-react-prototype test`、`npm --prefix rfq-react-prototype run build`、`git diff --check`；浏览器核对项目、任务及审批导出状态。
+- [x] 运行 `npm --prefix apps/web test`、`npm --prefix apps/web run build`、`git diff --check`；浏览器核对项目、任务及审批导出状态。
 - [x] 复核本次完整差异并修正阻断问题。

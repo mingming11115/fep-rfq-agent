@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: rfq-service
+  profiles:
+    default: local
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      # Migration may contain both a 30 MB original and a 30 MB reviewed file.
+      max-request-size: 64MB
+  datasource:
+    url: ${RFQ_DB_URL:jdbc:mysql://127.0.0.1:3306/rfq?useUnicode=true&characterEncoding=utf8&connectionTimeZone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${RFQ_DB_USER:rfq_app}
+    password: ${RFQ_DB_PASSWORD:rfq_app_pwd}
+    hikari:
+      pool-name: rfq-pool
+      maximum-pool-size: 10
+      connection-timeout: 10000
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.naura.rfq.domain
+  configuration:
+    # bu_id -> buId, created_at -> createdAt. Schema and POJO stay in step automatically.
+    map-underscore-to-camel-case: true
+    default-statement-timeout: 30
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+rfq:
+  storage-dir: ${RFQ_STORAGE_DIR:./data/rfq-files}
+  auth:
+    jwt-secret: ${RFQ_JWT_SECRET:rfq-local-dev-secret-key-please-replace-in-production}
+    token-ttl-minutes: ${RFQ_TOKEN_TTL_MINUTES:480}
+  parse:
+    # Guards against pathological documents; real RFQ files stay far below this.
+    max-blocks: ${RFQ_PARSE_MAX_BLOCKS:5000}
+    max-requirement-chars: ${RFQ_PARSE_MAX_REQUIREMENT_CHARS:4000}
+    integrations:
+      llm:
+        enabled: ${RFQ_LLM_ENABLED:false}
+        url: ${RFQ_LLM_URL:}
+        api-key: ${RFQ_LLM_API_KEY:}
+        model: ${RFQ_LLM_MODEL:}
+        connect-timeout: ${RFQ_LLM_CONNECT_TIMEOUT:3s}
+        timeout: ${RFQ_LLM_TIMEOUT:30s}
+        batch-chars: ${RFQ_LLM_BATCH_CHARS:16000}
+        batch-blocks: ${RFQ_LLM_BATCH_BLOCKS:20}
+      ocr:
+        enabled: ${RFQ_OCR_ENABLED:false}
+        url: ${RFQ_OCR_URL:}
+        api-key: ${RFQ_OCR_API_KEY:}
+        connect-timeout: ${RFQ_OCR_CONNECT_TIMEOUT:3s}
+        timeout: ${RFQ_OCR_TIMEOUT:30s}
+        max-images: ${RFQ_OCR_MAX_IMAGES:100}
+        max-image-pixels: ${RFQ_OCR_MAX_IMAGE_PIXELS:20000000}
+        max-image-bytes: ${RFQ_OCR_MAX_IMAGE_BYTES:10485760}
+
+office:
+  public-url: ${ONLYOFFICE_PUBLIC_URL:http://127.0.0.1:8082}
+  internal-url: ${ONLYOFFICE_INTERNAL_URL:http://onlyoffice}
+  callback-base-url: ${ONLYOFFICE_CALLBACK_BASE_URL:http://rfq-service:48081}
+  jwt-secret: ${ONLYOFFICE_JWT_SECRET:}
+  storage-dir: ${ONLYOFFICE_STORAGE_DIR:data/onlyoffice}
+  max-file-bytes: 31457280
+  frontend-origins: ${ONLYOFFICE_FRONTEND_ORIGINS:http://127.0.0.1:5173,http://localhost:5173}
+
+server:
+  port: ${SERVER_PORT:48081}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: RFQ 独立后端框架

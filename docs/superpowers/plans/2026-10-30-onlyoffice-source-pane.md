@@ -29,7 +29,7 @@
 
 ### Task 1: 后端文档闭环
 
-**Files:** create `rfq-service/src/main/java/com/naura/rfq/office/{OfficeProperties,OfficeJwt,OfficeFileStore,OfficeDocumentService,OfficeController}.java`; create `rfq-service/src/test/java/com/naura/rfq/office/OfficeIntegrationTest.java`; modify Spring 配置、`.gitignore`、Compose 与环境示例。
+**Files:** create `apps/api/src/main/java/com/naura/rfq/office/{OfficeProperties,OfficeJwt,OfficeFileStore,OfficeDocumentService,OfficeController}.java`; create `apps/api/src/test/java/com/naura/rfq/office/OfficeIntegrationTest.java`; modify Spring 配置、`.gitignore`、Compose 与环境示例。
 
 **Interfaces:** `/api/office/status`; `POST /documents` multipart；`POST /documents/{id}/session`；`GET /documents/{id}` metadata；`GET /documents/{id}/download?kind=original|review`；`GET /content/{id}?ticket=...`；`POST /callback/{id}`。路径均以 `/api/office` 开头，访问凭据通过 `X-Office-Access` 传入。保存回调返回 ONLYOFFICE 原生 `{error:0}`。
 
@@ -40,7 +40,7 @@
 
 ### Task 2: 左侧真实编辑器与上传
 
-**Files:** create `rfq-react-prototype/src/officeClient.js`, `officeClient.test.js`, `components/OnlyOfficeSourcePane.jsx`, `components/onlyoffice-source.css`; modify `SourceUploadDialog.jsx`, `SourceDocumentPane.jsx`, `ResponsePage.jsx`, `App.jsx`, `WorkflowPages.jsx`, `vite.config.js`.
+**Files:** create `apps/web/src/officeClient.js`, `officeClient.test.js`, `components/OnlyOfficeSourcePane.jsx`, `components/onlyoffice-source.css`; modify `SourceUploadDialog.jsx`, `SourceDocumentPane.jsx`, `ResponsePage.jsx`, `App.jsx`, `WorkflowPages.jsx`, `vite.config.js`.
 
 **Interfaces:** `uploadOfficeFile(file, source, signal)` 返回 `{id,access,name,fileType,...}`；`officeRequest(path,ref,options)` 自动附访问凭据；`loadOfficeApi(url)` 复用脚本并支持失败重试；`OnlyOfficeSourcePane` 接收文档引用、来源上下文、写权限、用户、关联原件回调和摘录组件。
 
@@ -51,7 +51,7 @@
 
 ### Task 3: 实际浏览器验收与交付
 
-**Files:** update `rfq-service/README.md`, `rfq-react-prototype/README.md`; add `docs/prototype-updates/2026-10-30-onlyoffice-source-pane.md` 和验收截图。
+**Files:** update `apps/api/README.md`, `apps/web/README.md`; add `docs/prototype-updates/2026-10-30-onlyoffice-source-pane.md` 和验收截图。
 
 **Interfaces:** 复用任务 1/2 的接口与页面，使用独立测试原件及独立浏览器存储。
 

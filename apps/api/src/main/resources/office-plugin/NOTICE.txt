@@ -1,0 +1,4 @@
+plugins.js is the unmodified ONLYOFFICE plugin SDK, served by the local
+official onlyoffice/documentserver:9.3.1.2 image at /sdkjs-plugins/v1/plugins.js.
+Copyright Ascensio System SIA 2021. Licensed under Apache License 2.0;
+see LICENSE-sdk.txt. The RFQ application bridge is clause-link.js.

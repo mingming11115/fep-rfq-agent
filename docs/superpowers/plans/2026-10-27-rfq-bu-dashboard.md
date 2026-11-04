@@ -27,7 +27,7 @@
 
 ### Task 1: 汇总选择器
 
-**Files:** 新增 `rfq-react-prototype/src/buDashboardSelectors.js` 和同名 `.test.js`。
+**Files:** 新增 `apps/web/src/buDashboardSelectors.js` 和同名 `.test.js`。
 
 **Interfaces:** `selectBuDashboard(state, {actorId, buId, now})` 返回授权 BU 的项目概览、统计、阶段分布、任务分布和人员负荷；未授权返回 null。
 

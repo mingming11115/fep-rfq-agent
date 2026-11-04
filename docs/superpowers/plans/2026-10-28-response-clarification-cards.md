@@ -26,7 +26,7 @@
 
 ### Task 1: Queue behavior
 
-**Files:** Create `rfq-react-prototype/src/responseCardQueue.js` and `responseCardQueue.test.js`.
+**Files:** Create `apps/web/src/responseCardQueue.js` and `responseCardQueue.test.js`.
 
 **Interfaces:** `selectResponseCards(requirements,reviews,filters)`, `responseCardStats(requirements,reviews)`, `nextResponseCard(rows,currentId,deferredIds)`, `transitionConfirmedCard({confirm,animate,advance})`.
 

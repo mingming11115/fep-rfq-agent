@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: rfq-react-prototype
+        working-directory: apps/web
         shell: pwsh
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: rfq-react-prototype/package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
       - name: Install application dependencies
         run: npm ci --ignore-scripts
       - name: Install browser test tools separately

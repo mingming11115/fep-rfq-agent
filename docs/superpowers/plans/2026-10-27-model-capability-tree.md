@@ -27,7 +27,7 @@
 
 ### Task 1: 树选择器
 
-**Files:** Create `rfq-react-prototype/src/capabilityTree.js` and `capabilityTree.test.js`.
+**Files:** Create `apps/web/src/capabilityTree.js` and `capabilityTree.test.js`.
 
 **Interfaces:** `buildCapabilityTree({buId,buName,models,processes,capabilities,filters})` returns `{key,kind,label,children,record?,modelId?,processId?}` nodes. `findCapabilityTreeNode(root,key)` finds exact identity; `resolveCapabilityTreeSelection(root,key)` falls back to first capability, first model, then BU.
 
@@ -37,7 +37,7 @@
 
 ### Task 2: 同页目录与详情
 
-**Files:** Create `rfq-react-prototype/src/components/CapabilityTree.jsx`, `capability-tree.css`; modify `src/pages/ReferencePages.jsx`.
+**Files:** Create `apps/web/src/components/CapabilityTree.jsx`, `capability-tree.css`; modify `src/pages/ReferencePages.jsx`.
 
 **Interfaces:** Tree consumes Task 1 root, selectedKey and `onSelect(node)`. CapabilitiesPage reuses existing dialogs, save and review handlers; selection key is the sole active node identity.
 
