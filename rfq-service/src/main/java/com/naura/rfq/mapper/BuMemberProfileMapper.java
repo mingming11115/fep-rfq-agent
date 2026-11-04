@@ -10,11 +10,16 @@ import java.util.List;
 public interface BuMemberProfileMapper {
 
     List<BuMemberProfile> findByBuId(@Param("buId") String buId);
+    List<BuMemberProfile> findByUserId(@Param("userId") String userId);
 
     BuMemberProfile findByBuIdAndUserId(@Param("buId") String buId, @Param("userId") String userId);
 
-    /** 存在则覆盖三个配置项，不存在则插入；靠 uk_bu_member_profile 保证幂等。 */
-    int upsert(BuMemberProfile profile);
+    /** Each write owns its fields; null qualification values preserve the current database value. */
+    int patchQualifications(@Param("userId") String userId,@Param("buId") String buId,
+            @Param("canConfirm") Boolean canConfirm,@Param("canFinalReview") Boolean canFinalReview,
+            @Param("qualifications") String qualifications);
+
+    int setEnabled(@Param("userId") String userId,@Param("buId") String buId,@Param("enabled") boolean enabled);
 
     int deleteByUserId(@Param("userId") String userId);
 }

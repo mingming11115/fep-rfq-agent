@@ -11,10 +11,14 @@
         where id = #{id}
     </select>
 
-    <select id="findByIdForUpdate" resultType="com.naura.rfq.domain.CustomerDocument">
+    <select id="findByIdForUpdate" resultType="com.naura.rfq.domain.CustomerDocument" useCache="false" flushCache="true">
         select <include refid="columns"/>
         from customer_document
         where id = #{id} for update
+    </select>
+    <select id="findLatestVersionForUpdate" resultType="java.lang.Integer" useCache="false" flushCache="true">
+        select version from customer_document where project_id=#{projectId}
+        order by version desc limit 1 for update
     </select>
 
     <select id="findByProjectIdOrderByCreatedAtDesc" resultType="com.naura.rfq.domain.CustomerDocument">
@@ -35,7 +39,7 @@
         select <include refid="columns"/>
         from customer_document
         where project_id = #{projectId}
-        order by ${q.orderBy}
+        order by ${q.orderBy}, id
         limit #{q.size} offset #{q.offset}
     </select>
 
@@ -54,15 +58,7 @@
 
     <update id="update">
         update customer_document
-        set name         = #{name},
-            version      = #{version},
-            purpose      = #{purpose},
-            storage_ref  = #{storageRef},
-            content_type = #{contentType},
-            size_bytes   = #{sizeBytes},
-            sha256       = #{sha256},
-            status       = #{status},
-            uploaded_by  = #{uploadedBy}
+        set status = #{status}
         where id = #{id}
     </update>
 </mapper>

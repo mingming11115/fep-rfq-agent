@@ -77,10 +77,11 @@ public class RequirementController {
         CurrentUser user = CurrentUserHolder.require();
         Requirement requirement = requirements.findById(id)
                 .orElseThrow(() -> new BusinessException(404, "条款不存在"));
-        Project project = projects.findById(requirement.getProjectId())
+        Project project = projects.findByIdForUpdate(requirement.getProjectId())
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
+        access.requireActiveProject(project);
 
         // Use the same document lock as re-parsing so a human edit cannot be lost mid-run.
         documents.findByIdForUpdate(requirement.getDocumentId())
@@ -111,7 +112,7 @@ public class RequirementController {
             throw new BusinessException(409, "条款已被他人修改，请刷新后重试");
         }
         requirement.setVersion(requirement.getVersion() + 1);
-        audit.success(user.id(), "修正抽取条款", "requirement", id, request.reviewReasons());
+        audit.successInBu(user.id(), project.getBuId(), "修正抽取条款", "requirement", id, request.reviewReasons());
         return ApiResponse.success(RequirementView.of(requirement));
     }
 }

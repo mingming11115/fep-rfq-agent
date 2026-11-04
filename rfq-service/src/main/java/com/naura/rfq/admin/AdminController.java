@@ -11,6 +11,7 @@ import com.naura.rfq.domain.UserBuRole;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -209,12 +210,12 @@ public class AdminController {
                 request.canConfirm(), request.canFinalReview(), request.resourceQualifications()));
     }
 
-    public record MemberStatusRequest(boolean enabled) {
+    public record MemberStatusRequest(@NotNull Boolean enabled) {
     }
 
     @PatchMapping("/business-units/{buId}/members/{userId}/status")
     public ApiResponse<AdminService.MemberView> updateMemberStatus(@PathVariable String buId,
-            @PathVariable String userId, @RequestBody MemberStatusRequest request) {
+            @PathVariable String userId, @Valid @RequestBody MemberStatusRequest request) {
         return ApiResponse.success(admin.updateMemberEnabled(CurrentUserHolder.require(), buId, userId,
                 request.enabled()));
     }

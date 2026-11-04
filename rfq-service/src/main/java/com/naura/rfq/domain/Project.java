@@ -1,6 +1,7 @@
 package com.naura.rfq.domain;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -23,6 +24,13 @@ public class Project {
     private String ownerId;
 
     private String stage = "DRAFT";
+    private LocalDate deadline;
+    private String archivedFromStage;
+    private Instant archivedAt;
+    private String archivedBy;
+    private String archiveReason;
+
+    public boolean isArchived() { return "CANCELLED".equals(stage); }
 
     /** 乐观锁版本号。JPA 会自动置 0，MyBatis 下由构造默认值承担同一职责。 */
     private Long version = 0L;

@@ -14,21 +14,27 @@ public class AuditService {
 
     private final AuditEventMapper events;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void success(String actorId, String action, String objectType, String objectId, String detail) {
-        write(actorId, action, objectType, objectId, "成功", detail);
+        write(actorId, null, action, objectType, objectId, "成功", detail);
+    }
+
+    @Transactional
+    public void successInBu(String actorId,String buId,String action,String objectType,String objectId,String detail) {
+        write(actorId,buId,action,objectType,objectId,"成功",detail);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void failure(String actorId, String action, String objectType, String objectId, String detail) {
-        write(actorId, action, objectType, objectId, "失败", detail);
+        write(actorId, null, action, objectType, objectId, "失败", detail);
     }
 
-    private void write(String actorId, String action, String objectType, String objectId,
+    private void write(String actorId, String buId, String action, String objectType, String objectId,
             String result, String detail) {
         AuditEvent event = new AuditEvent();
         event.setId(Ids.next("EVT"));
         event.setActorId(actorId);
+        event.setBuId(buId);
         event.setAction(action);
         event.setObjectType(objectType);
         event.setObjectId(objectId);

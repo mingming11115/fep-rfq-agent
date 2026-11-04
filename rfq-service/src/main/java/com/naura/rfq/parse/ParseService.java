@@ -1,6 +1,7 @@
 package com.naura.rfq.parse;
 
 import com.naura.rfq.audit.AuditService;
+import com.naura.rfq.auth.AccessGuard;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
 import com.naura.rfq.document.DocumentStorage;
@@ -12,6 +13,7 @@ import com.naura.rfq.mapper.CustomerDocumentMapper;
 import com.naura.rfq.mapper.DocumentBlockMapper;
 import com.naura.rfq.mapper.ParseRunMapper;
 import com.naura.rfq.mapper.RequirementMapper;
+import com.naura.rfq.mapper.ProjectMapper;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,6 +46,8 @@ public class ParseService {
     private final DocumentStorage storage;
     private final ParseProperties properties;
     private final AuditService audit;
+    private final ProjectMapper projects;
+    private final AccessGuard access;
 
     public record ParseRunView(String id, String documentId, String status, int totalBlocks,
             int processedBlocks, int requirementCount, int issueCount, String message,
@@ -52,10 +56,15 @@ public class ParseService {
 
     @Transactional
     public ParseRunView run(String documentId, String actorId) {
+        CustomerDocument reference = documents.findById(documentId)
+                .orElseThrow(() -> new BusinessException(404, "文档不存在"));
+        var project = projects.findByIdForUpdate(reference.getProjectId())
+                .orElseThrow(() -> new BusinessException(404, "项目不存在"));
+        access.requireActiveProject(project);
         CustomerDocument document = documents.findByIdForUpdate(documentId)
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
 
-        List<Requirement> previous = requirements.findByDocumentIdOrderBySortOrder(documentId);
+        List<Requirement> previous = requirements.findByDocumentIdForUpdate(documentId);
         if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
         }
@@ -136,7 +145,7 @@ public class ParseService {
         run.setMessage(truncate(run.getMessage(), 990));
         runs.update(run);
         documents.update(document);
-        audit.success(actorId, "解析客户文件", "document", documentId,
+        audit.successInBu(actorId, project.getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
         return view(run);
     }

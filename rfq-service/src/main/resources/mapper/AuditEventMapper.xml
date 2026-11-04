@@ -2,11 +2,11 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.naura.rfq.mapper.AuditEventMapper">
 
-    <sql id="columns">id, actor_id, action, object_type, object_id, result, detail, created_at</sql>
+    <sql id="columns">id, bu_id, actor_id, action, object_type, object_id, result, detail, created_at</sql>
 
     <insert id="insert">
-        insert into audit_event (id, actor_id, action, object_type, object_id, result, detail, created_at)
-        values (#{id}, #{actorId}, #{action}, #{objectType}, #{objectId}, #{result}, #{detail},
+        insert into audit_event (id, bu_id, actor_id, action, object_type, object_id, result, detail, created_at)
+        values (#{id}, #{buId}, #{actorId}, #{action}, #{objectType}, #{objectId}, #{result}, #{detail},
                 #{createdAt})
     </insert>
 
@@ -15,5 +15,26 @@
         from audit_event
         order by created_at desc
         limit #{limit}
+    </select>
+    <sql id="filters">
+        <where>
+            <if test="f.buIds != null">bu_id in
+                <foreach collection="f.buIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+            </if>
+            <if test="f.actorId != null">and actor_id=#{f.actorId}</if>
+            <if test="f.action != null">and action=#{f.action}</if>
+            <if test="f.objectType != null">and object_type=#{f.objectType}</if>
+            <if test="f.objectId != null">and object_id=#{f.objectId}</if>
+            <if test="f.result != null">and result=#{f.result}</if>
+            <if test="f.createdFrom != null">and created_at &gt;= #{f.createdFrom}</if>
+            <if test="f.createdTo != null">and created_at &lt;= #{f.createdTo}</if>
+        </where>
+    </sql>
+    <select id="findPage" resultType="com.naura.rfq.domain.AuditEvent">
+        select <include refid="columns"/> from audit_event <include refid="filters"/>
+        order by ${q.orderBy}, id desc limit #{q.size} offset #{q.offset}
+    </select>
+    <select id="countPage" resultType="long">
+        select count(*) from audit_event <include refid="filters"/>
     </select>
 </mapper>

@@ -42,13 +42,13 @@ public class DocumentController {
     private final SampleRfqBuilder sampleBuilder;
 
     public record DocumentView(String id, String projectId, String name, int version, String purpose,
-            long sizeBytes, String sha256, String status, String uploadedBy, Instant createdAt) {
+            long sizeBytes, String sha256, String status, String uploadedBy, Instant createdAt,String contentType) {
 
         public static DocumentView of(CustomerDocument document) {
             return new DocumentView(document.getId(), document.getProjectId(), document.getName(),
                     document.getVersion(), document.getPurpose(), document.getSizeBytes(),
                     document.getSha256(), document.getStatus(), document.getUploadedBy(),
-                    document.getCreatedAt());
+                    document.getCreatedAt(),document.getContentType());
         }
     }
 
@@ -59,11 +59,18 @@ public class DocumentController {
             @RequestParam(required = false) String sort) {
         Project project = requireProject(projectId);
         access.requireProject(CurrentUserHolder.require(), project);
-        PageQuery query = PageQuery.of(page, size, sort, List.of("createdAt"), "createdAt,desc");
+        PageQuery query = PageQuery.of(page, size, sort, List.of("createdAt","version"), "createdAt,desc");
         List<CustomerDocument> data = documents.findPage(projectId, query);
         long total = documents.countByProjectId(projectId);
         return ApiResponse.success(PageView.of(data.stream().map(DocumentView::of).toList(),
                 total, query.getPage(), query.getSize()));
+    }
+
+    @GetMapping("/documents/{documentId}")
+    public ApiResponse<DocumentView> detail(@PathVariable String documentId) {
+        CustomerDocument document=documents.findById(documentId).orElseThrow(()->new BusinessException(404,"文档不存在"));
+        access.requireProject(CurrentUserHolder.require(),requireProject(document.getProjectId()));
+        return ApiResponse.success(DocumentView.of(document));
     }
 
     @org.springframework.transaction.annotation.Transactional
@@ -75,6 +82,7 @@ public class DocumentController {
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
+        access.requireActiveProject(project);
 
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "请选择要上传的文件");
@@ -82,11 +90,13 @@ public class DocumentController {
         String name = file.getOriginalFilename() == null ? "unnamed" : file.getOriginalFilename();
         name = name.replace('\\', '/');
         name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "");
-        if (name.isBlank() || name.length() > 280) throw new BusinessException(400, "文件名为空或过长");
+        if (name.isBlank() || name.length() > 255) throw new BusinessException(400, "文件名为空或超过 255 个字符");
         String lower = name.toLowerCase(Locale.ROOT);
         String extension = SUPPORTED.stream().filter(lower::endsWith).findFirst()
                 .orElseThrow(() -> new BusinessException(400,
                         "当前仅支持 DOCX / PDF。DOC 请先另存为 DOCX 再上传"));
+
+        int fileVersion=nextVersion(projectId);
 
         String documentId = Ids.next("DOC");
         DocumentStorage.StoredFile stored = storage.save(documentId, file, extension);
@@ -96,19 +106,19 @@ public class DocumentController {
         document.setId(documentId);
         document.setProjectId(projectId);
         document.setName(name);
-        document.setVersion(nextVersion(projectId));
+        document.setVersion(fileVersion);
         document.setPurpose("REQUIREMENT_SOURCE");
         document.setStorageRef(stored.storageRef());
-        document.setContentType(file.getContentType());
+        document.setContentType(canonicalType(name));
         document.setSizeBytes(stored.size());
         document.setSha256(stored.sha256());
         document.setStatus(CustomerDocument.STATUS_UPLOADED);
         document.setUploadedBy(user.id());
-        documents.insert(document);
+        insertOriginal(document);
 
         project.setStage("PARSING");
         projects.update(project);
-        audit.success(user.id(), "上传客户文件", "document", document.getId(),
+        audit.successInBu(user.id(), project.getBuId(), "上传客户文件", "document", document.getId(),
                 name + "（" + stored.size() + " bytes）");
         return ApiResponse.success(DocumentView.of(document));
     }
@@ -121,6 +131,9 @@ public class DocumentController {
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
+        access.requireActiveProject(project);
+
+        int fileVersion=nextVersion(projectId);
 
         String documentId = Ids.next("DOC");
         byte[] content = sampleBuilder.build();
@@ -131,7 +144,7 @@ public class DocumentController {
         document.setId(documentId);
         document.setProjectId(projectId);
         document.setName("示例RFQ-锅炉给水泵.docx");
-        document.setVersion(nextVersion(projectId));
+        document.setVersion(fileVersion);
         document.setPurpose("REQUIREMENT_SOURCE");
         document.setStorageRef(stored.storageRef());
         document.setContentType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
@@ -139,11 +152,11 @@ public class DocumentController {
         document.setSha256(stored.sha256());
         document.setStatus(CustomerDocument.STATUS_UPLOADED);
         document.setUploadedBy(user.id());
-        documents.insert(document);
+        insertOriginal(document);
 
         project.setStage("PARSING");
         projects.update(project);
-        audit.success(user.id(), "载入示例RFQ", "document", document.getId(),
+        audit.successInBu(user.id(), project.getBuId(), "载入示例RFQ", "document", document.getId(),
                 document.getName() + "（" + stored.size() + " bytes）");
         return ApiResponse.success(DocumentView.of(document));
     }
@@ -152,16 +165,16 @@ public class DocumentController {
     public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> download(@PathVariable String documentId) throws IOException {
         CustomerDocument document = documents.findById(documentId).orElseThrow(() -> new BusinessException(404, "文档不存在"));
         access.requireProject(CurrentUserHolder.require(), requireProject(document.getProjectId()));
-        var path = storage.resolve(document.getStorageRef());
-        if (!java.nio.file.Files.isRegularFile(path)) throw new BusinessException(404, "原件不存在");
-        String type = document.getName().toLowerCase(Locale.ROOT).endsWith(".pdf") ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        var path = storage.verifiedFile(document.getStorageRef(),document.getSizeBytes(),document.getSha256());
+        String type = canonicalType(document.getName());
         return org.springframework.http.ResponseEntity.ok()
             .header("Cache-Control", "no-store")
             .header("X-Content-Type-Options", "nosniff")
             .header("Content-Disposition", org.springframework.http.ContentDisposition.attachment()
                 .filename(document.getName(), java.nio.charset.StandardCharsets.UTF_8).build().toString())
             .contentType(org.springframework.http.MediaType.parseMediaType(type))
+            .contentLength(document.getSizeBytes())
+            .eTag("\""+document.getSha256().toLowerCase(Locale.ROOT)+"\"")
             .body(new org.springframework.core.io.FileSystemResource(path));
     }
 
@@ -177,14 +190,27 @@ public class DocumentController {
             });
     }
 
-    private int nextVersion(String projectId) {        return documents.findByProjectIdOrderByCreatedAtDesc(projectId).stream()
-                .map(CustomerDocument::getVersion)
-                .filter(java.util.Objects::nonNull)
-                .max(Integer::compareTo)
-                .orElse(0) + 1;
+    private int nextVersion(String projectId) {
+        Integer latest=documents.findLatestVersionForUpdate(projectId).orElse(null);
+        if(latest==null)return 1;
+        if(latest<1)throw new BusinessException(409,"原件版本记录无效，请联系管理员核对");
+        if(latest==Integer.MAX_VALUE)throw new BusinessException(409,"原件版本已达上限，不能继续上传");
+        return latest+1;
+    }
+
+    private void insertOriginal(CustomerDocument document) {
+        try {documents.insert(document);}
+        catch(org.springframework.dao.DuplicateKeyException exception) {throw new BusinessException(409,"原件版本冲突，请刷新后重试");}
     }
 
     private Project requireProject(String projectId) {
         return projects.findById(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
+    }
+
+    private static String canonicalType(String name) {
+        String lower=name.toLowerCase(Locale.ROOT);
+        if(lower.endsWith(".pdf"))return "application/pdf";
+        if(lower.endsWith(".docx"))return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        throw new BusinessException(409,"原件格式记录无效，请联系管理员核对");
     }
 }

@@ -2,7 +2,7 @@
 
 > 对应实现：`rfq-service`（Spring Boot 3 / Java 17）
 > 编写依据：`docs/RFQ后端接口规范_CRUD_v0.1.md`（下称《规范》）
-> 更新时间：2026-11-02 ｜ 状态：P0+P1 纵向切片
+> 更新时间：2026-11-03 ｜ 状态：基础管理、项目权限与审计已补齐；首批验收见《RFQ 后端开发验收清单》
 > 组织方式：**按资源分组**（规范 §7），组内接口标注五件套归属
 
 ---
@@ -56,12 +56,12 @@ HTTP 401
 
 | 角色 | 数据能力 |
 |---|---|
-| `SR` | 建/查项目、上传文件、触发解析、修正条款（本 BU 内） |
+| `SR` | 建项目；在本 BU 获授权项目内上传文件、解析和修正条款 |
 | `BU_ADMIN` | 同 SR |
-| `TECH` / `APPROVER` | 只读 |
-| `systemAdmin` | 可见全部 BU |
+| `TECH` / `APPROVER` | 本 BU 获授权项目只读；APPROVER 为兼容角色 |
+| `systemAdmin` | 管理全部 BU、账号及授权元数据；不自动取得项目正文读取权 |
 
-**BU 隔离**：所有按 ID 的读写都先校验资源归属（规范 §5 IDOR 防护），跨 BU 一律 403。
+**BU 与项目隔离**：所有按 ID 的业务读写均先校验 BU、有效成员身份及项目授权；本 BU 管理员拥有本 BU 项目管理访问权，普通业务人员须为负责人或显式授权成员。加入 BU 不自动开放所有项目。停用/撤权后旧 JWT 下一次请求立即按最新权限校验。
 
 ### 1.6 演示账号（种子数据，仅 local profile）
 
@@ -150,13 +150,17 @@ GET /api/rfq/auth/me
 
 ## 3. 资源：项目（project）
 
-> 五件套：查列表 ✅ ／ 查单个 ✅ ／ 增 ✅ ／ 改（无业务场景，暂缓）／ 删（规范 §1.4 禁止物理删，走 `stage=CANCELLED`，动作接口未实现）
+> 五件套：查列表 ✅ ／ 查单个 ✅ ／ 增 ✅ ／ 改 ✅ ／ 归档与恢复 ✅（无物理删除）。基本信息、负责人移交、归档、恢复及新增查询参数见 [项目维护接口 v0.1](RFQ项目维护接口_v0.1.md)。所有项目维护写操作要求当前 version 与原因。
 
 | # | 方法 | 路径 | 归属 | 规范状态 |
 |---|---|---|---|---|
 | 3.1 | GET | `/api/rfq/projects` | 查列表（分页） | ✅ 符合 |
 | 3.2 | GET | `/api/rfq/projects/{id}` | 查单个 | ✅ 符合（含 IDOR 防护） |
 | 3.3 | POST | `/api/rfq/projects` | 增 | ✅ 符合 |
+| 3.4 | PATCH | `/api/rfq/projects/{id}` | 修改基本信息 | ✅ B09 |
+| 3.5 | POST | `/api/rfq/projects/{id}/handovers` | 移交负责人 | ✅ B09 |
+| 3.6 | POST | `/api/rfq/projects/{id}/archives` | 归档 | ✅ B09 |
+| 3.7 | POST | `/api/rfq/projects/{id}/restorations` | 恢复 | ✅ B09 |
 
 **ProjectView 结构**
 
@@ -190,7 +194,9 @@ GET /api/rfq/projects?page=1&size=20&sort=createdAt,desc
 | Query | `size` | int | ❌ | 每页条数，默认 20，上限 100 |
 | Query | `sort` | string | ❌ | 白名单：`createdAt`，默认 `createdAt,desc` |
 
-过滤规则由服务端按身份决定：systemAdmin 返回全部；其他角色返回其绑定 BU 的项目。
+过滤规则由服务端 SQL 决定：对应 BU 管理员可见该 BU；普通业务人员仅见有效角色和项目授权共同允许的项目。过滤在分页及计数前生效；只有平台身份时列表为空。
+
+默认 archived=false，仅返回活动项目；archived=true 只查归档项目。另支持 keyword（编码/名称/客户）和 stage 白名单过滤。ProjectView 另含 deadline、archived 与归档元数据；详见项目维护接口说明。
 
 **响应 `data`**：分页信封（§1.7），`list` 元素为 `ProjectView`
 
@@ -235,7 +241,9 @@ POST /api/rfq/projects
 
 ## 4. 资源：客户文档（document）
 
-> 五件套：查列表 ✅ ／ 查单个（无场景，暂缓）／ 增（上传）✅ ／ 改（无）／ 删（规范 §1.4：走 `status=ARCHIVED`，未实现）
+> B10 更新：详情、规范 MIME、文件名与流长度校验、当前读取版本分配/唯一约束、下载前完整性检查和 HTTP Range/HEAD，见 [原件上传与下载接口 v0.1](RFQ原件上传与下载接口_v0.1.md)。版本表示项目内上传序号，原件不覆盖。
+
+> 五件套：查列表 ✅ ／ 查单个 ✅ ／ 增（上传）✅ ／ 改（原件不可覆盖，仅内部解析状态更新）／ 删（不提供物理删除；文件独立归档由后续来源管理处理）
 
 | # | 方法 | 路径 | 归属 | 规范状态 |
 |---|---|---|---|---|
@@ -524,15 +532,12 @@ PATCH /api/rfq/requirements/{id}
 
 ---
 
-## 8. 待实现接口（规划占位，实现后按本档格式补全）
+## 8. 管理接口与后续开发范围
+
+基础管理、成员资格、项目授权和审计的实际路径、参数、响应与权限，见 [基础管理接口 v0.1](RFQ基础管理接口_v0.1.md)。原 `/admin/bus` 占位路径未启用，实际为 `/admin/business-units`。原件下载已在 §4 实现。以下业务流程仍待开发：
 
 | 接口 | 归属切片 | 说明 |
 |---|---|---|
-| `POST /api/rfq/admin/bus` | P2 管理面 | 系统管理员创建 BU |
-| `GET /api/rfq/admin/bus/{id}/members` | P2 管理面 | BU 管理员查看本 BU 成员（分页） |
-| `POST /api/rfq/admin/bus/{id}/members` | P2 管理面 | 授予/变更 BU 角色 |
-| `GET /api/rfq/audit` | P2 管理面 | 审计查询（分页 + 过滤，直接复用 `PageView`） |
-| `GET /api/rfq/documents/{id}/download` | P2 | JWT 鉴权版原始文件下载 |
 | `POST /api/rfq/projects/{id}/deviations` | P3 流程 | 偏离项登记（规范 §6 骨架示例资源） |
 | `POST /api/rfq/projects/{id}/snapshots` | P3 流程 | 审批快照 + 指纹 |
 | `POST /api/rfq/projects/{id}/exports` | P3 流程 | 导出应答稿记录 |

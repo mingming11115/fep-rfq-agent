@@ -4,6 +4,7 @@ import com.naura.rfq.domain.AppUser;
 import com.naura.rfq.domain.UserBuRole;
 import com.naura.rfq.mapper.AppUserMapper;
 import com.naura.rfq.mapper.UserBuRoleMapper;
+import com.naura.rfq.mapper.BuMemberProfileMapper;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class SessionService {
 
     private final AppUserMapper users;
     private final UserBuRoleMapper roles;
+    private final BuMemberProfileMapper profiles;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
@@ -34,7 +36,10 @@ public class SessionService {
     }
 
     private CurrentUser toCurrentUser(AppUser user) {
+        var disabledBus = profiles.findByUserId(user.getId()).stream()
+                .filter(profile -> !profile.isEnabled()).map(profile -> profile.getBuId()).toList();
         List<CurrentUser.RoleGrant> grants = roles.findByUserIdAndStatus(user.getId(), "ACTIVE").stream()
+                .filter(grant -> !disabledBus.contains(grant.getBuId()))
                 .map(this::toGrant)
                 .toList();
         return new CurrentUser(user.getId(), user.getDisplayName(), user.isSystemAdmin(), grants);

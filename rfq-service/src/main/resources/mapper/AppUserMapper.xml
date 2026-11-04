@@ -13,7 +13,7 @@
             </if>
             <if test="buIds != null">
                 and exists (select 1 from user_bu_role r
-                            where r.user_id = app_user.id and r.status = 'ACTIVE'
+                            where r.user_id = app_user.id
                               and r.bu_id in
                               <foreach collection="buIds" item="buId" open="(" separator="," close=")">#{buId}</foreach>)
             </if>

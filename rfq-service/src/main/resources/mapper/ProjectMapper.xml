@@ -3,7 +3,7 @@
 <mapper namespace="com.naura.rfq.mapper.ProjectMapper">
 
     <sql id="columns">id, code, name, customer, bu_id, owner_id, stage, version, created_by, created_at,
-        updated_at</sql>
+        updated_at, deadline, archived_from_stage, archived_at, archived_by, archive_reason</sql>
 
     <sql id="scopeFilter">
         <where>
@@ -20,7 +20,7 @@
         where id = #{id}
     </select>
 
-    <select id="findByIdForUpdate" resultType="com.naura.rfq.domain.Project">
+    <select id="findByIdForUpdate" resultType="com.naura.rfq.domain.Project" useCache="false" flushCache="true">
         select <include refid="columns"/>
         from project
         where id = #{id} for update
@@ -61,23 +61,60 @@
         <include refid="scopeFilter"/>
     </select>
 
+    <sql id="accessibleFilter">
+        where exists (select 1 from user_bu_role r join app_user u on u.id=r.user_id
+            where r.user_id=#{userId} and r.bu_id=project.bu_id and r.status='ACTIVE' and u.status='ACTIVE'
+            and not exists (select 1 from bu_member_profile bp where bp.user_id=r.user_id and bp.bu_id=r.bu_id and bp.enabled=false)
+            and (r.role='BU_ADMIN' or (r.role in ('SR','TECH','APPROVER') and
+                (project.owner_id=#{userId} or exists (select 1 from project_member m
+                    where m.project_id=project.id and m.user_id=#{userId} and m.enabled=true)))))
+        <choose>
+            <when test="f.archived">and stage='CANCELLED'</when>
+            <otherwise>and stage &lt;&gt; 'CANCELLED'</otherwise>
+        </choose>
+        <if test="f.keywordPattern != null">
+            and (code like concat('%',#{f.keywordPattern},'%') escape '!'
+                or name like concat('%',#{f.keywordPattern},'%') escape '!'
+                or customer like concat('%',#{f.keywordPattern},'%') escape '!')
+        </if>
+        <if test="f.stage != null">and stage=#{f.stage}</if>
+    </sql>
+    <select id="findAccessiblePage" resultType="com.naura.rfq.domain.Project">
+        select <include refid="columns"/> from project <include refid="accessibleFilter"/>
+        order by ${q.orderBy}, id limit #{q.size} offset #{q.offset}
+    </select>
+    <select id="countAccessible" resultType="long">
+        select count(*) from project <include refid="accessibleFilter"/>
+    </select>
+
     <insert id="insert">
         insert into project (id, code, name, customer, bu_id, owner_id, stage, version, created_by,
-                             created_at, updated_at)
+                             created_at, updated_at, deadline, archived_from_stage, archived_at, archived_by, archive_reason)
         values (#{id}, #{code}, #{name}, #{customer}, #{buId}, #{ownerId}, #{stage},
-                coalesce(#{version}, 0), #{createdBy}, #{createdAt}, #{updatedAt})
+                coalesce(#{version}, 0), #{createdBy}, #{createdAt}, #{updatedAt}, #{deadline}, #{archivedFromStage}, #{archivedAt}, #{archivedBy}, #{archiveReason})
     </insert>
 
-    <update id="update">
-        update project
-        set code       = #{code},
+    <sql id="assignments">
+            code       = #{code},
             name       = #{name},
             customer   = #{customer},
             bu_id      = #{buId},
             owner_id   = #{ownerId},
             stage      = #{stage},
             version    = version + 1,
-            updated_at = #{updatedAt}
+            updated_at = #{updatedAt},
+            deadline   = #{deadline},
+            archived_from_stage = #{archivedFromStage},
+            archived_at = #{archivedAt},
+            archived_by = #{archivedBy},
+            archive_reason = #{archiveReason}
+    </sql>
+    <update id="update">
+        update project set <include refid="assignments"/>
         where id = #{id}
+    </update>
+    <update id="updateWithVersion">
+        update project set <include refid="assignments"/>
+        where id = #{id} and version = #{version}
     </update>
 </mapper>

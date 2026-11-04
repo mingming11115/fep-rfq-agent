@@ -13,6 +13,7 @@ public class AuditEvent {
     private String id;
 
     private String actorId;
+    private String buId;
 
     private String action;
 

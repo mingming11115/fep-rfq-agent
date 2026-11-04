@@ -1,6 +1,7 @@
 package com.naura.rfq.common.exception;
 
 import com.naura.rfq.common.api.ApiResponse;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -12,12 +13,24 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidArgument(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, exception.getMessage()));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleWriteContention(PessimisticLockingFailureException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(409,"数据正在被其他操作修改，请刷新后重试"));
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
@@ -62,6 +75,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleExceptionInternal(
             Exception exception, Object body, HttpHeaders headers,
             HttpStatusCode status, WebRequest request) {
+        if(exception instanceof MaxUploadSizeExceededException) {
+            body=ApiResponse.error(413,"上传文件或请求内容过大，单文件最多 30 MiB");
+        }
         HttpStatus knownStatus = HttpStatus.resolve(status.value());
         String message = status.is5xxServerError() ? "服务内部错误"
                 : knownStatus != null ? knownStatus.getReasonPhrase() : "请求处理失败";

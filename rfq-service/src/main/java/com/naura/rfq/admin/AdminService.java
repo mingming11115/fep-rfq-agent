@@ -2,6 +2,8 @@ package com.naura.rfq.admin;
 
 import com.naura.rfq.audit.AuditService;
 import com.naura.rfq.auth.CurrentUser;
+import com.naura.rfq.auth.CurrentUserHolder;
+import com.naura.rfq.auth.AccessGuard;
 import com.naura.rfq.common.api.PageQuery;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
@@ -34,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class AdminService {
 
     public static final String ACTIVE = "ACTIVE";
@@ -50,6 +53,7 @@ public class AdminService {
     private final BuMemberProfileMapper profiles;
     private final PasswordEncoder passwordEncoder;
     private final AuditService audit;
+    private final AccessGuard access;
 
     public record UserRow(AppUser user, List<UserBuRole> roles) {
     }
@@ -86,7 +90,7 @@ public class AdminService {
         unit.setCode(code);
         unit.setName(name);
         businessUnits.insert(unit);
-        audit.success(actor.id(), "新建事业部", "business_unit", unit.getId(), code + " · " + name);
+        audit.successInBu(actor.id(), unit.getId(), "新建事业部", "business_unit", unit.getId(), code + " · " + name);
         return unit;
     }
 
@@ -95,7 +99,7 @@ public class AdminService {
         BusinessUnit unit = businessUnits.findById(id)
                 .orElseThrow(() -> new BusinessException(404, "事业部不存在"));
         businessUnits.updateName(id, name);
-        audit.success(actor.id(), "修改事业部", "business_unit", id, unit.getName() + " → " + name);
+        audit.successInBu(actor.id(), id, "修改事业部", "business_unit", id, unit.getName() + " → " + name);
         unit.setName(name);
         return unit;
     }
@@ -127,7 +131,9 @@ public class AdminService {
                 .findByUserIds(rows.stream().map(AppUser::getId).toList(), ACTIVE).stream()
                 .collect(Collectors.groupingBy(UserBuRole::getUserId));
         return new Slice<>(rows.stream()
-                .map(user -> new UserRow(user, grouped.getOrDefault(user.getId(), List.of())))
+                .map(user -> new UserRow(user, grouped.getOrDefault(user.getId(), List.of()).stream()
+                        .filter(role -> actor.systemAdmin() || actor.roles().stream().anyMatch(grant ->
+                                BU_ADMIN.equals(grant.role()) && grant.buId().equals(role.getBuId()))).toList()))
                 .toList(), total);
     }
 
@@ -162,15 +168,16 @@ public class AdminService {
         users.insert(user);
 
         bind(user.getId(), buId, command.role());
-        audit.success(actor.id(), "新建账号", "app_user", user.getId(),
+        audit.successInBu(actor.id(), buId, "新建账号", "app_user", user.getId(),
                 command.username() + " · " + buId + " · " + command.role());
         return new UserRow(user, bindings.findByUserIdAndStatus(user.getId(), ACTIVE));
     }
 
     public AppUser updateUser(CurrentUser actor, String id, String displayName, String email) {
         AppUser target = requireManagedUser(actor, id);
+        requireGlobalUserScope(actor, id);
         users.updateProfile(id, displayName, email);
-        audit.success(actor.id(), "修改账号资料", "app_user", id,
+        auditUserChange(actor, target, "修改账号资料",
                 target.getDisplayName() + " → " + displayName);
         target.setDisplayName(displayName);
         target.setEmail(email);
@@ -182,6 +189,7 @@ public class AdminService {
             throw new BusinessException(400, "账号状态只能是 ACTIVE 或 DISABLED");
         }
         AppUser target = requireManagedUser(actor, id);
+        requireGlobalUserScope(actor, id);
         if (DISABLED.equals(status)) {
             if (target.getId().equals(actor.id())) {
                 throw new BusinessException(400, "不能停用当前登录的账号");
@@ -191,16 +199,17 @@ public class AdminService {
             }
         }
         users.updateStatus(id, status);
-        audit.success(actor.id(), ACTIVE.equals(status) ? "启用账号" : "停用账号", "app_user", id,
+        auditUserChange(actor, target, ACTIVE.equals(status) ? "启用账号" : "停用账号",
                 target.getUsername());
         target.setStatus(status);
         return target;
     }
 
     public void resetPassword(CurrentUser actor, String id, String rawPassword) {
-        requireManagedUser(actor, id);
+        AppUser target = requireManagedUser(actor, id);
+        requireGlobalUserScope(actor, id);
         users.updatePassword(id, passwordEncoder.encode(rawPassword));
-        audit.success(actor.id(), "重置密码", "app_user", id, "已重置登录密码");
+        auditUserChange(actor, target, "重置密码", "已重置登录密码");
     }
 
     // -------------------------------------------------------------- 角色绑定
@@ -225,11 +234,11 @@ public class AdminService {
         if (revived != null) {
             bindings.updateStatus(userId, buId, role, ACTIVE);
             revived.setStatus(ACTIVE);
-            audit.success(actor.id(), "恢复角色", "user_bu_role", userId, buId + " · " + role);
+            audit.successInBu(actor.id(), buId, "恢复角色", "user_bu_role", userId, role);
             return revived;
         }
         bind(userId, buId, role);
-        audit.success(actor.id(), "授予角色", "user_bu_role", userId, buId + " · " + role);
+        audit.successInBu(actor.id(), buId, "授予角色", "user_bu_role", userId, role);
         return bindings.findByUserIdAndStatus(userId, ACTIVE).stream()
                 .filter(binding -> binding.getBuId().equals(buId) && binding.getRole().equals(role))
                 .findFirst().orElseThrow(() -> new BusinessException(500, "角色绑定写入后未能读回"));
@@ -241,6 +250,9 @@ public class AdminService {
         requireManagedUser(actor, userId);
         requireManageBu(actor, buId);
         if (BU_ADMIN.equals(role)) {
+            if (!actor.systemAdmin()) {
+                throw new BusinessException(403, "仅系统管理员可以撤销 BU_ADMIN 角色");
+            }
             if (userId.equals(actor.id())) {
                 throw new BusinessException(400, "不能撤销自己的 BU 管理员角色");
             }
@@ -253,7 +265,7 @@ public class AdminService {
         if (changed == 0) {
             throw new BusinessException(404, "角色绑定不存在");
         }
-        audit.success(actor.id(), "撤销角色", "user_bu_role", userId, buId + " · " + role);
+        audit.successInBu(actor.id(), buId, "撤销角色", "user_bu_role", userId, role);
     }
 
     // -------------------------------------------------------------- 成员资格
@@ -269,15 +281,13 @@ public class AdminService {
         return membersOf(buId);
     }
 
-    /**
-     * 业务侧只读：任何登录用户都能看某个 BU 的成员及其资格。
-     * 确认人、最终评审人候选列表都依赖这份数据，因此不加管理权限校验。
-     */
+    /** 业务候选目录按当前身份校验 BU；无需额外的管理角色。 */
     @Transactional(readOnly = true)
     public List<MemberView> membersOf(String buId) {
         if (buId == null || buId.isBlank()) {
             throw new BusinessException(400, "请指定事业部");
         }
+        access.requireBu(CurrentUserHolder.require(), buId);
         List<UserBuRole> grants = bindings.findByBuId(buId);
         if (grants.isEmpty()) {
             return List.of();
@@ -314,39 +324,27 @@ public class AdminService {
             throw new BusinessException(400, "该账号不属于所选事业部");
         }
 
-        BuMemberProfile existing = profiles.findByBuIdAndUserId(buId, userId);
-        boolean nextConfirm = canConfirm != null ? canConfirm : existing != null && existing.isCanConfirm();
-        boolean nextReview = canFinalReview != null ? canFinalReview : existing != null && existing.isCanFinalReview();
         List<String> nextQualification = resourceQualifications != null
                 ? resourceQualifications.stream().filter(q -> q != null && !q.isBlank())
                         .map(String::trim).distinct().sorted().toList()
-                : splitQualifications(existing == null ? "" : existing.getResourceQualifications());
-        for (String qualification : nextQualification) {
+                : null;
+        for (String qualification : nextQualification == null ? List.<String>of() : nextQualification) {
             if (!QUALIFICATIONS.contains(qualification)) {
                 throw new BusinessException(400, "无效的资料发布权限：" + qualification);
             }
         }
 
-        boolean enabled = grants.stream().anyMatch(grant -> ACTIVE.equals(grant.getStatus()));
-        if (!enabled || !nextConfirm) {
-            nextReview = false;
-        }
+        profiles.patchQualifications(userId, buId, canConfirm, canFinalReview,
+                nextQualification == null ? null : String.join(",", nextQualification));
+        BuMemberProfile profile = profiles.findByBuIdAndUserId(buId,userId);
 
-        BuMemberProfile profile = new BuMemberProfile();
-        profile.setUserId(userId);
-        profile.setBuId(buId);
-        profile.setCanConfirm(nextConfirm);
-        profile.setCanFinalReview(nextReview);
-        profile.setResourceQualifications(String.join(",", nextQualification));
-        profiles.upsert(profile);
-
-        audit.success(actor.id(), "更新BU成员资格", "bu_member_profile", buId + "/" + userId,
-                target.getDisplayName() + "：条款确认=" + nextConfirm + "，最终评审=" + nextReview
-                        + "，资料发布=" + (nextQualification.isEmpty() ? "无" : String.join("/", nextQualification)));
+        audit.successInBu(actor.id(), buId, "更新BU成员资格", "bu_member_profile", buId + "/" + userId,
+                target.getDisplayName() + "：条款确认=" + profile.isCanConfirm() + "，最终评审=" + profile.isCanFinalReview()
+                        + "，资料发布=" + profile.getResourceQualifications());
         return toMemberView(target, buId, grants, profile);
     }
 
-    /** 切换成员在某个事业部内是否启用：改的是 user_bu_role.status，不是账号全局状态。 */
+    /** 暂停成员只改变档案 enabled，保留各角色原有授予/撤销状态。 */
     @Transactional
     public MemberView updateMemberEnabled(CurrentUser actor, String buId, String userId, boolean enabled) {
         requireManageBu(actor, buId);
@@ -354,8 +352,12 @@ public class AdminService {
         if (bindings.findByUserId(userId).stream().noneMatch(grant -> buId.equals(grant.getBuId()))) {
             throw new BusinessException(400, "该账号不属于所选事业部");
         }
-        bindings.updateBuStatus(userId, buId, enabled ? ACTIVE : DISABLED);
-        audit.success(actor.id(), enabled ? "启用BU成员" : "停用BU成员", "user_bu_role",
+        var grants = bindings.findByUserId(userId).stream().filter(grant -> buId.equals(grant.getBuId())).toList();
+        if (!actor.systemAdmin() && grants.stream().anyMatch(grant -> BU_ADMIN.equals(grant.getRole()))) {
+            throw new BusinessException(403, "仅系统管理员可以调整 BU 管理员的成员状态");
+        }
+        profiles.setEnabled(userId,buId,enabled);
+        audit.successInBu(actor.id(), buId, enabled ? "启用BU成员" : "停用BU成员", "bu_member_profile",
                 buId + "/" + userId, target.getDisplayName());
         return toMemberView(target, buId, bindings.findByUserId(userId),
                 profiles.findByBuIdAndUserId(buId, userId));
@@ -368,11 +370,12 @@ public class AdminService {
         }
         // 只有 ACTIVE 的角色才算数：停用的角色不应让该账号出现在候选人列表里。
         List<UserBuRole> active = grants.stream().filter(grant -> ACTIVE.equals(grant.getStatus())).toList();
+        boolean enabled = user.isActive() && !active.isEmpty() && (profile == null || profile.isEnabled());
         return new MemberView(user.getId(), user.getUsername(), user.getDisplayName(),
                 active.stream().map(UserBuRole::getRole).distinct().sorted().toList(),
-                !active.isEmpty(),
-                profile != null && profile.isCanConfirm(),
-                profile != null && profile.isCanFinalReview(),
+                enabled,
+                enabled && profile != null && profile.isCanConfirm(),
+                enabled && profile != null && profile.isCanConfirm() && profile.isCanFinalReview(),
                 splitQualifications(profile == null ? "" : profile.getResourceQualifications()));
     }
 
@@ -451,12 +454,26 @@ public class AdminService {
         if (managed.isEmpty()) {
             throw new BusinessException(403, "当前账号没有账号管理权限");
         }
-        boolean inScope = bindings.findByUserIdAndStatus(userId, ACTIVE).stream()
+        boolean inScope = bindings.findByUserId(userId).stream()
                 .anyMatch(binding -> managed.contains(binding.getBuId()));
         if (!inScope) {
             throw new BusinessException(403, "只能管理本人负责事业部内的账号");
         }
         return target;
+    }
+
+    private void requireGlobalUserScope(CurrentUser actor, String userId) {
+        if (actor.systemAdmin()) return;
+        var managed = managedBuScope(actor);
+        if (bindings.findByUserId(userId).stream().anyMatch(grant -> !managed.contains(grant.getBuId()))) {
+            throw new BusinessException(403, "该账号关联其他事业部，全局资料、密码和账号状态请联系平台管理员维护");
+        }
+    }
+
+    private void auditUserChange(CurrentUser actor, AppUser target, String action, String detail) {
+        var bus = bindings.findByUserId(target.getId()).stream().map(UserBuRole::getBuId).distinct().toList();
+        if(bus.isEmpty())audit.success(actor.id(),action,"app_user",target.getId(),detail);
+        else for(String buId:bus)audit.successInBu(actor.id(),buId,action,"app_user",target.getId(),detail);
     }
 
     private void requireRoleCode(String role) {

@@ -34,6 +34,11 @@
         limit #{q.size} offset #{q.offset}
     </select>
 
+    <select id="findByDocumentIdForUpdate" resultType="com.naura.rfq.domain.Requirement" useCache="false" flushCache="true">
+        select <include refid="columns"/> from requirement
+        where document_id=#{documentId} order by sort_order asc, id for update
+    </select>
+
     <select id="countByProjectId" resultType="long">
         select count(*)
         from requirement

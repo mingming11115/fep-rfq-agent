@@ -15,6 +15,8 @@ public interface RequirementMapper {
     List<Requirement> findByProjectIdOrderBySortOrder(@Param("projectId") String projectId);
 
     List<Requirement> findByDocumentIdOrderBySortOrder(@Param("documentId") String documentId);
+    /** Current read after serialization: a prior RR snapshot must not hide a committed human edit. */
+    List<Requirement> findByDocumentIdForUpdate(@Param("documentId") String documentId);
 
     List<Requirement> findPage(@Param("projectId") String projectId, @Param("q") PageQuery query);
 

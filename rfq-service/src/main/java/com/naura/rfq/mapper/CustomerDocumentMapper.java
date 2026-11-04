@@ -13,6 +13,7 @@ public interface CustomerDocumentMapper {
     Optional<CustomerDocument> findById(@Param("id") String id);
 
     Optional<CustomerDocument> findByIdForUpdate(@Param("id") String id);
+    Optional<Integer> findLatestVersionForUpdate(@Param("projectId") String projectId);
 
     List<CustomerDocument> findByProjectIdOrderByCreatedAtDesc(@Param("projectId") String projectId);
 
@@ -26,5 +27,6 @@ public interface CustomerDocumentMapper {
 
     int insert(CustomerDocument document);
 
+    /** Parser status write; original metadata and file identity are immutable. */
     int update(CustomerDocument document);
 }

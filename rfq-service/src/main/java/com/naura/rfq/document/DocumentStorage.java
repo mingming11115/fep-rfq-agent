@@ -80,6 +80,30 @@ public class DocumentStorage {
         if (!path.startsWith(root) || path.equals(root)) throw new IllegalArgumentException("非法的存储路径");
         return path;
     }
+
+    /** Verify the registered original before the existing streaming/range response is opened. */
+    public Path verifiedFile(String ref,Long expectedSize,String expectedSha256) throws IOException {
+        if(ref==null || ref.isBlank())throw new BusinessException(409,"原件记录不完整，请联系管理员核对");
+        Path file;
+        try { file=resolve(ref); }
+        catch(IllegalArgumentException exception) { throw new BusinessException(409,"原件记录无效，请联系管理员核对"); }
+        try {
+            if(!Files.isRegularFile(file,java.nio.file.LinkOption.NOFOLLOW_LINKS))throw new BusinessException(404,"原件不存在");
+            if(expectedSize==null || expectedSize<=0 || expectedSize>MAX_BYTES || expectedSha256==null || !expectedSha256.matches("(?i)[0-9a-f]{64}"))
+                throw new BusinessException(409,"原件完整性信息缺失，请联系管理员核对");
+            if(Files.size(file)!=expectedSize)throw new BusinessException(409,"原件大小校验失败，请联系管理员核对");
+            MessageDigest digest=sha256();long count=0;
+            try(var input=new DigestInputStream(Files.newInputStream(file),digest)) {
+                byte[] buffer=new byte[8192];int read;
+                while((read=input.read(buffer))!=-1) {
+                    count+=read;if(count>MAX_BYTES)throw new BusinessException(409,"原件大小校验失败，请联系管理员核对");
+                }
+            }
+            if(count!=expectedSize || !expectedSha256.equalsIgnoreCase(HexFormat.of().formatHex(digest.digest())))
+                throw new BusinessException(409,"原件哈希校验失败，请联系管理员核对");
+            return file;
+        } catch(java.nio.file.NoSuchFileException exception) { throw new BusinessException(404,"原件不存在"); }
+    }
     public void delete(String ref) throws IOException {
         Path file = resolve(ref);
         Files.deleteIfExists(file); Files.deleteIfExists(file.getParent());

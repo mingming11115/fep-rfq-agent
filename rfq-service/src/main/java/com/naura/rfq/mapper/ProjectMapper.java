@@ -2,6 +2,7 @@ package com.naura.rfq.mapper;
 
 import com.naura.rfq.common.api.PageQuery;
 import com.naura.rfq.domain.Project;
+import com.naura.rfq.project.ProjectFilter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -25,8 +26,11 @@ public interface ProjectMapper {
     List<Project> findPage(@Param("buIds") Collection<String> buIds, @Param("q") PageQuery query);
 
     long countPage(@Param("buIds") Collection<String> buIds);
+    List<Project> findAccessiblePage(@Param("userId") String userId, @Param("q") PageQuery query,@Param("f") ProjectFilter filters);
+    long countAccessible(@Param("userId") String userId,@Param("f") ProjectFilter filters);
 
     int insert(Project project);
 
     int update(Project project);
+    int updateWithVersion(Project project);
 }

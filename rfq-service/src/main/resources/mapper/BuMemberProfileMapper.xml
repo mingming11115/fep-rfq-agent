@@ -3,7 +3,7 @@
 <mapper namespace="com.naura.rfq.mapper.BuMemberProfileMapper">
 
     <sql id="columns">
-        id, user_id, bu_id, can_confirm, can_final_review, resource_qualifications, created_at, updated_at
+        id, user_id, bu_id, enabled, can_confirm, can_final_review, resource_qualifications, created_at, updated_at
     </sql>
 
     <select id="findByBuId" resultType="com.naura.rfq.domain.BuMemberProfile">
@@ -18,14 +18,25 @@
         where bu_id = #{buId}
           and user_id = #{userId}
     </select>
+    <select id="findByUserId" resultType="com.naura.rfq.domain.BuMemberProfile">
+        select <include refid="columns"/> from bu_member_profile where user_id = #{userId}
+    </select>
 
-    <insert id="upsert" parameterType="com.naura.rfq.domain.BuMemberProfile">
+    <insert id="patchQualifications">
         insert into bu_member_profile (user_id, bu_id, can_confirm, can_final_review, resource_qualifications)
-        values (#{userId}, #{buId}, #{canConfirm}, #{canFinalReview}, #{resourceQualifications})
+        values (#{userId}, #{buId}, coalesce(#{canConfirm},false),
+            coalesce(#{canConfirm},false) and coalesce(#{canFinalReview},false), coalesce(#{qualifications},''))
         on duplicate key update
-            can_confirm = values(can_confirm),
-            can_final_review = values(can_final_review),
-            resource_qualifications = values(resource_qualifications)
+            can_final_review = case when coalesce(#{canConfirm},can_confirm)=false then false
+                else coalesce(#{canFinalReview},can_final_review) end,
+            can_confirm = coalesce(#{canConfirm},can_confirm),
+            resource_qualifications = coalesce(#{qualifications},resource_qualifications),
+            updated_at = current_timestamp
+    </insert>
+
+    <insert id="setEnabled">
+        insert into bu_member_profile (user_id,bu_id,enabled) values (#{userId},#{buId},#{enabled})
+        on duplicate key update enabled=values(enabled),updated_at=current_timestamp
     </insert>
 
     <delete id="deleteByUserId">
