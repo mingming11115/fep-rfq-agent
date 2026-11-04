@@ -18,6 +18,6 @@ test('BU member pagination preserves member actions and knowledge tabs navigate 
  assert.equal(host.querySelectorAll('tbody tr[data-row-key]').length,10);const next=host.querySelector('.ant-pagination-next button');assert.ok(next);await act(async()=>{next.click();await settle();});assert.equal(host.querySelectorAll('tbody tr[data-row-key]').length,4);assert.match(host.textContent,/成员13/);
  const actions=[...host.querySelectorAll('button')].filter(b=>b.textContent.includes('配置范围'));assert.equal(actions.length,4);
  const routes=[];await act(async()=>{root.render(React.createElement(Workspace,{page:'knowledge',actorRole:'BU管理员',permissionContext:{state,actorId:state.actorId,buId:'BU-DEMO'},onNavigate:key=>routes.push(key)},React.createElement('p',null,'保留页面内容')));await settle();});
- const group=[...host.querySelectorAll('[role="tab"]')].find(e=>e.textContent.includes('分组与能力配置'));assert.ok(group);await act(async()=>group.click());assert.deepEqual(routes,['capabilities']);assert.match(host.textContent,/保留页面内容/);
+ const group=[...host.querySelectorAll('[role="tab"]')].find(e=>e.textContent==='能力');assert.ok(group);await act(async()=>group.click());assert.deepEqual(routes,['capabilities']);assert.match(host.textContent,/保留页面内容/);
  }finally{await act(async()=>root.unmount());window.happyDOM.abort();}
 });

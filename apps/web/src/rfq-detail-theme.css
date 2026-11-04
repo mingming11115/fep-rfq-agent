@@ -1,0 +1,24 @@
+/* RFQ detail uses the shared Ant Design theme; document typography stays independent. */
+.rfq-detail { color:var(--text); font-size:14px; line-height:1.6; }
+.rfq-detail .detail-business { background:var(--surface); border-color:#d9d9d9; border-radius:8px; box-shadow:none; }
+.rfq-detail .detail-business-tabs { border-color:var(--border); padding-inline:16px; }
+.rfq-detail .detail-business-tabs>button { font-size:14px; color:var(--text-secondary); }
+.rfq-detail .detail-business-tabs>button.active { color:var(--primary); }
+.rfq-detail .detail-business .response-current-card .response-column-heading { padding:16px 24px; background:var(--surface); border-color:var(--border); }
+.rfq-detail .detail-business .response-current-card .response-column-heading h2 { font-size:16px; font-weight:600; color:var(--text); }
+.rfq-detail .detail-business .response-current-card .response-editor-body { padding:24px; font-size:14px; line-height:1.6; color:var(--text); }
+.rfq-detail .detail-business .response-current-card .response-active-title h2 { font-size:16px; font-weight:600; color:var(--text); }
+.rfq-detail .detail-business :is(.response-confirmation-owner,.response-save-state,.response-permission-tip,.response-wording-heading>span,.response-wording-footer>small,.response-card-navigation>span,.response-card-issue-tools>span,.response-card-queue-footer) { font-size:12px; color:var(--text-secondary); }
+.rfq-detail .detail-business .response-save-state.dirty { color:#ad6800; }
+.rfq-detail .detail-business .response-current-card :is(.response-form .field>span,.response-editor-body>.field>span,.response-wording-heading h3) { font-size:14px; font-weight:500; color:var(--text); }
+.rfq-detail .detail-business .response-current-card :is(.response-advice,.response-wording) { background:#fafafa; border:1px solid var(--border); border-radius:6px; padding:12px 16px; color:var(--text); font-size:14px; }
+.rfq-detail .detail-business .response-current-card .response-wording>textarea.input { font:inherit; font-size:14px; line-height:1.6; color:var(--text); background:var(--surface); border:1px solid #d9d9d9; border-radius:6px; padding:10px 12px; min-height:120px; }
+.rfq-detail .detail-business .response-current-card .response-wording>textarea.input:focus { border-color:var(--primary); outline:2px solid #91caff; outline-offset:0; }
+.rfq-detail .detail-business :is(.rfq-conclusion-radio .ant-radio-wrapper,.response-editor-actions .btn,.response-card-issue-tools .btn,.response-wording .btn,.response-conclusion-options button) { font-size:14px; }
+.rfq-detail .detail-business :is(.response-card-footer,.response-fixed-actions) { background:var(--surface); border-color:var(--border); padding:16px 24px; }
+.rfq-detail .detail-business .response-advice-ai { font-size:12px; color:var(--text-secondary); }
+.rfq-detail :is(.detail-document-header>.workspace-check,.detail-source-toolbar small,.detail-source-actions,.detail-clause-toolbar,.detail-outline-footer .text-link) { font-size:12px; color:var(--text-secondary); }
+.rfq-detail .detail-source-toolbar strong { font-size:14px; color:var(--text); }
+@media(max-width:767px) {
+ .rfq-detail .detail-business .response-current-card :is(.response-column-heading,.response-editor-body),.rfq-detail .detail-business :is(.response-card-footer,.response-fixed-actions) { padding:16px; }
+}

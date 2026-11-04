@@ -32,7 +32,7 @@ test('未登录时停在登录页，不渲染主应用',async()=>{
   const {node,render}=await mountAuthGate();
   await render();
   assert.match(node.textContent,/登录工作空间/);
-  assert.match(node.textContent,/演示账号/);
+  assert.match(node.textContent,/快捷登录账号/);
   assert.equal(node.querySelector('#app-shell'),null);
 });
 

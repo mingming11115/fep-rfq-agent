@@ -52,7 +52,7 @@ test('all four roles can create, save, submit and open knowledge imports while p
  try{
   for(const [actorId,role] of [['sr','SR'],['tech','技术'],['bu','BU管理员'],['system','后台管理']]){
    localStorage.setItem(storageKey,'[]');await render(actorId,role);
-   assert.ok([...container.querySelectorAll('[role="tab"]')].some(tab=>tab.textContent==='标准回复库'),`${role}: library tab`);
+   assert.ok([...container.querySelectorAll('[role="tab"]')].some(tab=>tab.textContent==='回复库'),`${role}: library tab`);
    assert.ok([...container.querySelectorAll('[role="tab"]')].some(tab=>tab.textContent==='历史 RFQ'),`${role}: history tab`);
    await click('新增标准回复');
    await act(async()=>{button('保存草稿').focus();await settle();});await click('保存草稿');

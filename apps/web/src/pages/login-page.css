@@ -41,7 +41,7 @@
 .login-brand-top{display:flex;align-items:center;gap:11px}
 .login-brand-top .brand-mark{height:34px;width:34px;font-size:26px}
 .login-brand-top strong{display:block;font-size:17px;font-weight:650;letter-spacing:-.01em;color:#182336;line-height:1.2}
-.login-brand-top small{display:block;margin-top:3px;font-size:11.5px;color:#86909c;letter-spacing:.02em}
+.login-brand-top small{display:block;margin-top:3px;font-size:11.5px;color:var(--text-secondary,#595959);letter-spacing:.02em}
 .login-brand h1{
   margin:6px 0 0;
   font-size:27px;
@@ -50,7 +50,7 @@
   letter-spacing:-.015em;
   color:#111b2b;
 }
-.login-brand-lead{margin:0;font-size:13px;line-height:1.75;color:#4e5969;max-width:30em}
+.login-brand-lead{margin:0;font-size:14px;line-height:1.75;color:#4e5969;max-width:30em}
 .login-capabilities{display:grid;gap:15px;margin:2px 0 0;padding:0;list-style:none}
 .login-capabilities li{display:flex;align-items:flex-start;gap:11px}
 .login-capabilities b{
@@ -64,34 +64,33 @@
   font-weight:600;
   font-variant-numeric:tabular-nums;
 }
-.login-capabilities strong{display:block;font-size:13px;font-weight:600;color:#1d2129;line-height:1.5}
-.login-capabilities span{display:block;margin-top:3px;font-size:12px;line-height:1.6;color:#86909c}
+.login-capabilities strong{display:block;font-size:14px;font-weight:600;color:#1d2129;line-height:1.5}
+.login-capabilities span{display:block;margin-top:3px;font-size:14px;line-height:1.6;color:var(--text-secondary,#595959)}
 .login-brand-foot{
   margin-top:auto;
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding-top:18px;
   border-top:1px solid #edf1f7;
-  font-size:11px;
-  color:#a3adba;
+  font-size:14px;color:var(--text-secondary,#595959);
 }
 
 /* ---------- 右栏：登录表单 ---------- */
 .login-panel{display:flex;flex-direction:column;justify-content:center;gap:18px;padding:38px 40px 30px}
 .login-panel-head h2{font-size:22px;font-weight:600;letter-spacing:-.01em;color:#111b2b}
-.login-panel-head p{margin-top:7px;font-size:13px;line-height:1.65;color:#4e5969}
+.login-panel-head p{margin-top:7px;font-size:14px;line-height:1.65;color:#4e5969}
 .login-error{margin:0}
 .login-form .ant-form-item{margin-bottom:16px}
 .login-form .ant-form-item-label{padding-bottom:6px}
 .login-form .ant-form-item-label>label{font-size:12.5px;color:#4e5969}
 .login-form .ant-input-affix-wrapper{padding-inline:11px}
-.login-form .ant-input-prefix{margin-inline-end:8px;color:#a3adba;display:inline-flex}
+.login-form .ant-input-prefix{margin-inline-end:8px;color:var(--text-secondary,#595959);display:inline-flex}
 .login-submit{height:40px;font-weight:500;letter-spacing:.01em}
-.login-form-meta{display:flex;align-items:center;justify-content:space-between;margin:-4px 0 14px;font-size:12px;color:#86909c}
+.login-form-meta{display:flex;align-items:center;justify-content:space-between;margin:-4px 0 14px;font-size:12px;color:var(--text-secondary,#595959)}
 
 .login-demo{border-top:1px dashed #e5e7eb;padding-top:16px}
 .login-demo-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .login-demo-head span{font-size:12.5px;font-weight:600;color:#4e5969}
-.login-demo-head small{font-size:11.5px;color:#a3adba}
+.login-demo-head small{font-size:11.5px;color:var(--text-secondary,#595959)}
 .login-demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .login-demo-card{
   display:flex;
@@ -116,16 +115,16 @@
   border-radius:50%;
   background:#e8f0ff;
   color:#1677ff;
-  font-size:13px;
+  font-size:14px;
   font-weight:600;
 }
 .login-demo-text{min-width:0;display:grid;gap:2px}
 .login-demo-text strong{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:#1d2129;white-space:nowrap}
-.login-demo-text em{font-style:normal;font-size:11px;font-weight:400;color:#86909c}
-.login-demo-text small{font-size:11px;color:#a3adba;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.login-demo-action{margin-left:auto;flex:none;font-size:11px;color:#1677ff;opacity:0;transition:opacity .15s ease}
+.login-demo-text em{font-style:normal;font-size:14px;font-weight:400;color:var(--text-secondary,#595959)}
+.login-demo-text small{font-size:12px;color:var(--text-secondary,#595959);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.login-demo-action{margin-left:auto;flex:none;font-size:14px;color:#1677ff;opacity:0;transition:opacity .15s ease}
 .login-demo-card:hover .login-demo-action,.login-demo-card.is-pending .login-demo-action{opacity:1}
-.login-footnote{margin:0;font-size:11px;line-height:1.6;color:#a3adba;text-align:center}
+.login-footnote{margin:0;font-size:12px;line-height:1.6;color:var(--text-secondary,#595959);text-align:center}
 
 @media(max-width:880px){
   .login-page{padding:24px 14px}

@@ -57,3 +57,17 @@ test('concurrent revisions allocate distinct monotonic versions and preserve eve
  for(const doc of readHistorySnapshot('A').documents)assert.ok(await files.get('A',doc.id));
  await assert.rejects(startHistoryUpload({file:new File(['unknown'],'bad.pdf'),buId:'A',actor,previousDocumentId:'missing'},deps),/不存在/);
 });
+
+test('history uploads share one original across groups and revisions inherit associations',async()=>{
+ const {files}=env(),context={buId:'A',actorId:'admin',state:{actorRole:'BU管理员',accountsById:{admin:{id:'admin',enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'}],buPersonnelByBuId:{A:[]}}};
+ localStorage.setItem('rfq.generic.catalog.v1:A',JSON.stringify({buId:'A',version:1,schema:{title:'Group',levels:[{id:'g',name:'Group',fields:[]}]},nodes:[{id:'G1',levelId:'g',name:'一组'},{id:'G2',levelId:'g',name:'二组'}],attachments:[]}));
+ const deps={files,parse:async()=>parsed},file=new File(['grouped source'],'groups.docx');
+ const first=(await startHistoryUpload({file,buId:'A',actor,groupIds:['G1'],permissionContext:context},deps)).document;await settle('A',first.id);
+ assert.deepEqual(readHistorySnapshot('A').clauses[0].groupIds,['G1']);
+ const duplicate=await startHistoryUpload({file,buId:'A',actor,groupIds:['G2'],permissionContext:context},deps);assert.equal(duplicate.duplicate,true);assert.equal(duplicate.document.id,first.id);
+ assert.deepEqual(readHistorySnapshot('A').documents[0].groupIds,['G1','G2']);assert.deepEqual(readHistorySnapshot('A').clauses[0].groupIds,['G1','G2']);
+ const revision=(await startHistoryUpload({file:new File(['revision grouped'],'v2.docx'),buId:'A',actor,previousDocumentId:first.id,groupIds:['G1'],permissionContext:context},deps)).document;await settle('A',revision.id);assert.deepEqual(revision.groupIds,['G1','G2']);
+ const {writeHistorySnapshot}=await import('./historyClient.js');const old=readHistorySnapshot('A');old.documents=old.documents.map(d=>d.id===first.id?{...d,groupIds:undefined,groupId:'G1'}:d);writeHistorySnapshot('A',old);
+ const inherited=(await startHistoryUpload({file:new File(['legacy group next'],'legacy-next.docx'),buId:'A',actor,previousDocumentId:first.id,permissionContext:context},deps)).document;await settle('A',inherited.id);assert.deepEqual(inherited.groupIds,['G1']);
+ await assert.rejects(startHistoryUpload({file:new File(['foreign'],'bad.docx'),buId:'A',actor,groupIds:['FOREIGN'],permissionContext:context},deps),/分组/);
+});

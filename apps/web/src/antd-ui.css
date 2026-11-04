@@ -3,12 +3,12 @@
 .ant-app .ant-select,.rfq-ant-modal .ant-select,.rfq-ant-drawer .ant-select{min-width:0}
 .rfq-ant-table .ant-pro-card-body{padding:0}
 .rfq-ant-table .ant-table-cell{vertical-align:middle}
-.rfq-table-meta{display:block;margin-top:4px;color:#86909c;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.rfq-table-meta{display:block;margin-top:4px;color:var(--text-secondary,#595959);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .rfq-ant-table .ant-btn-link{height:auto;padding:0;white-space:normal;text-align:left}
 .rfq-ant-table .ant-pro-table-list-toolbar-container{padding:12px 20px}
 .rfq-ant-table .ant-table-pagination{padding-inline:16px}
 .rfq-person-select{width:100%;min-width:0}
-.rfq-person-select .ant-select-selection-item{font-size:13px}
+.rfq-person-select .ant-select-selection-item{font-size:14px}
 .rfq-upload .ant-upload-drag{background:#f8faff}
 .rfq-upload .ant-upload-text{font-size:14px!important}
 .rfq-upload .ant-upload-list-item-name{overflow-wrap:anywhere}
@@ -18,7 +18,7 @@
 .rfq-create-grid>.ant-form-item{min-width:0}
 .rfq-create-form .rfq-catalog-tree{margin-bottom:12px}
 .rfq-mentions.ant-mentions{font-size:14px;line-height:1.7}
-@media(max-width:600px){.rfq-create-grid{grid-template-columns:1fr}.rfq-ant-modal .ant-modal-body{max-height:72dvh!important}.rfq-ant-table .ant-table-cell{font-size:13px}}
+@media(max-width:600px){.rfq-create-grid{grid-template-columns:1fr}.rfq-ant-modal .ant-modal-body{max-height:72dvh!important}.rfq-ant-table .ant-table-cell{font-size:14px}}
 
 .rfq-panel-tabs{padding:0 20px}.rfq-panel-tabs .ant-tabs-nav{margin-bottom:0}
 .rfq-ant-filters{flex-wrap:wrap}
@@ -28,12 +28,12 @@
 .rfq-workbench-splitter .detail-business{height:100%;min-height:0;margin-left:10px}
 .rfq-workbench-splitter .ant-splitter-bar{z-index:5}
 .rfq-detail .detail-business .response-editor-body{font-size:14px;line-height:1.7;padding:18px}
-.rfq-detail .detail-business .response-editor-body .field>span,.rfq-detail .detail-business .response-advice{font-size:13px}
+.rfq-detail .detail-business .response-editor-body .field>span,.rfq-detail .detail-business .response-advice{font-size:14px}
 .rfq-detail .detail-business .response-card-title-row h2{font-size:17px}
 .rfq-detail .detail-business .response-confirmation-owner,.rfq-detail .detail-business .response-permission-tip{font-size:12px}
 .rfq-detail .detail-business .response-editor-body textarea{font-size:14px;line-height:1.7}
 .rfq-detail .rfq-conclusion-radio{display:flex;flex-wrap:wrap;gap:10px 4px}
-.rfq-detail .rfq-conclusion-radio .ant-radio-wrapper{font-size:13px;margin-inline-end:10px}
+.rfq-detail .rfq-conclusion-radio .ant-radio-wrapper{font-size:14px;margin-inline-end:10px}
 .rfq-detail .detail-business .annotation-compose textarea,.rfq-detail .detail-business .annotation-reply-form textarea{font-size:14px}
 .rfq-detail .detail-business .annotation-reply-form{align-items:flex-start}
 .rfq-detail .detail-business .annotation-reply-form .ant-mentions{flex:1;min-width:0}
@@ -47,7 +47,7 @@
 .rfq-layout-content{padding:0 26px 20px;min-width:0}
 .rfq-layout-detail{padding-top:18px}
 .rfq-layout-menu-button{border:0;background:transparent;text-align:left;color:inherit;padding:0;width:100%;font:inherit;cursor:pointer}
-.rfq-layout-menu-footer{display:block;font-size:12px;color:#86909c;padding:8px 16px}
+.rfq-layout-menu-footer{display:block;font-size:14px;color:var(--text-secondary,#595959);padding:8px 16px}
 .rfq-pro-shell .ant-pro-global-header-logo .brand-mark{font-size:25px}
 .rfq-pro-shell .ant-pro-global-header-logo h1{font-size:20px!important}
 .rfq-pro-shell .ant-pro-sider-logo h1{font-size:20px!important}
@@ -71,23 +71,23 @@
 .project-detail-workspace>.project-context-top h1{flex:1;min-width:0;font-size:20px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 .project-detail-workspace>.project-context-top .project-final-actions{margin-left:auto;align-items:flex-end}
 .project-detail-workspace>.project-context-top .page-actions{padding-top:0;justify-content:flex-end}
-.project-detail-workspace>.project-context-top .project-process-binding{flex-basis:100%;margin:0;font-size:12px}
+.project-detail-workspace>.project-context-top .project-process-binding{flex-basis:100%;margin:0;font-size:14px}
 @media(max-width:767px){.rfq-layout-detail .project-detail-workspace>.project-context-top{gap:8px;min-height:0}.project-detail-workspace>.project-context-top .project-title-row{flex-basis:100%;flex-wrap:wrap;gap:10px}.project-detail-workspace>.project-context-top h1{flex-basis:100%;font-size:18px;white-space:normal;overflow-wrap:anywhere}.project-detail-workspace>.project-context-top .project-final-actions{margin-left:0;align-items:flex-start}.project-detail-workspace>.project-context-top .page-actions{justify-content:flex-start}}
 
 .rfq-layout-detail{display:flex;flex-direction:column;height:calc(100dvh - var(--pro-layout-header-height,56px));padding-block:12px 16px;box-sizing:border-box}
 .rfq-layout-detail .project-detail-workspace{flex:1;height:auto;min-height:0}
-.response-card-query>.ant-input-search{flex:1;min-width:0}.response-card-query .ant-input{font-size:12px}
+.response-card-query>.ant-input-search{flex:1;min-width:0}.response-card-query .ant-input{font-size:14px}
 .response-card-query>.response-filter-trigger{flex:none;padding-inline:8px;gap:3px}.response-filter-trigger.is-active{color:#1677ff;border-color:#a5bee9;background:#edf3ff}
 .response-filter-popover{width:260px;max-width:calc(100vw - 48px);display:grid;gap:14px}
-.response-filter-popover>label{display:grid;gap:6px;font-size:12px;color:#59677d}.response-filter-popover .ant-select{width:100%}
+.response-filter-popover>label{display:grid;gap:6px;font-size:14px;color:#59677d}.response-filter-popover .ant-select{width:100%}
 .response-filter-popover-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
 .response-card-stats{gap:2px;padding-inline:8px}.response-card-stats button{min-height:32px;padding-inline:7px}
 .response-card-deck{padding-bottom:3px}.response-card-under{bottom:3px}
 .response-fixed-actions{flex:none;background:#fff;border-top:1px solid #e5e9f0;padding:8px 10px;position:relative;z-index:4}
 .response-fixed-action-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px;flex-wrap:wrap}
-.response-card-navigation{display:flex;align-items:center;gap:2px;flex:none}.response-card-navigation .icon-btn{width:26px;height:30px;padding:3px;color:#59677d}.response-card-navigation>span{min-width:35px;text-align:center;font-size:11px;color:#86909c;font-variant-numeric:tabular-nums;white-space:nowrap}
-.response-fixed-primary-actions{display:flex;align-items:center;gap:6px;margin-left:auto}.response-fixed-primary-actions .btn{font-size:12px;min-height:32px;padding:6px 9px;gap:5px;white-space:nowrap}.response-fixed-primary-actions>.text-link{font-size:12px;white-space:nowrap;margin-right:2px}
-.response-fixed-actions>.response-permission-tip{margin:0 0 6px;font-size:11px;line-height:1.6;color:#86909c}.response-fixed-actions>.response-error{margin:0 0 8px;max-height:72px;overflow:auto;color:#c73636;font-size:12px}
+.response-card-navigation{display:flex;align-items:center;gap:2px;flex:none}.response-card-navigation .icon-btn{width:26px;height:30px;padding:3px;color:#59677d}.response-card-navigation>span{min-width:35px;text-align:center;font-size:14px;color:var(--text-secondary,#595959);font-variant-numeric:tabular-nums;white-space:nowrap}
+.response-fixed-primary-actions{display:flex;align-items:center;gap:6px;margin-left:auto}.response-fixed-primary-actions .btn{font-size:14px;min-height:32px;padding:6px 9px;gap:5px;white-space:nowrap}.response-fixed-primary-actions>.text-link{font-size:14px;white-space:nowrap;margin-right:2px}
+.response-fixed-actions>.response-permission-tip{margin:0 0 6px;font-size:12px;line-height:1.6;color:var(--text-secondary,#595959)}.response-fixed-actions>.response-error{margin:0 0 8px;max-height:72px;overflow:auto;color:#c73636;font-size:14px}
 @media(max-width:767px){.rfq-layout-detail{height:auto;display:block}.rfq-layout-detail .project-detail-workspace{height:auto;min-height:0}.response-fixed-actions{padding-inline:8px}}
 
 /* Only business layout lives here. Component colors, control dimensions,

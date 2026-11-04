@@ -1,3 +1,4 @@
+import GroupPicker from './KnowledgeGroupContext';
 import React, { useId, useRef } from 'react';
 import { Modal, Select } from 'antd';
 import { UiButton, UiInput, UiTextArea, UiSelect } from './AntContent';
@@ -37,7 +38,7 @@ export default function KnowledgeEditor({ form, isNew, error, onChange, onSave, 
     <div className="knowledge-editor">
       <p className="knowledge-editor-intro">{historical ? '记录历史项目的要求与最终答复。' : '整理可重复使用的客户要求与标准回复。'}保存后由 BU 管理员审核发布。</p>
       {error && <p className="knowledge-editor-error" role="alert">{error}</p>}
-      <section className="knowledge-editor-source-section" aria-label="来源">
+      <GroupPicker value={form.groupIds||[]} onChange={groupIds=>change('groupIds',groupIds)}/><section className="knowledge-editor-source-section" aria-label="来源">
         <div className="knowledge-editor-source">
           <EditorField label="来源类型">
             <UiSelect aria-label="来源类型" value={form.sourceType || undefined} allowClear placeholder="请选择来源类型"

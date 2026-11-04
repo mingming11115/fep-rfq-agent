@@ -12,7 +12,7 @@ export function clausesForDocument(document,clauses) {
 export function buildHistoryDocuments(documents,clauses) {
  const legacy=clauses.filter(row=>row.type==='history'&&!row.documentId),groups=new Map();
  for(const row of legacy){const key=JSON.stringify([row.source||'手工历史知识',row.scope||'FEP 授权项目',row.sourceProjectId||row.projectId||'']);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}
- return [...documents,...[...groups.entries()].map(([key,rows])=>({id:`legacy:${key}`,buId:rows[0].buId||'BU-DEMO',legacy:true,legacyIds:[...new Set(rows.map(row=>row.id))],name:rows[0].source||'手工历史知识',metadata:{},version:'—',parseStatus:'legacy',scope:rows[0].scope,projectId:rows[0].sourceProjectId||rows[0].projectId,createdAt:'',issues:[],sources:[]}))];
+ return [...documents,...[...groups.entries()].map(([key,rows])=>({id:`legacy:${key}`,buId:rows[0].buId||'BU-DEMO',legacy:true,...(rows.some(r=>Array.isArray(r.groupIds)||r.groupId)?{groupIds:[...new Set(rows.flatMap(r=>Array.isArray(r.groupIds)?r.groupIds:r.groupId?[r.groupId]:[]))]}:{}),legacyIds:[...new Set(rows.map(row=>row.id))],name:rows[0].source||'手工历史知识',metadata:{},version:'—',parseStatus:'legacy',scope:rows[0].scope,projectId:rows[0].sourceProjectId||rows[0].projectId,createdAt:'',issues:[],sources:[]}))];
 }
 export function selectHistoryResources(snapshot,context){
  const documents=selectReadableResources(snapshot.documents.map(document=>({...document,status:'草稿'})),context,'knowledge');
@@ -28,7 +28,7 @@ export function filterHistoryDocuments(documents,clauses,query='') {
  return documents.filter(doc=>[doc.name,...Object.values(doc.metadata||{}),...clausesForDocument(doc,clauses).flatMap(row=>[row.clauseNo,row.section,row.requirement,row.answer,row.conditions])].join(' ').toLowerCase().includes(search));
 }
 export function applyHistoryMetadata(document,clauses) {
- return clauses.map(row=>row.documentId===document.id?{...row,scope:document.scope,sourceProjectId:document.projectId||undefined,projectId:document.projectId||undefined,source:document.legacyImported&&row.source?row.source:`${document.name} · ${document.version||'未标注版本'}${row.clauseNo?` · 条款 ${row.clauseNo}`:''}`} : row);
+ return clauses.map(row=>row.documentId===document.id?{...row,...(Array.isArray(document.groupIds)?{groupIds:[...document.groupIds]}:{}),scope:document.scope,sourceProjectId:document.projectId||undefined,projectId:document.projectId||undefined,source:document.legacyImported&&row.source?row.source:`${document.name} · ${document.version||'未标注版本'}${row.clauseNo?` · 条款 ${row.clauseNo}`:''}`} : row);
 }
 export function materializeHistoryDocument(document,documents,clauses){
  if(!document.legacy)return {document,documents,clauses};

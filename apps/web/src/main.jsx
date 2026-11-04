@@ -9,6 +9,7 @@ import ThemeBridge from './components/ThemeBridge';
 import './styles.css';
 import './antd-ui.css';
 import './ui-polish.css';
+import './rfq-detail-theme.css';
 
 createRoot(document.getElementById('root')).render(
   <ConfigProvider locale={zhCN} theme={{
