@@ -1,6 +1,6 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.domain.UserBuRole;
+import com.naura.rfq.model.entity.UserBuRole;
 import java.util.Collection;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;

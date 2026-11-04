@@ -2,10 +2,10 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.naura.rfq.mapper.ProjectMemberMapper">
     <sql id="columns">project_id, user_id, enabled, granted_by, created_at, updated_at</sql>
-    <select id="find" resultType="com.naura.rfq.domain.ProjectMember">
+    <select id="find" resultType="com.naura.rfq.model.entity.ProjectMember">
         select <include refid="columns"/> from project_member where project_id=#{projectId} and user_id=#{userId}
     </select>
-    <select id="findPage" resultType="com.naura.rfq.domain.ProjectMember">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.ProjectMember">
         select <include refid="columns"/> from project_member where project_id=#{projectId}
         order by ${q.orderBy}, user_id limit #{q.size} offset #{q.offset}
     </select>

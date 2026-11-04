@@ -10,7 +10,7 @@
                 #{createdAt})
     </insert>
 
-    <select id="findRecent" resultType="com.naura.rfq.domain.AuditEvent">
+    <select id="findRecent" resultType="com.naura.rfq.model.entity.AuditEvent">
         select <include refid="columns"/>
         from audit_event
         order by created_at desc
@@ -30,7 +30,7 @@
             <if test="f.createdTo != null">and created_at &lt;= #{f.createdTo}</if>
         </where>
     </sql>
-    <select id="findPage" resultType="com.naura.rfq.domain.AuditEvent">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.AuditEvent">
         select <include refid="columns"/> from audit_event <include refid="filters"/>
         order by ${q.orderBy}, id desc limit #{q.size} offset #{q.offset}
     </select>

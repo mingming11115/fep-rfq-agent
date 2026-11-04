@@ -6,27 +6,27 @@
         customer_clause_no, title, level, parent_id, original_text, requirement_text, metrics_json,
         conditions_text, obligation, extraction_status, review_reasons, sort_order, version, created_at</sql>
 
-    <select id="findById" resultType="com.naura.rfq.domain.Requirement">
+    <select id="findById" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
         where id = #{id}
     </select>
 
-    <select id="findByProjectIdOrderBySortOrder" resultType="com.naura.rfq.domain.Requirement">
+    <select id="findByProjectIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
         where project_id = #{projectId}
         order by sort_order asc
     </select>
 
-    <select id="findByDocumentIdOrderBySortOrder" resultType="com.naura.rfq.domain.Requirement">
+    <select id="findByDocumentIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
         where document_id = #{documentId}
         order by sort_order asc
     </select>
 
-    <select id="findPage" resultType="com.naura.rfq.domain.Requirement">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
         where project_id = #{projectId}
@@ -34,7 +34,7 @@
         limit #{q.size} offset #{q.offset}
     </select>
 
-    <select id="findByDocumentIdForUpdate" resultType="com.naura.rfq.domain.Requirement" useCache="false" flushCache="true">
+    <select id="findByDocumentIdForUpdate" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
         select <include refid="columns"/> from requirement
         where document_id=#{documentId} order by sort_order asc, id for update
     </select>

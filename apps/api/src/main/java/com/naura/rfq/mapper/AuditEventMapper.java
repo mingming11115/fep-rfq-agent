@@ -1,8 +1,8 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.domain.AuditEvent;
-import com.naura.rfq.audit.AuditQuery;
-import com.naura.rfq.common.api.PageQuery;
+import com.naura.rfq.model.entity.AuditEvent;
+import com.naura.rfq.model.query.AuditQuery;
+import com.naura.rfq.model.query.PageQuery;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

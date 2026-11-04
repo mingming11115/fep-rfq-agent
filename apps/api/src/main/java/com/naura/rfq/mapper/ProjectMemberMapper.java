@@ -1,7 +1,7 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.common.api.PageQuery;
-import com.naura.rfq.domain.ProjectMember;
+import com.naura.rfq.model.entity.ProjectMember;
+import com.naura.rfq.model.query.PageQuery;
 import java.util.List;
 import java.util.Optional;
 import org.apache.ibatis.annotations.Mapper;

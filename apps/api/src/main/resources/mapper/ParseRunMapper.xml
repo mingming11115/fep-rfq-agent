@@ -5,13 +5,13 @@
     <sql id="columns">id, document_id, status, total_blocks, processed_blocks, requirement_count,
         issue_count, message, started_at, finished_at, created_by, extractor</sql>
 
-    <select id="findById" resultType="com.naura.rfq.domain.ParseRun">
+    <select id="findById" resultType="com.naura.rfq.model.entity.ParseRun">
         select <include refid="columns"/>
         from parse_run
         where id = #{id}
     </select>
 
-    <select id="findByDocumentIdOrderByStartedAtDesc" resultType="com.naura.rfq.domain.ParseRun">
+    <select id="findByDocumentIdOrderByStartedAtDesc" resultType="com.naura.rfq.model.entity.ParseRun">
         select <include refid="columns"/>
         from parse_run
         where document_id = #{documentId}

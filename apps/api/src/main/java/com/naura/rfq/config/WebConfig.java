@@ -1,6 +1,6 @@
 package com.naura.rfq.config;
 
-import com.naura.rfq.auth.AuthInterceptor;
+import com.naura.rfq.security.AuthInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;

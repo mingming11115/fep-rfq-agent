@@ -17,25 +17,25 @@
         </where>
     </sql>
 
-    <select id="findById" resultType="com.naura.rfq.domain.BusinessUnit">
+    <select id="findById" resultType="com.naura.rfq.model.entity.BusinessUnit">
         select <include refid="columns"/>
         from business_unit
         where id = #{id}
     </select>
 
-    <select id="findByCode" resultType="com.naura.rfq.domain.BusinessUnit">
+    <select id="findByCode" resultType="com.naura.rfq.model.entity.BusinessUnit">
         select <include refid="columns"/>
         from business_unit
         where code = #{code}
     </select>
 
-    <select id="findAll" resultType="com.naura.rfq.domain.BusinessUnit">
+    <select id="findAll" resultType="com.naura.rfq.model.entity.BusinessUnit">
         select <include refid="columns"/>
         from business_unit
         order by created_at asc
     </select>
 
-    <select id="findByIdIn" resultType="com.naura.rfq.domain.BusinessUnit">
+    <select id="findByIdIn" resultType="com.naura.rfq.model.entity.BusinessUnit">
         select <include refid="columns"/>
         from business_unit
         where id in
@@ -43,7 +43,7 @@
         order by created_at asc
     </select>
 
-    <select id="findPage" resultType="com.naura.rfq.domain.BusinessUnit">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.BusinessUnit">
         select <include refid="columns"/>
         from business_unit
         <include refid="pageFilter"/>

@@ -1,10 +1,9 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.domain.BuMemberProfile;
+import com.naura.rfq.model.entity.BuMemberProfile;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-
-import java.util.List;
 
 @Mapper
 public interface BuMemberProfileMapper {

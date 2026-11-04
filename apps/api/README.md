@@ -1,5 +1,32 @@
 # RFQ 后端
 
+## MVC 包结构
+
+源码根包为 `com.naura.rfq`，按职责分层，业务调用方向为 `controller → service → mapper → model.entity`。
+
+```text
+com.naura.rfq
+├── controller          # HTTP 路由、参数校验、响应组装
+├── service             # 业务流程、事务、审计与权限协作
+├── mapper              # MyBatis 数据访问接口
+├── model
+│   ├── entity          # 数据库实体
+│   ├── dto             # 跨层请求与数据传输对象
+│   ├── vo              # 共享接口响应模型
+│   ├── query           # 分页及查询条件
+│   └── parse           # 文档读取、抽取中间模型
+├── config              # Spring 配置及 properties 配置绑定
+├── security            # 鉴权、访问控制与当前用户上下文
+├── storage             # 原件及 Office 文件存储
+├── integration         # DOCX/PDF、OCR、模型和历史条款抽取适配
+├── support             # 示例文件等辅助能力
+└── common              # 统一响应、异常、ID 等公共能力
+```
+
+前后端分离，View 以 JSON 响应模型表达。Controller 不访问 Mapper、不声明业务事务；事务与文件回滚清理在 Service 中执行。MyBatis XML 保留在 `src/main/resources/mapper`，实体别名指向 `com.naura.rfq.model.entity`。仅由单个 Controller 使用的请求、响应类型可作为其内部类型，共享类型放在 `model`；Service 与 Model 不依赖 Controller。
+
+运行 `mvn verify` 验证全部后端测试；`mvn -Dtest=ArchitectureTest test` 可独立检查分层约束。测试默认需要 MySQL，配置项见下文。
+
 ## 原件上传与下载（B10）
 
 接口和版本语义见 [原件上传与下载](../../docs/api/RFQ原件上传与下载接口_v0.1.md)。新增文档详情、规范 MIME 和 255 字符文件名限制；上传版本由项目锁下的当前读取分配，并由 V5 唯一索引保护。旧原件不覆盖，解析仅更新状态。
