@@ -2,7 +2,8 @@ import {readGenericCatalog,resolveGroupBinding} from './genericCatalog';
 import { UiButton, UiInput } from './components/AntContent';
 import { App as AntApp } from 'antd';
 import RfqAppLayout from './components/RfqAppLayout';
-import { consumeLoginIdentity, logout } from './authClient';
+import { consumeLoginIdentity, readSession, logout } from './authClient';
+import { hydrateSessionPersonnel, mergeMemberDirectory } from './sessionPersonnel';
 import BuAdminPage,{ProjectPersonnelPanel,PlatformAdminPage} from './pages/BuAdminPage';
 import {canAccessProject,getPersonnelContext,personName,getProjectFinalReview,getRequiredFinalReviewers,configureProjectFinalReviewers,assignProjectDuty} from './personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomain';
@@ -69,6 +70,8 @@ function initial(){
 // 登录身份优先于本机残留身份，但只消费一次：之后页面内切换当前身份不会在刷新时被覆盖。
 function withLoginIdentity(state){
  const identity=consumeLoginIdentity();
+ const user=readSession()?.user;
+ if(user)return hydrateSessionPersonnel(state,user,{activate:!!identity||!state.accountsById?.[state.actorId]});
  if(!identity?.actorId||!identity?.actorRole)return state;
  return {...state,actorId:identity.actorId,actorRole:identity.actorRole};
 }
@@ -89,8 +92,8 @@ export default function App(){
  const item=NAV_ITEMS.find(n=>n.key===(page==='reviews'?'response':page)),isProjectPage=item?.section==='项目';
  const pageTitle=DETAIL_PAGES.includes(page)?'RFQ 详情':state.actorRole==='BU管理员'&&page==='projects'?'BU RFQ':page==='dashboard'&&state.actorRole==='BU管理员'?'BU看板':shortLabels[page]||item?.label||'工作台';
  useEffect(()=>{try{localStorage.setItem(STORAGE,JSON.stringify(state));}catch{}},[state]);
- // BU 成员与资格以后端 MySQL 为准；拉取失败或为空时保留本地数据，避免页面空白。
- useEffect(()=>{let cancelled=false;(async()=>{const buIds=(stateRef.current.businessUnits||[]).map(b=>b.id);if(!buIds.length)return;try{const loaded=await Promise.all(buIds.map(id=>fetchBuMembers(id).then(rows=>[id,rows])));if(cancelled)return;update(s=>{const merged={...s.buPersonnelByBuId};for(const [buId,rows] of loaded){if(rows.length)merged[buId]=rows;}return {...s,buPersonnelByBuId:merged};});}catch(error){console.error('BU 成员加载失败，保留本地数据',error);}})();return()=>{cancelled=true;};},[]);
+ // 各BU独立同步，避免无权读取的旧演示BU阻断真实BU的成员与资格加载。
+ useEffect(()=>{let cancelled=false;(async()=>{const buIds=(stateRef.current.businessUnits||[]).map(b=>b.id);if(!buIds.length)return;const loaded=await Promise.allSettled(buIds.map(id=>fetchBuMembers(id).then(rows=>[id,rows])));if(cancelled)return;const directories=loaded.filter(result=>result.status==='fulfilled').map(result=>result.value);if(directories.length)update(s=>directories.reduce((next,[buId,rows])=>mergeMemberDirectory(next,buId,rows),s));})();return()=>{cancelled=true;};},[]);
  useEffect(()=>{const handle=()=>{const next=parseWorkRoute(location.hash);const proceed=()=>{routeRef.current=next;setRoute(next);setPage(next.page);pageRef.current=next.page;if(next.projectId&&stateRef.current.projects.some(p=>p.id===next.projectId))update(s=>({...s,activeProjectId:next.projectId}));setFocusedRequirementId(next.requirementId||null);};if(window.__rfqRequestNavigation&&!window.__rfqRequestNavigation(proceed,{officeSource:officeRouteSource(stateRef.current,next)})){history.replaceState(null,'',buildWorkRoute(routeRef.current));return;}proceed();};window.addEventListener('hashchange',handle);if(routeRef.current.projectId)handle();return()=>{window.removeEventListener('hashchange',handle);timers.current.forEach(clearTimeout);};},[]);
  useEffect(()=>{document.title=`${pageTitle} · FEP RFQ`;window.scrollTo(0,0);},[page,pageTitle]);
  useEffect(()=>{if(state.actorRole==='后台管理'&&page==='dashboard')rawNavigate('admin',{},true);},[state.actorRole,page]);

@@ -66,3 +66,14 @@ test('后端角色码映射到前端可用身份',async()=>{
   assert.deepEqual(mod.resolveLoginIdentity({id:'demo-system-admin',systemAdmin:true,roles:[]}),{actorId:'demo-system-admin',actorRole:'后台管理'});
   assert.equal(mod.resolveLoginIdentity(null),null);
 });
+
+test('普通账号登录后离开上一位管理员的系统配置地址',async()=>{
+  const {node,render,settle,act}=await mountAuthGate();
+  window.history.replaceState(null,'','#/admin');
+  globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({code:0,data:{token:'new-user-token',expiresInSeconds:28800,user:{id:'new-user',displayName:'新用户',systemAdmin:false,roles:[{buId:'BU-FEP',role:'SR'}],bus:[{id:'BU-FEP',name:'FEP事业部'}]}}})});
+  await render();
+  const card=[...node.querySelectorAll('button')].find(button=>/销售负责人/.test(button.textContent));
+  await act(async()=>{card.click();await settle();});
+  assert.equal(window.location.hash,'#/dashboard');
+  assert.deepEqual(JSON.parse(localStorage.getItem('fep-rfq-login-identity')),{actorId:'new-user',actorRole:'SR'});
+});

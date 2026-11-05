@@ -7,6 +7,7 @@ import './management-pages.css';
 
 const Field = ({ label, children }) => <div className="field"><span>{label}</span>{children}</div>;
 const ErrorBox = ({ error }) => (error ? <p className="error-notice" role="alert">{error}</p> : null);
+const INITIAL_PASSWORD = '12345678';
 
 const ROLE_OPTIONS = [
   ['SR', 'SR（销售负责人）'],
@@ -58,7 +59,9 @@ export default function PlatformAdminPage({ actorId }) {
     if (type === 'bu') {
       setEdit(record ? { id: record.id, code: record.code, name: record.name } : { id: '', code: '', name: '' });
     } else {
-      setEdit({ id: '', username: '', password: '', displayName: '', email: '', buId: buId || bus[0]?.id || '', role: 'SR' });
+      setEdit(record
+        ? { id: record.id, username: record.username, displayName: record.displayName, email: record.email || '' }
+        : { id: '', username: '', password: INITIAL_PASSWORD, displayName: '', email: '', buId: buId || bus[0]?.id || '', role: 'SR' });
     }
   };
 
@@ -74,17 +77,24 @@ export default function PlatformAdminPage({ actorId }) {
           await adminApi.createBusinessUnit({ code: edit.code.trim(), name: edit.name.trim() });
         }
       } else {
-        if (!edit.username?.trim()) throw new Error('请填写账号');
-        if (edit.password.length < 8) throw new Error('密码至少 8 位');
         if (!edit.displayName?.trim()) throw new Error('请填写姓名');
-        await adminApi.createUser({
-          username: edit.username.trim(),
-          password: edit.password,
+        const profile = {
           displayName: edit.displayName.trim(),
           email: edit.email?.trim() || null,
-          buId: edit.buId,
-          role: edit.role,
-        });
+        };
+        if (edit.id) {
+          await adminApi.updateUser(edit.id, profile);
+        } else {
+          if (!edit.username?.trim()) throw new Error('请填写账号');
+          if (edit.password.length < 8) throw new Error('密码至少 8 位');
+          await adminApi.createUser({
+            ...profile,
+            username: edit.username.trim(),
+            password: edit.password,
+            buId: edit.buId,
+            role: edit.role,
+          });
+        }
       }
       await load();
       setEdit(null);
@@ -121,21 +131,32 @@ export default function PlatformAdminPage({ actorId }) {
     </section>
     <section className="panel" id="platform-account-list">
       <div className="panel-header"><div><h2>账号目录</h2><p className="platform-directory-scope" role="status">{selectedBu ? selectedBu.name : '全部BU及平台账号'} · {rows.length} 个账号</p></div><UiButton className="btn btn-primary" onClick={() => open('account')}><Plus size={15}/>新增账号</UiButton></div>
-      <div className="table-wrap"><BusinessTable className="data-table mg-table"><thead><tr><th>姓名／账号</th><th>所属BU</th><th>管理职责</th><th>状态</th></tr></thead><tbody>{rows.map((account) => <tr key={account.id}><td>{account.displayName}<small>{account.username}</small></td><td>{buIdsOf(account).map(buName).join('、') || (account.systemAdmin ? '平台级' : '未归属BU')}</td><td>{account.systemAdmin ? '后台管理' : managedBuIdsOf(account).length ? `BU管理员 · ${managedBuIdsOf(account).map(buName).join('、')}` : '业务账号'}</td><td><button type="button" className="platform-account-switch" role="switch" aria-label={`账号状态 ${account.displayName}`} aria-checked={account.status === 'ACTIVE'} disabled={account.id === actorId} title={account.id === actorId ? '当前登录账号不能停用' : `点击${account.status === 'ACTIVE' ? '停用' : '启用'}账号`} onClick={() => toggleAccount(account)}><span className="platform-account-switch-track" aria-hidden="true"/><span>{account.status === 'ACTIVE' ? '启用' : '停用'}</span></button></td></tr>)}</tbody></BusinessTable></div>
+      <div className="table-wrap"><BusinessTable className="data-table mg-table">
+        <thead><tr><th>姓名／账号</th><th>所属BU</th><th>管理职责</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>{rows.map((account) => <tr key={account.id}>
+          <td>{account.displayName}<small>{account.username}</small></td>
+          <td>{buIdsOf(account).map(buName).join('、') || (account.systemAdmin ? '平台级' : '未归属BU')}</td>
+          <td>{account.systemAdmin ? '后台管理' : managedBuIdsOf(account).length ? `BU管理员 · ${managedBuIdsOf(account).map(buName).join('、')}` : '业务账号'}</td>
+          <td><button type="button" className="platform-account-switch" role="switch" aria-label={`账号状态 ${account.displayName}`} aria-checked={account.status === 'ACTIVE'} disabled={account.id === actorId} title={account.id === actorId ? '当前登录账号不能停用' : `点击${account.status === 'ACTIVE' ? '停用' : '启用'}账号`} onClick={() => toggleAccount(account)}><span className="platform-account-switch-track" aria-hidden="true"/><span>{account.status === 'ACTIVE' ? '启用' : '停用'}</span></button></td>
+          <td><UiButton className="text-link" onClick={() => open('account', account)}>编辑</UiButton></td>
+        </tr>)}</tbody>
+      </BusinessTable></div>
       {!loading && !rows.length && <p className="muted">此BU暂无关联账号。</p>}
     </section>
-    {edit && <Modal title={kind === 'bu' ? (edit.id ? '维护BU' : '新增BU') : '新增账号'} onClose={() => setEdit(null)} footer={<><UiButton className="btn" onClick={() => setEdit(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={busy} onClick={save}>{busy ? '保存中…' : '保存目录配置'}</UiButton></>}>
+    {edit && <Modal title={kind === 'bu' ? (edit.id ? '维护BU' : '新增BU') : (edit.id ? '编辑账号' : '新增账号')} onClose={() => setEdit(null)} footer={<><UiButton className="btn" onClick={() => setEdit(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={busy} onClick={save}>{busy ? '保存中…' : '保存目录配置'}</UiButton></>}>
       {kind === 'bu' && <>
         {!edit.id && <Field label="编码"><UiInput className="input" aria-label="事业部编码" value={edit.code} onChange={(e) => setEdit({ ...edit, code: e.target.value })} placeholder="如 FEP、BU-QA"/></Field>}
         <Field label="名称"><UiInput className="input" aria-label="目录名称" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })}/></Field>
       </>}
       {kind === 'account' && <>
-        <Field label="账号"><UiInput className="input" aria-label="账号" value={edit.username} onChange={(e) => setEdit({ ...edit, username: e.target.value })} placeholder="3-32 位字母数字"/></Field>
-        <Field label="初始密码"><UiInput className="input" aria-label="初始密码" type="password" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} placeholder="至少 8 位"/></Field>
+        <Field label="账号"><UiInput className="input" aria-label="账号" readOnly={!!edit.id} value={edit.username} onChange={(e) => setEdit({ ...edit, username: e.target.value })} placeholder="3-32 位字母数字"/></Field>
+        {!edit.id && <Field label="初始密码"><UiInput className="input" aria-label="初始密码" type="password" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} placeholder="至少 8 位"/><small className="muted">默认初始密码：12345678</small></Field>}
         <Field label="姓名"><UiInput className="input" aria-label="姓名" value={edit.displayName} onChange={(e) => setEdit({ ...edit, displayName: e.target.value })}/></Field>
         <Field label="邮箱"><UiInput className="input" aria-label="邮箱" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} placeholder="可留空"/></Field>
-        <Field label="所属BU"><UiSelect className="select" aria-label="所属BU" value={edit.buId} onChange={(e) => setEdit({ ...edit, buId: e.target.value })}>{bus.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</UiSelect></Field>
-        <Field label="业务角色"><UiSelect className="select" aria-label="业务角色" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>{ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</UiSelect></Field>
+        {!edit.id && <>
+          <Field label="所属BU"><UiSelect className="select" aria-label="所属BU" value={edit.buId} onChange={(e) => setEdit({ ...edit, buId: e.target.value })}>{bus.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</UiSelect></Field>
+          <Field label="业务角色"><UiSelect className="select" aria-label="业务角色" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>{ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</UiSelect></Field>
+        </>}
       </>}
       <ErrorBox error={error}/>
     </Modal>}
