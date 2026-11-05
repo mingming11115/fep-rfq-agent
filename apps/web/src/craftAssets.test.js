@@ -7,6 +7,28 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {prepareCraftEditor} from '../scripts/prepare-craft-editors.mjs';
 
+test('deployment regenerates verified editor assets without using stale public editor copies',async()=>{
+  const {preparePublicAssets}=await import('../scripts/prepare-craft-editors.mjs');
+  const directory=await mkdtemp(path.join(tmpdir(),'rfq-clean-deployment-'));
+  try{
+    const publicSource=path.join(directory,'public'),target=path.join(directory,'generated');
+    const source=path.join(directory,'editor'),patch=path.join(directory,'editor.patch');
+    await mkdir(path.join(publicSource,'craft-editors'),{recursive:true});
+    await mkdir(path.join(publicSource,'craft-demo'),{recursive:true});
+    await writeFile(path.join(publicSource,'craft-editors','stale.wasm'),'broken');
+    await writeFile(path.join(publicSource,'craft-demo','demo.docx'),'bundled demo');
+    await mkdir(source);await writeFile(patch,'patch');await writeFile(path.join(source,'editor.wasm'),'verified wasm');
+    const hash=text=>createHash('sha256').update(text).digest('hex');
+    await writeFile(path.join(source,'build.json'),JSON.stringify({version:'test',patchSha256:hash('patch'),files:{'editor.wasm':hash('verified wasm')}}));
+    await preparePublicAssets({publicSource,target,editors:[{editor:'wordcraft',source,patch}]});
+    assert.equal(await readFile(path.join(target,'craft-editors/wordcraft-classic/editor.wasm'),'utf8'),'verified wasm');
+    assert.equal(await readFile(path.join(target,'craft-demo/demo.docx'),'utf8'),'bundled demo');
+    await assert.rejects(readFile(path.join(target,'craft-editors/stale.wasm')),/ENOENT/);
+    const config=(await import('../vite.config.js')).default;
+    assert.equal(config.publicDir,'.generated-public');
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
 test('prepared editor can load its generated nested JavaScript imports',async()=>{
   const directory=await mkdtemp(path.join(tmpdir(),'rfq-craft-assets-'));
   try{

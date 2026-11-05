@@ -4,6 +4,7 @@
 **/target/
 **/__pycache__/
 /apps/web/public/craft-editors/
+/apps/web/.generated-public/
 
 # Local runtime files, editor settings and credentials
 /.local/

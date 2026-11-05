@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 export default defineConfig({
+  publicDir: '.generated-public',
   esbuild: { jsx: 'automatic' },
   server: {
     fs: { allow: [fileURLToPath(new URL('../..',import.meta.url))] },

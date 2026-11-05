@@ -20,12 +20,24 @@ export async function prepareCraftEditor({editor,source,target,patch}){
   console.log(`Prepared ${editor} ${manifest.version}: /craft-editors/${editor}-classic/index.html`);
 }
 
+export async function preparePublicAssets({publicSource,target,editors}){
+  await mkdir(target,{recursive:true});
+  // Legacy public/craft-editors may be stale or unreadable after an interrupted copy.
+  // Publish the pinned, verified runtimes instead of carrying those copies into a build.
+  for(const item of await readdir(publicSource,{withFileTypes:true})){
+    if(item.name==='craft-editors')continue;
+    await cp(path.join(publicSource,item.name),path.join(target,item.name),{recursive:item.isDirectory()});
+  }
+  for(const entry of editors)await prepareCraftEditor({...entry,target:path.join(target,'craft-editors',entry.editor+'-classic')});
+}
+
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   for(const editor of ['wordcraft','pdfcraft']){
     if(process.argv.includes('--build')){
       const built=spawnSync('python3',[path.join(demo,`build_${editor}.py`)],{cwd:repo,stdio:'inherit'});
       if(built.status!==0)process.exit(built.status||1);
     }
-    await prepareCraftEditor({editor,source:path.join(demo,'site',editor+'-classic'),target:path.join(project,'public/craft-editors',editor+'-classic'),patch:path.join(demo,editor+'-classic-comments.patch')});
   }
+  await preparePublicAssets({publicSource:path.join(project,'public'),target:path.join(project,'.generated-public'),
+    editors:['wordcraft','pdfcraft'].map(editor=>({editor,source:path.join(demo,'site',editor+'-classic'),patch:path.join(demo,editor+'-classic-comments.patch')}))});
 }

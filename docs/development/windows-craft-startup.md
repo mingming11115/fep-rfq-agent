@@ -45,7 +45,7 @@ npm ci
 npm run dev
 ```
 
-`npm ci` 只需首次安装或依赖变更后执行。`npm run dev` 会自动校验 Git 中的编辑器资源并复制到前端，不必单独运行 `craft:prepare`，也不必编译编辑器。
+`npm ci` 只需首次安装或依赖变更后执行。`npm run dev` 和 `npm run build` 会自动校验 Git 中的编辑器资源，连同演示文件生成到 `apps/web/.generated-public`，再由 Vite 提供或打包。不再读取旧的 `apps/web/public/craft-editors` 副本，避免损坏或不可读的旧 WASM 阻断启动。不必单独运行 `craft:prepare`，也不必编译编辑器。生产部署应完整复制 `apps/web/dist`，包含其中的 `craft-editors`、`craft-demo` 和 `onlyoffice-demo` 目录。
 
 看到启动成功后打开 `http://127.0.0.1:5173/`。前后端窗口都保持运行。后续更新顺序为：先分别按 `Ctrl+C` 停止服务，运行 `git pull`，再正常启动前后端。
 
