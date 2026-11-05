@@ -17,8 +17,9 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
   const check = unchangedSource ? (row.realSource ? bhelFixtures[row.id] : fixtures[row.clause]) : null;
   const advice=buildResponseAdvice(row,suggestion,{check,retrieval});
   return <section className="response-advice" aria-label="AI 应答建议">
+    <header className="response-advice-heading"><span className="response-advice-avatar"><Sparkles size={16} aria-hidden="true"/></span><h3>AI 应答建议</h3></header>
     <dl>
-      <dt>建议结论</dt><dd className="response-advice-conclusion"><strong>{advice.conclusion}</strong><span className="response-advice-ai" title="基于当前要求与参考依据提供建议"><Sparkles size={12} aria-hidden="true"/>AI 应答建议</span></dd>
+      <dt>建议结论</dt><dd className="response-advice-conclusion"><strong>{advice.conclusion}</strong></dd>
     </dl>
     <details className="response-reference-details" key={JSON.stringify([project.id,row.id,sourceScope?.fileId??row.sourceFileId??row.source,String(sourceScope?.sourceVersion??row.sourceVersion??'1')])}>
       <summary><BookOpen size={14}/><strong>参考与证据</strong><ChevronDown size={13}/></summary>

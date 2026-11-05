@@ -10,9 +10,11 @@ import './styles.css';
 import './antd-ui.css';
 import './ui-polish.css';
 import './rfq-detail-theme.css';
+import './tab-theme.css';
 
 createRoot(document.getElementById('root')).render(
   <ConfigProvider locale={zhCN} theme={{
+    components: { Tabs: { horizontalItemGutter: 32, horizontalItemPadding: '16px 0', inkBarColor: '#1677ff', itemSelectedColor: '#1677ff', titleFontSize: 14 } },
     token: {
       colorPrimary: '#1677ff',
       fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif",

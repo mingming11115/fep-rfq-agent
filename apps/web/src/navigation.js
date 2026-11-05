@@ -1,6 +1,10 @@
 import {canPerform} from './permissions.js';
 export const PROJECT_PAGES=['documents','response','reviews','export','versions','settings'];
 export const ADMIN_PAGES=['bu-admin','admin','knowledge','history','capabilities','audit'];
+export function getWorkspaceContentKey({actorId,actorRole,buId,projectId,page}){
+ const workspace=PROJECT_PAGES.includes(page)?'project':['knowledge','history','capabilities'].includes(page)?'knowledge':['admin','audit'].includes(page)?'platform':page;
+ return JSON.stringify([actorId,actorRole,buId,workspace,projectId]);
+}
 export function getProjectEntryPage(state,projectId,destination='response') {
  return destination;
 }

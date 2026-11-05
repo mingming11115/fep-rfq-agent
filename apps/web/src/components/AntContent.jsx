@@ -47,7 +47,7 @@ export function BusinessTable({ children, className = '', ...props }) {
 export function BusinessTabs({ children, className = '' }) {
   const buttons = tableChildren(children);
   const active = buttons.findIndex(button => /(?:^|\s)active(?:\s|$)/.test(button.props.className || ''));
-  return <Tabs className={'rfq-content-tabs ' + without(className, ['tabs','workspace-tabs','mg-tabs','admin-tabs','project-stage-tabs'])}
+  return <Tabs animated={{ inkBar:true, tabPane:false }} className={'rfq-content-tabs ' + without(className, ['tabs','workspace-tabs','mg-tabs','admin-tabs','project-stage-tabs'])}
     activeKey={String(Math.max(0, active))} onChange={key => buttons[Number(key)]?.props.onClick?.()}
     items={buttons.map((button, index) => ({ key: String(index), label: button.props.children,
       disabled: button.props.disabled }))} />;

@@ -38,7 +38,7 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
   return <div className="workspace-page">
     <PageHeading title={<>任务中心</>} />
     <section className="panel">
-      <Tabs className="rfq-panel-tabs" activeKey={filters.tab} onChange={key => change('tab', key)} items={[
+      <Tabs animated={{ inkBar:true, tabPane:false }} className="rfq-panel-tabs" activeKey={filters.tab} onChange={key => change('tab', key)} items={[
         ['pending', '待办'], ['done', '已处理'], ['all', '全部'],
       ].map(([key, label]) => ({ key, label: label + ' ' + selectMyTasks(appState, { actorId: appState.actorId, tab: key }).length }))}/>
       <QueryFilter formRef={queryFormRef} className="rfq-query-form" layout="vertical" defaultCollapsed={false}

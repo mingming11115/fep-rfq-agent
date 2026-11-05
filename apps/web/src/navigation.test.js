@@ -1,6 +1,17 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {parseWorkRoute,buildWorkRoute,saveReturnContext,readReturnContext} from './navigation.js';
 import * as navigation from './navigation.js';
+test('workspace tab routes share a mount key without crossing identity, BU or project boundaries',()=>{
+ assert.equal(typeof navigation.getWorkspaceContentKey,'function');
+ const scope={actorId:'actor',actorRole:'SR',buId:'BU',projectId:'P'};
+ const key=page=>navigation.getWorkspaceContentKey({...scope,page});
+ for(const pages of [['admin','audit'],['knowledge','history','capabilities'],navigation.PROJECT_PAGES]){
+  assert.equal(new Set(pages.map(key)).size,1);
+ }
+ assert.notEqual(key('projects'),key('tasks'));
+ assert.notEqual(key('admin'),key('knowledge'));
+ for(const field of ['actorId','actorRole','buId','projectId'])assert.notEqual(key('response'),navigation.getWorkspaceContentKey({...scope,page:'response',[field]:'other'}));
+});
 test('RFQs keep the requested new detail page even before upload',()=>{
  const state={requirementsByProject:{ready:[{id:'R'}]}};
  for(const entry of ['settings','response']){

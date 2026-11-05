@@ -38,10 +38,8 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
         onLogout ? <Tooltip key="logout" title="退出登录"><Button type="text" aria-label="退出登录" icon={<LogoutOutlined/>} onClick={onLogout}/></Tooltip> : null,
       ].filter(Boolean)} footerRender={isDetail ? false : () => footer}
       token={{ sider: { colorBgMenuItemSelected: token.colorPrimaryBg, colorTextMenuSelected: token.colorPrimary }, pageContainer: { paddingInlinePageContainerContent: 0, paddingBlockPageContainerContent: 0 } }}>
-      {isDetail ? <div key={contentKey} ref={contentRef} className="rfq-layout-content rfq-layout-detail">{body}</div> :
-        <PageContainer className="rfq-page-container" title={false} breadcrumb={{ items: [{ title: '工作空间' }, { title: pageTitle }] }}>
-          <div key={contentKey} ref={contentRef} className="rfq-layout-content">{body}</div>
-        </PageContainer>}
+      {!isDetail && <PageContainer key="page-breadcrumb" className="rfq-page-container" title={false} breadcrumb={{ items: [{ title: '工作空间' }, { title: pageTitle }] }} />}
+      <div key={contentKey} ref={contentRef} className={`rfq-layout-content${isDetail?' rfq-layout-detail':''}`}>{body}</div>
     </ProLayout>
     {children}
   </div>;

@@ -36,7 +36,7 @@ export default function BuDashboardPage({appState:state,onSelectBu,navigate}){
   </div>}/>
   <Alert className="bu-data-notice" type={isMock?'info':'success'} showIcon message={<Space wrap><Tag color={isMock?'blue':'green'}>{isMock?'模拟数据':'当前数据'}</Tag><span>{isMock?'模拟项目仅用于看板，可切换当前数据查看实际进度。':`${bu.name} · 根据已保存的项目与任务统计`}</span></Space>}/>
   <div className="bu-metric-grid bu-dashboard-stats">{cards.map(card=><BuStatisticCard key={card.filter} {...card} selected={activeTab==='projects'&&filters.focus===card.filter} onFilter={()=>filterProjects(card.filter)}/>)}</div>
-  <Tabs className="bu-dashboard-tabs" activeKey={activeTab} onChange={setActiveTab} items={[
+  <Tabs animated={{ inkBar:true, tabPane:false }} className="bu-dashboard-tabs" activeKey={activeTab} onChange={setActiveTab} items={[
    {key:'approval',label:'审批分析',children:<BuApprovalPanel key={dataMode} data={approval} onPeriodChange={setApprovalPeriodDays} onConfigureProject={isMock?null:id=>navigate('bu-admin',null,{projectId:id})}/>},
    {key:'projects',label:'项目与团队',children:<BuProjectOverview key={`${dataMode}-${bu.id}`} data={data} isMock={isMock} {...filters} onFilters={setFilters} onStage={stage=>setFilters({query:'',focus:'all',stage})} navigate={navigate}/>},
   ]}/>

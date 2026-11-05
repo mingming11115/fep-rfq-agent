@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Button, Input, Popover, Select } from 'antd';
+import { Button, Input, Popover, Select, Tabs } from 'antd';
 import { Search, SlidersHorizontal } from "./icons";
 import {RESPONSE_STATUS_LABELS} from '../responseCardQueue';
 
@@ -35,6 +35,9 @@ export function ResponseCardQuery({ filters, draft, sources = [], disabled, onDr
 
 export default function ResponseCardFilters({ stats, filters, draft, disabled, onApply }) {
   return <div className="response-card-top">
-    <div className="response-card-stats" aria-label="应答统计">{groups.map(([key, label]) => <button type="button" key={key} disabled={disabled} aria-pressed={filters.status === key} onClick={() => onApply({ ...draft, status: key })}><span>{label}</span><strong>{stats[key]}</strong></button>)}</div>
+    <Tabs className="response-stat-tabs" aria-label="应答统计" activeKey={filters.status || 'all'}
+      animated={{ inkBar: true, tabPane: false }} tabBarGutter={0}
+      onChange={status => onApply({ ...draft, status })}
+      items={groups.map(([key,label])=>({key,disabled,label:<span className="response-stat-label"><span>{label}</span><strong>{stats[key]}</strong></span>}))}/>
   </div>;
 }

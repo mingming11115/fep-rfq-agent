@@ -15,7 +15,7 @@ import {migrateFepDemoCatalog} from './fepDemoCatalog';
 import {canPerform,assertPermission,assertRequirementPatch,canAccessPage,getRoleNavigation} from './permissions';
 import {reconcileTasks,selectMyTasks,applyTaskAction,assertBusinessAction,getTaskContextError,isTaskPending,startTaskForObject,transferBusinessTask,confirmProjectRequirement} from './taskDomain';
 import {getProjectSummary,selectAccessibleState} from './projectSelectors';
-import {parseWorkRoute,buildWorkRoute,getProjectEntryPage,PROJECT_PAGES,ADMIN_PAGES,shouldOpenSourceUpload,getSourceUploadExitRoute} from './navigation';
+import {getWorkspaceContentKey,parseWorkRoute,buildWorkRoute,getProjectEntryPage,PROJECT_PAGES,ADMIN_PAGES,shouldOpenSourceUpload,getSourceUploadExitRoute} from './navigation';
 import {removeProject,restoreProject,addProjectSources,handoverProject,createProjectReviewSettings,createProjectPersonnel,updateProjectSettings} from './projectDomain';
 import {readRfqCatalog,resolveRfqProcessBinding} from './rfqProcessBinding';
 import SourceUploadDialog from './components/SourceUploadDialog';
@@ -246,7 +246,7 @@ export default function App(){
  onIdentityChange={value=>{const [id,role,buId]=value.split('|');guarded(()=>{update(st=>event({...st,actorId:id,actorRole:role,activeBuId:buId},'切换当前身份',id,'本机人员模拟'));const dest=canAccessPage(role,pageRef.current)?pageRef.current:role==='后台管理'?'admin':'dashboard';rawNavigate(dest,{...(PROJECT_PAGES.includes(dest)?{projectId:project.id}:{}),taskId:undefined,action:undefined});toast(`已切换为${personName(state,id)} · ${role}`);});}}
  pageTitle={pageTitle} isDetail={DETAIL_PAGES.includes(page)} body={body}
 onLogout={logout}
- contentKey={`${state.actorId}-${state.actorRole}-${activeBuId}-${DETAIL_PAGES.includes(page)?'detail':['knowledge','history'].includes(page)?'knowledge':page}-${project.id}`}
+ contentKey={getWorkspaceContentKey({actorId:state.actorId,actorRole:state.actorRole,buId:activeBuId,projectId:project.id,page})}
  footer={<footer className="app-footer"><span>FEP · RFQ 工作空间</span>{canPerform(state.actorRole,'project:manage')&&<UiButton className="text-link" onClick={()=>setReset(true)}><RotateCcw size={12}/>重置数据</UiButton>}</footer>}>
  {!missingProject&&pageAllowed&&finalReviewOpen&&canPerform(state.actorRole,'snapshot:submit',permissionContext)&&<ExportPage {...common} onSnapshot={onSnapshot} launchOnly onClose={()=>setFinalReviewOpen(false)} onSubmitted={()=>setFinalReviewOpen(false)}/>}
  {!missingProject&&pageAllowed&&DETAIL_PAGES.includes(page)&&shouldOpenSourceUpload(route,state.actorRole)&&<SourceUploadDialog project={project} files={state.documentsByProject[project.id]||[]} onSubmit={uploadFromDetail} onClose={()=>{const next=getSourceUploadExitRoute(route,false);rawNavigate(next.page,next);}}/>}
