@@ -44,24 +44,20 @@ for(const role of ['SR','最终审批人'])test(`${role} uses two sections and p
     const originalRoute=props.route;
     for(const override of [{sourceVersion:'0'},{fileId:'HISTORIC-FILE'}]){
       props={...props,route:{...originalRoute,...override}};await render();assert.equal(refs().open,false,'changing the displayed source scope resets the reference disclosure');
-      await click(refs().querySelector('summary'));assert.equal(refs().querySelector('[aria-label="本条关联证据"]').readOnly,true,'historical or mismatched sources retain read-only permissions');
+      await click(refs().querySelector('summary'));assert.equal(refs().querySelector('textarea'),null);
       props={...props,route:originalRoute};await render();assert.equal(refs().open,false);await click(refs().querySelector('summary'));
     }
-    const evidence=refs().querySelector('[aria-label="本条关联证据"]');assert.equal(evidence.value,'https://example.com/human');assert.equal(evidence.readOnly,role!=='SR');
-    assert.equal(refs().querySelector('[aria-label="打开本条关联证据"]').href,'https://example.com/human');
-    if(role==='SR'){await type(evidence,'https://example.com/edited');assert.equal(refs().open,true,'ordinary same-scope typing preserves the open reference disclosure');assert.match(responseState().textContent,/应答未保存/);assert.equal(window.__rfqOfficeUnsaved?.dirty,false,'response changes do not dirty the native file');}
+    const evidence=refs().querySelector('[aria-label="本条关联证据"]');assert.equal(evidence.textContent,'Candidate report REF-1');assert.equal(refs().querySelector('textarea'),null);
     const frame=node.querySelector('iframe');await click(button('项目信息'));assert.ok(drawer().classList.contains('ant-drawer-open'));
     const projectName=inputByLabel('项目名称',drawer());assert.equal(projectName.disabled,role!=='SR');
     if(role==='SR')await type(projectName,'Changed project');
     await click(drawer().querySelector('.ant-drawer-close'));await click(button('项目信息'));
     assert.equal(inputByLabel('项目名称',drawer()).value,role==='SR'?'Changed project':'Project','closing retains the unsaved settings form');
-    assert.equal(evidence.value,role==='SR'?'https://example.com/edited':'https://example.com/human','opening information retains the response draft');assert.equal(node.querySelector('iframe'),frame);
     assert.equal(projectWrites.length,0);assert.equal(responseWrites.length,0,'view actions do not save drafts');
     if(role==='SR'){
       await type(inputByLabel('变更原因',drawer()),'Correct project name');await click(button('保存项目设置',drawer()));assert.equal(projectWrites[0].name,'Changed project');
     }else assert.equal(button('保存项目设置',drawer()),undefined);
     await click(drawer().querySelector('.ant-drawer-close'));
-    if(role==='SR'){await click(button('保存草稿'));assert.equal(responseWrites[0].patch.evidence,'https://example.com/edited');assert.equal(confirmations.length,0);assert.equal(responseState(),null);}
     await click(button('讨论'));assert.ok(node.querySelector('.annotation-panel'));await click(button('应答'));assert.equal(node.querySelector('.detail-clause-content').style.display,'flex','response can reopen on the same route');
     await click(button('下一条')||node.querySelector('button[aria-label="下一条"]'));assert.equal(refs().open,false,'a different clause starts with references collapsed');
     props={...props,route:{...props.route,page:'settings'},requirements:[]};await render();assert.ok(drawer().classList.contains('ant-drawer-open'),'legacy settings links open information even with no clauses');

@@ -36,7 +36,6 @@ export function confirmationValidation(row) {
   if (row.removedFromSource && row.conclusion !== '不适用') issues.push('客户新版已删除此条款，请确认不适用范围处置');
   if (!hasText(row.original)) issues.push('请填写客户要求原文');
   if (!FINAL_CONCLUSIONS.has(row.conclusion)) issues.push('请选择明确的最终结论，待确认不能作为最终处置');
-  if (row.conclusion === '不适用' && !hasText(row.reason)) issues.push('选择不适用时，请说明不适用范围依据');
   return issues;
 }
 

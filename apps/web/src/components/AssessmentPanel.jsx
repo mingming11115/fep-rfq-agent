@@ -2,6 +2,7 @@ import { UiButton } from './AntContent';
 import React from 'react';
 import { BookOpen, ChevronDown, Sparkles } from "./icons";
 import { makeRequirements } from '../data';
+import { reviewEvidenceHref } from '../reviewRequest';
 import { buildResponseAdvice } from '../responseAdvice';
 export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference, sourceScope, children }) {
   const original = makeRequirements(project.id).find((item) => item.id === row.id);
@@ -23,7 +24,7 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
     </dl>
     <details className="response-reference-details" key={JSON.stringify([project.id,row.id,sourceScope?.fileId??row.sourceFileId??row.source,String(sourceScope?.sourceVersion??row.sourceVersion??'1')])}>
       <summary><BookOpen size={14}/><strong>参考与证据</strong><ChevronDown size={13}/></summary>
-      <div className="response-reference-body"><dl><dt>建议来源</dt><dd>{advice.reference}{advice.evidence&&onOpenReference&&<UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}</dd>{advice.evidence&&<><dt>候选依据</dt><dd>{advice.evidence}</dd></>}</dl>{children}</div>
+      <div className="response-reference-body"><dl><dt>AI 建议来源</dt><dd>{advice.reference}{advice.evidence&&onOpenReference&&<UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}</dd><dt>本条关联证据</dt><dd aria-label="本条关联证据">{advice.evidence || '暂无关联证据'}{reviewEvidenceHref(advice.evidence)&&<a className="text-link" aria-label="打开本条关联证据" href={reviewEvidenceHref(advice.evidence)} target="_blank" rel="noopener noreferrer">查看来源 ↗</a>}</dd></dl>{children}</div>
     </details>
     {row.previousOriginal&&<details><summary>查看变更前要求</summary><p>{row.previousOriginal}</p></details>}
   </section>;
