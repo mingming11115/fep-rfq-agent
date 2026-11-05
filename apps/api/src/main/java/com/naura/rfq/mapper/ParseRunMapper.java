@@ -1,6 +1,6 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.domain.ParseRun;
+import com.naura.rfq.model.entity.ParseRun;
 import java.util.List;
 import java.util.Optional;
 import org.apache.ibatis.annotations.Mapper;

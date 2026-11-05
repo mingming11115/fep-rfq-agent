@@ -20,13 +20,13 @@
         </where>
     </sql>
 
-    <select id="findById" resultType="com.naura.rfq.domain.AppUser">
+    <select id="findById" resultType="com.naura.rfq.model.entity.AppUser">
         select <include refid="columns"/>
         from app_user
         where id = #{id}
     </select>
 
-    <select id="findByUsername" resultType="com.naura.rfq.domain.AppUser">
+    <select id="findByUsername" resultType="com.naura.rfq.model.entity.AppUser">
         select <include refid="columns"/>
         from app_user
         where username = #{username}
@@ -37,7 +37,7 @@
         from app_user
     </select>
 
-    <select id="findPage" resultType="com.naura.rfq.domain.AppUser">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.AppUser">
         select <include refid="columns"/>
         from app_user
         <include refid="pageFilter"/>
@@ -83,7 +83,7 @@
         where system_admin = true
           and status = #{status}
     </select>
-    <select id="findByIds" resultType="com.naura.rfq.domain.AppUser">
+    <select id="findByIds" resultType="com.naura.rfq.model.entity.AppUser">
         select <include refid="columns"/>
         from app_user
         where id in

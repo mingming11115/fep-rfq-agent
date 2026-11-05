@@ -4,20 +4,20 @@
 
     <sql id="columns">id, user_id, bu_id, role, status, created_at</sql>
 
-    <select id="findByBuId" resultType="com.naura.rfq.domain.UserBuRole">
+    <select id="findByBuId" resultType="com.naura.rfq.model.entity.UserBuRole">
         select <include refid="columns"/>
         from user_bu_role
         where bu_id = #{buId}
     </select>
 
-    <select id="findByUserIdAndStatus" resultType="com.naura.rfq.domain.UserBuRole">
+    <select id="findByUserIdAndStatus" resultType="com.naura.rfq.model.entity.UserBuRole">
         select <include refid="columns"/>
         from user_bu_role
         where user_id = #{userId}
           and status = #{status}
     </select>
 
-    <select id="findByBuIdAndRoleAndStatus" resultType="com.naura.rfq.domain.UserBuRole">
+    <select id="findByBuIdAndRoleAndStatus" resultType="com.naura.rfq.model.entity.UserBuRole">
         select <include refid="columns"/>
         from user_bu_role
         where bu_id = #{buId}
@@ -30,13 +30,13 @@
         values (#{userId}, #{buId}, #{role}, #{status}, #{createdAt})
     </insert>
 
-    <select id="findByUserId" resultType="com.naura.rfq.domain.UserBuRole">
+    <select id="findByUserId" resultType="com.naura.rfq.model.entity.UserBuRole">
         select <include refid="columns"/>
         from user_bu_role
         where user_id = #{userId}
     </select>
 
-    <select id="findByUserIds" resultType="com.naura.rfq.domain.UserBuRole">
+    <select id="findByUserIds" resultType="com.naura.rfq.model.entity.UserBuRole">
         select <include refid="columns"/>
         from user_bu_role
         where status = #{status}

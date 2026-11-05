@@ -5,13 +5,13 @@
     <sql id="columns">id, project_id, name, version, purpose, storage_ref, content_type, size_bytes, sha256,
         status, uploaded_by, created_at</sql>
 
-    <select id="findById" resultType="com.naura.rfq.domain.CustomerDocument">
+    <select id="findById" resultType="com.naura.rfq.model.entity.CustomerDocument">
         select <include refid="columns"/>
         from customer_document
         where id = #{id}
     </select>
 
-    <select id="findByIdForUpdate" resultType="com.naura.rfq.domain.CustomerDocument" useCache="false" flushCache="true">
+    <select id="findByIdForUpdate" resultType="com.naura.rfq.model.entity.CustomerDocument" useCache="false" flushCache="true">
         select <include refid="columns"/>
         from customer_document
         where id = #{id} for update
@@ -21,21 +21,21 @@
         order by version desc limit 1 for update
     </select>
 
-    <select id="findByProjectIdOrderByCreatedAtDesc" resultType="com.naura.rfq.domain.CustomerDocument">
+    <select id="findByProjectIdOrderByCreatedAtDesc" resultType="com.naura.rfq.model.entity.CustomerDocument">
         select <include refid="columns"/>
         from customer_document
         where project_id = #{projectId}
         order by created_at desc
     </select>
 
-    <select id="findByProjectIdAndSha256" resultType="com.naura.rfq.domain.CustomerDocument">
+    <select id="findByProjectIdAndSha256" resultType="com.naura.rfq.model.entity.CustomerDocument">
         select <include refid="columns"/>
         from customer_document
         where project_id = #{projectId}
           and sha256 = #{sha256}
     </select>
 
-    <select id="findPage" resultType="com.naura.rfq.domain.CustomerDocument">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.CustomerDocument">
         select <include refid="columns"/>
         from customer_document
         where project_id = #{projectId}

@@ -1,8 +1,8 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.common.api.PageQuery;
-import com.naura.rfq.domain.Project;
-import com.naura.rfq.project.ProjectFilter;
+import com.naura.rfq.model.entity.Project;
+import com.naura.rfq.model.query.PageQuery;
+import com.naura.rfq.model.query.ProjectFilter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;

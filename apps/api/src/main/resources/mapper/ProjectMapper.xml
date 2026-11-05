@@ -14,32 +14,32 @@
         </where>
     </sql>
 
-    <select id="findById" resultType="com.naura.rfq.domain.Project">
+    <select id="findById" resultType="com.naura.rfq.model.entity.Project">
         select <include refid="columns"/>
         from project
         where id = #{id}
     </select>
 
-    <select id="findByIdForUpdate" resultType="com.naura.rfq.domain.Project" useCache="false" flushCache="true">
+    <select id="findByIdForUpdate" resultType="com.naura.rfq.model.entity.Project" useCache="false" flushCache="true">
         select <include refid="columns"/>
         from project
         where id = #{id} for update
     </select>
 
-    <select id="findAll" resultType="com.naura.rfq.domain.Project">
+    <select id="findAll" resultType="com.naura.rfq.model.entity.Project">
         select <include refid="columns"/>
         from project
         order by created_at desc
     </select>
 
-    <select id="findByIdIn" resultType="com.naura.rfq.domain.Project">
+    <select id="findByIdIn" resultType="com.naura.rfq.model.entity.Project">
         select <include refid="columns"/>
         from project
         where id in
         <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
     </select>
 
-    <select id="findByBuIdOrderByCreatedAtDesc" resultType="com.naura.rfq.domain.Project">
+    <select id="findByBuIdOrderByCreatedAtDesc" resultType="com.naura.rfq.model.entity.Project">
         select <include refid="columns"/>
         from project
         where bu_id = #{buId}
@@ -47,7 +47,7 @@
     </select>
 
     <!-- orderBy 由 PageQuery 的白名单校验生成，只可能是字段名加 asc/desc，不接受外部原文。 -->
-    <select id="findPage" resultType="com.naura.rfq.domain.Project">
+    <select id="findPage" resultType="com.naura.rfq.model.entity.Project">
         select <include refid="columns"/>
         from project
         <include refid="scopeFilter"/>
@@ -79,7 +79,7 @@
         </if>
         <if test="f.stage != null">and stage=#{f.stage}</if>
     </sql>
-    <select id="findAccessiblePage" resultType="com.naura.rfq.domain.Project">
+    <select id="findAccessiblePage" resultType="com.naura.rfq.model.entity.Project">
         select <include refid="columns"/> from project <include refid="accessibleFilter"/>
         order by ${q.orderBy}, id limit #{q.size} offset #{q.offset}
     </select>

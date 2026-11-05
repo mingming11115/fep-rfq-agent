@@ -5,7 +5,7 @@
     <sql id="columns">id, document_id, block_index, parent_block_id, type, section_path, customer_clause_no,
         content, source_anchor, provenance, processing_status</sql>
 
-    <select id="findByDocumentIdOrderByBlockIndex" resultType="com.naura.rfq.domain.DocumentBlock">
+    <select id="findByDocumentIdOrderByBlockIndex" resultType="com.naura.rfq.model.entity.DocumentBlock">
         select <include refid="columns"/>
         from document_block
         where document_id = #{documentId}

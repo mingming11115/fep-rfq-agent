@@ -1,13 +1,13 @@
 package com.naura.rfq.config;
 
-import com.naura.rfq.domain.AppUser;
-import com.naura.rfq.domain.BusinessUnit;
-import com.naura.rfq.domain.Project;
-import com.naura.rfq.domain.UserBuRole;
 import com.naura.rfq.mapper.AppUserMapper;
 import com.naura.rfq.mapper.BusinessUnitMapper;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.mapper.UserBuRoleMapper;
+import com.naura.rfq.model.entity.AppUser;
+import com.naura.rfq.model.entity.BusinessUnit;
+import com.naura.rfq.model.entity.Project;
+import com.naura.rfq.model.entity.UserBuRole;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;

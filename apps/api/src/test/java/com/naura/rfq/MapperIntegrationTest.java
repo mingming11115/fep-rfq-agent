@@ -1,20 +1,19 @@
 package com.naura.rfq;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-import com.naura.rfq.common.api.PageQuery;
-import com.naura.rfq.domain.AppUser;
-import com.naura.rfq.domain.Project;
-import com.naura.rfq.domain.Requirement;
 import com.naura.rfq.mapper.AppUserMapper;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.mapper.RequirementMapper;
+import com.naura.rfq.model.entity.AppUser;
+import com.naura.rfq.model.entity.Project;
+import com.naura.rfq.model.entity.Requirement;
+import com.naura.rfq.model.query.PageQuery;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 验证 MyBatis 侧真正容易出错的地方：下划线列名到驼峰字段的映射、分页 SQL、

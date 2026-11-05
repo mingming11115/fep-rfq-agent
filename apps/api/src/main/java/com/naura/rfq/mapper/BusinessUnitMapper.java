@@ -1,7 +1,7 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.common.api.PageQuery;
-import com.naura.rfq.domain.BusinessUnit;
+import com.naura.rfq.model.entity.BusinessUnit;
+import com.naura.rfq.model.query.PageQuery;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;

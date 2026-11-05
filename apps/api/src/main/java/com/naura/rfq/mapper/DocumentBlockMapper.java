@@ -1,6 +1,6 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.domain.DocumentBlock;
+import com.naura.rfq.model.entity.DocumentBlock;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

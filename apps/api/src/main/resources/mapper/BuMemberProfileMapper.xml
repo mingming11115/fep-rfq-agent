@@ -6,19 +6,19 @@
         id, user_id, bu_id, enabled, can_confirm, can_final_review, resource_qualifications, created_at, updated_at
     </sql>
 
-    <select id="findByBuId" resultType="com.naura.rfq.domain.BuMemberProfile">
+    <select id="findByBuId" resultType="com.naura.rfq.model.entity.BuMemberProfile">
         select <include refid="columns"/>
         from bu_member_profile
         where bu_id = #{buId}
     </select>
 
-    <select id="findByBuIdAndUserId" resultType="com.naura.rfq.domain.BuMemberProfile">
+    <select id="findByBuIdAndUserId" resultType="com.naura.rfq.model.entity.BuMemberProfile">
         select <include refid="columns"/>
         from bu_member_profile
         where bu_id = #{buId}
           and user_id = #{userId}
     </select>
-    <select id="findByUserId" resultType="com.naura.rfq.domain.BuMemberProfile">
+    <select id="findByUserId" resultType="com.naura.rfq.model.entity.BuMemberProfile">
         select <include refid="columns"/> from bu_member_profile where user_id = #{userId}
     </select>
 

@@ -21,7 +21,7 @@ spring:
       connection-timeout: 10000
 mybatis:
   mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: com.naura.rfq.domain
+  type-aliases-package: com.naura.rfq.model.entity
   configuration:
     # bu_id -> buId, created_at -> createdAt. Schema and POJO stay in step automatically.
     map-underscore-to-camel-case: true
