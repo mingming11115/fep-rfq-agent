@@ -23,7 +23,7 @@ export async function officeRequest(path, ref, options = {}) {
   catch (error) { if (error.name === 'AbortError') throw error; throw new Error('无法连接文档服务，请检查 RFQ 后端是否启动'); }
   if (options.binary && response.ok) return response.blob();
   const body = await response.json().catch(()=>null);
-  if (!response.ok || body?.code !== 0) throw new Error(body?.msg || '文档服务暂不可用，请检查后端和 ONLYOFFICE 配置');
+  if (!response.ok || body?.code !== 0) { const error=new Error(body?.msg || '文档服务暂不可用，请检查后端和 ONLYOFFICE 配置'); error.status=response.status; throw error; }
   return body.data;
 }
 export async function uploadOfficeFile(file, source, signal) {

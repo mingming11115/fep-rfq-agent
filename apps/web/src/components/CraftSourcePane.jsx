@@ -68,7 +68,13 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
         const binary=await craftRequest(`/documents/${ref.id}/download?kind=review`,ref,{binary:true,signal:abort.signal});
         const content=await binary.arrayBuffer();if(abort.signal.aborted)return;
         setMeta(value);setBytes(content);setLoading(false);
-      }catch(cause){if(!abort.signal.aborted){setLoading(false);setError(cause.message);}}
+      }catch(cause){if(!abort.signal.aborted){
+        if(cause.status===404&&craftDemoAsset(source)&&!dirtyRef.current&&!pendingSaves.current){
+          try{const restored=await loadCraftDemo(source,abort.signal);if(!abort.signal.aborted)remember(restored);return;}
+          catch(recoveryError){if(abort.signal.aborted)return;setError(recoveryError.message);}
+        }else setError(cause.message);
+        setLoading(false);
+      }}
     }
     void load();return()=>abort.abort();
   },[reference?.id,retry]);
