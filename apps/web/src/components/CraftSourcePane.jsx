@@ -149,7 +149,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   }
   function retryFile(){
     if(saveFailed||backup&&dirty){void saveFile();return;}
-    setError('');if(editor.current)editor.current.retry();else setRetry(value=>value+1);
+    setError('');if(editor.current&&!editorState.ready)setFrameEpoch(value=>value+1);else if(editor.current)editor.current.retry();else setRetry(value=>value+1);
   }
   async function downloadFile(kind){
     if(!canDownloadFile||downloadRequest.current)return;
@@ -214,7 +214,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       <AnnotationFilterView.Provider value={Boolean(bytes)}>
       <div className="word-classic-document review-tools" ref={tools}/>
       <div className="craft-editor-and-advice">
-      <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
+      <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&!error&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
       <CraftResponseAdvice key={craftSourceKey(source)} showResponses={showResponses} nativeNotes={editorState.nativeNotes} nativeActiveId={editorState.nativeActiveId} onOpenNativeComment={key=>editor.current?.openFileComment(key,{locate:true})} rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} geometry={editorState.geometry} frame={frame} onSelectAnchor={anchor=>{const allowed=onSelectAnchor?.(anchor);if(allowed!==false&&editorState.ready)void locateClause(anchor.requirementId);return allowed;}} onQuote={onQuote} canEditRow={canEditRow}/>
       </div>
       </AnnotationFilterView.Provider>

@@ -5,6 +5,20 @@ import {Window} from 'happy-dom';
 import {makeSourceAnchor} from './documentAnchors.js';
 import {createCraftProjectEditor} from './craftEditorBridge.js';
 
+test('Word bootstrap reports module and WASM failures to its host',async()=>{
+  const html=await readFile(new URL('../../../packages/craft-editors/site/wordcraft-classic/index.html',import.meta.url),'utf8');
+  const script=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+  const messages=[],loading={textContent:''};
+  const parent={postMessage:(...args)=>messages.push(args)};
+  const win={parent,location:{origin:'https://rfq.example',search:'?host=parent'}};
+  const run=new Function('window','document',`return (async()=>{${script.replace("import('./wordcraft-classic.js')","Promise.reject(new Error('WASM download failed'))")}})()`);
+  await run(win,{getElementById:()=>loading});
+  assert.equal(messages[0]?.[0].type,'wordcraft:failed');
+  assert.match(messages[0][0].error,/WASM download failed/);
+  assert.equal(messages[0][1],win.location.origin);
+  assert.match(loading.textContent,/WASM download failed/);
+});
+
 test('project editor coordinates native and collaboration comments within one source session',async t=>{
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
   const document=window.document;document.write(await readFile(new URL('../../../packages/craft-editors/site/classic.html',import.meta.url),'utf8'));
@@ -45,7 +59,11 @@ test('project editor coordinates native and collaboration comments within one so
     onSelectAnchor:anchor=>selected.push(anchor.requirementId),onSelectComment:(id)=>selected.push(id)});
   const tick=async()=>{for(let i=0;i<80;i++)await Promise.resolve();};
   await t.test('only its same-origin iframe can open the file and provide project state',async()=>{
+    t.mock.timers.enable({apis:['setTimeout']});
     bridge.open('real.docx',new Uint8Array([1,2,3]).buffer);
+    t.mock.timers.tick(60000);
+    assert.match(errors.pop(),/编辑器启动超时/);
+    t.mock.timers.reset();
     send('ready',{}, {source:{}});send('ready',{}, {origin:'https://foreign.invalid'});await tick();assert.equal(calls.length,0);
     send('ready');await tick();assert.equal(calls[0].type,'wordcraft:open');
     const configure=calls.filter(c=>c.type==='wordcraft:review').map(c=>JSON.parse(c.payload)).find(c=>c.action==='configure');

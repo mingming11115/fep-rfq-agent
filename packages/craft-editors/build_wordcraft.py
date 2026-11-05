@@ -132,8 +132,16 @@ def main():
     html = '\n'.join(line for line in html.splitlines() if 'data-trunk' not in line)
     html = html.replace('</head>', '''<link rel="icon" href="data:,">
 <script type="module">
-import init from './wordcraft-classic.js';
-await init({module_or_path:'./wordcraft-classic_bg.wasm'});
+try {
+  const {default:init}=await import('./wordcraft-classic.js');
+  await init({module_or_path:'./wordcraft-classic_bg.wasm'});
+} catch(cause) {
+  const error=cause instanceof Error?cause.message:String(cause);
+  const loading=document.getElementById('wordcraft_loading');
+  if(loading)loading.textContent='Word 编辑器启动失败：'+error;
+  if(window.parent!==window&&new URLSearchParams(window.location.search).get('host')==='parent')
+    window.parent.postMessage({type:'wordcraft:failed',error},window.location.origin);
+}
 </script>
 </head>''')
     (args.out / 'index.html').write_text(html)

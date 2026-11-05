@@ -10,6 +10,8 @@ const modifying=new Set(['draft','replyDraft','reply','delete','resolve','new','
 export function createCraftProjectEditor({frame,root,tools,source,reference,revision=0,user,engine,getContext,
   onCommentsChange,onState=()=>{},onError=()=>{},onDirty=()=>{},onSave=()=>{},onSelectAnchor=()=>{},onSelectComment=()=>{},onUnlinkedComment,externalSummaries=false}){
   let alive=true,ready=false,file=null,sent=false,boundToken='',snapshot=null,busy=false,scheduled=false;
+  let startupTimer=null;
+  const clearStartupTimer=()=>{clearTimeout(startupTimer);startupTimer=null;};
   let configuration='',failedConfiguration='',minimumApplied=0,lastMutatingSequence=0,lastActive=null,lastBusinessSelection='',lastState='';
   const associations={},failures=new Map(),draftNativeKeys=new Set(),newDraftKeys=new Set(),freshNativeKeys=new Set();let discussion=null,lastUnlinked='';
   const discussionScope=()=>JSON.stringify([reference.id,boundToken]);
@@ -192,7 +194,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     const data=event.data;if(typeof data?.type!=='string'||!data.type.startsWith(engine+':'))return;
     const kind=data.type.slice(engine.length+1);
     if(kind==='ready'){ready=true;sendFile();return;}
-    if(kind==='failed'){onError('编辑器启动失败：'+(data.error||'请检查静态资源'));return;}
+    if(kind==='failed'){clearStartupTimer();onError('编辑器启动失败：'+(data.error||'请检查静态资源'));return;}
     if(kind==='dirty'){if(data.dirty)onDirty();return;}
     if(kind==='save'){
       const bytes=data.bytes instanceof ArrayBuffer?data.bytes:ArrayBuffer.isView(data.bytes)?data.bytes.buffer.slice(data.bytes.byteOffset,data.bytes.byteOffset+data.bytes.byteLength):null;
@@ -207,7 +209,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     if(!sent||!payload?.document||!Array.isArray(payload.notes)||payload.fileName!==file?.name)return;
     if(boundToken&&payload.document!==boundToken){onError('编辑器已切换到其他文件，请从项目入口打开原件');return;}
     if(snapshot&&(payload.applied||0)<(snapshot.applied||0))return;
-    boundToken=payload.document;
+    clearStartupTimer();boundToken=payload.document;
     const previous=snapshot;snapshot=payload;
     surface.receive(kind,{...payload,notes:payload.notes.map(note=>({...note,...permissions(note)}))});
     if(configuration&&payload.source?.status==='matched'&&payload.source.selectedId!==getContext().selectedAnchor?.requirementId){
@@ -223,7 +225,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
   window.addEventListener('message',receive);
   const api={
     checkpointCovers,
-    open(name,bytes){file={name,bytes};sendFile();},refresh(){failedConfiguration='';schedule();},
+    open(name,bytes){file={name,bytes};clearStartupTimer();startupTimer=setTimeout(()=>{if(alive&&!boundToken)onError('编辑器启动超时，请检查编辑器 JS/WASM 资源是否完整、可访问，并点击重试。');},60000);sendFile();},refresh(){failedConfiguration='';schedule();},
     save:()=>command('save',{}),setVisible:value=>surface.setVisible(value),
     setOutline:visible=>engine==='wordcraft'?command('outline',{visible}):Promise.reject(new Error('当前编辑器不支持 Word 文档目录')),
     setEditorTools:visible=>alive&&boundToken&&engine==='wordcraft'&&snapshot?.editorToolsControlled&&typeof visible==='boolean'?command('tools',{visible}):Promise.reject(new Error('当前 Word 编辑工具尚不可用')),
@@ -258,7 +260,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       }
       state();
     },
-    destroy(){alive=false;clearUnlinked();window.removeEventListener('message',receive);surface.destroy();},
+    destroy(){alive=false;clearStartupTimer();clearUnlinked();window.removeEventListener('message',receive);surface.destroy();},
   };
   return api;
 }
