@@ -20,7 +20,7 @@ test('collaboration starts on the current clause while project records remain op
   const writes=[],navigations=[];let props={project,requirements:rows,reviews:[],route:{page:'response',projectId:'P',requirementId:'R1',fileId:'F1',sourceVersion:'1'},appState:{accountsById:{},commentsByProject:{P:comments},membersByProject:{P:[{id:'member',name:'Team member',role:'Reviewer',status:'生效'}]},audit:[{id:'E',object:'R1',action:'Project operation',detail:'Keep history',actor:'Actor',time:'Today'},{id:'FOREIGN',object:'Q',action:'Foreign operation'}]},actorRole:'最终审批人',actorId:'reader',canBusinessAction:()=>false,onAppUpdate:value=>writes.push(value),navigate:(...value)=>navigations.push(value),toast:()=>{}};
   const settle=async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));};
   const render=async()=>act(async()=>{root.render(React.createElement(ResponsePage,props));await settle();});
-  const button=text=>[...node.querySelectorAll('button')].find(button=>button.textContent===text);
+  const button=text=>[...node.querySelectorAll('button,[role="tab"]')].find(button=>button.textContent===text);
   const disclosure=text=>[...node.querySelectorAll('.detail-activity details')].find(group=>group.querySelector('summary')?.textContent.includes(text));
   try{
     await render();await act(async()=>{button('讨论').click();await settle();});

@@ -9,7 +9,7 @@ import React,{act} from 'react';
 
 test('one directory preserves clause controls and navigates real headings with their source revision',async()=>{
   const window=new Window({url:'http://127.0.0.1:5174'});
-  Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,ShadowRoot:window.ShadowRoot,IS_REACT_ACT_ENVIRONMENT:true});
+  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},IS_REACT_ACT_ENVIRONMENT:true});
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});
   const output=path.join(directory,'rfq-directory-test.mjs');
   await build({entryPoints:[fileURLToPath(new URL('./components/RfqDirectory.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});

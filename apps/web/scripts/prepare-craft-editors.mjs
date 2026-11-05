@@ -1,5 +1,5 @@
-import {readFile,readdir,mkdir,cp} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
+import {readFile,readdir,mkdir,cp,writeFile,rename,rm} from 'node:fs/promises';
+import {createHash,randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -16,7 +16,14 @@ export async function prepareCraftEditor({editor,source,target,patch}){
   if(![digest(patchBytes),digest(patchBytes.toString('utf8').replace(/\r\n/g,'\n'))].includes(manifest.patchSha256))throw new Error(`${editor} 编辑器补丁已更新，请运行 npm run craft:build。`);
   for(const [name,hash] of Object.entries(manifest.files))if(digest(await readFile(path.join(source,name)))!==hash)throw new Error(`${editor} 编译文件校验失败，请重新构建。`);
   await mkdir(target,{recursive:true});
-  for(const item of await readdir(source,{withFileTypes:true}))await cp(path.join(source,item.name),path.join(target,item.name),{recursive:item.isDirectory()});
+  for(const name of [...Object.keys(manifest.files),'build.json']){
+    const bytes=await readFile(path.join(source,name)),destination=path.join(target,name);
+    try{if((await readFile(destination)).equals(bytes))continue;}catch(error){if(error.code!=='ENOENT')throw error;}
+    await mkdir(path.dirname(destination),{recursive:true});
+    const temporary=destination+'.'+randomUUID()+'.tmp';
+    try{await writeFile(temporary,bytes);await rename(temporary,destination);}
+    finally{await rm(temporary,{force:true});}
+  }
   console.log(`Prepared ${editor} ${manifest.version}: /craft-editors/${editor}-classic/index.html`);
 }
 

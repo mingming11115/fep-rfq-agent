@@ -27,7 +27,7 @@ export default function SourceUploadDialog({project,files=[],onSubmit,onClose}){
   try{
    for(let index=0;index<incoming.length;index++){
     const original=fileList[index]?.originFileObj||fileList[index];
-    incoming[index]=await uploadRfqSource(project.id,original,incoming[index]);
+    incoming[index]=await uploadRfqSource(project.id,original,incoming[index],undefined,project);
     if(supportsCraft(incoming[index].name))incoming[index].craft=await uploadCraftFile(original,{projectId:project.id,fileId:incoming[index].id,sourceVersion:incoming[index].version},{signal:abort.current.signal});
    }
    if(alive.current)onSubmit(incoming);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,stat,utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -26,6 +26,12 @@ test('deployment regenerates verified editor assets without using stale public e
     await assert.rejects(readFile(path.join(target,'craft-editors/stale.wasm')),/ENOENT/);
     const config=(await import('../vite.config.js')).default;
     assert.equal(config.publicDir,'.generated-public');
+    assert.ok(config.server.watch.ignored.includes('**/.generated-public/**'));
+    const runtimePath=path.join(target,'craft-editors/wordcraft-classic/editor.wasm');
+    await utimes(runtimePath,new Date('2020-01-01'),new Date('2020-01-01'));
+    const before=await stat(runtimePath);
+    await preparePublicAssets({publicSource,target,editors:[{editor:'wordcraft',source,patch}]});
+    assert.equal((await stat(runtimePath)).mtimeMs,before.mtimeMs,'unchanged runtimes must not be replaced while the dev server serves them');
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 

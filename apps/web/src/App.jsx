@@ -4,6 +4,7 @@ import { App as AntApp } from 'antd';
 import RfqAppLayout from './components/RfqAppLayout';
 import { consumeLoginIdentity, readSession, logout } from './authClient';
 import { hydrateSessionPersonnel, mergeMemberDirectory } from './sessionPersonnel';
+import {createBackendProject} from './rfqProjectClient';
 import BuAdminPage,{ProjectPersonnelPanel,PlatformAdminPage} from './pages/BuAdminPage';
 import {canAccessProject,getPersonnelContext,personName,getProjectFinalReview,getRequiredFinalReviewers,configureProjectFinalReviewers,assignProjectDuty} from './personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomain';
@@ -129,16 +130,18 @@ export default function App(){
  function transferProject(id,to,reason){try{update(st=>event(handoverProject(st,{projectId:id,to,reason}),'移交项目负责人',id,reason));return true;}catch(e){toast(e.message,'error');return false;}}
  function analysisRun(run){update(s=>({...s,analysisRuns:appendAnalysisRun(s.analysisRuns,{...run,projectId:project.id})}));}
  const logEvent=(action,object='',detail='')=>update(s=>event(s,action,object,detail));
- function createProject(form){
+ async function createProject(form){
   const current=stateRef.current,buId=current.activeBuId||getPersonnelBu(current),context={state:current,actorId:current.actorId,buId};
   try{
    assertPermission(current.actorRole,'project:create',context);
    if(['name','ownerId','deadline'].some(key=>!form[key]?.trim()))throw new Error('请填写项目名称、负责人和截止时间');
    const catalog=readRfqCatalog(localStorage,context),binding=resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog),form.groupId,buId);
-   const id=`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number(p.id.match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
+   const code=`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number((p.code||p.id).match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
    const {technicalMode,srId,technicalIds,technicalRepresentativeId,...projectForm}=form;
    const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId,technicalMode,srId,technicalIds,technicalRepresentativeId});
-   const p={...projectForm,...binding,id,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:1};
+   const saved=await createBackendProject({...form,id:code,buId});
+   const id=saved.id;
+   const p={...projectForm,...binding,id,code:saved.code,backendProjectId:id,backendBuId:saved.buId,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:saved.createdAt||new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:saved.version||1};
    update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.groupPath||[p.modelName,p.modelRevision,p.processCode,p.processName].filter(Boolean).join(" / ")}`));
    toast('项目已关联目录，请上传资料或载入示例 RFQ');rawNavigate('documents');return true;
   }catch(error){toast(error.message,'error');return false;}

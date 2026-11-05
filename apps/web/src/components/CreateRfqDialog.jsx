@@ -23,12 +23,12 @@ export default function CreateRfqDialog({appState,onClose,onCreateProject}){
  useEffect(()=>{formApi.setFieldsValue({...form,deadline:form.deadline?dayjs(form.deadline):undefined});},[form,formApi]);
  useEffect(()=>{const refresh=e=>{if(e.key&&e.key!==catalogKey(buId))return;try{setGroups(readGroups());}catch(cause){setError(cause.message);}};window.addEventListener('storage',refresh);return()=>window.removeEventListener('storage',refresh);},[buId]);
  function changeValues(changed,values){setForm(current=>{const next={...current,...values,deadline:formDate(values.deadline)};if('ownerId' in changed){next.ownerId=changed.ownerId||'';next.owner=next.ownerId?personName(appState,next.ownerId):'';if(!current.srId||current.srId===current.ownerId)next.srId=srCandidates.some(p=>p.userId===next.ownerId)?next.ownerId:'';}return next;});setError('');}
- function create(){
+ async function create(){
   try{
    if(!canPerform(appState.actorRole,'project:create',context))throw new Error('当前身份没有本BU的RFQ创建权限');
    if(!form.name.trim()||!form.ownerId||!form.deadline)throw new Error('请填写项目名称、负责人和截止时间');
    const latest=readGroups();setGroups(latest);resolveGroupBinding(latest,form.groupId,buId);
-   createProjectPersonnel(appState,{...form,buId});if(onCreateProject(form)===false)return false;onClose();return true;
+   createProjectPersonnel(appState,{...form,buId});if(await onCreateProject(form)===false)return false;onClose();return true;
   }catch(cause){setError(cause.message);return false;}
  }
  return <ModalForm title="新建 RFQ 项目" open form={formApi} width={760} className="rfq-create-form" layout="vertical" onOpenChange={open=>{if(!open)onClose();}} onValuesChange={changeValues} onFinish={create} modalProps={{maskClosable:false,centered:true,styles:{body:{maxHeight:'calc(100dvh - 220px)',overflowY:'auto',paddingTop:12}}}} submitter={{searchConfig:{submitText:'创建并上传资料',resetText:'取消'},resetButtonProps:{onClick:onClose},submitButtonProps:{disabled:!enabledGroups.length}}}>

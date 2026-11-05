@@ -4,6 +4,7 @@ export default defineConfig({
   publicDir: '.generated-public',
   esbuild: { jsx: 'automatic' },
   server: {
+    watch: { ignored: ['**/.generated-public/**','**/public/craft-editors/**'] },
     fs: { allow: [fileURLToPath(new URL('../..',import.meta.url))] },
     proxy: {
       '/api/rfq': { target: process.env.RFQ_API_TARGET || 'http://127.0.0.1:48083', changeOrigin: true },

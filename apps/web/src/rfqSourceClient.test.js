@@ -12,3 +12,14 @@ test('failure and unknown local sources never generate substitute clauses',async
  await assert.rejects(()=>parseRfqSource('P',{id:'F'}),/重新上传/);
  await assert.rejects(()=>parseRfqSource('P',{backendDocumentId:'D'},{post:async()=>({status:'failed',message:'解析失败'})}),/解析失败/);
 });
+
+test('a migrated local project uploads and reads clauses using its backend ID while preserving its source binding',async()=>{
+ const calls=[];
+ const api={get:async path=>{calls.push(path);return path.includes('requirements')?{list:[{id:'R',documentId:'D',originalText:'精度要求'}],totalPages:1}:{id:'BACKEND'};},upload:async path=>{calls.push(path);return {id:'D',version:1};},post:async()=>({status:'completed',requirementCount:1})};
+ const file=await uploadRfqSource('LOCAL',new Blob(['word']),{id:'F',name:'new.docx',version:'V1.0'},api,{id:'LOCAL'});
+ assert.equal(file.sourceProjectId,'LOCAL');assert.equal(file.backendProjectId,'BACKEND');
+ assert.ok(calls.includes('/projects/BACKEND/documents'));
+ const result=await parseRfqSource('LOCAL',file,api);assert.equal(result.rows.length,1);
+ assert.ok(calls.some(path=>path.startsWith('/projects/BACKEND/requirements')));
+ await assert.rejects(()=>parseRfqSource('OTHER',file,api),/所属项目不一致/);
+});
