@@ -12,6 +12,7 @@ const modernPermissions={
 };
 function modernCan(role,action,context){
  if(!modernPermissions[action]?.includes(role))return false;
+ if(context?.state?.dataSource==='mysql'&&!['project:create','project:manage','project:handover','source:manage','analysis:view','audit:view','system:manage','bu:manage'].includes(action))return false;
  // Without context this is a UI capability query. Mutation boundaries always pass state.
  if(!context)return true;
  const {state,actorId=state?.actorId,projectId,requirementId,buId=state?.projects?.find(p=>p.id===projectId)?.buId}=context;
@@ -68,7 +69,7 @@ export function assertRequirementPatch(role, current, patch,context) {
 }
 export function canAccessPage(role, page,context) {
   if(modernRoles.includes(role)){
-   if(['knowledge','history'].includes(page))return modernCan(role,'knowledge:edit',context);
+   if(['knowledge','history'].includes(page))return context?.state?.dataSource==='mysql'?!!context.state.accountsById?.[context.actorId||context.state.actorId]?.enabled:modernCan(role,'knowledge:edit',context);
    if(role==='后台管理')return ['admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
    if(role==='BU管理员'){
     const rfqPages=['documents','response','reviews','versions','settings','export'];

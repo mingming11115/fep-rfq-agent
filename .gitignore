@@ -1,10 +1,13 @@
 # Dependencies and generated build outputs
 **/node_modules/
 **/dist/
+/apps/web/dist-mock/
+/apps/web/dist-mysql/
 **/target/
 **/__pycache__/
 /apps/web/public/craft-editors/
 /apps/web/.generated-public/
+/apps/web/.test-build/
 
 # Local runtime files, editor settings and credentials
 /.local/

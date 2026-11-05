@@ -1,4 +1,5 @@
 import {officeRequest, officeSourceKey} from './officeClient.js';
+import {uploadWithProgress} from './uploadTransport.js';
 
 export const supportsCraft=name=>/\.(docx|pdf)$/i.test(name||'');
 export const craftSourceKey=officeSourceKey;
@@ -9,11 +10,11 @@ export function assertCraftSource(meta,source){
 }
 
 export async function craftRequest(path,reference,options={}){
-  const {binary,...request}=options;
+  const {binary,onUploadProgress,...request}=options;
   const headers=new Headers(request.headers);
   if(reference?.access)headers.set('X-Craft-Access',reference.access);
   let response;
-  try{response=await fetch('/api/craft'+path,{...request,headers});}
+  try{response=onUploadProgress?await uploadWithProgress('/api/craft'+path,{...request,headers},onUploadProgress):await fetch('/api/craft'+path,{...request,headers});}
   catch(error){if(error.name==='AbortError')throw error;throw new Error('无法连接文档服务，请检查 RFQ 后端是否启动');}
   if(binary&&response.ok)return response.blob();
   const body=await response.json().catch(()=>null);
@@ -21,11 +22,11 @@ export async function craftRequest(path,reference,options={}){
   return body.data;
 }
 
-export async function uploadCraftFile(file,source,{review,signal}={}){
+export async function uploadCraftFile(file,source,{review,signal,onUploadProgress}={}){
   const body=new FormData();body.append('file',file);
   if(review)body.append('review',review,file.name);
   for(const key of ['projectId','fileId','sourceVersion'])body.append(key,String(source[key]??''));
-  return craftRequest('/documents',null,{method:'POST',body,signal});
+  return craftRequest('/documents',null,{method:'POST',body,signal,onUploadProgress});
 }
 
 export function saveCraftReview(reference,bytes,revision,signal){

@@ -11,6 +11,7 @@ function readRows(storage,base,seed,buId){
  return rows;
 }
 export function readRfqCatalog(storage,context){
+ if(context?.state?.dataSource==='mysql'){const r=context.state.resourcesByBuId?.[context.buId]||{};return {models:r.models||[],processes:r.processes||[]};}
  return {
   models:selectReadableResources(readRows(storage,'rfq.reference.models.v1',MODELS,context.buId),context,'catalog'),
   processes:selectReadableResources(readRows(storage,'rfq.reference.processes.v1',PROCESSES,context.buId),context,'catalog'),

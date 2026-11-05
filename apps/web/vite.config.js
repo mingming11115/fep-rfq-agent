@@ -4,11 +4,13 @@ export default defineConfig({
   publicDir: '.generated-public',
   esbuild: { jsx: 'automatic' },
   server: {
+    port: 5173,
+    strictPort: true,
     watch: { ignored: ['**/.generated-public/**','**/public/craft-editors/**'] },
     fs: { allow: [fileURLToPath(new URL('../..',import.meta.url))] },
     proxy: {
-      '/api/rfq': { target: process.env.RFQ_API_TARGET || 'http://127.0.0.1:48083', changeOrigin: true },
-      '/api/craft': { target: process.env.RFQ_CRAFT_API_TARGET || 'http://127.0.0.1:48083', changeOrigin: true },
+      '/api/rfq': { target: process.env.RFQ_API_TARGET || 'http://127.0.0.1:48084', changeOrigin: true },
+      '/api/craft': { target: process.env.RFQ_CRAFT_API_TARGET || 'http://127.0.0.1:48084', changeOrigin: true },
       '/api/office': { target: process.env.RFQ_BACKEND_URL || 'http://127.0.0.1:48081', changeOrigin: true },
     },
   },

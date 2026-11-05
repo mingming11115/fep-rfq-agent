@@ -1,11 +1,12 @@
 import {api as defaultApi} from './authClient.js';
 import {ensureBackendProject} from './rfqProjectClient.js';
 
-export async function uploadRfqSource(projectId,original,file,api=defaultApi,project){
+export async function uploadRfqSource(projectId,original,file,api=defaultApi,project,options={}){
  let backendProjectId=projectId;
  try{const saved=project?await ensureBackendProject(project,api):await api.get(`/projects/${encodeURIComponent(projectId)}`);backendProjectId=saved.id;}catch(error){throw new Error(`无法上传到当前后端项目：${error.message}。请确认项目已在后端创建且当前账号有权限。`);}
  const body=new FormData();body.append('file',original,file.name);
- const saved=await api.upload(`/projects/${encodeURIComponent(backendProjectId)}/documents`,body);
+ if(options.signal?.aborted)throw new DOMException('请求已取消','AbortError');
+ const saved=await api.upload(`/projects/${encodeURIComponent(backendProjectId)}/documents`,body,options);
  return {...file,sourceProjectId:projectId,backendDocumentId:saved.id,backendProjectId,backendVersion:saved.version,status:'排队中'};
 }
 export async function parseRfqSource(projectId,file,api=defaultApi){

@@ -29,6 +29,7 @@ export function getProjectSummary(state,projectId,actorId) {
   const parsing=sources.some(f=>['排队中','处理中','失败'].includes(f.status));
   const snapshot=latestSnapshot(snapshots);
   const approved=finished&&!parsing&&snapshot?.status==='已批准'&&(!state.accountsById||isFinalReviewApproved(snapshot))&&current(snapshot);
-  const stage=parsing?'解析中':approved?(snapshot.exportedAt?'已导出':'审批完成'):rows.length?'评审中':sources.length?'解析中':'待上传';
+  const backendStage=state.dataSource==='mysql'?{DRAFT:'待上传',PARSING:'解析中',REVIEWING:'评审中',APPROVED:'审批完成',EXPORTED:'已导出',CANCELLED:'已归档'}[state.projects?.find(project=>project.id===projectId)?.backendStage]:undefined;
+  const stage=backendStage||(parsing?'解析中':approved?(snapshot.exportedAt?'已导出':'审批完成'):rows.length?'评审中':sources.length?'解析中':'待上传');
   return {stage,pending,total:rows.length,confirmed:rows.filter(r=>r.status==='已确认'&&!r.needsReview).length,reviews:open.filter(r=>r.kind!=='clarification').length,clarifications:open.filter(r=>r.kind==='clarification').length,rechecks:rows.filter(r=>r.needsReview||r.status==='待复核'||r.sourceRevision||r.sourceCorrected).length};
 }

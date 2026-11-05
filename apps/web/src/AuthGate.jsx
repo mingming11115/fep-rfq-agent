@@ -5,7 +5,7 @@ import { resolveLoginIdentity } from './sessionPersonnel';
 
 export { resolveLoginIdentity } from './sessionPersonnel';
 
-export default function AuthGate({ children }) {
+export default function AuthGate({ children, loginAccounts }) {
   const [session, setSession] = useState(() => readSession());
 
   useEffect(() => subscribeSession(setSession), []);
@@ -17,6 +17,6 @@ export default function AuthGate({ children }) {
     setSession(next);
   }
 
-  if (!session) return <LoginPage onLogin={handleLogin} />;
+  if (!session) return <LoginPage onLogin={handleLogin} accounts={loginAccounts} />;
   return children;
 }

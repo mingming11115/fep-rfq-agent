@@ -38,7 +38,7 @@ function LockGlyph() {
   );
 }
 
-export default function LoginPage({ onLogin }) {
+export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState('');
@@ -92,7 +92,7 @@ export default function LoginPage({ onLogin }) {
         <section className="login-panel">
           <div className="login-panel-head">
             <h2>登录工作空间</h2>
-            <p>使用企业账号登录。环境可直接选择下方任一角色进入。</p>
+            <p>使用已配置的账号登录工作空间。</p>
           </div>
 
           {error && <Alert className="login-error" type="error" showIcon message={error} />}
@@ -122,13 +122,13 @@ export default function LoginPage({ onLogin }) {
             </Button>
           </Form>
 
-          <div className="login-demo">
+          {accounts.length>0&&<div className="login-demo">
             <div className="login-demo-head">
               <span>快捷登录账号</span>
               <small>统一密码 {DEMO_PASSWORD}</small>
             </div>
             <div className="login-demo-grid">
-              {DEMO_ACCOUNTS.map((account) => (
+              {accounts.map((account) => (
                 <button
                   key={account.username}
                   type="button"
@@ -145,9 +145,9 @@ export default function LoginPage({ onLogin }) {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
-          <p className="login-footnote">登录即表示按职责范围使用系统数据；所有写操作均记录审计。</p>
+          <p className="login-footnote">项目和条款按账号授权范围从数据库读取。</p>
         </section>
       </div>
     </div>

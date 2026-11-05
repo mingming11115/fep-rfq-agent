@@ -30,7 +30,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const groupScope=useKnowledgeGroup();
  const buId=permissionContext?.buId,legacy=buId==='BU-DEMO'?seedKnowledge:[];
  const actor={id:actorId,role:actorRole,name:personName(permissionContext?.state||{},actorId),canEdit:canPerform(actorRole,'knowledge:edit',permissionContext),canApprove:canPerform(actorRole,'resource:approve',permissionContext)};
- const load=()=>readHistorySnapshot(buId,legacy);
+ const load=()=>permissionContext?.state?.dataSource==='mysql'?{documents:permissionContext.state.resourcesByBuId?.[buId]?.historyDocuments||[],clauses:permissionContext.state.resourcesByBuId?.[buId]?.historyClauses||[]}:readHistorySnapshot(buId,legacy);
  const [snapshot,setSnapshot]=useState(()=>{try{return load();}catch{return {documents:[],clauses:[]};}});
  const [error,setError]=useState(''),[query,setQuery]=useState(''),[activeId,setActiveId]=useState(null),[filter,setFilter]=useState('all'),[selected,setSelected]=useState([]),[uploading,setUploading]=useState(false),[files,setFiles]=useState({}),[busy,setBusy]=useState(false),[metadata,setMetadata]=useState(null),[editing,setEditing]=useState(null),[anchor,setAnchor]=useState(''),[review,setReview]=useState(null),[reason,setReason]=useState('');
  useEffect(()=>{const refresh=()=>{try{setSnapshot(load());}catch(cause){setError(cause.message);}};refresh();window.addEventListener('rfq-history-change',refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener('rfq-history-change',refresh);window.removeEventListener('storage',refresh);};},[buId]);

@@ -16,6 +16,25 @@ RFQ 应答与审核工程，包含 React 前端、Java 后端，以及 Word/PDF 
 
 ## 前端开发
 
+### 单一 MySQL 工作空间
+
+保留原来的完整页面、导航和 RFQ 工作台，只提供一个入口：[http://127.0.0.1:5173](http://127.0.0.1:5173)。页面登录后经 Java 后端读取 MySQL 的项目、原件、条款和成员，不读取前端演示核心缓存；空库和无授权账号保持空列表，连接失败时显示错误和重试。
+
+```sh
+npm run dev:api        # Java 后端，默认 48084
+npm run dev            # 原工作台 UI，默认 5173
+```
+
+两个命令分别在终端运行。Windows 已配置好本机工具时，可运行 `npm start` 启动已配置的 MySQL、后端和唯一前端。MySQL 继续使用 `RFQ_DB_URL`、`RFQ_DB_USER`、`RFQ_DB_PASSWORD`，默认连接 `127.0.0.1:3306/rfq`。
+
+前端模拟入口、独立数据库表格页和 `5174` 服务已取消。登录页只使用数据库账号。local 配置启动时会补入完整演示集：8 个项目、33 条要求及应答、7 条评审、3 份定稿快照、2 个机型、4 个工艺、5 条能力、4 条知识、4 条证据元数据和2份历史知识文档。每版种子只执行一次，保留已有记录、密码和人工修改；其他环境默认关闭，可用 `RFQ_DEMO_DATA_ENABLED=false` 显式关闭。
+
+开发页面顶部身份下拉支持一键登录 `mysql_sr`、`mysql_tech`、`mysql_tech2`、`mysql_tech3`、`mysql_appr`、`mysql_bu`、`mysql_view` 和 `admin`，使用现有开发初始密码 `Rfq@2026`，后端照常验证密码和权限。密码修改后快捷登录会正常失败；生产构建不显示快捷账号。
+
+原件读取、新建项目、上传和解析使用现有后端接口。应答、评审、快照和知识目录展示读取各自的数据库业务表；尚缺完整后端持久化的编辑和审批操作保持未开放。证据迁移保存原有元数据，不会凭空生成报告原件。部分旧页面组件中的模拟工具保留供单元测试使用，产品入口不会调用它们。
+
+构建使用 `npm run build`，输出到 `apps/web/dist`。数据库核对可使用 [SQL 脚本](docs/development/mysql-demo-check.sql)。
+
 需要 Node.js 22.12+。在工程根目录执行：
 
 ```sh
@@ -23,7 +42,7 @@ npm ci --prefix apps/web
 npm run dev
 ```
 
-访问 http://127.0.0.1:5173 。前端默认代理到本机 `48083` 的 RFQ/Craft 接口及 `48081` 的 Office 接口；可用 `RFQ_API_TARGET`、`RFQ_CRAFT_API_TARGET`、`RFQ_BACKEND_URL` 调整，详见 [前端说明](apps/web/README.md)。
+访问 http://127.0.0.1:5173 。前端默认代理到本机 `48084` 的 RFQ/Craft 接口及 `48081` 的 Office 接口；可用 `RFQ_API_TARGET`、`RFQ_CRAFT_API_TARGET`、`RFQ_BACKEND_URL` 调整，详见 [前端说明](apps/web/README.md)。
 
 普通开发无需编译 Rust：启动与构建会校验 `packages/craft-editors/site` 中的预编译资源，并复制到前端生成目录。
 
@@ -35,7 +54,7 @@ npm run dev
 npm run dev:api
 ```
 
-也可在 `apps/api` 中直接运行 `mvn spring-boot:run`。开发脚本使用 `JAVA_HOME` 和 PATH 中的 Maven，支持 `MVN_CMD`；本机存在 `.rfq-tools` 工具时可自动使用。后端默认端口为 `48081`，需要同时接入当前前端时，将 `SERVER_PORT=48083`，或调整前端代理。
+也可在 `apps/api` 中直接运行 `mvn spring-boot:run`。开发脚本使用 `JAVA_HOME` 和 PATH 中的 Maven，支持 `MVN_CMD`；本机存在 `.rfq-tools` 工具时可自动使用。`npm run dev:api` 使用 `48084`，直接运行 Maven 默认 `48081`，可用 `SERVER_PORT` 调整。
 
 后端以 `apps/api` 为工作目录时，本地文件默认保存在其 `data/` 下；原有数据与历史运行包已分别保留在 `apps/api/data` 和 `apps/api/runtime`。历史包不会随源码修改自动更新。其他工作目录启动时，请明确设置绝对存储目录，避免生成另一套数据。
 

@@ -6,6 +6,7 @@ import { Button, Checkbox, Form, Input, Select, Space, Tabs } from 'antd';
 import { DrawerForm, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { StatusBadge } from '../components/ui';
 import PersonPicker from '../components/PersonPicker';
+import OverlayPresence from '../components/OverlayPresence';
 import { selectMyTasks, taskLabels, isTaskPending, isTaskOverdue, isQualifiedTaskActor } from '../taskDomain';
 import './workspace-pages.css';
 
@@ -56,13 +57,13 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
         pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>
       </div>
     </section>
-    {transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) setTransfer(null); }}
+    <OverlayPresence kind="drawer-form">{transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) setTransfer(null); }}
       initialValues={{ to: undefined, reason: '' }} submitter={{ searchConfig: { submitText: '确认转办', resetText: '取消' } }}
       onFinish={values => !!onTaskAction(transfer.id, { type: 'transfer', to: values.to, reason: values.reason.trim() })}>
       <p style={{ marginBottom: 20 }}>{transfer.title} · 截止 {transfer.dueAt || '未设置'}</p>
       <Form.Item name="to" label="新处理人" rules={[{ required: true, message: '请选择接收人' }]}><PersonPicker label="新处理人" people={Object.values(appState.accountsById || {}).filter(a => a.id !== appState.actorId && isQualifiedTaskActor(transfer, a.id, appState))} emptyLabel="暂无具有本节点处理资格的其他人员"/></Form.Item>
       <ProFormTextArea name="reason" label="转办原因" rules={[{ required: true, whitespace: true, message: '请填写转办原因' }]} fieldProps={{ autoSize: { minRows: 3, maxRows: 6 } }}/>
       <p className="muted">仅可转给具备节点资格的人员；保留原到达时间、期限和处理历史。</p>
-    </DrawerForm>}
+    </DrawerForm>}</OverlayPresence>
   </div>;
 }

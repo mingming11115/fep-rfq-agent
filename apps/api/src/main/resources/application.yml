@@ -32,6 +32,8 @@ mybatis:
     baseline-on-migrate: true
 
 rfq:
+  demo-data:
+    enabled: ${RFQ_DEMO_DATA_ENABLED:false}
   storage-type: ${RFQ_STORAGE_TYPE:local}
   storage-dir: ${RFQ_STORAGE_DIR:./data/rfq-files}
   minio:
