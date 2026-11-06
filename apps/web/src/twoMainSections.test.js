@@ -105,3 +105,18 @@ test('folded references do not reveal denied or failed candidate evidence',async
     }
   }finally{await h.close();}
 });
+
+
+test('technical users enter their own pending card and reselect only when identity or project changes',async()=>{
+ const h=await harness('personal-entry'),{ResponsePage,node,root,settle}=h;
+ const rows=['other','me'].map((actor,index)=>({id:'ENTRY-'+index,projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'1',clause:'9.'+index,title:'Assigned '+actor,original:'Source '+actor,conclusion:'Comply',status:'待确认',version:1,confirmationAssigneeId:actor,confirmationAssignmentSource:'explicit'}));
+ let props={project:{id:'P',name:'Entry',buId:'BU'},requirements:rows,reviews:[],route:{page:'response',projectId:'P'},appState:{dataSource:'mysql',accountsById:{},commentsByProject:{},membersByProject:{},audit:[]},actorRole:'技术',actorId:'me',canBusinessAction:()=>false,navigate:()=>{},toast:()=>{}};
+ const render=async()=>act(async()=>{root.render(React.createElement(ResponsePage,props));await settle();});
+ const title=()=>node.querySelector('.response-card-title-row h2')?.textContent;
+ try{
+  await render();assert.equal(title(),'Assigned me');
+  props={...props,requirements:rows.map(row=>({...row}))};await render();assert.equal(title(),'Assigned me');
+  props={...props,actorId:'other'};await render();assert.equal(title(),'Assigned other');
+  props={...props,actorId:'me',focusedRequirementId:'ENTRY-0',route:{...props.route,requirementId:'ENTRY-0'}};await render();assert.equal(title(),'Assigned other','explicit links retain their target');
+ }finally{await h.close();}
+});

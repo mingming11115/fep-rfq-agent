@@ -1,3 +1,4 @@
+import {selectResponseEntry} from '../responseEntry';
 import {applyCollaborationEdit} from '../craftCommentSync';
 import { playContentMotion } from '../contentMotion';
 import usePanePreference from '../components/usePanePreference';
@@ -58,7 +59,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
   const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
-  const initialRow = requirements.find((row) => row.id === (focusedRequirementId || reviews.find(r => r.id === route?.reviewId)?.requirementId)) || requirements.find(row => /\.docx?$/i.test(row.source || '')) || requirements[0];
+  const initialRow = selectResponseEntry({requirements,reviews,state:appState,projectId:project.id,actorRole,actorId,requirementId:focusedRequirementId||route?.requirementId,reviewId:route?.reviewId});
   const [activeId, setActiveId] = useState(initialRow?.id || null);
   const active = requirements.find((r) => r.id === activeId) || requirements[0];
   const [form, setForm] = useState(() => toForm(initialRow));
@@ -207,6 +208,14 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     return allowed;
   }
   function revealCard(row) { if (row && !cardRows.some(item => item.id === row.id)) { setCardFilters(EMPTY_CARD_FILTERS); setCardFilterDraft(EMPTY_CARD_FILTERS); } }
+  const entryScopeRef=useRef(null);
+  useEffect(()=>{
+    if(!requirements.length)return;
+    const scope=JSON.stringify([project.id,actorId,actorRole]);
+    if(entryScopeRef.current===scope)return;
+    entryScopeRef.current=scope;
+    if(initialRow){hydrate(initialRow);revealCard(initialRow);}
+  },[project.id,actorId,actorRole,requirements,initialRow?.id]);
   function chooseRow(row) { if (!row) return; return guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); },row); }
   function applyCardFilters(next) { const rows = selectResponseCards(requirements, reviews, next); const first = rows.find(row => row.status !== '已确认') || rows[0]; guardedDetail(() => { setCardFilters(next); setCardFilterDraft(next); setDeferredCards([]); if (first) { hydrate(first); navigate('response', first.id, { fileId: first.sourceFileId, sourceVersion: first.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); } else { setQueueDone(false); setInlineReviewId(null); } }, first); }
   function browseCard(direction) {
