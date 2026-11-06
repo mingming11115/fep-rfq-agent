@@ -1,4 +1,5 @@
 import {assignConfirmation} from './confirmationAssignmentClient';
+import {writeResponse} from './responseClient';
 import {useSourceParsing} from './useSourceParsing';
 import {databaseAccounts,switchDatabaseAccount} from './databaseAccountSwitch';
 import {readGenericCatalog,resolveGroupBinding} from './genericCatalog';
@@ -157,8 +158,17 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
  function businessAllowed(objectType,objectId,action='save',expectedVersion,expectedRound){if(databaseBacked)return unavailable();try{assertBusinessAction(stateRef.current,{projectId:stateRef.current.activeProjectId,objectType,objectId,action,route:routeRef.current,expectedVersion,expectedRound});return true;}catch(e){toast(e.message,'error');return false;}}
  function followOwnTask(objectType,objectId){const current=routeRef.current;if(!current.taskId)return;const t=Object.values(stateRef.current.tasksById).find(t=>t.projectId===current.projectId&&t.objectType===objectType&&t.objectId===objectId&&t.assigneeId===stateRef.current.actorId&&isTaskPending(t));if(t&&t.id!==current.taskId)rawNavigate(current.page,{...current,taskId:t.id});}
  function markSaved(s,objectType,objectId){return startTaskForObject(s,{projectId:s.activeProjectId,objectType,objectId,actorId:s.actorId});}
- function updateRequirement(id,patch,expectedVersion){if(!businessAllowed('requirement',id,'save',expectedVersion))return false;const s=stateRef.current,pid=s.activeProjectId||project.id,row=s.requirementsByProject[pid]?.find(r=>r.id===id);if(!row){toast('找不到该要求，请刷新后重试','error');return false;}try{assertRequirementPatch(s.actorRole,row,patch,{state:s,actorId:s.actorId,projectId:pid,requirementId:id});}catch(error){toast(error.message,'error');return false;}const edited=applyRequirementEdit(row,patch);update(s=>markSaved(event(resetResponseReviewConfirmations(s,pid,row,edited),'保存应答草稿',`${pid} · ${row.clause}`,row.status==='已确认'&&edited.status!=='已确认'?'内容变更，原确认已失效':'草稿已保存'),'requirement',id));followOwnTask('requirement',id);return true;}
- function confirm(id,expectedVersion){if(databaseBacked)return unavailable();try{update(st=>event(confirmProjectRequirement(st,{projectId:project.id,requirementId:id,expectedVersion,route:routeRef.current}),'确认要求',`${project.id} · ${id}`,'按当前人员资格和条款分派确认'));return true;}catch(e){toast(e.message,'error');return false;}}
+ function updateRequirement(id,patch,expectedVersion){if(databaseBacked)return persistResponse(id,patch,expectedVersion,false);if(!businessAllowed('requirement',id,'save',expectedVersion))return false;const s=stateRef.current,pid=s.activeProjectId||project.id,row=s.requirementsByProject[pid]?.find(r=>r.id===id);if(!row){toast('找不到该要求，请刷新后重试','error');return false;}try{assertRequirementPatch(s.actorRole,row,patch,{state:s,actorId:s.actorId,projectId:pid,requirementId:id});}catch(error){toast(error.message,'error');return false;}const edited=applyRequirementEdit(row,patch);update(s=>markSaved(event(resetResponseReviewConfirmations(s,pid,row,edited),'保存应答草稿',`${pid} · ${row.clause}`,row.status==='已确认'&&edited.status!=='已确认'?'内容变更，原确认已失效':'草稿已保存'),'requirement',id));followOwnTask('requirement',id);return true;}
+ async function persistResponse(id,patch,expectedVersion,confirming){
+  const current=stateRef.current,pid=current.activeProjectId,row=current.requirementsByProject[pid]?.find(r=>r.id===id);
+  try{
+   assertBusinessAction(current,{projectId:pid,objectType:'requirement',objectId:id,action:confirming?'confirm':'save',expectedVersion,route:routeRef.current});
+   const saved=await writeResponse(row,patch,confirming);
+   update(s=>({...s,requirementsByProject:{...s.requirementsByProject,[pid]:s.requirementsByProject[pid].map(r=>r.id===id?{...r,...saved}:r)}}));
+   return true;
+  }catch(error){toast(error.message,'error');return false;}
+ }
+ function confirm(id,expectedVersion){if(databaseBacked)return persistResponse(id,null,expectedVersion,true);try{update(st=>event(confirmProjectRequirement(st,{projectId:project.id,requirementId:id,expectedVersion,route:routeRef.current}),'确认要求',`${project.id} · ${id}`,'按当前人员资格和条款分派确认'));return true;}catch(e){toast(e.message,'error');return false;}}
  function createReview(value){
   value={...value,kind:'review'};
   if(!businessAllowed('requirement',value.requirementId,'save',value.requirementVersion))return false;
@@ -226,7 +236,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
   }catch(error){toast(error.message,'error');return false;}
  }
  function changeMembers(members){if(databaseBacked)return unavailable();if(!allow('project:manage'))return false;update(s=>event({...s,membersByProject:{...s.membersByProject,[project.id]:structuredClone(members)}},'调整成员职责',project.id,'当前项目成员与审批配置已更新'));}
- const canBusinessAction=(objectType,objectId,action='save')=>{if(databaseBacked)return false;try{return assertBusinessAction(state,{projectId:project.id,objectType,objectId,action,route});}catch{return false;}};
+ const canBusinessAction=(objectType,objectId,action='save')=>{if(databaseBacked&&(objectType!=='requirement'||!['save','confirm'].includes(action)))return false;try{return assertBusinessAction(state,{projectId:project.id,objectType,objectId,action,route});}catch{return false;}};
  const taskContextError=state.tasksById?.[route.taskId]?.objectType==='snapshot'?getTaskContextError(state,route):'';
  const activeBuId=(['knowledge','history','capabilities'].includes(page)&&route.buId)||state.activeBuId||getPersonnelBu(state);
  const permissionContext={state,actorId:state.actorId,buId:activeBuId,...(PROJECT_PAGES.includes(page)?{projectId:project.id}:{} )};

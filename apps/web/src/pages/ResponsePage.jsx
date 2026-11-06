@@ -281,7 +281,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   async function finishConfirmation(row, nextId) {
     try {
       const success = await transitionConfirmedCard({
-        confirm: () => { const success = onConfirm(row.id, row.version || 1); if (success !== false) { clearDirty(); addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); setModal(null); } return success; },
+        confirm: async () => { const success = await onConfirm(row.id, row.version || 1); if (success !== false) { clearDirty(); addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); setModal(null); } return success; },
         animate: () => animateCardMotion(),
         advance: () => advanceCard(nextId),
       });
@@ -317,11 +317,14 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (!window.__rfqRequestNavigation || window.__rfqRequestNavigation(next)) next();
   }
   function goPage(key) { navigate(key); }
-  function saveDraft(reasonOverride) {
+  async function saveDraft(reasonOverride) {
     if (!active || !canEdit) { toast('当前身份不能修改应答草稿'); return false; }
     if (conflicted) { setError('条目版本已变化，请保留当前输入并返回核对最新版本，不能覆盖保存。'); setModal('conflict'); return false; }
     const patch = { ...form, ...(reasonOverride ? { reason: reasonOverride } : {}) };
-    if (onUpdateRequirement(active.id, patch,baseline.current.version||1) === false) return false;
+    if(cardBusyRef.current)return false;
+    cardBusyRef.current=true;setCardBusy(true);
+    try { if (await onUpdateRequirement(active.id, patch,baseline.current.version||1) === false) return false; }
+    finally {cardBusyRef.current=false;if(aliveRef.current)setCardBusy(false);}
     clearDirty(); addActivity('保存应答草稿', '草稿已保存，未自动确认'); toast('草稿已保存；最终确认状态仍需单独操作'); return true;
   }
   useEffect(() => { localStorage.setItem(`rfq.response.events.${project.id}`, JSON.stringify(activities)); }, [activities, project.id]);
@@ -340,7 +343,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 
   function beginConfirm() { if (cardBusyRef.current) return; if (reviewForm) { setError('请先提交或取消当前新增事项。'); return; } confirmOne(); }
   function closeConfirmationValidation() { setModal(null); setError(''); }
-  function confirmOne() {
+  async function confirmOne() {
     if (cardBusyRef.current) return;
     if (!active || !canConfirm) { setError(`本条确认责任人：${getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')}`); return; }
     if(openReview){openInlineReview(openReview.id);return;}
@@ -352,16 +355,16 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const nextId = nextResponseCard(cardRows, active.id, deferredCards)?.id;
     if (dirty) {
       const expected = { ...form };
-      if (onUpdateRequirement(active.id, expected,baseline.current.version||1) === false) { cardBusyRef.current = false; setCardBusy(false); setError('草稿保存失败，当前输入已保留。'); return; }
+      if (await onUpdateRequirement(active.id, expected,baseline.current.version||1) === false) { cardBusyRef.current = false; setCardBusy(false); setError('草稿保存失败，当前输入已保留。'); return; }
       addActivity('修改后确认', '保存当前应答修改并确认条目');
       setForm(expected); clearDirty(); setPendingConfirmation({ id: active.id, expected, nextId });
     } else finishConfirmation(active, nextId);
   }
-  function batchConfirm() {
+  async function batchConfirm() {
     if (cardBusyRef.current || !selectedRows.length) return;
     if (dirtyRef.current) { setError('当前条目存在未提交修改，请先确认当前条目再执行批量确认'); return; }
     setError('');
-    const results = selectedRows.map((row) => { const exclusions = batchReasons(row); if (exclusions.length) return { ...row, result: '已排除', message: exclusions.join('；') }; const ok = onConfirm(row.id,row.version||1) !== false; return { ...row, result: ok ? '确认成功' : '确认失败', message: ok ? `已绑定 V${row.version || 1}` : '重新校验未通过，请查看当前条目或未关闭评审' }; });
+    const results = []; for (const row of selectedRows) { const result = await (async () => { const exclusions = batchReasons(row); if (exclusions.length) return { ...row, result: '已排除', message: exclusions.join('；') }; const ok = await onConfirm(row.id,row.version||1) !== false; return { ...row, result: ok ? '确认成功' : '确认失败', message: ok ? `已绑定 V${row.version || 1}` : '重新校验未通过，请查看当前条目或未关闭评审' }; })(); results.push(result); }
     setBatchSummary({ total: selectedRows.length, eligible: eligibleBatch.length, excluded: selectedRows.length - eligibleBatch.length }); setBatchResults(results); setSelected((old) => old.filter((id) => !results.some((r) => r.id === id && r.result === '确认成功'))); addActivity('批量确认结果', `明确选择 ${selectedRows.length} 条，成功 ${results.filter((r) => r.result === '确认成功').length} 条`); setModal('batch-result');
   }
   function adoptSuggestion(next, label) {
@@ -375,14 +378,14 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (!active) return;
     guardedDetail(() => { setInlineReviewId(null); setReviewForm({ kind, title: kind === 'rereview' ? `${active.title} · 重新专项评审` : kind === 'reject' ? `${active.title} · 匹配结果未接受` : `${active.title} · 评审`, type:active.category||'技术', source: kind === 'rereview' ? '重新评审' : kind === 'reject' ? '用户未接受' : active.matchLevel === 'none' ? '知识库中没有' : active.score < 80 ? '置信度低' : '人工发起专项评审', owner:'技术', reviewerIds: [], deadline: project.deadline || '2026-10-28', description: candidate ? `参考 ${candidate.project} ${candidate.version}；${candidate.difference}` : '', evidence:reviewEvidenceHref(form.evidence) }); setError(''); });
   }
-  function submitReview() {
+  async function submitReview() {
     if (!reviewForm.title.trim() || !reviewForm.type || !reviewForm.deadline || !reviewForm.description.trim() || !reviewForm.reviewerIds?.length) { setError('请补齐备注、评审人和截止时间。'); return false; }
     const requirementVersion = dirty ? applyRequirementEdit(active, form).version || 1 : active.version || 1;
     let request;
     try { request = buildReviewRequest({ requirement: active, form: reviewForm, requirementVersion }); }
     catch (error) { setError(error.message); return false; }
     setError('');
-    if (dirty && !saveDraft()) return false;
+    if (dirty && !await saveDraft()) return false;
     const created = onCreateReview({...request,id:reviewForm.id,commentId:reviewForm.commentId,reviewerIds:reviewForm.reviewerIds});
     if (created === false) return false;
     setInlineReviewId(created); addActivity(reviewForm.kind === 'reject' ? '明确拒绝本条匹配并建立偏离' : '发起评审', reviewForm.description); setReviewForm(null); reviewFormRef.current = null; toast('关联事项已创建，可直接在当前条目处理'); return true;
@@ -492,7 +495,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       </Notice>
       <div className="table-wrap response-batch-table"><BusinessTable className="data-table"><thead><tr><th>条款 / 要求</th><th>状态</th><th>执行结果</th></tr></thead><tbody>{(batchResults || []).map(row => <tr key={row.id}><td>{row.clause} {row.title}</td><td><StatusBadge status={responseStatusLabel(row, reviews)} /></td><td><StatusBadge status={row.result}/><p>{row.message}</p></td></tr>)}</tbody></BusinessTable></div>
     </Modal>}
-    {transition && <Modal title="存在未保存的修改" onClose={() => setTransition(null)} footer={<><UiButton className="btn" onClick={() => setTransition(null)}>取消切换</UiButton><UiButton className="btn" onClick={() => { setForm(toForm(active)); baseline.current = { id: active.id, version: active.version, status: active.status }; clearDirty(); setReviewForm(null); reviewFormRef.current = null; candidateDirty.current = false; setCapabilityForm(null); const next = transition.next; setTransition(null); next?.(); }}>放弃修改</UiButton><UiButton className="btn btn-primary" onClick={() => { if (candidateDirty.current && !saveCapability()) return; if (reviewFormRef.current && !submitReview()) return; if (dirtyRef.current && !saveDraft()) return; const next = transition.next; setTransition(null); next?.(); }}>保存后切换</UiButton></>}><p>当前应答或新增事项尚未保存。保存成功后再切换，或放弃本次修改。</p>{error && <p className="response-error">{error}</p>}</Modal>}
+    {transition && <Modal title="存在未保存的修改" onClose={() => setTransition(null)} footer={<><UiButton className="btn" onClick={() => setTransition(null)}>取消切换</UiButton><UiButton className="btn" onClick={() => { setForm(toForm(active)); baseline.current = { id: active.id, version: active.version, status: active.status }; clearDirty(); setReviewForm(null); reviewFormRef.current = null; candidateDirty.current = false; setCapabilityForm(null); const next = transition.next; setTransition(null); next?.(); }}>放弃修改</UiButton><UiButton className="btn btn-primary" onClick={async () => { if (candidateDirty.current && !saveCapability()) return; if (reviewFormRef.current && !await submitReview()) return; if (dirtyRef.current && !await saveDraft()) return; const next = transition.next; setTransition(null); next?.(); }}>保存后切换</UiButton></>}><p>当前应答或新增事项尚未保存。保存成功后再切换，或放弃本次修改。</p>{error && <p className="response-error">{error}</p>}</Modal>}
     {adoption && <Modal title="采用建议前核对应答差异" onClose={() => setAdoption(null)} width={760} footer={<><UiButton className="btn" onClick={() => setAdoption(null)}>保留当前编辑</UiButton><UiButton className="btn btn-primary" onClick={() => applyAdoption(adoption.proposal, adoption.label)}>采用建议并保留来源条件</UiButton></>}><Notice>当前应答已有内容。采用将替换答复、结论、条件和证据；仍需人工保存与确认。</Notice><div className="response-diff-grid"><div><h4>当前人工答复</h4><p>{form.draft}</p><small>条件：{form.conditions || '未填写'}</small></div><div><h4>{adoption.label}</h4><p>{adoption.proposal.draft}</p><small>条件：{adoption.proposal.conditions || '未填写'}</small></div></div></Modal>}
 
     {capabilityForm && <Drawer title="补充机型能力边界 · 候选草稿" width={650} onClose={() => { setTransition({ next: () => { setCapabilityForm(null); candidateDirty.current = false; } }); }} footer={<><UiButton className="btn" onClick={() => { setTransition({ next: () => { setCapabilityForm(null); candidateDirty.current = false; } }); }}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveCapability}>保存能力候选</UiButton></>}><Notice>保存为未发布候选，不覆盖当前应答，不自动改变 Comply 结论。请在能力维护页核对条件、证据并独立批准。</Notice><div className="form-grid response-spaced"><Field label="关联机型" required><UiSelect className="select" aria-label="补充能力关联机型" value={capabilityForm.modelId} onChange={e=>{const chosen=[...capabilityModels].sort((a,b)=>b.version-a.version).find(m=>m.id===e.target.value);setCapabilityForm({...capabilityForm,modelId:e.target.value,processId:'',config:chosen?.config||''});}}><option value="">请选择本BU的机型及硬件版本</option>{[...new Set(capabilityModels.map(m=>m.id))].map(id=>{const m=[...capabilityModels].filter(m=>m.id===id).sort((a,b)=>b.version-a.version)[0];return <option key={id} value={id}>{m.name} {m.revision} · {m.code}</option>;})}</UiSelect></Field><Field label="关联工艺" required><UiSelect className="select" aria-label="补充能力关联工艺" value={capabilityForm.processId} onChange={e=>setCapabilityForm({...capabilityForm,processId:e.target.value})}><option value="">请选择机型下的工艺</option>{capabilityProcesses.filter(p=>p.modelId===capabilityForm.modelId&&p.enabled!==false).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</UiSelect></Field><Field label="配置 / 项目基线" required><UiInput className="input" value={capabilityForm.config} onChange={(e) => setCapabilityForm({ ...capabilityForm, config: e.target.value })} /></Field><Field label="能力指标" required><UiInput className="input" value={capabilityForm.metric} onChange={(e) => setCapabilityForm({ ...capabilityForm, metric: e.target.value })} /></Field><Field label="实际能力值 / 范围" required><UiInput className="input" value={capabilityForm.value} onChange={(e) => setCapabilityForm({ ...capabilityForm, value: e.target.value })} /></Field><Field label="值类型"><UiSelect className="select" value={capabilityForm.valueType} onChange={(e) => setCapabilityForm({ ...capabilityForm, valueType: e.target.value })}>{['保证值', '典型值', '范围值', '描述值'].map((v) => <option key={v}>{v}</option>)}</UiSelect></Field><Field label="来源"><UiInput className="input" readOnly value="手动补充" /></Field><Field label="适用条件" required wide><UiTextArea className="input response-conditions" value={capabilityForm.conditions} onChange={(e) => setCapabilityForm({ ...capabilityForm, conditions: e.target.value })} placeholder="材料、厚度、工艺、测试方法与工况" /></Field><Field label="限制" wide><UiTextArea className="input" value={capabilityForm.limits} onChange={(e) => setCapabilityForm({ ...capabilityForm, limits: e.target.value })} /></Field><Field label="证据与版本" wide><UiInput className="input" value={capabilityForm.evidence} onChange={(e) => setCapabilityForm({ ...capabilityForm, evidence: e.target.value })} list="response-evidence-options" placeholder="可在能力维护页补齐有效证据" /><datalist id="response-evidence-options">{capabilityEvidence.filter((r) => r.status === '有效').map((r) => <option key={r.id} value={`${r.id} v${r.version}，${r.location || '请补充页码'}`}>{r.name}</option>)}</datalist></Field><Field label="来源定位" wide><UiTextArea className="input" readOnly value={capabilityForm.sourceLocation} /></Field></div>{error && <p className="response-error">{error}</p>}</Drawer>}

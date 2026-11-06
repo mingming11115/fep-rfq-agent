@@ -18,7 +18,9 @@ test('real database records use the original App shape without injected demo rec
  assert.deepEqual(state.requirementsByProject.P[0].sectionPath,['技术','性能']);assert.equal(state.requirementsByProject.P[0].backendVersion,0);
  assert.equal(state.documentsByProject.P[0].backendDocumentId,'D');assert.deepEqual(state.snapshotsByProject.P,[]);
  assert.equal(getProjectSummary(state,'P','sr').stage,'审批完成');
- assert.equal(canPerform('SR','response:edit',{state,actorId:'sr',projectId:'P'}),false,'unimplemented writes cannot pretend to save');
+ assert.equal(canPerform('SR','snapshot:submit',{state,actorId:'sr',projectId:'P'}),false);
+ assert.equal(canPerform('SR','response:confirm',{state,actorId:'sr',projectId:'P',requirementId:'R'}),true);
+ assert.equal(canPerform('SR','response:edit',{state,actorId:'sr',projectId:'P'}),true,'response drafts now use the backend');
 });
 test('empty authorized database stays empty and does not load browser samples',()=>{
  const state=mapDatabaseWorkspace({user,projects:[],directories:{BU:[member]},details:{}});
