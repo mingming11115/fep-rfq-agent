@@ -31,6 +31,8 @@ public interface RequirementMapper {
     /** 乐观锁：where 带 version 条件并自增，返回 0 表示已被他人改动。 */
     int updateWithVersion(Requirement requirement);
 
+    int assignConfirmation(Requirement requirement);
+
     /** 解析时回填父子关系，属内部写，不参与乐观锁。 */
     int updateParentId(@Param("id") String id, @Param("parentId") String parentId);
 }

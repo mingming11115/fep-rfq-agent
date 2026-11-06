@@ -1,4 +1,3 @@
-import {parseRfqSource} from '../rfqSourceClient';
 import { UiTag, UiButton, PageHeading, BusinessTabs, BusinessTable, UiInput, UiTextArea, UiSelect, UiCheckbox } from '../components/AntContent';
 import ResponseReviewPanel from '../components/ResponseReviewPanel';
 import {getReviewActorIds,hasReviewConfirmation} from '../confirmationPolicy';
@@ -7,22 +6,14 @@ import { guardCardNavigation } from '../responseCardQueue';
 import {getProjectFinalReview,getRequiredFinalReviewers,personName} from '../personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from '../finalReviewDomain';
 import {canPerform} from '../permissions';
-import {shouldOpenSourceUpload,getSourceUploadExitRoute} from '../navigation';
 import {snapshotFingerprint,latestSnapshot,checkSnapshotValidity,getFinalReviewScope} from '../snapshotDomain';
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, FileText, Check, AlertCircle, ArrowRight, Download, Plus, Search, RefreshCw, X, ShieldCheck, ChevronRight, ListChecks } from "../components/icons";
 import { Modal, Drawer } from '../components/ui';
-import { makeRequirements } from '../data';
-import { BHEL_ID } from '../bhelDemo';
-import { makeDocumentDemo } from '../documentMocks';
 import { getExportIssues, makeSnapshot, toCsv } from '../domain';
 import {getUnconfirmedComplyRows} from '../responseRecommendation';
 import UnconfirmedComplyList from '../components/UnconfirmedComplyList';
 import './workflow-pages.css';
-import DocumentWorkbench from '../components/DocumentWorkbench';
-import WordCommentsPrototype from '../components/WordCommentsPrototype';
-import SourceUploadDialog from '../components/SourceUploadDialog';
-import OverlayPresence from '../components/OverlayPresence';
 
 const uid = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const now = () => new Date().toLocaleString('zh-CN', { hour12: false });
@@ -39,141 +30,8 @@ function Pager({ count, page = 1, pageSize = 6, onChange }) {
   const last = Math.max(1, Math.ceil(count / pageSize));
   return <div className="flow-pager"><span>共 {count} 条记录</span><div><UiButton className="btn btn-sm" disabled={page <= 1} onClick={() => onChange?.(page - 1)}>上一页</UiButton><UiButton className="btn btn-sm flow-page-number">{page}</UiButton><UiButton className="btn btn-sm" disabled={page >= last} onClick={() => onChange?.(page + 1)}>下一页</UiButton><span>{pageSize} 条 / 页</span></div></div>;
 }
-function useUnsavedWarning(dirty) {
-  useEffect(() => { const guard = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard); }, [dirty]);
-}
 const metadataStorage = (projectId) => `fep-rfq-documents:${projectId}`;
 function readDocumentState(projectId) { try { return JSON.parse(localStorage.getItem(metadataStorage(projectId)) || 'null'); } catch { return null; } }
-
-export function DocumentsPage({ actorRole, route, project, requirements = [], appState, onImport, onCorrect, toast, navigate, focusedRequirementId, onAnalysisRun = () => {}, onFilesChange, logEvent = () => {} }) {
-  const databaseBacked=appState?.dataSource==='mysql';
-  const canManage=canPerform(actorRole,'source:manage',databaseBacked?{state:appState,actorId:appState.actorId,projectId:project.id}:undefined);
-  const [files, setFiles] = useState(() => appState?.documentsByProject?.[project.id] ?? readDocumentState(project.id)?.files ?? (requirements.length ? makeDocumentDemo(project.id).files : []));
-  const [parsed, setParsed] = useState(() => {
-    if(databaseBacked)return structuredClone(requirements);
-    const stored=readDocumentState(project.id),currentFiles=appState?.documentsByProject?.[project.id];
-    if(currentFiles===undefined)return stored?.parsed || (requirements.length ? makeDocumentDemo(project.id, requirements).parsed : []);
-    const currentParsed=(stored?.parsed||[]).filter(row=>currentFiles.some(file=>file.id===row.sourceFileId));
-    return [...currentParsed,...structuredClone(requirements.filter(row=>!currentParsed.some(parsedRow=>parsedRow.id===row.id)))];
-  });
-  const [activeId, setActiveId] = useState(focusedRequirementId || null);
-  const [uploadOpen, setUploadOpen] = useState(()=>shouldOpenSourceUpload(route,actorRole));
-  const [wordCommentsOpen, setWordCommentsOpen] = useState(false);
-  const [fileTab, setFileTab] = useState('文件清单');
-  const [fileDetail, setFileDetail] = useState(null);
-  const [editor, setEditor] = useState(null);
-  const [editReason, setEditReason] = useState('');
-  const [error, setError] = useState('');
-  const timers = useRef([]);
-  const running = useRef(new Set());
-  const parsedRef = useRef(parsed);
-  parsedRef.current = parsed;
-  const imported = new Set(requirements.map((r) => r.id));
-  useEffect(() => {
-    if(!canManage)return;
-    const missing = parsed.filter((row) => !requirements.some((current) => current.id === row.id));
-    if (missing.length) onImport(missing);
-    setFiles((old) => {
-      const next = old.map((file) => file.status === '待核对' && !file.backendDocumentId && parsed.some((row) => row.sourceFileId === file.id) ? { ...file, status: '完成' } : file);
-      return next.some((file, i) => file !== old[i]) ? next : old;
-    });
-  }, [parsed, requirements, onImport]);
-  useEffect(() => { if(!canManage)return;if(!databaseBacked)localStorage.setItem(metadataStorage(project.id), JSON.stringify({ files, parsed })); onFilesChange?.(project.id,files); }, [files, parsed, project.id, onFilesChange]);
-  useEffect(() => {
-    if(!canManage)return;
-    files.filter((file) => ['排队中', '处理中'].includes(file.status)).forEach(scheduleParse);
-    return () => timers.current.forEach(clearTimeout);
-  }, []);
-  useUnsavedWarning(!!editor);
-  useEffect(()=>{if(shouldOpenSourceUpload(route,actorRole))setUploadOpen(true);},[route?.action,actorRole]);
-
-  function closeUpload(submitted=false) {
-    setUploadOpen(false);setError('');
-    if(route?.action==='upload'){
-      const next=getSourceUploadExitRoute({...route,projectId:project.id},submitted);
-      navigate(next.page,null,{...next,action:undefined,taskId:undefined});
-    }
-  }
-
-  function loadSample() {
-    if(databaseBacked||!canManage)return;
-    const demo = makeDocumentDemo(project.id, requirements.length ? requirements : makeRequirements(project.id));
-    setFiles((old) => [...old, ...demo.files.filter((file) => !old.some((existing) => existing.id === file.id))]);
-    setParsed((old) => {
-      const linked = old.map((row) => {
-        const sample = demo.parsed.find((item) => item.id === row.id);
-        return sample && !row.sourceFileId ? { ...row, source: sample.source, sourceFileId: sample.sourceFileId, sourceVersion: sample.sourceVersion } : row;
-      });
-      return [...linked, ...demo.parsed.filter((row) => !old.some((existing) => existing.id === row.id))];
-    });
-    setActiveId(demo.parsed[0]?.id || parsed[0]?.id);
-    onAnalysisRun({id:uid('RUN'),projectId:project.id,fileId:demo.files[0]?.id,sourceVersion:demo.files[0]?.version,type:'parse',status:'完成',startedAt:new Date().toISOString(),endedAt:new Date().toISOString(),successCount:demo.parsed.length,failedCount:0,needsHumanCount:demo.parsed.filter(r=>r.matchLevel==='none').length});
-    logEvent('加载解析示例', project.id, '补齐多版本模拟资料及条目来源，保留已有文件和编辑');
-    toast(project.id === BHEL_ID ? '已载入BHEL真实RFQ：40条精选要求及原PDF，保留已有编辑' : '已补齐示例：已包含 Safety / Facility 与模块组合两份 Word 示例，以及历史版本和失败案例');
-  }
-  async function scheduleParse(file) {
-    if(!canManage||file.demoParsePreview||running.current.has(file.id))return;
-    running.current.add(file.id);
-    setFiles(old=>old.map(f=>f.id===file.id?{...f,status:'处理中',parseStage:'extracting',error:''}:f));
-    try {
-      const {run,rows}=await parseRfqSource(project.id,file);
-      setParsed(old=>[...old.filter(row=>row.sourceFileId!==file.id),...rows]);
-      setFiles(old=>old.map(f=>f.id===file.id?{...f,status:run.status==='partial'?'待核对':'完成',parseStage:'completed',parsedCount:rows.length,lastRunId:run.id,parsedAt:now(),error:run.message||''}:f));
-      onAnalysisRun({id:run.id,fileId:file.id,sourceVersion:file.version,type:'parse',status:run.status==='partial'?'待核对':'完成',startedAt:run.startedAt,endedAt:run.finishedAt,successCount:rows.length,failedCount:0,needsHumanCount:run.issueCount});
-      setActiveId(rows[0]?.id);logEvent('后端解析完成',file.id,`${rows.length} 条要求已从数据库读取`);
-    }catch(error){setFiles(old=>old.map(f=>f.id===file.id?{...f,status:'失败',error:error.message}:f));toast(error.message,'error');}
-    finally{running.current.delete(file.id);}
-  }
-  function reparse(file) {
-    if(!canManage)return;
-    if (running.current.has(file.id)) return;
-    setFiles((old) => old.map((f) => f.id === file.id ? { ...f, status: '排队中', parseStage: 'queued', error: '' } : f));
-    scheduleParse(file); logEvent('重新解析资料', file.id, '保留已修改条款及已有应答，不重复导入');
-    toast('已请求后端重新解析；人工修改由后端校验保护');
-  }
-  function correctRow(row, patch, reason) {
-    if(!canManage)return '当前身份无来源修正权限';
-    const result = onCorrect(row, patch, reason);
-    if (typeof result === 'string') return result;
-    setParsed((old) => old.map((item) => item.id === row.id ? { ...item, ...result } : item));
-    return result;
-  }
-  function upload(incoming) {
-    if(!canManage)return;
-    const nextFiles=[...files,...incoming];
-    setFiles(nextFiles);onFilesChange?.(project.id,nextFiles);
-    incoming.forEach(scheduleParse);closeUpload(true);
-    logEvent('上传资料元数据',project.id,`${incoming.length} 个文件；${incoming[0].purpose}；${incoming[0].version}`);
-    toast('原件已上传，正在请求后端解析');
-  }
-  function openEditor(sourceFile = null) {
-    if(databaseBacked||!canManage)return;
-    setEditor({ id: uid('REQ'), clause: '', title: '', original: '', conclusion: '待确认', draft: '', evidence: '', reason: '', matchLevel: 'none', score: 0, conditions: '', source: sourceFile?.name || '人工补录', sourceFileId: sourceFile?.id, sourcePage: 1, category: '', sectionPath: [], status: '待确认', version: 1 });
-    setEditReason(''); setError('');
-  }
-  function saveEditor() {
-    if(databaseBacked||!canManage)return;
-    if (!editor.title.trim() || !editor.original.trim() || !asText(editor.source).trim()) { setError('请完整填写条目标题、要求原文和来源定位'); return; }
-    if (!editReason.trim()) { setError('请填写补录原因'); return; }
-    const row = { ...editor, parseHistory: [{ time: now(), action: 'add', reason: editReason }] };
-    setParsed((old) => [...old, row]);
-    if (editor.sourceFileId) setFiles((old) => old.map((file) => file.id === editor.sourceFileId && file.status === '失败' ? { ...file, status: '完成', error: '', handlingMode: '人工补录' } : file));
-    setActiveId(row.id); setEditor(null); logEvent('补录要求', row.id, editReason); toast('补录已保存，自动进入细则比对');
-  }
-  return <div className="flow-page">
-    <PageHeading title={<>RFQ 解析</>} description={<>{project.id === BHEL_ID ? 'BHEL IKCCAP0034 · 2018年公开采购历史案例 · 保留原始章节、编号与PDF实际页码。' : '以 DOC / DOCX 为主，保留每份 RFQ 自己的章节、编号与顺序，点击条款进入对应细则比对。'}</>} actions={<>{canManage&&<div className="page-actions">{!databaseBacked&&<><UiButton className="btn" onClick={() => setWordCommentsOpen(true)}><FileText size={16} />历史批注示例</UiButton><UiButton className="btn" onClick={()=>openEditor()}>人工补录</UiButton><UiButton hidden={databaseBacked} className="btn" onClick={loadSample}><FileText size={16} />载入示例</UiButton></>}<UiButton className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={16} />上传资料</UiButton></div>}</>} />{!canManage&&<Notice>来源文件与解析结果为只读；上传、重新解析及修正由SR处理。</Notice>}
-    {wordCommentsOpen && canManage && <WordCommentsPrototype projectId={project.id} onClose={() => setWordCommentsOpen(false)} />}
-    {project.id === BHEL_ID && <Notice>真实RFQ · 原文件为43页PDF，当前精选40条人工核对要求，中文为译文，并非全文自动解析。采购已于2018年截止；供应商能力、应答与评审均为模拟。新上传文件通过后端解析，条款从数据库读取。</Notice>}
-    <div className="dw-compact-stats"><span>项目资料<strong>{files.length}</strong></span><span>已抽取条款<strong>{parsed.length}</strong></span><span>已自动导入<strong>{parsed.filter((row) => imported.has(row.id)).length}</strong></span><span>失败任务<strong className={files.some((f) => f.status === '失败') ? 'flow-red' : ''}>{files.filter((f) => f.status === '失败').length}</strong></span></div>
-    {files.length > 0 ? <DocumentWorkbench readOnly={!canManage} files={files} rows={parsed} responseRows={requirements} imported={imported} selectedId={activeId} onSelect={setActiveId} onCorrect={correctRow} onReparse={reparse} onSupplement={openEditor} onContinue={(id) => navigate('response', id)} /> : <section className="panel"><NoRows title="上传第一份 RFQ，自动抽取要求条款"><span>支持 DOC、DOCX，兼容 PDF。</span>{canManage&&<UiButton className="btn btn-primary" onClick={() => { setUploadOpen(true); setError(''); }}><Upload size={15}/>上传并解析</UiButton>}</NoRows></section>}
-    <details className="panel dw-file-records"><summary>文件与版本记录<span>{files.length} 份资料 · 查看历史版本和失败任务</span></summary><BusinessTabs className="tabs"><button className={fileTab === '文件清单' ? 'active' : ''} onClick={() => setFileTab('文件清单')}>文件清单 <span>{files.length}</span></button><button className={fileTab === '版本记录' ? 'active' : ''} onClick={() => setFileTab('版本记录')}>文件版本</button></BusinessTabs>
-      <div className="table-wrap"><BusinessTable className="data-table"><thead><tr><th>文件名称 / 任务编号</th><th>用途</th><th>版本</th><th>处理状态</th><th>上传时间</th><th>操作</th></tr></thead><tbody>{files.map((file) => <tr key={file.id}><td><UiButton className="text-link flow-file-name" onClick={() => setFileDetail(file)}><FileText size={16} />{file.name}</UiButton><div className="muted flow-small">{fileTab === '版本记录' ? (file.previousVersionId ? `替代 ${file.previousVersionId} · ${file.reason}` : '初始版本') : `${file.id} · ${(file.size / 1024 / 1024).toFixed(2)} MB`}</div></td><td>{file.purpose}</td><td>{file.version}</td><td><Badge value={file.status} />{file.error && <div className="flow-error-inline">{file.error}</div>}</td><td className="flow-nowrap">{file.createdAt}</td><td><div className="flow-inline-actions"><UiButton className="text-link" onClick={() => setFileDetail(file)}>详情</UiButton>{canManage && file.status === '失败' && <UiButton className="text-link" onClick={() => { reparse(file); }}>重试</UiButton>}{canManage && file.status === '失败' && <UiButton className="text-link" onClick={() => openEditor(file)}>手动补录</UiButton>}{file.parsedCount > 0 && <UiButton className="text-link" onClick={() => { const row = parsed.find((r) => r.sourceFileId === file.id) || parsed[0]; setActiveId(row?.id); document.querySelector('.dw-workbench')?.scrollIntoView({ behavior: 'smooth' }); }}>查看结果</UiButton>}</div></td></tr>)}</tbody></BusinessTable></div>{!files.length && <NoRows title="还没有项目资料">上传 RFQ 文档，或载入示例体验解析流程。</NoRows>}
-    </details>
-    <OverlayPresence>{uploadOpen && canManage && <SourceUploadDialog project={project} files={files} onSubmit={upload} onClose={()=>closeUpload(false)}/>}</OverlayPresence>
-    {editor && canManage && <Drawer title="补录要求" onClose={() => setEditor(null)} width={600} footer={<><UiButton className="btn" onClick={() => setEditor(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveEditor}>保存补录</UiButton></>}><Notice>保存后自动进入RFQ细则比对。</Notice><div className="form-grid"><Field label="条款编号"><UiInput className="input" value={editor.clause} onChange={(e) => setEditor({ ...editor, clause: e.target.value })} /></Field><Field label="原文章节路径"><UiInput className="input" value={(editor.sectionPath || []).join(' / ')} onChange={(e) => setEditor({ ...editor, sectionPath: e.target.value.split('/').map(s => s.trim()).filter(Boolean) })} placeholder="按原文填写，例如：反应模块 / 温控" /></Field><Field label="条目标题" required wide><UiInput className="input" value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} /></Field><Field label="客户要求原文" required wide><UiTextArea className="input flow-textarea" value={editor.original} onChange={(e) => setEditor({ ...editor, original: e.target.value })} /></Field><Field label="必要条件" wide><UiTextArea className="input" value={asText(editor.conditions)} onChange={(e) => setEditor({ ...editor, conditions: e.target.value })} /></Field><Field label="来源文件 / 多来源定位" required wide><UiTextArea className="input" value={asText(editor.source)} onChange={(e) => setEditor({ ...editor, source: e.target.value })} /></Field><Field label="页码 / 工作表 / 单元格"><UiInput className="input" value={editor.sourcePage || ''} onChange={(e) => setEditor({ ...editor, sourcePage: e.target.value })} /></Field><Field label="补录原因" required wide><UiTextArea className="input" value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="说明补录原因" /></Field></div>{error && <p className="flow-error-inline" role="alert">{error}</p>}</Drawer>}
-    {fileDetail && <Drawer title="资料详情与版本" onClose={() => setFileDetail(null)} width={580}><div className="flow-detail-heading"><FileText size={24} /><div><h3>{fileDetail.name}</h3><Badge value={files.find((f) => f.id === fileDetail.id)?.status || fileDetail.status} /></div></div><dl className="flow-description"><dt>资料编号</dt><dd>{fileDetail.id}</dd><dt>用途 / 版本</dt><dd>{fileDetail.purpose} / {fileDetail.version}</dd><dt>可见范围</dt><dd>{fileDetail.visibility || '项目成员可见'}</dd><dt>来源定位</dt><dd>解析后条目保留文件名、页码及条款。</dd><dt>替代版本</dt><dd>{fileDetail.previousVersionId || '初始版本'}</dd><dt>替换原因</dt><dd>{fileDetail.reason || '—'}</dd><dt>原件状态</dt><dd>{fileDetail.realSource ? <a href={fileDetail.localUrl} target="_blank" rel="noreferrer">查看BHEL原始PDF（43页）</a> : fileDetail.craft||fileDetail.office ? '原件已保存，可在详情左侧批阅。' : '仅登记元数据，原文件请在本地查看。'}</dd></dl><Notice>{fileDetail.realSource ? '此文件是从BHEL官网下载的原始PDF。来源页码采用PDF实际页序；中文为译文，摘录仅覆盖精选条款。' : fileDetail.craft||fileDetail.office ? '原件与批阅副本分别保留；文件批注与条款协作记录联动。条款解析仍为现有模拟流程。' : '历史记录未保留原件，可在详情中上传对应文件；条款解析仍为现有模拟流程。'}</Notice>{fileDetail.error && <Notice type="error">{fileDetail.error}</Notice>}<h4>相关条目</h4>{parsed.filter((r) => r.sourceFileId === fileDetail.id).map((r) => <button className="flow-related-row" key={r.id} onClick={() => { setActiveId(r.id); setFileDetail(null); }}>{r.clause} {r.title}<ChevronRight size={15} /></button>)}</Drawer>}
-  </div>;
-}
 
 export function ReviewsPage({project,requirements=[],reviews=[],onUpdateReview,onAdoptReview,toast,navigate,actorRole,actorId,appState,canBusinessAction,embedded=false,inline=false,registerNavigationGuard,initialReviewId=null,initialAction=null,onCloseEmbedded}){
  const [query,setQuery]=useState(''),[status,setStatus]=useState('全部'),[type,setType]=useState('全部类别'),[mine,setMine]=useState(false),[activeId,setActiveId]=useState(initialReviewId);
@@ -253,9 +111,9 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({...savedExport,tab,templateId,mapping,scroll:window.scrollY}));
     if(issue.route){navigate(issue.route.page,issue.route.requirementId,{...issue.route,returnKey:'export'});return;}
     if (issue.id === 'approval-config') navigate('settings');
-    else if (String(issue.id).startsWith('document-')) navigate('documents');
+    else if (String(issue.id).startsWith('document-')) navigate('response');
     else if (String(issue.id).startsWith('mapping-')) setTab('模板与映射');
-    else if (issue.id === 'empty-requirements') navigate('documents');
+    else if (issue.id === 'empty-requirements') navigate('response');
     else if (reviews.some((r) => r.id === issue.id)) navigate('reviews',issue.requirementId,{reviewId:issue.id,returnKey:'export'});
     else navigate('response',issue.id,{returnKey:'export'});
   }

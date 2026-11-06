@@ -3,4 +3,4 @@ logging:
     com.naura.rfq: DEBUG
 rfq:
   demo-data:
-    enabled: ${RFQ_DEMO_DATA_ENABLED:true}
+    enabled: ${RFQ_DEMO_DATA_ENABLED:false}

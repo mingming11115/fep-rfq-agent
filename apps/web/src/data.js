@@ -9,7 +9,6 @@ export const NAV_ITEMS = [
   { key: 'dashboard', label: '个人工作台与待办', section: '全局' },
   { key: 'projects', label: '项目列表', section: '全局' },
   { key: 'capabilities', label: '分组与能力配置', section: '全局' },
-  { key: 'documents', label: 'RFQ解析', section: '项目' },
   { key: 'response', label: 'RFQ细则比对', section: '项目' },
   { key: 'export', label: '导出文档', section: '项目' },
   { key: 'settings', label: '项目设置、成员与审批配置', section: '项目' },

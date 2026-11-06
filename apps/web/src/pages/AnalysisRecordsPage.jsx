@@ -16,7 +16,7 @@ export default function AnalysisRecordsPage({ appState, onOpenProject }) {
     { title: '分析类型', dataIndex: 'type', width: 110, render: (_, run) => run.type === 'parse' ? '条款解析' : '三级匹配' },
     { title: '时间', key: 'time', width: 190, sorter: (a, b) => new Date(a.endedAt || a.startedAt) - new Date(b.endedAt || b.startedAt), render: (_, run) => new Date(run.endedAt || run.startedAt).toLocaleString('zh-CN') },
     { title: '状态 / 结果', dataIndex: 'status', width: 230, render: (_, run) => <><StatusBadge status={run.status}/><small className="rfq-table-meta">成功 {run.successCount || 0} · 失败 {run.failedCount || 0} · 需核对 {run.needsHumanCount || 0}</small></> },
-    { title: '操作', key: 'actions', fixed: 'right', width: 170, render: (_, run) => <Space><Button type="link" onClick={() => setDetail(run)}>查看本次</Button><Button type="link" onClick={() => onOpenProject(run.projectId, 'documents', { fileId: run.fileId, sourceVersion: run.sourceVersion })}>回到文件</Button></Space> },
+    { title: '操作', key: 'actions', fixed: 'right', width: 170, render: (_, run) => <Space><Button type="link" onClick={() => setDetail(run)}>查看本次</Button><Button type="link" onClick={() => onOpenProject(run.projectId, 'response', { fileId: run.fileId, sourceVersion: run.sourceVersion })}>回到文件</Button></Space> },
   ];
   return <div className="workspace-page">
     <PageHeading title={<>AI 分析记录</>} description={<>逐次保留来源版本、解析和匹配结果；当前原型执行模拟分析。</>} actions={<></>} />

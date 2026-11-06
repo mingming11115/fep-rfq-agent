@@ -30,17 +30,21 @@ test('layout keeps the workspace tab node mounted when entering and leaving deta
  }finally{await h.close();}
 });
 
-test('project stages stay mounted across routes and retain guarded selection and export permissions',async()=>{
+test('project workspace omits stage navigation and retains the header export action',async()=>{
  const h=await harness('project'),navigations=[];
  const props={project:{id:'P',name:'Project'},actorRole:'SR',onNavigate:page=>navigations.push(page),onReturn:()=>{},finalReviewGate:{canExport:false,reason:'需审批'},canDownload:true};
- const render=page=>h.render(React.createElement(h.Project,{...props,route:{page}},React.createElement('p',null,page)));
- const tabs=()=>[...h.host.querySelectorAll('.rfq-content-tabs [role="tab"]')];
+ const render=(page,extra={})=>h.render(React.createElement(h.Project,{...props,...extra,route:{page}},React.createElement('p',null,'项目内容')));
+ const exportButton=()=>[...h.host.querySelectorAll('button')].find(button=>button.textContent.includes('导出文档'));
  try{
-  await render('documents');const bar=h.host.querySelector('.ant-tabs-ink-bar');assert.equal(tabs().length,3);
-  await act(async()=>tabs()[1].click());assert.deepEqual(navigations,['response']);assert.equal(tabs()[0].getAttribute('aria-selected'),'true','only a successful guarded route update changes selection');
-  for(const page of ['response','settings','versions','reviews']){
-   await render(page);assert.ok(h.host.querySelector('.ant-tabs-ink-bar')===bar,`${page} must retain stage navigation`);assert.equal(tabs()[1].getAttribute('aria-selected'),'true');assert.equal(tabs()[2].getAttribute('aria-disabled'),'true');
+  for(const page of ['response','settings','versions','reviews','export']){
+   await render(page);
+   assert.ok(!h.host.querySelector('.rfq-project-stage-tabs'),'stage navigation must be removed');
+   assert.ok(!h.host.querySelector('[role="tab"]'));
+   assert.ok(h.host.textContent.includes('项目内容'));
+   assert.equal(exportButton().disabled,true);
   }
-  await render('export');assert.ok(h.host.querySelector('.ant-tabs-ink-bar')===bar);assert.equal(tabs()[2].getAttribute('aria-selected'),'true');
+  await render('response',{finalReviewGate:{canExport:true}});
+  assert.equal(exportButton().disabled,false);
+  await act(async()=>exportButton().click());assert.deepEqual(navigations,['export']);
  }finally{await h.close();}
 });

@@ -20,6 +20,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class RequirementController {
     private final RequirementService service;
+    private final com.naura.rfq.service.ConfirmationAssignmentService assignments;
+
+    @GetMapping("/requirements/{id}/confirmation-candidates")
+    public ApiResponse<java.util.List<com.naura.rfq.service.ConfirmationAssignmentService.Candidate>> candidates(@PathVariable String id) {
+        return ApiResponse.success(assignments.candidates(CurrentUserHolder.require(),id));
+    }
+
+    @PatchMapping("/requirements/{id}/confirmation-assignment")
+    public ApiResponse<RequirementView> assign(@PathVariable String id,
+            @jakarta.validation.Valid @RequestBody com.naura.rfq.model.dto.AssignConfirmationRequest request) {
+        return ApiResponse.success(assignments.assign(CurrentUserHolder.require(),id,request));
+    }
 
     @GetMapping("/projects/{projectId}/requirements")
     public ApiResponse<PageView<RequirementView>> list(@PathVariable String projectId,

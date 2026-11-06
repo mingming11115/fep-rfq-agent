@@ -4,7 +4,8 @@
 
     <sql id="columns">id, project_id, document_id, parse_run_id, block_id, section_path,
         customer_clause_no, title, level, parent_id, original_text, requirement_text, metrics_json,
-        conditions_text, obligation, extraction_status, review_reasons, sort_order, version, created_at</sql>
+        conditions_text, obligation, extraction_status, review_reasons, sort_order, version, created_at,
+        confirmation_assignee_id, confirmation_assigned_by, confirmation_assigned_at, confirmation_assignment_reason</sql>
 
     <select id="findById" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
@@ -77,6 +78,13 @@
             version            = version + 1
         where id = #{id}
           and version = #{version}
+    </update>
+
+    <update id="assignConfirmation">
+        update requirement set confirmation_assignee_id=#{confirmationAssigneeId},
+            confirmation_assigned_by=#{confirmationAssignedBy}, confirmation_assigned_at=#{confirmationAssignedAt},
+            confirmation_assignment_reason=#{confirmationAssignmentReason}, version=version+1
+        where id=#{id} and version=#{version}
     </update>
 
     <update id="updateParentId">

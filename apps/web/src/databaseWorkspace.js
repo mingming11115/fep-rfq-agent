@@ -23,6 +23,7 @@ export function mapDatabaseRequirement(row,files,owner){
   source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',sectionPath:sectionPath(row.sectionPath),
   category:'未分类',status:'待确认',conclusion:'',draft:'',conditions:row.conditionsText||'',evidence:'',reason:'',
   matchLevel:'none',score:0,backendVersion:row.version,version:row.version,owner,
+  confirmationAssigneeId:row.confirmationAssigneeId||null,confirmationAssignmentSource:row.confirmationAssigneeId?'explicit':null,
   parserNote:row.reviewReasons||'',needsReview:row.extractionStatus!=='VALID',
  };
 }
@@ -57,7 +58,7 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
   state.requirementsByProject[row.id]=(details[row.id]?.requirements||[]).map(requirement=>{
    const source=mapDatabaseRequirement(requirement,documents,owner),response=workflow.responses?.find(r=>r.id===requirement.id)||{};
    return {...source,...response,id:source.id,projectId:row.id,title:source.title,clause:source.clause,original:source.original,sourceOriginal:source.sourceOriginal,
-    source:source.source,sourceFileId:source.sourceFileId,sourceVersion:source.sourceVersion,sectionPath:source.sectionPath,backendVersion:source.backendVersion};
+    source:source.source,sourceFileId:source.sourceFileId,sourceVersion:source.sourceVersion,sectionPath:source.sectionPath,backendVersion:source.backendVersion,confirmationAssigneeId:source.confirmationAssigneeId,confirmationAssignmentSource:source.confirmationAssignmentSource};
   });
   state.membersByProject[row.id]=members.filter(member=>[row.ownerId,user.id].includes(member.userId)).map(member=>({
    id:member.userId,name:member.displayName,role:member.roles.join(' / '),scope:'后端授权项目',status:member.enabled?'生效':'停用',canConfirm:member.canConfirm,

@@ -6,6 +6,7 @@ export function getResponseReview(state,projectId,requirementId){
 }
 export function getConfirmationActorIds(state,projectId,row){
  if(hasAssignedConfirmer(row))return [row.confirmationAssigneeId];
+ if(state.dataSource==='mysql'||row?.backendDocumentId)return [];
  const review=getResponseReview(state,projectId,row?.id);
  const implicit=state.implicitConfirmationIdsByProject?.[projectId]?.includes(row?.id)&&row?.confirmationAssignmentSource!=='explicit';
  return review?getReviewActorIds(review):[(!implicit&&row?.confirmationAssigneeId)||state.projects?.find(p=>p.id===projectId)?.ownerId].filter(Boolean);

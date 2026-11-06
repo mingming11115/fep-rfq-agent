@@ -32,7 +32,7 @@ test('未登录时停在登录页，不渲染主应用',async()=>{
   const {node,render}=await mountAuthGate();
   await render();
   assert.match(node.textContent,/登录工作空间/);
-  assert.match(node.textContent,/快捷登录账号/);
+  assert.match(node.textContent,/各角色一键登录/);
   assert.equal(node.querySelector('#app-shell'),null);
 });
 
@@ -70,10 +70,12 @@ test('后端角色码映射到前端可用身份',async()=>{
 test('普通账号登录后离开上一位管理员的系统配置地址',async()=>{
   const {node,render,settle,act}=await mountAuthGate();
   window.history.replaceState(null,'','#/admin');
-  globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({code:0,data:{token:'new-user-token',expiresInSeconds:28800,user:{id:'new-user',displayName:'新用户',systemAdmin:false,roles:[{buId:'BU-FEP',role:'SR'}],bus:[{id:'BU-FEP',name:'FEP事业部'}]}}})});
+  let submitted;
+  globalThis.fetch=async(url,options)=>{submitted=JSON.parse(options.body);return {ok:true,status:200,json:async()=>({code:0,data:{token:'new-user-token',expiresInSeconds:28800,user:{id:'new-user',displayName:'新用户',systemAdmin:false,roles:[{buId:'BU-FEP',role:'SR'}],bus:[{id:'BU-FEP',name:'FEP事业部'}]}}})};};
   await render();
   const card=[...node.querySelectorAll('button')].find(button=>/销售负责人/.test(button.textContent));
   await act(async()=>{card.click();await settle();});
+  assert.deepEqual(submitted,{username:'mysql_sr',password:'Rfq@2026'});
   assert.equal(window.location.hash,'#/dashboard');
   assert.deepEqual(JSON.parse(localStorage.getItem('fep-rfq-login-identity')),{actorId:'new-user',actorRole:'SR'});
 });

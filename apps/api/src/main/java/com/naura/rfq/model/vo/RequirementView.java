@@ -5,7 +5,8 @@ import com.naura.rfq.model.entity.Requirement;
 public record RequirementView(String id, String projectId, String documentId, String customerClauseNo,
         String sectionPath, String title, int level, String parentId, String originalText,
         String requirementText, String metricsJson, String conditionsText, String obligation,
-        String extractionStatus, String reviewReasons, int sortOrder, Long version) {
+        String extractionStatus, String reviewReasons, int sortOrder, Long version,
+        String confirmationAssigneeId) {
 
     public static RequirementView of(Requirement requirement) {
         return new RequirementView(requirement.getId(), requirement.getProjectId(),
@@ -15,6 +16,6 @@ public record RequirementView(String id, String projectId, String documentId, St
                 requirement.getRequirementText(), requirement.getMetricsJson(),
                 requirement.getConditionsText(), requirement.getObligation(),
                 requirement.getExtractionStatus(), requirement.getReviewReasons(),
-                requirement.getSortOrder(), requirement.getVersion());
+                requirement.getSortOrder(), requirement.getVersion(), requirement.getConfirmationAssigneeId());
     }
 }
