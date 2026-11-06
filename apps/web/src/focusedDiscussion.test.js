@@ -7,7 +7,7 @@ import path from 'node:path';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
 
-test('collaboration starts on the current clause while project records remain optional and read-only',async()=>{
+test('operation records show only project history and remain read-only',async()=>{
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
   Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});const output=path.join(directory,'focused-discussion-test.mjs');
@@ -23,25 +23,28 @@ test('collaboration starts on the current clause while project records remain op
   const button=text=>[...node.querySelectorAll('button,[role="tab"]')].find(button=>button.textContent===text);
   const disclosure=text=>[...node.querySelectorAll('.detail-activity details')].find(group=>group.querySelector('summary')?.textContent.includes(text));
   try{
-    await render();await act(async()=>{button('讨论').click();await settle();});
-    const current=node.querySelector('.annotation-panel');assert.ok(current,'entering collaboration shows discussion without first selecting a comment');
-    assert.ok(current.textContent.includes('Current discussion'));assert.ok(!current.textContent.includes('Other discussion'));assert.ok(!current.textContent.includes('Historic discussion'));
-    assert.equal(current.querySelectorAll('textarea').length,0,'read-only discussion retains read-only permissions');
-    for(const label of ['项目成员','全部批注','操作记录'])assert.equal(disclosure(label)?.open,false,`${label} starts closed`);
-    await act(async()=>{disclosure('项目成员').querySelector('summary').click();await settle();});
-    assert.equal(disclosure('项目成员').open,true);assert.equal(disclosure('全部批注').open,false);
-    props={...props,appState:{...props.appState,audit:[...props.appState.audit,{id:'E2',object:'P',action:'New operation',actor:'Actor',time:'Now'}]}};await render();
-    assert.equal(disclosure('项目成员').open,true,'record refresh preserves the expanded group');
-    await act(async()=>{disclosure('操作记录').querySelector('summary').click();disclosure('全部批注').querySelector('summary').click();await settle();});
-    assert.ok(disclosure('操作记录').textContent.includes('New operation'));assert.ok(!disclosure('操作记录').textContent.includes('Foreign operation'));
-    assert.ok(disclosure('全部批注').textContent.includes('历史版本'));
-    const other=[...disclosure('全部批注').querySelectorAll('button')].find(button=>button.textContent.includes('Other discussion'));
-    await act(async()=>{other.click();await settle();});
-    assert.ok(node.querySelector('.annotation-panel').textContent.includes('Other discussion'));
-    assert.ok(!node.querySelector('.annotation-panel').textContent.includes('Current discussion'));
-    assert.equal(navigations.at(-1)[1],'R2');assert.equal(navigations.at(-1)[2].fileId,'F2');
-    assert.equal(disclosure('项目成员').open,true,'same-project clause changes retain disclosure state');assert.equal(writes.length,0,'viewing discussions and records makes no business writes');
+    await render();await act(async()=>{button('操作记录').click();await settle();});
+    const history=()=>disclosure('操作记录');
+    assert.ok(!node.querySelector('.annotation-panel'),'operation records exclude the annotation panel');
+    assert.ok(!node.querySelector('.detail-annotations'),'operation records exclude annotations');
+    assert.equal(button('批注当前条款'),undefined);
+    assert.equal(disclosure('项目成员'),undefined);assert.equal(disclosure('全部批注'),undefined);
+    assert.equal(node.querySelectorAll('.detail-activity-group').length,1);
+    assert.equal(history().open,true,'operation records are visible on entry');
+    assert.ok(history().textContent.includes('Project operation'));
+    assert.ok(history().textContent.includes('Today · Actor'));
+    assert.ok(history().textContent.includes('Keep history'));
+    assert.ok(!history().textContent.includes('Foreign operation'));
+    props={...props,appState:{...props.appState,audit:[{id:'E2',object:'P',action:'New operation',actor:'Actor',time:'Now'},...props.appState.audit]}};await render();
+    assert.ok(history().textContent.includes('New operation'));
+    await act(async()=>{history().querySelector('summary').click();await settle();});
+    assert.equal(history().open,false);
+    await render();assert.equal(history().open,false,'refresh preserves user disclosure state');
+    assert.equal(writes.length,0,'viewing records makes no business writes');
+    assert.equal(navigations.length,0);
     props={...props,project:{...project,id:'Q'},requirements:[],reviews:[],route:{page:'activity',projectId:'Q'},appState:{accountsById:{}}};await render();
-    for(const label of ['项目成员','全部批注','操作记录'])assert.equal(disclosure(label)?.open,false,'a new empty project starts collapsed');
+    assert.equal(history().open,true,'a different project starts expanded');
+    assert.ok(history().textContent.includes('本项目暂无操作记录。'));
+    assert.equal(disclosure('项目成员'),undefined);assert.equal(disclosure('全部批注'),undefined);
   }finally{await act(async()=>root.unmount());await window.happyDOM.cancelAsync();}
 });

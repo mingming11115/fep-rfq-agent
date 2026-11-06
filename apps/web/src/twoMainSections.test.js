@@ -37,7 +37,7 @@ for(const role of ['SR','最终审批人'])test(`${role} uses two sections and p
   const inputByLabel=(label,scope)=>[...scope.querySelectorAll('label')].find(item=>item.querySelector(':scope > span')?.textContent.includes(label))?.querySelector('input,textarea');
   const refs=()=>node.querySelector('.response-reference-details');
   try{
-    await render();assert.deepEqual([...node.querySelectorAll('[aria-label="RFQ 详情分区"] [role="tab"]')].map(item=>item.textContent),['应答','讨论']);
+    await render();assert.deepEqual([...node.querySelectorAll('[aria-label="RFQ 详情分区"] [role="tab"]')].map(item=>item.textContent),['应答','操作记录']);
     const responseState=()=>node.querySelector('[aria-label="应答保存状态"]');assert.equal(responseState(),null);
     assert.ok(button('项目信息'));assert.equal(refs().open,false);await click(refs().querySelector('summary'));
     assert.ok(refs().textContent.includes('Candidate report REF-1'));
@@ -58,10 +58,10 @@ for(const role of ['SR','最终审批人'])test(`${role} uses two sections and p
       await type(inputByLabel('变更原因',drawer()),'Correct project name');await click(button('保存项目设置',drawer()));assert.equal(projectWrites[0].name,'Changed project');
     }else assert.equal(button('保存项目设置',drawer()),undefined);
     await click(drawer().querySelector('.ant-drawer-close'));
-    await click(button('讨论'));assert.ok(node.querySelector('.annotation-panel'));await click(button('应答'));assert.equal(node.querySelector('.detail-clause-content').style.display,'flex','response can reopen on the same route');
+    await click(button('操作记录'));assert.ok(node.querySelector('.detail-activity'));assert.equal(node.querySelector('.annotation-panel'),null);await click(button('应答'));assert.equal(node.querySelector('.detail-clause-content').style.display,'flex','response can reopen on the same route');
     await click(button('下一条')||node.querySelector('button[aria-label="下一条"]'));assert.equal(refs().open,false,'a different clause starts with references collapsed');
     props={...props,route:{...props.route,page:'settings'},requirements:[]};await render();assert.ok(drawer().classList.contains('ant-drawer-open'),'legacy settings links open information even with no clauses');
-    assert.deepEqual([...node.querySelectorAll('[aria-label="RFQ 详情分区"] [role="tab"]')].map(item=>item.textContent),['应答','讨论']);assert.ok(node.textContent.includes('应答项尚未生成'));
+    assert.deepEqual([...node.querySelectorAll('[aria-label="RFQ 详情分区"] [role="tab"]')].map(item=>item.textContent),['应答','操作记录']);assert.ok(node.textContent.includes('应答项尚未生成'));
     props={...props,project:{...props.project,id:'Q',name:'Another project'},route:{page:'response',projectId:'Q'}};await render();await click(button('项目信息'));assert.equal(inputByLabel('项目名称',drawer()).value,'Another project','project changes cannot inherit the previous form draft');
   }finally{await h.close();}
 });
