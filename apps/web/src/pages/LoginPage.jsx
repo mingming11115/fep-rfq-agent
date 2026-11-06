@@ -124,7 +124,7 @@ export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
 
           {accounts.length>0&&<div className="login-demo">
             <div className="login-demo-head">
-              <span>快捷登录账号</span>
+              <span>各角色一键登录</span>
               <small>统一密码 {DEMO_PASSWORD}</small>
             </div>
             <div className="login-demo-grid">
@@ -141,7 +141,7 @@ export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
                     <strong>{account.name}<em>{account.role}</em></strong>
                     <small>{account.hint}</small>
                   </span>
-                  <span className="login-demo-action">{pending === account.username ? '登录中…' : '进入'}</span>
+                  <span className="login-demo-action">{pending === account.username ? '登录中…' : '一键登录'}</span>
                 </button>
               ))}
             </div>

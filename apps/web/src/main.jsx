@@ -19,5 +19,5 @@ createRoot(document.getElementById('root')).render(
       colorPrimary: '#1677ff',
       fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif",
     },
-  }}><AntApp><ThemeBridge><AuthGate loginAccounts={[]}><DatabaseWorkspace/></AuthGate></ThemeBridge></AntApp></ConfigProvider>
+  }}><AntApp><ThemeBridge><AuthGate><DatabaseWorkspace/></AuthGate></ThemeBridge></AntApp></ConfigProvider>
 );
