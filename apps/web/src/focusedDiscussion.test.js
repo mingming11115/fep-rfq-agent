@@ -9,7 +9,7 @@ import React,{act} from 'react';
 
 test('operation records show only project history and remain read-only',async()=>{
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
-  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
+  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,HTMLBodyElement:window.HTMLBodyElement,HTMLHtmlElement:window.HTMLHtmlElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});const output=path.join(directory,'focused-discussion-test.mjs');
   await build({entryPoints:[fileURLToPath(new URL('./pages/ResponsePage.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'},define:{'import.meta.env':'{"BASE_URL":"/"}'},plugins:[{name:'raw-template',setup(b){b.onResolve({filter:/\.html\?raw$/},args=>({path:path.resolve(args.resolveDir,args.path.slice(0,-4)),namespace:'raw'}));b.onLoad({filter:/.*/,namespace:'raw'},async args=>({contents:await readFile(args.path,'utf8'),loader:'text'}));}}]});
   const {ResponsePage}=await import(pathToFileURL(output));const {createRoot}=await import('react-dom/client');
@@ -89,6 +89,15 @@ test('operation records show only project history and remain read-only',async()=
     const comparison=document.querySelector('.rfq-confirm-history-comparison');
     assert.match(comparison.textContent,/交期 8 周.*交期 10 周/);
     const restoreButton=scope=>[...scope.querySelectorAll('button')].find(candidate=>candidate.textContent==='恢复为草稿');
+    const historyFooter=document.querySelector('.rfq-confirm-history-footer');
+    const versions=[...document.querySelectorAll('.rfq-confirm-history-version')];
+    await act(async()=>{versions[0].click();await settle();});
+    const disabledRestore=restoreButton(historyFooter);
+    assert.equal(disabledRestore.disabled,true);
+    await act(async()=>{disabledRestore.parentElement.focus();await new Promise(resolve=>setTimeout(resolve,180));});
+    assert.match(document.querySelector('[role="tooltip"]')?.textContent||'',/V2 是当前已确认版本/);
+    await act(async()=>{versions[1].click();await settle();});
+    assert.equal(restoreButton(historyFooter).disabled,false);
     await act(async()=>{restoreButton(document.querySelector('.rfq-confirm-history-footer')).click();await settle();});
     await act(async()=>{restoreButton(document.querySelector('.ant-modal')).click();await settle();});
     assert.deepEqual(restored,[['R1',5,'confirmation',1]]);

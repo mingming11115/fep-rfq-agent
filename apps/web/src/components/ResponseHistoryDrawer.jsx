@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, List, Skeleton, Tag } from 'antd';
+import { Alert, List, Skeleton, Tag, Tooltip } from 'antd';
 import { UiButton } from './AntContent';
 import { Drawer, EmptyState, Modal } from './ui';
 import { loadResponseHistory } from '../responseClient';
@@ -45,6 +45,12 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
   const comparing = latest && selected && latest.key !== selected.key;
   const canSelectRestore = selected && (comparing || selected.kind === 'checkpoint' || requirement.status !== '已确认');
   const readyToRestore = canRestore && !dirty && canSelectRestore && !busy;
+  const currentVersionHint = selected && !canSelectRestore
+    ? `${selected.label} 是当前已确认版本。${entries.length > 1 ? '请选择其他历史记录。' : '暂无可恢复的旧版。'}`
+    : '';
+  const restoreButton = <UiButton className="btn btn-primary" disabled={!readyToRestore} onClick={() => {
+    setError(''); setConfirmationOpen(true);
+  }}>恢复为草稿</UiButton>;
   const selectedSource = selected?.item;
   const sourceChanged = selectedSource && (
     selectedSource.sourceDocumentId && selectedSource.sourceDocumentId !== requirement.sourceFileId ||
@@ -72,9 +78,11 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
       footer={<div className="rfq-confirm-history-footer">
         {dirty && canRestore && <small>请先保存当前编辑，再恢复旧版。</small>}
         <UiButton disabled={busy} onClick={onClose}>关闭</UiButton>
-        {canRestore && selected && <UiButton className="btn btn-primary" disabled={!readyToRestore} onClick={() => {
-          setError(''); setConfirmationOpen(true);
-        }}>恢复为草稿</UiButton>}
+        {canRestore && selected && (currentVersionHint
+          ? <Tooltip title={currentVersionHint} trigger={['hover', 'focus']}>
+            <span className="rfq-confirm-history-restore-help" tabIndex={0}>{restoreButton}</span>
+          </Tooltip>
+          : restoreButton)}
       </div>}>
       <div className="rfq-confirm-history">
         <p className="rfq-confirm-history-caption">条款 {requirement.clause || '无编号'} · {requirement.title}</p>

@@ -20,6 +20,8 @@
 .rfq-confirm-history-columns dt { font-size: 12px; color: var(--text-secondary, #595959); }
 .rfq-confirm-history-columns dd { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rfq-confirm-history-footer { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rfq-confirm-history-restore-help { display: inline-flex; cursor: not-allowed; }
+.rfq-confirm-history-restore-help > button { pointer-events: none; }
 .response-confirmation-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .response-confirmation-meta .ant-tag { margin: 0; }
 @media (max-width: 620px) {
