@@ -1,8 +1,12 @@
+# RFQ Web
+
+从仓库根目录按 [MySQL 工作空间启动说明](../../README.md#单一-mysql-工作空间) 启动前后端，然后打开 [本地 RFQ](http://127.0.0.1:5173/)。
+
 ## WordCraft / PdfCraft 原文件批阅（2026-11-01）
 
 本分支详情左侧使用 WordCraft / PdfCraft，沿用已确认的统一批注界面。文件批注与右侧「协作记录」双向同步；未识别条款的批注先保留在文件中，必须选择条款后才能同步。正文修改仍不自动改变条款、应答或评审结果。项目详情已移除“查看条款摘录”入口和摘录视图；未关联原件时提示由 SR 上传对应 DOCX / PDF。
 
-启动、数据边界和验证步骤见 [项目批阅接入说明](../../docs/development/craft-project-review.md)。本机独立入口为 [RFQ-001 第 6 条](http://127.0.0.1:5174/#/response?projectId=RFQ-001&requirementId=RFQ-001-DOC-EXAMPLE-6)，后端为 `48083`；编辑器资源随本项目提供，不需要启动 `18771` 的独立 Demo。
+编辑器随项目提供。批阅接入、数据边界和验证步骤见 [项目批阅接入说明](../../docs/development/craft-project-review.md)。
 
 以下为历史更新记录；当前行为以上述说明为准。
 
@@ -90,27 +94,11 @@ BU管理员从目录添加／停用本BU成员、设置确认及评审资格、�
 
 真实 Word 解析/排版和 DOCX 导出尚未接入；新上传文件仅记录元数据。企业账号、权限与服务端并发控制仍需后端实现。详情见 [交互改造验证](../../docs/archive/validation/RFQ交互改造验证_2026-10-23.md)。
 
-## BHEL真实RFQ演示（2026-10-22）
+## BHEL RFQ 演示（2026-10-22，历史）
 
-打开 http://127.0.0.1:5173/#/documents 查看默认BHEL案例。已内置官网原始43页PDF、40条精选要求（人工核对，含中英内容及页码），并准备切缝验证、交期偏离、厚度澄清、质保核对四个重点评审。供应商能力及应答均为模拟。详见[演示汇报](../../docs/archive/reports/web-demo-report.md)。已有浏览器数据会保留并追加此案例。
+原型演示使用 BHEL 的 43 页采购 PDF 和人工核对的 40 条要求，涵盖切缝验证、交期偏离、厚度澄清及质保核对。供应商能力及应答使用模拟数据。[BHEL 原始 RFQ](https://www.bhel.com/sites/default/files/rfq-ikccap0034-laser-cutting_merged-1515663096.pdf)
 
-# FEP RFQ React 交互原型
-
-参考 Ant Design Pro 查询表格的布局和操作方式，使用 React + Vite 实现现有 PRD 与交互设计中的 13 个主页面。界面为中文，数据为模拟数据，操作保存在当前浏览器的 localStorage。
-
-快速使用：[启动说明](../../docs/archive/development/legacy-web-startup.md) · [演示汇报稿](../../docs/archive/reports/web-demo-report.md)
-
-## 启动
-
-```bash
-cd apps/web
-npm install
-npm run dev
-```
-
-打开终端显示的 HTTP 地址，默认 http://127.0.0.1:5173。使用 `npm run build` 构建静态文件到 `dist/`；`npm test` 运行确认、版本、快照与 CSV 相关行为测试。
-
-## 页面覆盖
+## 原型页面覆盖
 
 | 编号 | 页面 | 主要交互 |
 | --- | --- | --- |
