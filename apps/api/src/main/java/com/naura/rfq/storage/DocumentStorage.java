@@ -11,6 +11,7 @@ import java.util.HexFormat;
 import org.apache.pdfbox.Loader;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,17 +22,22 @@ public class DocumentStorage {
     private final Path root;
     private final String type, bucket;
     private final MinioObjectStore remote;
+    private final JdbcTemplate jdbc;
 
     public DocumentStorage(String directory) { this(directory, "local", "rfq-files", null); }
+
+    public DocumentStorage(String directory, String type, String bucket, MinioObjectStore remote) {
+        this(directory, type, bucket, remote, null);
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public DocumentStorage(@Value("${rfq.storage-dir:./data/rfq-files}") String directory,
             @Value("${rfq.storage-type:local}") String type,
-            @Value("${rfq.minio.bucket:rfq-files}") String bucket, MinioObjectStore remote) {
+            @Value("${rfq.minio.bucket:rfq-files}") String bucket, MinioObjectStore remote, JdbcTemplate jdbc) {
         root = Path.of(directory).toAbsolutePath().normalize();
         if (!java.util.List.of("local", "minio").contains(type)) throw new IllegalArgumentException("存储类型必须为 local 或 minio");
         if (!bucket.matches("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")) throw new IllegalArgumentException("MinIO bucket 无效");
-        this.type = type; this.bucket = bucket; this.remote = remote;
+        this.type = type; this.bucket = bucket; this.remote = remote; this.jdbc = jdbc;
     }
     public record StoredFile(String storageRef, long size, String sha256) { }
 
@@ -153,6 +159,7 @@ public class DocumentStorage {
         return location;
     }
     public FileLease open(String ref, Long size, String hash) throws IOException {
+        if (ref != null && ref.startsWith("demo:")) return openDemoDocument(ref.substring(5), size, hash);
         if (ref == null || !ref.startsWith("minio:")) return new FileLease(verifiedFile(ref, size, hash), false);
         String[] location = remoteLocation(ref);
         if (size == null || size <= 0 || size > MAX_BYTES || hash == null || !hash.matches("(?i)[0-9a-f]{64}"))
@@ -173,5 +180,24 @@ public class DocumentStorage {
                 throw new BusinessException(409, "原件完整性校验失败");
             return new FileLease(temp, true);
         } catch (IOException | RuntimeException e) { Files.deleteIfExists(temp); throw e; }
+    }
+
+    private FileLease openDemoDocument(String id, Long size, String hash) throws IOException {
+        if (jdbc == null || !id.matches("MYSQL-DEMO-\\d{3}-DOC") || size == null || size <= 0
+                || size > MAX_BYTES || hash == null || !hash.matches("(?i)[0-9a-f]{64}"))
+            throw new BusinessException(409, "演示原件记录无效");
+        byte[] bytes = jdbc.query("select content from rfq_demo_document where id=? and octet_length(content)=?",
+            rows -> rows.next() ? rows.getBytes(1) : null, id, size);
+        if (bytes == null) throw new BusinessException(404, "演示原件不存在或大小不匹配");
+        if (!hash.equalsIgnoreCase(HexFormat.of().formatHex(sha256().digest(bytes))))
+            throw new BusinessException(409, "演示原件哈希校验失败");
+        Path temp = Files.createTempFile("rfq-demo-original-", ".docx");
+        try {
+            Files.write(temp, bytes);
+            return new FileLease(temp, true);
+        } catch (IOException | RuntimeException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
     }
 }

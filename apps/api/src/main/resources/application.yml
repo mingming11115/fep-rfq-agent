@@ -20,7 +20,7 @@ spring:
       maximum-pool-size: 10
       connection-timeout: 10000
   flyway:
-    locations: classpath:db/baseline
+    locations: classpath:db
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.naura.rfq.model.entity

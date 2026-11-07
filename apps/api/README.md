@@ -134,7 +134,7 @@ OCR 使用本项目定义的轻量 HTTP JSON 协议，可通过适配服务对�
 
 ## 本机运行与验证
 
-需要 JDK 17+、Maven 3.9+、MySQL 8。配置 `RFQ_DB_URL`、`RFQ_DB_USER`、`RFQ_DB_PASSWORD` 和 `RFQ_JWT_SECRET`；默认端口 48081。Flyway 用 `B10__rfq_schema.sql` 自动建表。新电脑启动及旧演示库重建步骤见 [启动指南](../../启动.md)。
+需要 JDK 17+、Maven 3.9+、MySQL 8。配置 `RFQ_DB_URL`、`RFQ_DB_USER`、`RFQ_DB_PASSWORD` 和 `RFQ_JWT_SECRET`，默认端口 48081。[init.sql](src/main/resources/db/init.sql) 包含建表语句、演示数据和 Word 原件。新电脑启动及旧演示库重建步骤见 [启动指南](../../启动.md)。
 
 ```bash
 cd apps/api
