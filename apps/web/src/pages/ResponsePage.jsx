@@ -8,9 +8,10 @@ import ReviewerPicker from '../components/ReviewerPicker';
 import useContentTransition from '../components/useContentTransition';
 import OverlayPresence from '../components/OverlayPresence';
 import ResponseAssignmentControl from '../components/ResponseAssignmentControl';
+import ResponseHistoryDrawer from '../components/ResponseHistoryDrawer';
 import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../confirmationPolicy';
 import {personName,canAccessProject} from '../personnelDomain';
-import { ConfigProvider, Grid, Radio, Splitter, Tabs } from 'antd';
+import { ConfigProvider, Grid, Radio, Splitter, Tabs, Tag } from 'antd';
 import {resizePanelShare} from '../antdAdapters';
 import ProjectActivityPanel from '../components/ProjectActivityPanel';
 import './rfq-detail.css';
@@ -56,13 +57,15 @@ function Notice({ children, warning = false }) { return <div className={`respons
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
 
-export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onConfirm, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange, logEvent = () => {} }) {
+export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onConfirm, onRestoreConfirmation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange, logEvent = () => {} }) {
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
   const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
   const initialRow = selectResponseEntry({requirements,reviews,state:appState,projectId:project.id,actorRole,actorId,requirementId:focusedRequirementId||route?.requirementId,reviewId:route?.reviewId});
   const [activeId, setActiveId] = useState(initialRow?.id || null);
   const active = requirements.find((r) => r.id === activeId) || requirements[0];
+  const databaseBacked = appState.dataSource === 'mysql';
+  const [confirmationHistory, setConfirmationHistory] = useState(null);
   const [form, setForm] = useState(() => toForm(initialRow));
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
@@ -182,6 +185,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const staleSource=route?.requirementId===active?.id&&((route?.sourceVersion&&route.sourceVersion!==String(active?.sourceVersion||'1'))||(route?.fileId&&route.fileId!==(active?.sourceFileId||active?.source)));
   const [reconfirmKey, setReconfirmKey] = useState(null);
   const confirmedLocked = active?.status === '已确认' && reconfirmKey !== `${active.id}:${active.version}`;
+  const confirmationVersion = active?.confirmationVersion || (active?.confirmedAt && active?.status === '已确认' ? active.version : null);
   const canEdit = !confirmedLocked && actorRole !== '最终审批人'&&!staleSource&&canBusinessAction('requirement',active?.id);
   const canConfirm = ['SR','技术'].includes(actorRole)&&!staleSource&&canBusinessAction('requirement',active?.id,'confirm');
   const suggestion = matchingSuggestion(active, project.id);
@@ -207,7 +211,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const ids = new Set(directoryRows.map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
-  function hydrate(row) { if (!row) return; setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(reviews.find(r => r.requirementId === row.id && !['已关闭', '已取消'].includes(r.status))?.id || null); setInlineReviewAction(null); }
+  function hydrate(row) { if (!row) return; setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(reviews.find(r => r.requirementId === row.id && !['已关闭', '已取消'].includes(r.status))?.id || null); setInlineReviewAction(null); }
   function edit(field, value) { if (!canEdit) return; setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
   function requestTransition(next) { if (cardBusyRef.current) return false; return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
@@ -327,10 +331,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       return slideToCard(next?.id, -1, deferred);
     });
   }
-  async function finishConfirmation(row, nextId) {
+  async function finishConfirmation(row, nextId, patch) {
     try {
       const success = await transitionConfirmedCard({
-        confirm: async () => { const success = await onConfirm(row.id, row.version || 1); if (success !== false) { clearDirty(); addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); setModal(null); } return success; },
+        confirm: async () => { const success = await (patch ? onConfirm(row.id, row.version || 1, patch) : onConfirm(row.id, row.version || 1)); if (success !== false) { clearDirty(); addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); setModal(null); } return success; },
         animate: () => animateCardMotion(),
         advance: () => advanceCard(nextId),
       });
@@ -401,7 +405,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (issues.length) { setError(issues.join('；')); setModal('confirmation-validation'); return; }
     if (conflicted) { setModal('conflict'); return; }
     cardBusyRef.current = true; setCardBusy(true); setError('');
-    const nextId = nextResponseCard(cardRows, active.id, deferredCards)?.id;
+    const nextId = databaseBacked && active.restoredFromVersion && active.status !== '已确认'
+      ? active.id : nextResponseCard(cardRows, active.id, deferredCards)?.id;
+    if (dirty && databaseBacked) return finishConfirmation(active, nextId, form);
     if (dirty) {
       const expected = { ...form };
       if (await onUpdateRequirement(active.id, expected,baseline.current.version||1) === false) { cardBusyRef.current = false; setCardBusy(false); setError('草稿保存失败，当前输入已保留。'); return; }
@@ -497,7 +503,22 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           <div className="response-card-workspace">
           <div className="response-card-deck" aria-busy={cardBusy}>
             {cardVisible ? <article ref={cardRef} className="response-current-card" aria-label="当前应答项"><fieldset disabled={cardBusy}>
-<section className="panel response-editor"><div className="response-column-heading"><h2>应答编辑</h2>{dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}</div><div className="response-editor-body"><div className="response-active-title"><span className="response-clause">条款 {active.clause || "无编号"}</span><StatusBadge status={responseStatusLabel(active, reviews)} /><div className="response-card-title-row"><h2>{active.title}</h2><span className="response-confirmation-owner">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join("、")||"未指派"}</span></div></div><div className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
+<section className="panel response-editor">
+  <div className="response-column-heading">
+    <h2>应答编辑</h2>
+    {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
+    {databaseBacked && <UiButton className="text-link" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
+      <History size={15}/>确认历史
+    </UiButton>}
+  </div>
+  <div className="response-editor-body"><div className="response-active-title">
+    <div className="response-confirmation-meta">
+      <span className="response-clause">条款 {active.clause || '无编号'}</span><StatusBadge status={responseStatusLabel(active, reviews)}/>
+      {databaseBacked && confirmationVersion && <Tag color="blue">{active.status === '已确认' ? '确认' : '最近确认'} V{confirmationVersion}</Tag>}
+      {active.restoredFromVersion && <Tag>恢复自 V{active.restoredFromVersion}</Tag>}
+    </div>
+    <div className="response-card-title-row"><h2>{active.title}</h2><span className="response-confirmation-owner">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')||'未指派'}</span></div>
+  </div><div className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
         {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<UiButton className="text-link" onClick={() => goPage('export')}>查看最终审批</UiButton></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<UiButton className="text-link" onClick={() => openInlineReview(openReview.id)}>查看事项</UiButton></Notice>}
         {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}<AssessmentPanel sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}/>
         <div className="form-grid response-form"><div className="field response-wide"><span><i className="response-required">*</i>人工最终结论</span><Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit} onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/></div>{form.conclusion === '不适用' && <Field label="备注" wide><UiTextArea className="input" aria-label="备注" value={form.reason} readOnly={!canEdit} onChange={(e) => edit('reason', e.target.value)} placeholder="填写备注（选填）" /></Field>}</div>
@@ -539,7 +560,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
                 <UiButton type="button" className="text-link" disabled={cardBusy} onClick={deferCard}>稍后处理</UiButton>
                 <UiButton type="button" className="btn" disabled={cardBusy || !canEdit || !dirty} onClick={() => saveDraft()}><Save size={14}/>保存草稿</UiButton>
                 {['SR','技术'].includes(actorRole) && confirmedLocked && <UiButton type="button" className="btn" disabled={cardBusy || !canConfirm} onClick={() => setReconfirmKey(`${active.id}:${active.version}`)}><Pencil size={14}/>再次确认</UiButton>}
-                {['SR','技术'].includes(actorRole) && !confirmedLocked && <UiButton type="button" className="btn btn-primary" onClick={beginConfirm} disabled={cardBusy || !canConfirm || !!active.pendingReviewProposal || active.status === '已确认' && !dirty}><Check size={14}/>{cardBusy ? '处理中…' : active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'&&!hasAssignedConfirmer(active)?'处理本人评审':'确认本条'}</UiButton>}
+                {['SR','技术'].includes(actorRole) && !confirmedLocked && <UiButton type="button" className="btn btn-primary" onClick={beginConfirm} disabled={cardBusy || !canConfirm || !!active.pendingReviewProposal || !databaseBacked && active.status === '已确认' && !dirty}><Check size={14}/>{cardBusy ? '处理中…' : !databaseBacked && active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'&&!hasAssignedConfirmer(active)?'处理本人评审':'确认本条'}</UiButton>}
               </div>}
             </div>
           </footer>
@@ -553,6 +574,11 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     {modal === 'confirmation-validation' && <Modal title="暂无法确认本条" centered width={480} onClose={closeConfirmationValidation} footer={<UiButton type="button" className="btn btn-primary" onClick={closeConfirmationValidation}>返回修改</UiButton>}><p role="alert">{error}</p></Modal>}
     {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason))setModal(null);}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal))setModal(null);}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><small>{active.conditions}</small><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{active.pendingReviewProposal.proposal.draft}</p><small>{active.pendingReviewProposal.proposal.conditions}</small><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
     {modal === 'confirm'  && <Modal title={dirty ? '修改后确认当前条目' : '确认当前条目应答'} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={!canConfirm || !!pendingConfirmation} onClick={confirmOne}>{pendingConfirmation ? '保存后确认中…' : '确认本条'}</UiButton></>}><div className="response-modal-title"><span>条款 {active.clause} · V{active.version || 1}</span><h3>{active.title}</h3></div><Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.reason]] : []), ...(form.conclusion !== 'Comply' ? [['推荐话术', form.draft]] : [])]} /><Notice>确认绑定当前条目版本，不代表最终快照已批准。未关闭评审、结论未明确或权限不足会阻止确认。</Notice><label className="response-checkbox"><UiCheckbox type="checkbox" checked={confirmNext} onChange={(e) => setConfirmNext(e.target.checked)} />确认后跳转下一未完成条目</label>{error && <p className="response-error" role="alert">{error}</p>}</Modal>}
+    <OverlayPresence>{confirmationHistory?.id === active.id && <ResponseHistoryDrawer key={active.id} requirement={active}
+      dirty={dirty} canRestore={Boolean(onRestoreConfirmation && actorRole !== '最终审批人' && !staleSource &&
+        canBusinessAction('requirement', active.id, 'save') && confirmationHistory.sourceVersion === active.backendVersion && confirmationHistory.version === (active.version || 1))}
+      onRestore={entry => onRestoreConfirmation(active.id, confirmationHistory.version, entry)}
+      onClose={() => setConfirmationHistory(null)}/>}</OverlayPresence>
     <OverlayPresence>{modal === 'batch-result' && <Modal title="批量确认结果" width={820} onClose={() => setModal(null)} footer={<UiButton className="btn" onClick={() => setModal(null)}>完成</UiButton>}>
       <Notice warning={batchSummary.excluded > 0 || batchResults?.some(row => row.result === '确认失败')}>
         本次选择 {batchSummary.total} 条；确认成功 {batchResults?.filter(row => row.result === '确认成功').length || 0} 条，确认失败 {batchResults?.filter(row => row.result === '确认失败').length || 0} 条，排除 {batchSummary.excluded} 条。

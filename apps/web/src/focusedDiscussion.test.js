@@ -9,7 +9,7 @@ import React,{act} from 'react';
 
 test('operation records show only project history and remain read-only',async()=>{
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
-  Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
+  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});const output=path.join(directory,'focused-discussion-test.mjs');
   await build({entryPoints:[fileURLToPath(new URL('./pages/ResponsePage.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'},define:{'import.meta.env':'{"BASE_URL":"/"}'},plugins:[{name:'raw-template',setup(b){b.onResolve({filter:/\.html\?raw$/},args=>({path:path.resolve(args.resolveDir,args.path.slice(0,-4)),namespace:'raw'}));b.onLoad({filter:/.*/,namespace:'raw'},async args=>({contents:await readFile(args.path,'utf8'),loader:'text'}));}}]});
   const {ResponsePage}=await import(pathToFileURL(output));const {createRoot}=await import('react-dom/client');
@@ -67,5 +67,31 @@ test('operation records show only project history and remain read-only',async()=
     await act(async()=>{button('操作记录').click();await settle();});
     assert.match(history().textContent,/李工 → 王工.*改派确认人：技术分工.*默认确认人 → 李工/);
     assert.deepEqual(requests,[['/api/rfq/projects/Q/activity','GET'],['/api/rfq/projects/Q/activity','GET']]);
+
+    const confirmed={...rows[0],status:'已确认',version:5,backendVersion:0,confirmationVersion:2,draft:'交期 8 周'};
+    const restored=[];
+    globalThis.fetch=async url=>{
+      assert.equal(url,'/api/rfq/requirements/R1/response/history');
+      return {ok:true,json:async()=>({code:0,data:{versions:[
+        {confirmationVersion:2,confirmedBy:'B',draft:'交期 8 周'},
+        {confirmationVersion:1,confirmedBy:'A',draft:'交期 10 周'},
+      ],checkpoints:[]}})};
+    };
+    props={...props,project,requirements:[confirmed],route:{page:'response',projectId:'P',requirementId:'R1'},actorRole:'SR',
+      canBusinessAction:()=>true,onRestoreConfirmation:(id,version,entry)=>{
+        restored.push([id,version,entry.kind,entry.historyVersion]);
+        props={...props,requirements:[{...confirmed,status:'待确认',version:6,draft:'交期 10 周',restoredFromVersion:1}]};
+        root.render(React.createElement(ResponsePage,props));
+        return true;
+      }};
+    await render();
+    await act(async()=>{button('确认历史').click();await settle();});
+    const comparison=document.querySelector('.rfq-confirm-history-comparison');
+    assert.match(comparison.textContent,/交期 8 周.*交期 10 周/);
+    const restoreButton=scope=>[...scope.querySelectorAll('button')].find(candidate=>candidate.textContent==='恢复为草稿');
+    await act(async()=>{restoreButton(document.querySelector('.rfq-confirm-history-footer')).click();await settle();});
+    await act(async()=>{restoreButton(document.querySelector('.ant-modal')).click();await settle();});
+    assert.deepEqual(restored,[['R1',5,'confirmation',1]]);
+    assert.match(node.querySelector('.response-confirmation-meta').textContent,/恢复自 V1/);
   }finally{globalThis.fetch=originalFetch;await act(async()=>root.unmount());await window.happyDOM.cancelAsync();}
 });
