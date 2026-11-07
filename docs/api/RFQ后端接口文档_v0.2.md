@@ -72,7 +72,7 @@ HTTP 401
 | `appr01` | 王强 | APPROVER |
 | `bu01` | 陈静 | BU_ADMIN |
 
-统一密码见 `DemoDataInitializer.DEMO_PASSWORD`（不入文档、不入 Git）。
+演示库初始化和登录方式见 [启动指南](../../启动.md)。
 
 ### 1.7 分页信封（规范 §2.3）—— ✅ 已实现
 

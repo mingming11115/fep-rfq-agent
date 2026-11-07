@@ -1,21 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-const data=JSON.parse(readFileSync(new URL('../apps/api/src/main/resources/demo/mysql-demo.json',import.meta.url)));
-test('database fixture retains the complete original response and review scenarios',()=>{
- assert.ok(data.supplement,'full business records must be exported, not just extracted requirements');
- assert.equal(data.supplement.responses.length,33);
- assert.equal(data.supplement.reviews.length,7);
- assert.equal(data.supplement.snapshots.length,3);
- const ids=new Set(data.projects.flatMap(p=>p.requirements.map((r,i)=>`${p.id}-REQ-${i+1}`)));
- for(const row of data.supplement.responses){assert.ok(ids.has(row.id));assert.ok(row.payload.draft);}
- for(const row of data.supplement.reviews)assert.ok(ids.has(row.payload.requirementId));
- assert.equal(data.supplement.resources.models.length,2);
- assert.equal(data.supplement.resources.processes.length,4);
- assert.equal(data.supplement.resources.capabilities.length,5);
- assert.equal(data.supplement.resources.knowledge.length,4);
- assert.ok(data.supplement.resources.evidence.length>=3);
- assert.ok(data.supplement.resources.historyClauses.length>0);
- assert.ok(!JSON.stringify(data.supplement).includes('"BU-DEMO"'));
- assert.ok(!JSON.stringify(data.supplement).includes('"demo-technical-2"'));
+
+const sql = readFileSync(new URL('../apps/api/src/main/resources/db/init.sql', import.meta.url), 'utf8');
+const rows = (table) => sql.split('\n').filter(line => line.startsWith('INSERT INTO `' + table + '` '));
+
+test('init.sql contains the complete MySQL demo records and Word originals', () => {
+  assert.equal(rows('project').filter(line => line.includes("'BU-MYSQL-DEMO'")).length, 8);
+  for (const [table, count] of Object.entries({
+    requirement: 33, requirement_response: 33, response_review: 7, response_snapshot: 3,
+    model_definition: 2, process_definition: 4, capability_record: 5, knowledge_record: 4,
+  })) {
+    assert.equal(rows(table).length, count, table);
+  }
+  assert.ok(rows('app_user').some(line => line.includes("'mysql_sr'") && line.includes("'张明'")));
+  assert.equal(sql.split('\n').filter(line => /^INSERT INTO rfq_demo_document .*X'504b/i.test(line)).length, 7);
 });

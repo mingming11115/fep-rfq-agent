@@ -8,7 +8,6 @@ import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.AppUserMapper;
@@ -30,10 +29,13 @@ import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
+import java.util.regex.Pattern;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
@@ -42,21 +44,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class ApprovedDocumentExportServiceTest {
     @Test void importedApprovalsExportNativeCommentsAndRejectChangedResponses() throws Exception {
         var json = new ObjectMapper();
-        JsonNode fixture;
-        try (var stream = new ClassPathResource("demo/mysql-demo.json").getInputStream()) {
-            fixture = json.readTree(stream);
-        }
-        var supplement = fixture.path("supplement");
-        for (var saved : supplement.path("snapshots")) {
-            String projectId = saved.path("projectId").asText(), documentId = projectId + "-DOC";
-            var snapshot = saved.path("payload");
-            var projectSeed = find(fixture.path("projects"), "id", projectId);
+        var sql = new ClassPathResource("db/init.sql").getContentAsString(StandardCharsets.UTF_8);
+        var snapshots = rows(sql, "response_snapshot");
+        assertThat(snapshots).hasSize(3);
+        for (var saved : snapshots) {
+            String projectId = saved.get("project_id"), documentId = projectId + "-DOC";
+            var snapshot = json.readTree(saved.get("payload"));
+            var projectSeed = rows(sql, "project").stream().filter(row -> projectId.equals(row.get("id")))
+                    .findFirst().orElseThrow();
             String bu = "BU-MYSQL-DEMO", sr = "mysql-demo-sales";
             var actor = new CurrentUser(sr, "张明", false, List.of(new CurrentUser.RoleGrant(bu, "SR")));
             var project = new Project();
             project.setId(projectId);
             project.setBuId(bu);
-            project.setName(projectSeed.path("name").asText());
+            project.setName(projectSeed.get("name"));
             var document = new CustomerDocument();
             document.setId(documentId);
             document.setStatus("PARSED");
@@ -77,7 +78,8 @@ class ApprovedDocumentExportServiceTest {
             when(jdbc.queryForList(startsWith("select payload from response_snapshot"), eq(String.class), eq(projectId)))
                     .thenReturn(List.of(snapshot.toString()));
             when(jdbc.queryForList(startsWith("select payload from project_response_config"), eq(String.class), eq(projectId)))
-                    .thenReturn(List.of(find(supplement.path("projects"), "id", projectId).path("payload").toString()));
+                    .thenReturn(rows(sql, "project_response_config").stream()
+                            .filter(row -> projectId.equals(row.get("project_id"))).map(row -> row.get("payload")).toList());
             var profile = new BuMemberProfile();
             profile.setCanConfirm(true);
             profile.setCanFinalReview(true);
@@ -96,15 +98,17 @@ class ApprovedDocumentExportServiceTest {
             var bytes = new ByteArrayOutputStream();
             try (var word = new XWPFDocument()) {
                 word.createParagraph().createRun().setText("客户原件");
-                for (var source : projectSeed.path("requirements")) {
+                var clauses = rows(sql, "requirement").stream().filter(row -> projectId.equals(row.get("project_id")))
+                        .sorted(java.util.Comparator.comparingInt(row -> Integer.parseInt(row.get("sort_order")))).toList();
+                for (var source : clauses) {
                     int index = sourceRows.size() + 1;
                     var row = new Requirement();
                     row.setId(projectId + "-REQ-" + index);
                     row.setDocumentId(documentId);
                     row.setBlockId("B" + index);
-                    row.setTitle(source.path("title").asText());
-                    row.setCustomerClauseNo(source.path("clause").asText());
-                    row.setOriginalText(source.path("original").asText());
+                    row.setTitle(source.get("title"));
+                    row.setCustomerClauseNo(source.get("customer_clause_no"));
+                    row.setOriginalText(source.get("original_text"));
                     sourceRows.add(row);
                     var block = new DocumentBlock();
                     block.setId(row.getBlockId());
@@ -116,9 +120,9 @@ class ApprovedDocumentExportServiceTest {
             }
             when(requirements.findByProjectIdOrderBySortOrder(projectId)).thenReturn(sourceRows);
             when(blocks.findByDocumentIdOrderByBlockIndex(documentId)).thenReturn(sourceBlocks);
-            var responses = StreamSupport.stream(supplement.path("responses").spliterator(), false)
-                    .filter(row -> projectId.equals(row.path("projectId").asText()))
-                    .map(row -> row.path("payload").toString()).toList();
+            var responses = rows(sql, "requirement_response").stream()
+                    .filter(row -> projectId.equals(row.get("project_id")))
+                    .map(row -> row.get("payload")).toList();
             when(jdbc.queryForList(startsWith("select payload from requirement_response"), eq(String.class), eq(projectId)))
                     .thenReturn(responses);
             when(originals.download(actor, documentId)).thenReturn(new DocumentDownload(bytes.toByteArray(), "客户.docx",
@@ -140,8 +144,27 @@ class ApprovedDocumentExportServiceTest {
         }
     }
 
-    private static JsonNode find(JsonNode array, String field, String value) {
-        return StreamSupport.stream(array.spliterator(), false)
-                .filter(row -> value.equals(row.path(field).asText())).findFirst().orElseThrow();
+    private static List<Map<String, String>> rows(String sql, String table) {
+        // The fixture uses mysqldump's complete INSERT format with one row per line.
+        var insert = Pattern.compile("^INSERT INTO `" + table + "` \\((.+)\\) VALUES \\((.+)\\);$");
+        var value = Pattern.compile("'((?:\\\\.|[^'\\\\]++)*+)'|([^,]+)");
+        var escape = Pattern.compile("\\\\(.)");
+        return sql.lines().map(insert::matcher).filter(java.util.regex.Matcher::matches).map(statement -> {
+            var columns = statement.group(1).replace("`", "").split(", ");
+            var values = value.matcher(statement.group(2));
+            Map<String, String> row = new HashMap<>();
+            for (String column : columns) {
+                if (!values.find()) throw new IllegalArgumentException("Missing fixture column " + column);
+                String quoted = values.group(1);
+                row.put(column, quoted == null ? values.group(2) : escape.matcher(quoted).replaceAll(match ->
+                    java.util.regex.Matcher.quoteReplacement(switch (match.group(1)) {
+                        case "n" -> "\n";
+                        case "r" -> "\r";
+                        case "t" -> "\t";
+                        default -> match.group(1);
+                    })));
+            }
+            return row;
+        }).toList();
     }
 }
