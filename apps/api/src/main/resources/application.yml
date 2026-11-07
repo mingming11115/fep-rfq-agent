@@ -19,6 +19,8 @@ spring:
       pool-name: rfq-pool
       maximum-pool-size: 10
       connection-timeout: 10000
+  flyway:
+    locations: classpath:db/baseline
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.naura.rfq.model.entity
@@ -26,10 +28,6 @@ mybatis:
     # bu_id -> buId, created_at -> createdAt. Schema and POJO stay in step automatically.
     map-underscore-to-camel-case: true
     default-statement-timeout: 30
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
 
 rfq:
   demo-data:
