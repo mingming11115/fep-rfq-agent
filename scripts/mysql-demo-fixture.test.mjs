@@ -16,3 +16,8 @@ test('init.sql contains the complete MySQL demo records and Word originals', () 
   assert.ok(rows('app_user').some(line => line.includes("'mysql_sr'") && line.includes("'张明'")));
   assert.equal(sql.split('\n').filter(line => /^INSERT INTO rfq_demo_document .*X'504b/i.test(line)).length, 7);
 });
+
+test('init.sql leaves existing business rows alone', () => {
+  assert.doesNotMatch(sql, /^(update|delete|replace)\s/mi);
+  assert.doesNotMatch(sql, /\bselect id, owner_id, created_by from project;/i);
+});

@@ -1,5 +1,5 @@
 -- Complete RFQ schema for a new MySQL database.
--- Flyway uses this baseline in place of V1 through V10 on an empty database.
+-- On first startup, the backend applies the schema before loading the optional demo data.
 
 -- P0 schema: identity, BU scope, project, document, parsed blocks and requirements.
 -- Customer clause numbers are deliberately stored as free text: they may be empty,
@@ -136,8 +136,7 @@ create index idx_audit_created on audit_event (created_at);
 
 alter table parse_run add column extractor varchar(255) not null default 'rule-based-v1';
 
--- Older deployments may already have the qualification table; retain those rows.
-create table if not exists bu_member_profile (
+create table bu_member_profile (
     id bigint auto_increment primary key,
     user_id varchar(64) not null,
     bu_id varchar(64) not null,
@@ -162,10 +161,6 @@ create table project_member (
     primary key (project_id, user_id),
     index idx_project_member_user (user_id, enabled, project_id)
 );
--- Preserve ownership, without opening legacy projects to every BU member.
-insert into project_member (project_id, user_id, granted_by)
-select id, owner_id, created_by from project;
-
 alter table audit_event add column bu_id varchar(64);
 create index idx_audit_bu_created on audit_event (bu_id, created_at, id);
 
@@ -236,11 +231,6 @@ create table response_confirmation_history (
     primary key (requirement_id, kind, entry_version)
 );
 
-update app_user
-set display_name = '张明'
-where id = 'mysql-demo-sales'
-  and username = 'mysql_sr'
-  and display_name = '数据库销售';
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

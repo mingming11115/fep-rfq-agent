@@ -39,7 +39,7 @@ class DatabaseInit {
 
     @Bean
     FlywayConfigurationCustomizer initSqlBaseline() {
-        // Preserve the name and checksum recorded by databases already created from B10.
+        // Keep the same schema baseline identity for databases already initialized.
         String schema = sql.substring(0, sql.indexOf(ASSET_SCHEMA));
         LoadableResource baseline = new LoadableResource() {
             @Override public StringReader read() { return new StringReader(schema); }
