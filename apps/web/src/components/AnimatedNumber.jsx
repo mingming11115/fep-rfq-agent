@@ -1,9 +1,17 @@
 import React,{useEffect,useRef,useState} from 'react';
 
+function motionPreference() {
+  const query = '(prefers-reduced-motion: reduce)';
+  return globalThis.matchMedia?.(query) ?? globalThis.window?.matchMedia?.(query);
+}
+
 export default function AnimatedNumber({value,duration=260}){
-  const [shown,setShown]=useState(value),current=useRef(value);
+  const [shown,setShown] = useState(() => (
+    Number.isFinite(value) && typeof requestAnimationFrame === 'function' && !motionPreference()?.matches ? 0 : value
+  ));
+  const current = useRef(shown);
   useEffect(()=>{
-    const media=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')||globalThis.window?.matchMedia?.('(prefers-reduced-motion: reduce)');
+    const media=motionPreference();
     let frame,stopped=false;
     const finish=()=>{stopped=true;cancelAnimationFrame(frame);current.current=value;setShown(value);};
     if(!Number.isFinite(value)||media?.matches||typeof requestAnimationFrame!=='function'){current.current=value;setShown(value);return;}

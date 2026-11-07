@@ -66,13 +66,22 @@ public class ConfirmationAssignmentService {
         return requirements.findById(id).orElseThrow(()->new BusinessException(404,"条款不存在"));
     }
     private boolean eligible(Project project,String id) {
+        return qualified(project.getBuId(),id)
+                &&(id.equals(project.getOwnerId())||members.find(project.getId(),id).map(ProjectMember::isEnabled).orElse(false));
+    }
+
+    String defaultAssigneeId(Project project) {
+        String creatorId=project.getCreatedBy();
+        String ownerId=project.getOwnerId();
+        return creatorId!=null&&!creatorId.equals(ownerId)&&eligible(project,creatorId)?creatorId:ownerId;
+    }
+
+    boolean qualified(String buId,String id) {
         var target=users.findById(id);
         if(target.isEmpty()||!target.get().isActive()||target.get().isSystemAdmin())return false;
-        var profile=profiles.findByBuIdAndUserId(project.getBuId(),id);
+        var profile=profiles.findByBuIdAndUserId(buId,id);
         if(profile!=null&&!profile.isEnabled())return false;
-        var grants=roles.findByUserIdAndStatus(id,"ACTIVE").stream().filter(r->project.getBuId().equals(r.getBuId())).toList();
-        boolean qualified=grants.stream().anyMatch(r->"SR".equals(r.getRole())
+        return roles.findByUserIdAndStatus(id,"ACTIVE").stream().filter(r->buId.equals(r.getBuId())).anyMatch(r->"SR".equals(r.getRole())
                 ||Set.of("TECH","APPROVER").contains(r.getRole())&&profile!=null&&profile.isCanConfirm());
-        return qualified&&(id.equals(project.getOwnerId())||members.find(project.getId(),id).map(ProjectMember::isEnabled).orElse(false));
     }
 }

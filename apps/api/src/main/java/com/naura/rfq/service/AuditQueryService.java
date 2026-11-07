@@ -3,6 +3,7 @@ package com.naura.rfq.service;
 import com.naura.rfq.common.api.PageView;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.AuditEventMapper;
+import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.model.entity.AuditEvent;
 import com.naura.rfq.model.query.AuditQuery;
 import com.naura.rfq.model.query.PageQuery;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuditQueryService {
     private final AuditEventMapper events;
+    private final ProjectMapper projects;
     private final AccessGuard access;
 
     @Transactional(readOnly=true)
@@ -36,6 +38,14 @@ public class AuditQueryService {
         var filters=new AuditQuery(scope,filter(actorId,64),filter(action,64),filter(objectType,32),filter(objectId,64),result,createdFrom,createdTo);
         return PageView.of(events.findPage(filters,query),events.countPage(filters),query.getPage(),query.getSize());
     }
+
+    @Transactional(readOnly = true)
+    public List<AuditEvent> listProjectActivity(CurrentUser user, String projectId) {
+        var project = projects.findById(projectId).orElse(null);
+        access.requireProject(user, project);
+        return events.findProjectActivity(projectId, project.getBuId());
+    }
+
     private static String filter(String value,int max) {
         if(value==null || value.isBlank())return null;
         if(value.length()>max)throw new BusinessException(400,"过滤参数长度超过上限 "+max);

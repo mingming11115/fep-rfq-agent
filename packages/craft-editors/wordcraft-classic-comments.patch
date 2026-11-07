@@ -852,7 +852,7 @@ diff --git a/crates/ui-egui/src/panes/host_project.rs b/crates/ui-egui/src/panes
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project.rs
-@@ -0,0 +1,358 @@
+@@ -0,0 +1,359 @@
 +//! RFQ clause navigation and bidirectional comment writes; host metadata stays outside DOCX.
 +use super::*;
 +use std::collections::BTreeMap;
@@ -916,6 +916,7 @@ new file mode 100644
 +            p.selection = None;
 +            p.status = "unsupported".into();
 +            p.tools_visible = false;
++            let _ = self.session.run("view.webLayout", &json!({}));
 +        }
 +        let targets = p
 +            .targets
@@ -1369,7 +1370,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,316 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1396,6 +1397,7 @@ new file mode 100644
 +    }
 +    pub fn enable_host_review(&mut self) {
 +        if !self.canvas.host_comments {
++            let _ = self.session.run("view.webLayout", &json!({}));
 +            let _ = self.session.run("view.zoom", &json!({"value":"pageWidth"}));
 +            self.ui.mini_toolbar = false;
 +            // Apply the hosted default once; later frames preserve a user's expansion.

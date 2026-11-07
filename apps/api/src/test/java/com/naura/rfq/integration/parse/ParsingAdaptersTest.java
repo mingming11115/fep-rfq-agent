@@ -62,6 +62,33 @@ class ParsingAdaptersTest {
         assertThat(result.extractor()).isEqualTo("rule-based-v1");
         assertThat(result.requirements()).hasSize(1); assertThat(result.issues()).isEmpty();
     }
+    @Test void modelMayIgnoreDemoNoticeWithoutFallingBack() throws Exception {
+        var input = List.of(RawBlock.paragraph(0, DocumentNoticeExtractionTest.NOTICE, "", null, "p0"),
+            RawBlock.paragraph(1, source, "设计", "1.1", "p1"));
+        var response = json.readTree(answer(1, source));
+        ((com.fasterxml.jackson.databind.node.ArrayNode) response.path("ignoredBlockIndexes")).add(0);
+        var s = server(200, envelope(json.writeValueAsString(response)), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(input);
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.issues()).isEmpty();
+            assertThat(result.requirements()).singleElement().satisfies(r -> assertThat(r.originalText()).isEqualTo(source));
+        } finally { s.stop(0); }
+    }
+    @Test void modelCannotTurnDemoNoticeIntoRequirement() throws Exception {
+        var response = json.readTree(answer(0, DocumentNoticeExtractionTest.NOTICE));
+        ((com.fasterxml.jackson.databind.node.ArrayNode) response.path("requirements"))
+            .add(json.readTree(answer(0, "请供应商逐条填写应答，说明满足情况、适用条件、证据及偏离。"))
+                .path("requirements").get(0));
+        var s = server(200, envelope(json.writeValueAsString(response)), 0);
+        try {
+            var input = List.of(RawBlock.paragraph(0, DocumentNoticeExtractionTest.NOTICE, "", null, "p0"));
+            var result = extractor(settings(url(s), true)).extractWithReport(input);
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.requirements()).isEmpty();
+            assertThat(result.issues()).isEmpty();
+        } finally { s.stop(0); }
+    }
     @Test void modelOutputKeepsValidatedOriginalSource() throws Exception {
         var s = server(200, envelope(answer(0, source)), 0);
         try {

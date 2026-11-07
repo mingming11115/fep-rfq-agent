@@ -56,5 +56,11 @@ class ConfirmationAssignmentServiceTest {
     @Test void targetNeedsConfirmationQualification(){when(profiles.findByBuIdAndUserId("BU","tech")).thenReturn(new BuMemberProfile());assertThatThrownBy(()->service.assign(owner,"R",request(0))).hasMessageContaining("确认资格");}
     @Test void disabledUserCannotBeSelected(){AppUser disabled=new AppUser();disabled.setStatus("DISABLED");when(users.findById("tech")).thenReturn(Optional.of(disabled));assertThat(service.candidates(owner,"R")).isEmpty();}
     @Test void candidatesUseServerAuthorization(){assertThat(service.candidates(owner,"R")).extracting(ConfirmationAssignmentService.Candidate::userId).containsExactly("tech");}
+    @Test void creatorIsPreferredOnlyWhileQualifiedAndAuthorized() {
+        project.setCreatedBy("tech");
+        assertThat(service.defaultAssigneeId(project)).isEqualTo("tech");
+        when(members.find("P","tech")).thenReturn(Optional.empty());
+        assertThat(service.defaultAssigneeId(project)).isEqualTo("owner");
+    }
     @Test void optimisticUpdateFailureDoesNotReportSuccess(){when(requirements.assignConfirmation(any())).thenReturn(0);assertThatThrownBy(()->service.assign(owner,"R",request(0))).hasMessageContaining("已变化");verifyNoInteractions(audit);}
 }

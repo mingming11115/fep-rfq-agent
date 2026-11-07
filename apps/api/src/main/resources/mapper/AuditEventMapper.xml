@@ -16,6 +16,24 @@
         order by created_at desc
         limit #{limit}
     </select>
+
+    <select id="findProjectActivity" resultType="com.naura.rfq.model.entity.AuditEvent">
+        select <include refid="columns"/>
+        from audit_event a
+        where (a.bu_id = #{buId} or a.bu_id is null)
+          and (
+            (a.object_type = 'project' and a.object_id = #{projectId})
+            or (a.object_type = 'requirement' and exists (
+                select 1 from requirement r where r.id = a.object_id and r.project_id = #{projectId}
+            ))
+            or (a.object_type = 'document' and exists (
+                select 1 from customer_document d where d.id = a.object_id and d.project_id = #{projectId}
+            ))
+          )
+        order by a.created_at desc, a.id desc
+        limit 30
+    </select>
+
     <sql id="filters">
         <where>
             <if test="f.buIds != null">bu_id in

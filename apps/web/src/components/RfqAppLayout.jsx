@@ -16,7 +16,8 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
   useEffect(() => { setMobileCollapsed(true); }, [mobile]);
   useEffect(() => { if (isDetail) { onCollapse(true); setMobileCollapsed(true); } }, [isDetail, contentKey, onCollapse]);
   const contentRef = useRef(null);
-  useContentTransition(contentRef, contentKey, { kind: 'page' });
+  const pageMotionKey = JSON.stringify([contentKey, isDetail]);
+  useContentTransition(contentRef, pageMotionKey, { kind: 'page' });
   const menu = navigation.map(item => {
     const Icon = item.page === 'knowledge' ? icons.knowledge : icons[item.key] || icons[item.page];
     return { path: '/' + item.key, key: item.key, name: item.label, targetPage: item.page,

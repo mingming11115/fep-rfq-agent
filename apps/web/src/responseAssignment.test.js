@@ -16,6 +16,16 @@ function fixture() {
 }
 const request = (state, patch={}) => ({projectId:'P',requirementId:'R',userIds:['t1'],reason:'调整条款分工',
   expectedVersion:1,expectedAssigneeIds:getConfirmationActorIds(state,'P',state.requirementsByProject.P[0]),expectedReviewId:null,...patch});
+test('an unassigned card defaults to the eligible project creator even after handover', () => {
+  const state = fixture();
+  state.projects[0].createdById = 't1';
+  const next = reconcileTasks(state);
+  assert.deepEqual(getResponseAssignmentContext(next,'P','R').actorIds,['t1']);
+  assert.deepEqual(selectMyTasks(next,{actorId:'t1'}).map(task=>task.requirementId),['R']);
+  assert.doesNotThrow(()=>assertBusinessAction({...next,actorId:'t1',actorRole:'技术'},{projectId:'P',objectType:'requirement',objectId:'R',action:'confirm'}));
+  state.buPersonnelByBuId.B.find(member=>member.userId==='t1').canConfirm=false;
+  assert.deepEqual(getResponseAssignmentContext(state,'P','R').actorIds,['sr']);
+});
 function withReview(closed=false) {
   const state = fixture();
   state.requirementsByProject.P[0] = {...state.requirementsByProject.P[0],status:closed?'已确认':'评审中',...(closed?{confirmedByIds:['t1'],confirmedAt:'2026-10-28'}:{})};

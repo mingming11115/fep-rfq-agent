@@ -120,3 +120,66 @@ test('technical users enter their own pending card and reselect only when identi
   props={...props,actorId:'me',focusedRequirementId:'ENTRY-0',route:{...props.route,requirementId:'ENTRY-0'}};await render();assert.equal(title(),'Assigned other','explicit links retain their target');
  }finally{await h.close();}
 });
+
+test('only mine scopes response navigation to the current account assignments',async()=>{
+ const h=await harness('only-mine'),{ResponsePage,node,root,settle,click}=h;
+ const row={projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'1',original:'Source',conclusion:'Comply',status:'待确认',version:1,confirmationAssignmentSource:'explicit'};
+ const requirements=[
+  {...row,id:'R1',clause:'1',title:'Other confirmer',confirmationAssigneeId:'other'},
+  {...row,id:'R2',clause:'2',title:'My confirmation',confirmationAssigneeId:'me'},
+  {...row,id:'R3',clause:'3',title:'Unassigned'},
+  {...row,id:'R4',clause:'4',title:'My completed confirmation',confirmationAssigneeId:'me',status:'已确认'},
+  {...row,id:'R5',clause:'5',title:'My review',confirmationAssigneeId:'other'},
+ ];
+ const audit=[
+  {id:'A1',object:'R1',action:'Other user updated a response',actor:'Other user'},
+  {id:'A2',object:'R2',action:'I updated a response',actor:'Me'},
+ ];
+ const props={project:{id:'P',name:'Project',buId:'BU'},requirements,reviews:[{id:'V1',title:'Review',requirementId:'R5',reviewerIds:['me'],status:'待处理'}],route:{page:'response',projectId:'P'},appState:{dataSource:'mysql',accountsById:{},commentsByProject:{},membersByProject:{},audit},actorRole:'SR',actorId:'me',canBusinessAction:()=>false,navigate:()=>{},toast:()=>{}};
+ const render=async overrides=>act(async()=>{root.render(React.createElement(ResponsePage,{...props,...overrides}));await settle();});
+ const filter=()=>[...node.querySelectorAll('label')].find(label=>label.textContent==='只看我的')?.querySelector('input');
+ const title=()=>node.querySelector('.response-card-title-row h2')?.textContent;
+ const next=()=>click(node.querySelector('[aria-label="下一条"]'));
+ try{
+  await render();
+  assert.ok(filter(),'the response header offers a personal filter');
+  const [responseTab,activityTab]=node.querySelectorAll('[aria-label="RFQ 详情分区"] [role="tab"]');
+  assert.ok(filter().closest('.ant-tabs-tab')===responseTab.closest('.ant-tabs-tab'),'the response tab indicator covers the filter');
+  assert.equal(responseTab.contains(filter()),false,'the checkbox has its own focus target outside the tab button');
+  assert.equal(h.window.getComputedStyle(filter().nextElementSibling).width,'12px');
+  assert.equal(filter().checked,false);
+  assert.equal(title(),'Other confirmer');
+  await click(node.querySelector('[aria-label="展开文档目录"]'));
+  const directoryRow=label=>node.querySelector(`[aria-label="选择条款 ${label}"]`);
+  await click(directoryRow('1 Other confirmer'));
+  await click(filter());
+  assert.equal(title(),'My confirmation');
+  assert.equal(directoryRow('1 Other confirmer'),null);
+  assert.ok(directoryRow('2 My confirmation'));
+  assert.equal([...node.querySelectorAll('.detail-outline-footer button')].find(button=>button.textContent.includes('批量确认')).disabled,true);
+  await click(activityTab);
+  assert.equal(filter().disabled,true);
+  await click(filter().closest('label'));
+  assert.equal(activityTab.getAttribute('aria-selected'),'true');
+  assert.deepEqual([...node.querySelectorAll('.detail-timeline strong')].map(event=>event.textContent),audit.map(event=>event.action));
+  await click(responseTab);
+  assert.equal(filter().checked,true);
+  assert.equal(title(),'My confirmation');
+  await next();
+  assert.equal(title(),'My completed confirmation');
+  await next();
+  assert.equal(title(),'My review');
+  await next();
+  assert.equal(title(),'My confirmation');
+  await click(filter());
+  await next();
+  assert.equal(title(),'Unassigned');
+  await render({actorId:'nobody'});
+  await click(filter());
+  assert.equal(title(),undefined);
+  assert.ok(node.textContent.includes('没有符合条件的应答项'));
+  await click([...node.querySelectorAll('button')].find(button=>button.textContent==='查看全部应答项'));
+  assert.equal(filter().checked,false);
+  assert.equal(title(),'Other confirmer');
+ }finally{await h.close();}
+});

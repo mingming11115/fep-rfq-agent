@@ -137,3 +137,58 @@ test('native refusal remains visible after the document becomes dirty',async()=>
   for(let i=0;i<12;i++)await Promise.resolve();assert.equal(document.getElementById('status').textContent,'Native edit refused');
   await window.happyDOM.cancelAsync();
 });
+
+test('embedded Word previews comment text over the source range and PDF keeps its highlight', async t => {
+  const window = new Window({url:'http://127.0.0.1:18771/classic.html',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
+  const {document} = window;
+  document.write(await readFile(new URL('../site/classic.html',import.meta.url),'utf8'));
+  let nextFrame;
+  Object.assign(globalThis,{document,location:window.location,ResizeObserver:class{observe(){} disconnect(){}},
+    requestAnimationFrame:callback=>{nextFrame=callback;return 1;},cancelAnimationFrame:()=>{nextFrame=null;}});
+  const frame = document.getElementById('word-frame');
+  const calls = [];
+  Object.defineProperty(frame,'contentWindow',{value:{postMessage(message){calls.push(JSON.parse(message.payload));}}});
+  const highlights = document.querySelector('[data-native-highlights]');
+  const clip = {x:10,y:20,w:400,h:300};
+  const ranges = [{x:80,y:40,w:100,h:20},{x:40,y:60,w:180,h:20}];
+  const note = {id:1,author:'Reviewer',text:'核对 <12 周> & 交期',quote:'客户原文',color:0,ranges,replies:[]};
+  const snapshot = {document:'word-1',notes:[note],clip,pages:[],active:1};
+  const render = (surface, state) => {
+    surface.receive('reviewState', state);
+    nextFrame();
+  };
+  const options = {frame,onStatus:()=>{},onDirty:()=>assert.fail('Rendering must not dirty the file'),summaryOnly:true,externalSummaries:true};
+  const word = createOriginalComments(options);
+  t.after(async () => {
+    word.destroy();
+    await window.happyDOM.cancelAsync();
+  });
+  render(word,snapshot);
+  assert.equal(highlights.style.mixBlendMode,'normal');
+  assert.equal(highlights.querySelectorAll('rect').length,2,'cover every line of the original range');
+  let label = highlights.querySelector('foreignObject');
+  assert.equal(label.textContent,note.text);
+  assert.equal(label.getAttribute('x'),'30');
+  assert.equal(label.getAttribute('y'),'40');
+  assert.equal(label.getAttribute('width'),'180');
+  assert.doesNotMatch(highlights.textContent,/客户原文/);
+  assert.equal(highlights.querySelector('foreignObject').childElementCount,1,'comment markup is escaped');
+  render(word,{...snapshot,clip:{...clip,y:55},notes:[{...note,text:'更新后的批注'}]});
+  assert.equal(highlights.querySelectorAll('rect').length,2);
+  label = highlights.querySelector('foreignObject');
+  assert.equal(label.textContent,'更新后的批注');
+  assert.equal(label.getAttribute('y'),'5');
+  render(word,{...snapshot,clip:null});
+  assert.equal(highlights.childElementCount,0,'discard old geometry when the editor has no viewport');
+  render(word,{...snapshot,notes:[]});
+  assert.equal(highlights.childElementCount,0);
+  assert.deepEqual(calls.map(call=>call.action),['select'],'preview may locate a comment without editing or saving');
+  word.destroy();
+
+  const pdf = createOriginalComments({...options,namespace:'pdfcraft',documentFormat:'PDF'});
+  render(pdf,snapshot);
+  assert.equal(highlights.style.mixBlendMode,'');
+  assert.equal(highlights.querySelector('foreignObject'),null);
+  assert.equal(highlights.querySelectorAll('rect').length,2);
+  pdf.destroy();
+});

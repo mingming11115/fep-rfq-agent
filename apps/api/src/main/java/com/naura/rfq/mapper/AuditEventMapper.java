@@ -13,6 +13,7 @@ public interface AuditEventMapper {
     int insert(AuditEvent event);
 
     List<AuditEvent> findRecent(@Param("limit") int limit);
+    List<AuditEvent> findProjectActivity(@Param("projectId") String projectId, @Param("buId") String buId);
     List<AuditEvent> findPage(@Param("f") AuditQuery filters,@Param("q") PageQuery query);
     long countPage(@Param("f") AuditQuery filters);
 }

@@ -14,11 +14,14 @@ function load() { try { return JSON.parse(sessionStorage.getItem('rfq.tasks.filt
 export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
   const [filters, setFilters] = useState(() => ({ tab: 'pending', query: '', projectId: '', kind: '', overdue: false, ...load() }));
   const [transfer, setTransfer] = useState(null);
-  const resultsRef = useRef(null), queryFormRef = useRef(null);
+  const resultsRef = useRef(null), queryFormRef = useRef(null), tableActionRef = useRef(null);
   const initialQuery = useRef({query:filters.query,projectId:filters.projectId,kind:filters.kind});
   useContentTransition(resultsRef, filters.tab, { kind:'tab', position:['pending','done','all'].indexOf(filters.tab) });
   useEffect(() => { sessionStorage.setItem('rfq.tasks.filters', JSON.stringify(filters)); }, [filters]);
-  const change = (key, value) => setFilters(current => ({ ...current, [key]: value }));
+  const applyFilters = patch => {
+    setFilters(current => ({ ...current, ...patch }));
+    tableActionRef.current?.setPageInfo({ current: 1 });
+  };
   const names = Object.fromEntries(Object.values(appState.accountsById || {}).map(account => [account.id, account.name]));
   const all = selectMyTasks(appState, { actorId: appState.actorId, tab: filters.tab });
   const rows = all.filter(task => (!filters.projectId || task.projectId === filters.projectId)
@@ -33,26 +36,37 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
     { title: '到达 / 截止', dataIndex: 'dueAt', width: 200, sorter: (a, b) => String(a.dueAt || '').localeCompare(String(b.dueAt || '')), render: (_, task) => <><span>{task.dueAt || '未设置截止'}</span><small className="rfq-table-meta">到达 {new Date(task.arrivedAt).toLocaleDateString('zh-CN')}{task.completedAt ? ' · 完成 ' + new Date(task.completedAt).toLocaleDateString('zh-CN') : ''}</small></> },
     { title: '操作', key: 'actions', width: 160, fixed: 'right', render: (_, task) => <Space wrap>
       <Button type="link" onClick={() => onOpenTask(task, isTaskPending(task) ? 'start' : 'view')}>{isTaskPending(task) ? task.status === '处理中' ? '继续处理' : '开始处理' : '查看'}</Button>
-      {isTaskPending(task) && task.kind !== 'final-approve' && <Button type="link" onClick={() => setTransfer(task)}>转办</Button>}
+      {appState.dataSource !== 'mysql' && isTaskPending(task) && task.kind !== 'final-approve' && <Button type="link" onClick={() => setTransfer(task)}>转办</Button>}
     </Space> },
   ];
   return <div className="workspace-page">
     <PageHeading title={<>任务中心</>} />
     <section className="panel">
-      <Tabs animated={{ inkBar:true, tabPane:false }} className="rfq-panel-tabs" activeKey={filters.tab} onChange={key => change('tab', key)} items={[
+      <Tabs animated={{ inkBar:true, tabPane:false }} className="rfq-panel-tabs" activeKey={filters.tab} onChange={tab => applyFilters({ tab })} items={[
         ['pending', '待办'], ['done', '已处理'], ['all', '全部'],
       ].map(([key, label]) => ({ key, label: label + ' ' + selectMyTasks(appState, { actorId: appState.actorId, tab: key }).length }))}/>
       <QueryFilter formRef={queryFormRef} className="rfq-query-form" layout="vertical" defaultCollapsed={false}
- initialValues={initialQuery.current}
- onFinish={async values=>{setFilters(current=>({...current,query:values.query||'',projectId:values.projectId||'',kind:values.kind||''}));return true;}}
- onReset={()=>{queryFormRef.current?.setFieldsValue({query:'',projectId:'',kind:''});setFilters(current=>({...current,query:'',projectId:'',kind:'',overdue:false}));}}>
- <ProFormText name="query" label="关键词" placeholder="项目、条款或任务关键词" fieldProps={{'aria-label':'搜索任务',allowClear:true}}/>
- <ProFormSelect name="projectId" label="关联项目" fieldProps={{'aria-label':'任务项目'}} options={[{value:'',label:'全部项目'},...appState.projects.map(p=>({value:p.id,label:p.name}))]}/>
- <ProFormSelect name="kind" label="任务类型" fieldProps={{'aria-label':'任务类型'}} options={[{value:'',label:'全部类型'},...Object.entries(taskLabels).map(([value,label])=>({value,label}))]}/>
- </QueryFilter>
-      <div ref={resultsRef} className="rfq-task-results"><ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false}
+        initialValues={initialQuery.current}
+        onFinish={async values => {
+          applyFilters({ query: values.query || '', projectId: values.projectId || '', kind: values.kind || '' });
+          return true;
+        }}
+        onReset={() => {
+          const emptyQuery = { query: '', projectId: '', kind: '' };
+          queryFormRef.current?.setFieldsValue(emptyQuery);
+          applyFilters({ ...emptyQuery, overdue: false });
+        }}>
+        <ProFormText name="query" label="关键词" placeholder="项目、条款或任务关键词" fieldProps={{'aria-label':'搜索任务',allowClear:true}}/>
+        <ProFormSelect name="projectId" label="关联项目"
+          fieldProps={{ 'aria-label': '任务项目', onChange: value => applyFilters({ projectId: value ?? '' }) }}
+          options={[{value:'',label:'全部项目'},...appState.projects.map(p=>({value:p.id,label:p.name}))]}/>
+        <ProFormSelect name="kind" label="任务类型"
+          fieldProps={{ 'aria-label': '任务类型', onChange: value => applyFilters({ kind: value ?? '' }) }}
+          options={[{value:'',label:'全部类型'},...Object.entries(taskLabels).map(([value,label])=>({value,label}))]}/>
+      </QueryFilter>
+      <div ref={resultsRef} className="rfq-task-results"><ProTable actionRef={tableActionRef} className="rfq-ant-table" rowKey="id" columns={columns} dataSource={rows} search={false}
         headerTitle={<span className="muted">{rows.length} 项任务</span>} tooltip="查看任务不会自动接手；保存草稿不会完成任务。"
-        toolBarRender={()=>[<Checkbox key="overdue" checked={filters.overdue} onChange={event=>change('overdue',event.target.checked)}>仅逾期</Checkbox>]}
+        toolBarRender={()=>[<Checkbox key="overdue" checked={filters.overdue} onChange={event => applyFilters({ overdue: event.target.checked })}>仅逾期</Checkbox>]}
         options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1140 }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>
       </div>

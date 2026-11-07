@@ -18,6 +18,7 @@ class ResponseServiceTest {
     final BuMemberProfileMapper profiles=mock(BuMemberProfileMapper.class,withSettings().mockMaker("mock-maker-subclass"));
     final AccessGuard guard=mock(AccessGuard.class,withSettings().mockMaker("mock-maker-subclass"));
     final AuditService audit=mock(AuditService.class,withSettings().mockMaker("mock-maker-subclass"));
+    final ConfirmationAssignmentService confirmationAssignments=mock(ConfirmationAssignmentService.class,withSettings().mockMaker("mock-maker-subclass"));
     final ObjectMapper json=new ObjectMapper();
     final CurrentUser sr=new CurrentUser("sr","张明",false,List.of(new CurrentUser.RoleGrant("BU","SR")));
     ResponseService service;
@@ -29,7 +30,8 @@ class ResponseServiceTest {
         when(requirements.findByDocumentIdForUpdate("D")).thenReturn(List.of(r));
         when(documents.findByIdForUpdate("D")).thenReturn(Optional.of(new CustomerDocument()));
         when(jdbc.queryForList(anyString(),eq(String.class),any(Object[].class))).thenReturn(List.of());
-        service=new ResponseService(jdbc,json,requirements,projects,documents,profiles,guard,audit);
+        when(confirmationAssignments.defaultAssigneeId(p)).thenReturn("sr");
+        service=new ResponseService(jdbc,json,requirements,projects,documents,profiles,guard,audit,confirmationAssignments);
     }
     @Test void ownerCanSaveAndConfirm(){
         var saved=service.write(sr,"R",1L,0L,json.createObjectNode().put("conclusion","Comply"),false);
@@ -54,6 +56,27 @@ class ResponseServiceTest {
         assertThat(row.path("version").asLong()).isEqualTo(4);
     }
     @Test void explicitAssignmentOverridesOwner(){response("{\"version\":1,\"confirmationAssigneeId\":\"tech\",\"conclusion\":\"Comply\"}");assertThatThrownBy(()->service.write(sr,"R",1L,0L,null,true)).hasMessageContaining("确认人");}
+    @Test void confirmationUsesTheProjectDefaultInsteadOfTheOwner() {
+        var project=projects.findByIdForUpdate("P").orElseThrow();
+        when(confirmationAssignments.defaultAssigneeId(project)).thenReturn("creator");
+        var creator=new CurrentUser("creator","创建人",false,sr.roles());
+        response("{\"version\":1,\"conclusion\":\"Comply\"}");
+
+        assertThatThrownBy(()->service.write(sr,"R",1L,0L,null,true)).hasMessageContaining("确认人");
+        assertThat(service.write(creator,"R",1L,0L,null,true).path("confirmedById").asText()).isEqualTo("creator");
+    }
+    @Test void persistedAssignmentAllowsTheAssignedTechnicianToConfirm() {
+        requirements.findById("R").orElseThrow().setConfirmationAssigneeId("tech");
+        var tech=new CurrentUser("tech","李工",false,List.of(new CurrentUser.RoleGrant("BU","TECH")));
+        var profile=new BuMemberProfile();profile.setEnabled(true);profile.setCanConfirm(true);
+        when(profiles.findByBuIdAndUserId("BU","tech")).thenReturn(profile);
+        response("{\"version\":1,\"confirmationAssigneeId\":\"sr\",\"conclusion\":\"Comply\"}");
+
+        var confirmed=service.write(tech,"R",1L,0L,null,true);
+
+        assertThat(confirmed.path("confirmedById").asText()).isEqualTo("tech");
+        assertThatThrownBy(()->service.write(sr,"R",1L,0L,null,true)).hasMessageContaining("确认人");
+    }
     @Test void openReviewBlocksConfirmation(){
         when(jdbc.queryForList(contains("from response_review"),eq(String.class),any(Object[].class))).thenReturn(List.of("{\"requirementId\":\"R\",\"status\":\"待处理\"}"));
         assertThatThrownBy(()->service.write(sr,"R",1L,0L,null,true)).hasMessageContaining("未关闭");

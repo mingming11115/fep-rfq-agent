@@ -68,6 +68,7 @@ public class ProjectAccessService {
     }
     public void requireOwner(String userId,String buId) { requireEligible(userId,buId,true); }
     public void addOwner(Project project,String actorId) { saveMember(project.getId(),project.getOwnerId(),true,actorId); }
+    void addCreator(Project project) { saveMember(project.getId(),project.getCreatedBy(),true,project.getCreatedBy()); }
     private void saveMember(String projectId,String userId,boolean enabled,String actorId) {
         ProjectMember member=new ProjectMember(); member.setProjectId(projectId); member.setUserId(userId);
         member.setEnabled(enabled); member.setGrantedBy(actorId); members.upsert(member);

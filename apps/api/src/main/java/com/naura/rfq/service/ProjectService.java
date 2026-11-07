@@ -24,6 +24,7 @@ public class ProjectService {
     private final AccessGuard access;
     private final AuditService audit;
     private final ProjectAccessService projectAccess;
+    private final ConfirmationAssignmentService confirmationAssignments;
 
     public PageView<ProjectView> list(CurrentUser user,
             int page,
@@ -66,6 +67,9 @@ public class ProjectService {
         project.setCreatedBy(user.id());
         projects.insert(project);
         projectAccess.addOwner(project,user.id());
+        if(!user.id().equals(project.getOwnerId())&&confirmationAssignments.qualified(buId,user.id())){
+            projectAccess.addCreator(project);
+        }
         audit.successInBu(user.id(), buId, "创建项目", "project", project.getId(), project.getName());
         return ProjectView.of(project);
     }

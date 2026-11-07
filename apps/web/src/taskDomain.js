@@ -107,6 +107,7 @@ export function applyTaskAction(task, action,state) {
 }
 export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
   const tasks=Object.fromEntries(Object.entries(state.tasksById||{}).map(([id,t])=>[id,{...t,status:normalizeTaskStatus(t.status)}])), desired=new Set();
+  const databaseBacked=state.dataSource==='mysql';
   function ensure(project,object,type,kind,assigneeId,extra={}) {
     const version=object.version||1,round=object.round||1;
     let id=`${project.id}:${type}:${object.id}:${kind}:v${version}:r${round}${state.accountsById?`:a${assigneeId||'unassigned'}:${extra.reviewSide||''}`:''}`;
@@ -121,14 +122,17 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
     else if(!tasks[id].requiredActorId)tasks[id]={...tasks[id],requiredActorId:assigneeId};
   }
   for(const project of state.projects||[]) {
+    if(databaseBacked&&project.backendStage==='CANCELLED')continue;
     const reviews=state.reviewsByProject?.[project.id]||[];
     for(const row of state.requirementsByProject?.[project.id]||[]) {
+      if(databaseBacked&&row.pendingReviewProposal)continue;
       if(row.status==='已确认'||canReviewWithoutManualConfirmation(row,project.id))continue;
       if(reviews.some(r=>r.requirementId===row.id&&!['已关闭','已取消'].includes(r.status)))continue;
       const kind=row.needsReview||row.status==='待复核'?'recheck':state.accountsById||row.readyForConfirmation?'confirm':'draft';
       const assignees=state.accountsById?getConfirmationActorIds(state,project.id,row):[kind==='draft'?'demo-sales':'demo-technical'];
       for(const assignee of assignees)ensure(project,row,'requirement',kind,assignee,{requirementId:row.id});
     }
+    if(databaseBacked)continue;
     for(const review of reviews) {
       if(['已关闭','已取消'].includes(review.status))continue;
       if(state.accountsById&&Array.isArray(review.reviewerIds)&&review.kind!=='clarification'){

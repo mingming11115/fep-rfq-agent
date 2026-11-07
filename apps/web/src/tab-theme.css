@@ -37,6 +37,23 @@
 .rfq-detail-native-tabs, .rfq-directory-native-tabs { padding-inline:16px; flex-shrink:0; }
 .rfq-detail-native-tabs > .ant-tabs-nav, .rfq-directory-native-tabs > .ant-tabs-nav { margin-bottom:0; }
 .rfq-detail-native-tabs > .ant-tabs-content-holder, .rfq-directory-native-tabs > .ant-tabs-content-holder { display:none; }
+.rfq-response-tab-label { font-size:16px; }
+.rfq-response-mine-filter { display:inline-flex; margin-inline-start:10px; white-space:nowrap; }
+.rfq-response-mine-filter .ant-checkbox-wrapper {
+  align-items:center;
+  padding-block:2px;
+  padding-inline:7px 3px;
+  border-radius:6px;
+  line-height:18px;
+}
+.rfq-response-mine-filter .ant-checkbox-wrapper:not(.ant-checkbox-wrapper-disabled) {
+  background:var(--bg,#f5f7fa);
+  color:var(--text-secondary,#4e5969);
+}
+.rfq-response-mine-filter .ant-checkbox-wrapper-checked:not(.ant-checkbox-wrapper-disabled) {
+  background:#e6f4ff;
+  color:#0958d9;
+}
 
 /* Existing response counters are controlled filters with the same native sliding indicator. */
 .response-stat-tabs { padding-inline:8px; }

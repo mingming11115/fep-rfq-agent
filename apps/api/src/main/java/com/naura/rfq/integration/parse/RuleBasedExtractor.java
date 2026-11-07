@@ -34,6 +34,12 @@ public class RuleBasedExtractor implements RequirementExtractor {
     private static final Pattern RECOMMENDED = Pattern.compile("宜|建议|推荐|可以|优先");
     private static final Pattern REFERENCE = Pattern.compile("见附图|参见|如图|如下表|见下表|见表|附图|附录|详见");
     private static final Pattern ENDS_LIKE_HEADING = Pattern.compile("[。；;：:，,、]");
+    private static final Pattern DOCUMENT_PURPOSE = Pattern.compile(
+            "本(?:文件|文档|资料)(?:用于|仅供)[^，,：:；;。]*(?:测试|演示|示例)(?:使用)?");
+    private static final Pattern DEMO_CONTEXT = Pattern.compile(
+            "(?:采购方|设备参数|商务条件)(?:[、和及](?:采购方|设备参数|商务条件))*均为(?:演示|测试|示例)(?:设定|数据|内容)");
+    private static final Pattern DEMO_RESPONSE_GUIDANCE = Pattern.compile(
+            "请供应商逐条填写应答[，,]说明满足情况、适用条件、证据及偏离");
 
     private static final Pattern METRIC = Pattern.compile(
             "(不低于|不小于|不少于|不大于|不超过|不高于|大于等于|小于等于|大于|小于|等于|≥|≤|＞|＜|>|<)?\\s*"
@@ -79,6 +85,9 @@ public class RuleBasedExtractor implements RequirementExtractor {
         ClauseNumber clause = detectNumbering(text);
         String body = clause == null ? text : clause.body.trim();
 
+        if (isDocumentNotice(body)) {
+            return null;
+        }
         if (clause != null && isHeadingLike(body)) {
             return null;
         }
@@ -134,7 +143,7 @@ public class RuleBasedExtractor implements RequirementExtractor {
         for (int rowIndex = start; rowIndex < rows.size(); rowIndex++) {
             List<String> cells = rows.get(rowIndex);
             String joined = joinCells(cells);
-            if (joined.length() < 6) {
+            if (joined.length() < 6 || isDocumentNotice(joined)) {
                 continue;
             }
             List<Map<String, String>> metrics = extractMetrics(joined);
@@ -195,6 +204,23 @@ public class RuleBasedExtractor implements RequirementExtractor {
             return body.length() >= 6;
         }
         return body.length() >= 15 && MANDATORY.matcher(body).find();
+    }
+
+    /** Only discard a wholly explanatory notice; keep any block containing a real requirement. */
+    boolean isDocumentNotice(String text) {
+        ClauseNumber clause = detectNumbering(text.trim());
+        String body = clause == null ? text.trim() : clause.body.trim();
+        boolean hasContext = false;
+        for (String sentence : body.split("[。！？!?；;]+")) {
+            sentence = sentence.trim();
+            if (sentence.isEmpty()) continue;
+            if (DOCUMENT_PURPOSE.matcher(sentence).matches() || DEMO_CONTEXT.matcher(sentence).matches()) {
+                hasContext = true;
+            } else if (!DEMO_RESPONSE_GUIDANCE.matcher(sentence).matches()) {
+                return false;
+            }
+        }
+        return hasContext;
     }
 
     private boolean isHeadingLike(String body) {

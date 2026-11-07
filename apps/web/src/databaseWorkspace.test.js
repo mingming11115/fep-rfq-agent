@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {loadDatabaseWorkspace,mapDatabaseWorkspace} from './databaseWorkspace.js';
 import {selectAccessibleState,getProjectSummary} from './projectSelectors.js';
 import {canPerform} from './permissions.js';
+import {selectMyTasks} from './taskDomain.js';
 
 const user={id:'sr',displayName:'真实销售',roles:[{buId:'BU',role:'SR'}],bus:[{id:'BU',name:'事业部'}]};
 const member={userId:'sr',displayName:'真实销售',roles:['SR'],enabled:true,canConfirm:true,canFinalReview:true};
@@ -25,6 +26,23 @@ test('real database records use the original App shape without injected demo rec
 test('empty authorized database stays empty and does not load browser samples',()=>{
  const state=mapDatabaseWorkspace({user,projects:[],directories:{BU:[member]},details:{}});
  assert.equal(state.projects.length,0);assert.equal(Object.keys(state.requirementsByProject).length,0);
+});
+test('database tasks and confirmation permissions use the explicit assignee or project creator',()=>{
+ const technician={id:'tech',displayName:'李工',roles:[{buId:'BU',role:'TECH'}],bus:user.bus};
+ const techMember={userId:'tech',displayName:'李工',roles:['TECH'],enabled:true,canConfirm:true};
+ const owner={...member,userId:'other-sr',displayName:'接手的销售'};
+ const assigned={...requirement,confirmationAssigneeId:'tech',version:1};
+ const state=mapDatabaseWorkspace({
+  user:technician,projects:[{...project,ownerId:owner.userId,stage:'REVIEWING'}],directories:{BU:[member,owner,techMember]},
+  details:{P:{documents:[document],requirements:[assigned,{...assigned,id:'confirmed'},{...assigned,id:'in-review'}, {...requirement,id:'unassigned'}],
+   workflow:{defaultConfirmationAssigneeId:'sr',responses:[{id:'confirmed',status:'已确认'}],reviews:[{id:'review',requirementId:'in-review',status:'待处理',reviewerIds:['tech']}]}}},
+ });
+ const tasks=selectMyTasks(state,{actorId:'tech'});
+ assert.deepEqual(tasks.map(({projectId,requirementId,kind})=>({projectId,requirementId,kind})),[{projectId:'P',requirementId:'R',kind:'confirm'}]);
+ assert.deepEqual(selectMyTasks(state,{actorId:'sr'}).map(task=>task.requirementId),['unassigned']);
+ const context={state,projectId:'P',requirementId:'unassigned'};
+ assert.equal(canPerform('SR','response:confirm',{...context,actorId:'sr'}),true);
+ assert.equal(canPerform('SR','response:confirm',{...context,actorId:owner.userId}),false);
 });
 test('workspace reads every project page and each server document and requirement',async()=>{
  const requests=[];const api={get:async path=>{

@@ -1,0 +1,112 @@
+.detail-activity {
+  --activity-accent: color-mix(in srgb, var(--primary) 9%, var(--surface));
+  padding: 16px;
+}
+
+.detail-activity-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.detail-activity-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color var(--motion-fast, 150ms) var(--motion-ease, ease);
+}
+
+.detail-activity-group > summary::-webkit-details-marker { display: none; }
+.detail-activity-group > summary:hover { background: var(--activity-accent); }
+.detail-activity-group > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.detail-activity-group[open] > summary { border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; }
+
+.detail-activity-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--activity-accent);
+  color: var(--primary);
+}
+
+.detail-activity-heading { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.detail-activity-heading strong, .detail-activity-card-title strong { color: var(--text); font-size: 14px; font-weight: 600; }
+.detail-activity-heading small, .detail-activity-meta { color: var(--text-secondary, #595959); font-size: 12px; }
+.detail-activity-group > summary .detail-activity-count { margin: 0; background: var(--activity-accent); color: var(--primary); }
+
+.detail-activity-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary, #595959);
+  transition: transform var(--motion-normal, 180ms) var(--motion-ease, ease);
+}
+
+.detail-activity-group[open] .detail-activity-chevron { transform: rotate(180deg); }
+.detail-activity-group-body { padding: 14px; }
+.detail-activity-loading { color: var(--text-secondary, #595959); font-size: 13px; }
+.detail-activity-loading .ant-skeleton { margin-top: 8px; }
+
+.detail-timeline { display: grid; gap: 10px; margin: 0; padding: 0 0 0 18px; list-style: none; }
+.detail-activity-entry { position: relative; min-width: 0; }
+
+.detail-activity-entry::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  left: -17px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.detail-activity-entry:first-child::before { border-color: var(--primary); box-shadow: 0 0 0 3px var(--activity-accent); }
+.detail-activity-entry:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset: 20px auto -30px -13px;
+  width: 1px;
+  background: var(--border);
+}
+
+.detail-activity-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.detail-activity-card-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.detail-activity-card-title .ant-tag { flex-shrink: 0; margin: 0; }
+.detail-activity-meta { display: block; margin-top: 4px; line-height: 1.55; }
+.detail-activity-meta .anticon { vertical-align: -0.04em; }
+.detail-activity-meta time { font-variant-numeric: tabular-nums; }
+.detail-activity-card p { margin: 8px 0 0; color: var(--text-secondary, #595959); font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+
+.detail-activity-assignment { margin-top: 8px; color: var(--text-secondary, #595959); line-height: 1.9; }
+.detail-activity-assignment span { padding: 2px 6px; border-radius: 4px; background: var(--bg); }
+.detail-activity-assignment span:last-child { background: var(--activity-accent); color: var(--primary); font-weight: 500; }
+.detail-activity-reason span { color: var(--text); font-weight: 500; }
+
+.detail-activity-group[open] .detail-activity-entry {
+  animation: activity-entry-in var(--motion-normal, 180ms) var(--motion-ease, ease) both;
+  animation-delay: calc(min(var(--entry-index, 0), 5) * 22ms);
+}
+
+@keyframes activity-entry-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-activity-group[open] .detail-activity-entry { animation: none; }
+  .detail-activity-group > summary, .detail-activity-chevron { transition: none; }
+}

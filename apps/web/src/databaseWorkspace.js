@@ -1,5 +1,6 @@
 import {api as defaultApi} from './authClient.js';
 import {hydrateSessionPersonnel} from './sessionPersonnel.js';
+import {reconcileTasks} from './taskDomain.js';
 
 const roleNames={SR:'SR',TECH:'技术',APPROVER:'技术'};
 async function pages(path,api){
@@ -47,7 +48,8 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
   const workflow=details[row.id]?.workflow||{},metadata=workflow.metadata||{};
   const members=state.buPersonnelByBuId[row.buId]||[],owner=state.accountsById[row.ownerId]?.name||row.ownerId;
   state.projects.push({...metadata,...row,backendStage:row.stage,backendProjectId:row.id,backendBuId:row.buId,owner,createdById:row.createdBy||'',
-   participantIds:[...new Set([...(metadata.participantIds||[]),row.ownerId,user.id])],equipment:metadata.equipment||'',responseReviewSchemaVersion:1,
+   defaultConfirmationAssigneeId:workflow.defaultConfirmationAssigneeId,
+   participantIds:[...new Set([...(metadata.participantIds||[]),row.ownerId,workflow.defaultConfirmationAssigneeId,user.id].filter(Boolean))],equipment:metadata.equipment||'',responseReviewSchemaVersion:1,
    technicalReviewSettings:metadata.technicalReviewSettings||{technicalMode:'all',version:1},approvalConfig:metadata.approvalConfig||{finalReviewers:{srId:null,technicalIds:[],technicalRepresentativeId:null}},
   });
   const documents=(details[row.id]?.documents||[]).map(file=>({...file,backendDocumentId:file.id,backendProjectId:row.id,
@@ -58,7 +60,9 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
   state.requirementsByProject[row.id]=(details[row.id]?.requirements||[]).map(requirement=>{
    const source=mapDatabaseRequirement(requirement,documents,owner),response=workflow.responses?.find(r=>r.id===requirement.id)||{};
    return {...source,...response,id:source.id,projectId:row.id,title:source.title,clause:source.clause,original:source.original,sourceOriginal:source.sourceOriginal,
-    source:source.source,sourceFileId:source.sourceFileId,sourceVersion:source.sourceVersion,sectionPath:source.sectionPath,backendVersion:source.backendVersion,confirmationAssigneeId:source.confirmationAssigneeId,confirmationAssignmentSource:source.confirmationAssignmentSource};
+    source:source.source,sourceFileId:source.sourceFileId,sourceVersion:source.sourceVersion,sectionPath:source.sectionPath,backendVersion:source.backendVersion,
+    confirmationAssigneeId:source.confirmationAssigneeId||response.confirmationAssigneeId||null,
+    confirmationAssignmentSource:source.confirmationAssignmentSource||response.confirmationAssignmentSource||null};
   });
   state.membersByProject[row.id]=members.filter(member=>[row.ownerId,user.id].includes(member.userId)).map(member=>({
    id:member.userId,name:member.displayName,role:member.roles.join(' / '),scope:'后端授权项目',status:member.enabled?'生效':'停用',canConfirm:member.canConfirm,
@@ -66,7 +70,7 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
   state.reviewsByProject[row.id]=workflow.reviews||[];state.snapshotsByProject[row.id]=workflow.snapshots||[];state.commentsByProject[row.id]=[];
  }
  state.activeProjectId=state.projects[0]?.id||'';
- return hydrateSessionPersonnel(state,user,{activate:true});
+ return reconcileTasks(hydrateSessionPersonnel(state,user,{activate:true}));
 }
 export async function loadDatabaseWorkspace(user,api=defaultApi){
  if(!user?.id)throw new Error('登录会话不存在，请重新登录');

@@ -32,7 +32,9 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         "level":1,"parentClauseNo":null,"obligation":"mandatory|recommended|unknown"}],
         "ignoredBlockIndexes":[]}。
         必须逐个处理输入blockIndex。每块或者有requirements引用，或者列入ignoredBlockIndexes。
-        只有确为标题、页码、目录等非要求才能忽略。保留原文数值、单位、否定与条件，不补写要求。
+        标题、页码、目录、文档用途、演示或测试声明等非采购要求应忽略。
+        演示声明附带的一般填写指引不作为条款；实际技术、商务及正式应答要求必须保留。
+        同块若包含实际要求，不得因演示声明而整块忽略。保留原文数值、单位、否定与条件，不补写要求。
         同一块可以拆出多个要求。originalText必须是该块text的连续原文，不能改写。
         每个未忽略块的全部原文必须被originalText摘录完整覆盖，不能只摘第一句而遗漏后文和条件。
         可在一条要求中引用完整块，其他子要求引用其中部分。
@@ -83,10 +85,17 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                 unavailable = true;
             }
         }
+        Set<Integer> noticeBlocks = new HashSet<>();
+        for (var block : blocks) {
+            if (block.hasText() && !block.isTable() && rules.isDocumentNotice(block.text())) noticeBlocks.add(block.index());
+        }
         List<ExtractedRequirement> ordered = new ArrayList<>();
-        for (var r : results) ordered.add(new ExtractedRequirement(ordered.size(), r.blockIndex(), r.sectionPath(),
-            r.customerClauseNo(), r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(),
-            r.metricsJson(), r.conditionsText(), r.obligation(), r.extractionStatus(), r.reviewReasons()));
+        for (var r : results) {
+            if (noticeBlocks.contains(r.blockIndex()) || rules.isDocumentNotice(r.originalText())) continue;
+            ordered.add(new ExtractedRequirement(ordered.size(), r.blockIndex(), r.sectionPath(),
+                r.customerClauseNo(), r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(),
+                r.metricsJson(), r.conditionsText(), r.obligation(), r.extractionStatus(), r.reviewReasons()));
+        }
         String used = modelUsed ? "llm:" + config.getModel() : rules.name();
         if (modelUsed && !issues.isEmpty()) used += "+" + rules.name();
         return new ExtractionResult(ordered, used, issues);

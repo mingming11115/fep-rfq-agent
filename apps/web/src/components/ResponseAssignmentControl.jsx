@@ -1,4 +1,4 @@
-import { UiButton, UiTextArea } from './AntContent';
+import { UiButton } from './AntContent';
 import React, {useEffect,useState} from 'react';
 import {UserRoundCog} from "./icons";
 import {Modal} from './ui';
@@ -11,7 +11,7 @@ function AssignmentDialog({state, project, requirementId, route, onPersonnelActi
   const context = getResponseAssignmentContext(state, project.id, requirementId);
   const [baseline] = useState(() => ({expectedVersion:context.row.version || 1, expectedAssigneeIds:context.actorIds}));
   const [selected, setSelected] = useState(context.actorIds[0] || '');
-  const [reason, setReason] = useState('');
+  const reason=context.actorIds.length?'改派确认人':'指派确认人';
   const [error, setError] = useState('');
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(state.dataSource==='mysql');
   const [people,setPeople]=useState(state.dataSource==='mysql'?[]:context.people);
@@ -20,7 +20,7 @@ function AssignmentDialog({state, project, requirementId, route, onPersonnelActi
     confirmationCandidates(requirementId).then(rows=>{if(active)setPeople(rows);}).catch(cause=>{if(active)setError(cause.message);}).finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
   },[requirementId,state.dataSource]);
-  const valid = !busy && !loading && context.canAssign && reason.trim() && !!selected
+  const valid = !busy && !loading && context.canAssign && !!selected
     && people.some(person => person.userId === selected)
     && (baseline.expectedAssigneeIds.length !== 1 || selected !== baseline.expectedAssigneeIds[0]);
   async function save() {
@@ -36,13 +36,10 @@ function AssignmentDialog({state, project, requirementId, route, onPersonnelActi
   }
   return <Modal title={context.label} onClose={()=>{if(!busy)onClose();}} width={540}
     footer={<><UiButton className="btn" disabled={busy} onClick={onClose}>取消</UiButton><UiButton className="btn btn-primary" disabled={!valid} onClick={save}>保存确认分工</UiButton></>}>
-    <p>条款 {context.row?.clause} · {context.row?.title}</p>
-    <p className="muted">当前确认责任人：{context.actorIds.map(id => personName(state,id)).join('、') || '未指派'}</p>
     <div className="field"><span>新确认人 *</span>
       <PersonPicker disabled={busy||loading} label="新确认人" people={people} value={selected} onChange={setSelected}
         resolveName={id => personName(state,id)} emptyLabel="暂无具备确认资格和项目授权的人员"/>
     </div>
-    <label className="field"><span>分工原因 *</span><UiTextArea disabled={busy} className="input" aria-label="指派或改派原因" value={reason} onChange={event => setReason(event.target.value)} placeholder="说明本次确认人调整的原因"/></label>
     {context.row?.status === '已确认'
       ? <p className="muted">保存后调整后续确认人，保留本版确认及原确认人记录。</p>
       : context.review && context.review.status !== '已关闭' && <p className="muted">评审继续由原评审人处理，评审完成后交由新确认人确认本条。</p>}

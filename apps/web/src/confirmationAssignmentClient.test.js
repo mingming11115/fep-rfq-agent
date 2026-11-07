@@ -4,10 +4,10 @@ import {assignConfirmation,confirmationCandidates} from './confirmationAssignmen
 import {getConfirmationActorIds} from './confirmationPolicy.js';
 import {mapDatabaseRequirement} from './databaseWorkspace.js';
 
-test('new backend clauses have no implicit confirmer and explicit assignments survive mapping',()=>{
- const state={dataSource:'mysql',projects:[{id:'P',ownerId:'OWNER'}]};
+test('new backend clauses use the project default and explicit assignments survive mapping',()=>{
+ const state={dataSource:'mysql',projects:[{id:'P',ownerId:'OWNER',defaultConfirmationAssigneeId:'CREATOR'}]};
  const row=mapDatabaseRequirement({id:'R',documentId:'D',version:0},[],'OWNER');
- assert.deepEqual(getConfirmationActorIds(state,'P',row),[]);
+ assert.deepEqual(getConfirmationActorIds(state,'P',row),['CREATOR']);
  const loaded=mapDatabaseRequirement({...row,confirmationAssigneeId:'TECH'},[],'OWNER');
  assert.deepEqual(getConfirmationActorIds(state,'P',loaded),['TECH']);
 });

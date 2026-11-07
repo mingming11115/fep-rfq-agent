@@ -12,7 +12,7 @@ const modernPermissions={
 };
 function modernCan(role,action,context){
  if(!modernPermissions[action]?.includes(role))return false;
- if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','analysis:view','audit:view','system:manage','bu:manage'].includes(action))return false;
+ if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action))return false;
  // Without context this is a UI capability query. Mutation boundaries always pass state.
  if(!context)return true;
  const {state,actorId=state?.actorId,projectId,requirementId,buId=state?.projects?.find(p=>p.id===projectId)?.buId}=context;
@@ -34,7 +34,7 @@ function modernCan(role,action,context){
   if(project?.archived||row?.pendingReviewProposal)return false;
   if(responseReview&&!hasAssignedConfirmer(row))return false;
   if((state.reviewsByProject?.[projectId]||[]).some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status)))return false;
-  if(action==='response:confirm'||role==='技术')return (row?.confirmationAssigneeId||project?.ownerId)===actorId&&(role==='SR'||c.member.canConfirm);
+  if(action==='response:confirm'||role==='技术')return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
  }
 
  if(action==='response:edit'&&requirementId){

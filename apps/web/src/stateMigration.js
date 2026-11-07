@@ -120,7 +120,7 @@ function migrateResponseReviews(state){
   for(const row of state.requirementsByProject[project.id]||[]){
    const ambiguousLegacyAudit=(state.audit||[]).some(e=>e.action==='分派条款确认人'&&!e.projectId&&!e.requirementId&&(e.buId===project.buId||e.object===project.buId)&&e.after===row.confirmationAssigneeId);
    const explicit=ambiguousLegacyAudit||row.confirmationAssignmentSource==='explicit'||Object.values(state.tasksById||{}).some(t=>t.projectId===project.id&&t.objectType==='requirement'&&t.objectId===row.id&&(t.history||[]).some(h=>h.action==='transfer'&&h.to===row.confirmationAssigneeId))||(state.audit||[]).some(e=>e.action==='分派条款确认人'&&e.projectId===project.id&&e.requirementId===row.id&&e.after===row.confirmationAssigneeId);
-   if(ambiguousLegacyAudit&&row.confirmationAssignmentSource!=='explicit'){state.confirmationMigrationNotesByProject ||= {};state.confirmationMigrationNotesByProject[project.id] ||= {};state.confirmationMigrationNotesByProject[project.id][row.id]='旧分派记录未包含具体条款，已保留现有确认人；可选择默认SR恢复默认分工。';}
+   if(ambiguousLegacyAudit&&row.confirmationAssignmentSource!=='explicit'){state.confirmationMigrationNotesByProject ||= {};state.confirmationMigrationNotesByProject[project.id] ||= {};state.confirmationMigrationNotesByProject[project.id][row.id]='旧分派记录未包含具体条款，已保留现有确认人；可清除当前指派，恢复默认分工。';}
    if(row.confirmationAssigneeId==='demo-technical'&&!explicit){
     if(row.status==='已确认'){state.implicitConfirmationIdsByProject[project.id] ||= [];if(!state.implicitConfirmationIdsByProject[project.id].includes(row.id))state.implicitConfirmationIdsByProject[project.id].push(row.id);}
     else delete row.confirmationAssigneeId;

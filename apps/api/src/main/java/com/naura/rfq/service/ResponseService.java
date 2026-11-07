@@ -23,6 +23,7 @@ public class ResponseService {
     private final BuMemberProfileMapper profiles;
     private final AccessGuard guard;
     private final AuditService audit;
+    private final ConfirmationAssignmentService confirmationAssignments;
     private JsonNode decode(String value){try{return json.readTree(value);}catch(Exception e){throw new IllegalStateException("业务记录格式异常",e);}}
     private List<JsonNode> rows(String sql,Object... args){return jdbc.queryForList(sql,String.class,args).stream().map(this::decode).toList();}
 
@@ -41,11 +42,13 @@ public class ResponseService {
         boolean tech=user.roles().stream().anyMatch(r->r.buId().equals(project.getBuId())&&Set.of("TECH","APPROVER").contains(r.role()));
         var profile=profiles.findByBuIdAndUserId(project.getBuId(),user.id());
         if(user.systemAdmin()||(!sr&&!tech)||profile!=null&&!profile.isEnabled()||!sr&&(profile==null||!profile.isCanConfirm()))throw new BusinessException(403,"当前业务角色无应答操作资格");
-        String assignee=row.path("confirmationAssigneeId").asText("");
-        if(assignee.isBlank())assignee=project.getOwnerId();
+        String assignedConfirmer=requirement.getConfirmationAssigneeId();
+        String assignee=assignedConfirmer==null?row.path("confirmationAssigneeId").asText(""):assignedConfirmer;
+        if(assignee.isBlank())assignee=confirmationAssignments.defaultAssigneeId(project);
         if((confirm||!sr)&&!user.id().equals(assignee))throw new BusinessException(403,"当前账号不是本条确认人");
         var projectReviews=rows("select payload from response_review where project_id=? for update",project.getId());
-        if(!row.path("confirmationAssignmentSource").asText().equals("explicit")&&projectReviews.stream().anyMatch(r->id.equals(r.path("requirementId").asText())&&!r.path("kind").asText().equals("clarification")&&!r.path("status").asText().equals("已取消")&&r.path("reviewerIds").isArray()))throw new BusinessException(409,"本条由评审人共同确认，评审确认流程尚未接通");
+        boolean explicitlyAssigned=assignedConfirmer!=null||row.path("confirmationAssignmentSource").asText().equals("explicit");
+        if(!explicitlyAssigned&&projectReviews.stream().anyMatch(r->id.equals(r.path("requirementId").asText())&&!r.path("kind").asText().equals("clarification")&&!r.path("status").asText().equals("已取消")&&r.path("reviewerIds").isArray()))throw new BusinessException(409,"本条由评审人共同确认，评审确认流程尚未接通");
         var reviews=projectReviews.stream()
             .filter(r->id.equals(r.path("requirementId").asText())&&!Set.of("已关闭","已取消").contains(r.path("status").asText())).toList();
         if(!reviews.isEmpty())throw new BusinessException(409,"本条存在未关闭评审或澄清，请先完成处理");

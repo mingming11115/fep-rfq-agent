@@ -15,6 +15,7 @@ export function buildSourceResponseAnnotation(row = {}, response = row) {
   const value = String(current.conclusion || '').trim();
   const conclusion = Object.hasOwn(conclusionLabels, value) ? value : '待确认';
   if (conclusion === 'Comply') return { kind: 'comply', label: 'Comply', conclusion, wording: '' };
+  if (conclusion === '待确认') return { kind: 'pending', label: '待确认', conclusion, wording: '' };
   return {
     kind: 'recommendation', label: '推荐话术', conclusion,
     wording: generateRecommendedWording({ ...current, conclusion }),
@@ -23,7 +24,7 @@ export function buildSourceResponseAnnotation(row = {}, response = row) {
 
 export function generateRecommendedWording(row = {}) {
   const conclusion = String(row.conclusion || '').trim();
-  if (!['有条件 Comply', '不满足', '不适用', '待确认'].includes(conclusion)) return '';
+  if (!['有条件 Comply', '不满足', '不适用'].includes(conclusion)) return '';
   const text = (value) => String(value || '').trim().replace(/[。；;]+$/, '');
   const subject = `针对${row.clause ? `条款 ${row.clause} ` : ''}${row.title ? `“${row.title}”` : '本项要求'}`;
   const conditions = text(row.conditions), reason = text(row.reason);
@@ -44,11 +45,6 @@ export function generateRecommendedWording(row = {}) {
     reason ? `不适用依据：${reason}。` : '具体不适用范围及依据尚待确认。',
     conditions && `适用范围说明：${conditions}。`,
     '如项目范围调整，需重新核对本项要求。',
-  ].filter(Boolean).join('\n');
-  return [
-    `${subject}，本项尚待核实，暂不作出满足性承诺。`,
-    ...context,
-    '待相关信息与依据确认后，再提供正式答复。',
   ].filter(Boolean).join('\n');
 }
 

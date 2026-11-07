@@ -22,6 +22,7 @@ test('operation records show only project history and remain read-only',async()=
   const render=async()=>act(async()=>{root.render(React.createElement(ResponsePage,props));await settle();});
   const button=text=>[...node.querySelectorAll('button,[role="tab"]')].find(button=>button.textContent===text);
   const disclosure=text=>[...node.querySelectorAll('.detail-activity details')].find(group=>group.querySelector('summary')?.textContent.includes(text));
+  const originalFetch=globalThis.fetch;
   try{
     await render();await act(async()=>{button('操作记录').click();await settle();});
     const history=()=>disclosure('操作记录');
@@ -31,6 +32,7 @@ test('operation records show only project history and remain read-only',async()=
     assert.equal(disclosure('项目成员'),undefined);assert.equal(disclosure('全部批注'),undefined);
     assert.equal(node.querySelectorAll('.detail-activity-group').length,1);
     assert.equal(history().open,true,'operation records are visible on entry');
+    assert.equal(history().querySelectorAll('ol > li').length,1,'records form a chronological list');
     assert.ok(history().textContent.includes('Project operation'));
     assert.ok(history().textContent.includes('Today · Actor'));
     assert.ok(history().textContent.includes('Keep history'));
@@ -46,5 +48,24 @@ test('operation records show only project history and remain read-only',async()=
     assert.equal(history().open,true,'a different project starts expanded');
     assert.ok(history().textContent.includes('本项目暂无操作记录。'));
     assert.equal(disclosure('项目成员'),undefined);assert.equal(disclosure('全部批注'),undefined);
-  }finally{await act(async()=>root.unmount());await window.happyDOM.cancelAsync();}
+
+    const requests=[];
+    const assignment={id:'assigned',action:'分派条款确认人',objectType:'requirement',objectId:'R1',actorId:'sr',createdAt:'2026-11-07T03:52:27Z',result:'成功',detail:'null -> mysql-demo-technical：指派确认人'};
+    let databaseEvents=[assignment];
+    globalThis.fetch=async (url,options)=>{
+      requests.push([url,options.method||'GET']);
+      return {ok:true,json:async()=>({code:0,data:databaseEvents})};
+    };
+    props={...props,appState:{dataSource:'mysql',accountsById:{sr:{name:'张明'},'mysql-demo-technical':{name:'李工'},'mysql-demo-technical-2':{name:'王工'}}}};
+    await render();
+    const firstEntry=history().querySelector('ol > li');
+    assert.equal(firstEntry.querySelector('time').dateTime,assignment.createdAt);
+    assert.match(firstEntry.textContent,/分派条款确认人.*成功.*张明.*默认确认人 → 李工/);
+    assert.match(firstEntry.querySelector('p').textContent,/原因.*指派确认人/);
+    await act(async()=>{button('应答').click();await settle();});
+    databaseEvents=[{...assignment,id:'reassigned',detail:'mysql-demo-technical -> mysql-demo-technical-2：改派确认人：技术分工'},assignment];
+    await act(async()=>{button('操作记录').click();await settle();});
+    assert.match(history().textContent,/李工 → 王工.*改派确认人：技术分工.*默认确认人 → 李工/);
+    assert.deepEqual(requests,[['/api/rfq/projects/Q/activity','GET'],['/api/rfq/projects/Q/activity','GET']]);
+  }finally{globalThis.fetch=originalFetch;await act(async()=>root.unmount());await window.happyDOM.cancelAsync();}
 });

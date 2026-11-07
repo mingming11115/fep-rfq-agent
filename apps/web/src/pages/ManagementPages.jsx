@@ -73,7 +73,7 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
     onProjectChange?.({ approvalConfig: approvalDraft, reason }); setReason(''); setError(''); toast?.(incomplete ? '已保存配置草稿，缺项仍会阻止对应确认和审批' : '责任与审批配置已保存');
   };
   const approvalField = (key, label, options = roles) => <Field key={key} label={label}><Select disabled={!canEdit} label={label} value={approvalDraft[key]} onChange={(value) => setApprovalDraft({ ...approvalDraft, [key]: value })} options={[{ value: '', label: '待配置（保存为草稿）' }, ...options]}/></Field>;
-  return <div className="management-page">{embedded?<div className="project-info-permission"><StatusBadge status={canEdit ? '项目管理权限' : '只读查看'}/></div>:<Heading title="项目设置" description="明确项目范围、确认责任与审批关系，让每一次变更可追溯。" actions={<StatusBadge status={canEdit ? '项目管理权限' : '只读查看'}/>}/>}
+  return <div className="management-page">{embedded?(canEdit&&<div className="project-info-permission"><StatusBadge status="项目管理权限"/></div>):<Heading title="项目设置" description="明确项目范围、确认责任与审批关系，让每一次变更可追溯。" actions={canEdit?<StatusBadge status="项目管理权限"/>:null}/>}
     <section className="panel"><Tabs value={tab} onChange={(value) => { setTab(value); setError(''); }} items={[["basic", "基本信息"], ["personnel", "人员与最终评审"]]}/>
       <div className="panel-body">
         {tab==='personnel'&&<ProjectPersonnelPanel appState={appState} project={project} requirements={requirements} actorId={actorId} onPersonnelAction={onPersonnelAction}/>}

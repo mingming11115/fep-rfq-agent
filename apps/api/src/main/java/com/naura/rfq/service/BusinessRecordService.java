@@ -19,14 +19,17 @@ public class BusinessRecordService {
     private final ObjectMapper json;
     private final ProjectMapper projects;
     private final AccessGuard guard;
+    private final ConfirmationAssignmentService confirmationAssignments;
     private JsonNode decode(String payload){
         try{return json.readTree(payload);}catch(Exception e){throw new IllegalStateException("数据库业务记录格式异常",e);}
     }
     private List<JsonNode> rows(String sql,Object... args){return jdbc.query(sql,(rs,n)->decode(rs.getString("payload")),args);}
     public Map<String,Object> workflow(CurrentUser user,String id){
-        guard.requireProject(user,projects.findById(id).orElse(null));
+        var project=projects.findById(id).orElse(null);
+        guard.requireProject(user,project);
         var config=rows("select payload from project_response_config where project_id=?",id);
         return Map.of("metadata",config.isEmpty()?json.createObjectNode():config.get(0),
+            "defaultConfirmationAssigneeId",confirmationAssignments.defaultAssigneeId(project),
             "responses",rows("select payload from requirement_response where project_id=? order by requirement_id",id),
             "reviews",rows("select payload from response_review where project_id=? order by id",id),
             "snapshots",rows("select payload from response_snapshot where project_id=? order by id",id));

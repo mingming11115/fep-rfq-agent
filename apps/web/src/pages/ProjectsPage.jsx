@@ -31,7 +31,8 @@ export default function ProjectsPage({appState,route,navigate,onCreateProject,on
   resultsRef.current?.closest('.workspace-page')?.querySelector('input[name="project-view"]:checked')?.focus({preventScroll:true});
   viewFocusRef.current=false;
  },[f.view]);
- useContentTransition(resultsRef,`${f.tab}:${f.view}`,{kind:'rfq-tab',position:['all','initiated','participated'].indexOf(f.tab)});
+ useContentTransition(resultsRef,f.tab,{kind:'rfq-tab',position:['all','initiated','participated'].indexOf(f.tab)});
+ useContentTransition(resultsRef,f.view,{kind:'view'});
  const viewControl=<Segmented key="project-view" name="project-view" aria-label="项目视图" value={f.view} onChange={value=>{viewFocusRef.current=true;change('view',value);}} options={[{value:'list',icon:<List size={15}/>,label:'列表'},{value:'cards',icon:<LayoutGrid size={15}/>,label:'卡片'}]}/>;
  return <div className="workspace-page"><PageHeading title={<>{isBuAdmin?'BU RFQ':'我的 RFQ'}</>} actions={<>{canManage&&lastDeleted&&<UiButton className="text-link" onClick={()=>onRestoreProject(lastDeleted.project.id)}>撤销删除</UiButton>}{canManage&&<UiButton className="btn btn-primary" onClick={()=>{setModal(true);}}><Plus size={16}/>新建 RFQ</UiButton>}</>} /><section className="panel"><BusinessTabs className="tabs workspace-tabs">{(isBuAdmin?[['all','全部']]:[['all','全部'],['initiated','我发起的'],['participated','我参与的']]).map(([key,label])=><button key={key} className={(isBuAdmin||f.tab===key)?'active':''} onClick={()=>change('tab',key)}>{label}</button>)}</BusinessTabs><QueryFilter formRef={queryFormRef} className="rfq-query-form" layout="vertical" defaultCollapsed={false}
  initialValues={initialQuery.current} onFinish={async values=>{change('query',values.query||'');return true;}}

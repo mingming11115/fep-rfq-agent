@@ -7,11 +7,17 @@ import com.naura.rfq.security.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.*;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @Transactional
 class ConfirmationAssignmentIntegrationTest {
     @Autowired ConfirmationAssignmentService service;
@@ -22,10 +28,13 @@ class ConfirmationAssignmentIntegrationTest {
     @Autowired UserBuRoleMapper roles;
     @Autowired ProjectMemberMapper members;
     @Autowired org.apache.ibatis.session.SqlSession sql;
+    @Autowired AuditService audit;
+    @Autowired JwtService jwt;
+    @Autowired MockMvc mvc;
 
-    @Test void databaseRoundtripReassignmentAndConflict(){
-        String prefix="ASSIGN-"+UUID.randomUUID().toString().substring(0,8),bu=prefix+"BU",owner=prefix+"SR",target=prefix+"TARGET";
-        for(String id:List.of(owner,target)){
+    @Test void databaseRoundtripReassignmentAndConflict() throws Exception {
+        String prefix="ASSIGN-"+UUID.randomUUID().toString().substring(0,8),bu=prefix+"BU",owner=prefix+"SR",target=prefix+"TARGET",outsider=prefix+"OUT";
+        for(String id:List.of(owner,target,outsider)){
             AppUser user=new AppUser();user.setId(id);user.setUsername(id);user.setDisplayName(id);user.setPasswordHash("test-only");users.insert(user);
             UserBuRole role=new UserBuRole();role.setUserId(id);role.setBuId(bu);role.setRole("SR");roles.insert(role);
         }
@@ -45,5 +54,16 @@ class ConfirmationAssignmentIntegrationTest {
         service.assign(actor,row.getId(),new AssignConfirmationRequest(owner,saved.version(),"改派负责人"));
         sql.clearCache();
         assertThat(requirements.findById(row.getId()).orElseThrow().getConfirmationAssigneeId()).isEqualTo(owner);
+
+        audit.successInBu(owner,bu,"修改项目信息","project",prefix+"OTHER","其他项目的操作");
+        String activityUrl="/api/rfq/projects/"+prefix+"/activity";
+        mvc.perform(get(activityUrl).header("Authorization","Bearer "+jwt.issue(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].detail",containsInAnyOrder(
+                        "null -> "+target+"：首次指派",target+" -> "+owner+"：改派负责人")))
+                .andExpect(jsonPath("$.data[0].action").value("分派条款确认人"))
+                .andExpect(jsonPath("$.data[0].actorId").value(owner));
+        mvc.perform(get(activityUrl).header("Authorization","Bearer "+jwt.issue(outsider)))
+                .andExpect(status().isForbidden());
     }
 }

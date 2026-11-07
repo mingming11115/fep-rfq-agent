@@ -43,7 +43,10 @@ test('metric changes finish at the newest value and respect reduced motion',asyn
  const paint=value=>act(async()=>root.render(React.createElement(AnimatedNumber,{value})));
  const tick=now=>act(async()=>{const active=[...frames.values()];frames.clear();for(const callback of active)callback(now);});
  try{
-  await paint(100);await paint(30);assert.equal(host.firstChild.getAttribute('aria-label'),'30');
+  await paint(100);assert.equal(host.textContent,'0');
+  await tick(0);await tick(130);assert.ok(Number(host.textContent)>0&&Number(host.textContent)<100);
+  await tick(300);assert.equal(host.textContent,'100');
+  await paint(30);assert.equal(host.firstChild.getAttribute('aria-label'),'30');
   await tick(0);await tick(130);assert.ok(Number(host.textContent)>30&&Number(host.textContent)<100);
   await paint(10);await tick(200);await tick(600);assert.equal(host.textContent,'10');
   reduced=true;await paint(0);assert.equal(host.textContent,'0');assert.equal(frames.size,0);

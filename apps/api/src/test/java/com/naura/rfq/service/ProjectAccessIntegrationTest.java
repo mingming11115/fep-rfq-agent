@@ -87,6 +87,15 @@ class ProjectAccessIntegrationTest extends AcceptanceSupport {
         mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId",inactiveId)),sr))
                 .andExpect(status().isBadRequest());
     }
+    @Test void projectCreatorIsTheDefaultConfirmerWhenTheOwnerIsDifferent() throws Exception {
+        String creator=token("sr01");
+        var owner=newUser(token("admin"),"BU-FEP","SR");
+        var project=ok(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","确认人验收",
+                "ownerId",owner.path("id").asText())),creator));
+        String id=project.path("id").asText();
+        var workflow=ok(auth(get("/api/rfq/projects/"+id+"/workflow-records"),creator));
+        assertThat(workflow.path("defaultConfirmationAssigneeId").asText()).isEqualTo("demo-sales");
+    }
     @Test void suspendedMemberImmediatelyLosesAnExistingProjectGrant() throws Exception {
         String admin=token("admin"), bu=token("bu01"), project=newProject(token("sr01"),"P"+unique());
         var user=newUser(admin,"BU-FEP","TECH"); String id=user.path("id").asText(), technical=login(user.path("username").asText(),"TestOnly@2026");
