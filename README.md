@@ -73,6 +73,6 @@ Docker 从 `apps/api` 执行 `docker compose up --build -d`，详见后端说明
 
 ## 文档与清理
 
-[文档索引](docs/README.md) · [目录迁移说明](docs/development/project-layout.md) · [Windows 编辑器启动](docs/development/windows-craft-startup.md)
+[文档索引](docs/README.md) · [Windows 编辑器启动](docs/development/windows-craft-startup.md)
 
 `apps/web/dist`、`apps/web/public/craft-editors`、`apps/api/target` 可以重新生成；运行时不删除 `apps/api/data`。`node_modules` 可通过对应模块的锁文件重新安装。日志、IDE 配置、密钥和运行数据不进入 Git。

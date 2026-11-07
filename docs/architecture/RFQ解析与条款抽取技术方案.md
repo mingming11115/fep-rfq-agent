@@ -390,7 +390,7 @@ context_block_ids 仅提供标题、条件、表头、脚注或关联图片上�
 本方案承接以下项目规则：
 
 - [FEP 销售 RFQ 提效 Agent PRD v0.2](../product/FEP销售RFQ提效Agent_PRD_v0.2.md)：自动解析要求条目、来源定位、异常处理和内网部署约束。
-- [FEP 销售 RFQ 提效 Agent 交互设计 v0.3](../product/FEP销售RFQ提效Agent_交互设计_v0.3.md)：解析成功自动同步、原始章节联动和部分异常处置。
+- [FEP 销售 RFQ 提效 Agent 交互设计](../product/FEP销售RFQ提效Agent_交互设计.md#7-解析和-ai-匹配)：解析成功自动同步、原始章节联动和部分异常处置。
 - [原型说明](../../apps/web/README.md)：现有模拟解析及真实功能边界。
 
 组件实现参考：
