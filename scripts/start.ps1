@@ -28,6 +28,7 @@ if(!$env:RFQ_DB_URL -and !(Test-DemoPort 3306)){
 }
 Write-Output 'Using configured MySQL (default 127.0.0.1:3306 / rfq).'
 if($DatabaseOnly){exit 0}
+if(!$env:RFQ_DEMO_DATA_ENABLED){$env:RFQ_DEMO_DATA_ENABLED='true'}
 $taskNpm=(Get-Command npm.cmd -ErrorAction Stop).Source
 function Start-DemoNpm([string]$Script,[string]$Label,[int]$Port){
  if(Test-DemoPort $Port){Write-Output "$Label already listening on $Port; verify it is the intended entry.";return}

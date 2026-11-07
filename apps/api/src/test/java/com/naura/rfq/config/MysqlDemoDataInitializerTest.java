@@ -30,6 +30,8 @@ class MysqlDemoDataInitializerTest {
         verify(jdbc, times(8)).update(startsWith("insert into project ("), any(Object[].class));
         verify(jdbc, times(33)).update(startsWith("insert into requirement ("), any(Object[].class));
         verify(passwords, times(5)).encode("Rfq@2026");
+        verify(jdbc).update(startsWith("insert into app_user ("), eq("mysql-demo-sales"),
+            eq("mysql_sr"), eq("encoded-password"), eq("张明"));
         clearInvocations(jdbc, storage, passwords);
         initializer.run();
         verify(jdbc, never()).update(startsWith("insert into project ("), any(Object[].class));

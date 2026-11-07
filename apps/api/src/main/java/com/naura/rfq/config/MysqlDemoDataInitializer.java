@@ -39,10 +39,10 @@ public class MysqlDemoDataInitializer implements CommandLineRunner {
         jdbc.update("insert into rfq_demo_seed (id) values (?) on duplicate key update id = id",DATASET);
         if(jdbc.queryForList("select initialized_at from rfq_demo_seed where id = ? for update",Timestamp.class,DATASET).get(0)!=null)return;
         if(!exists("business_unit","id",BU))jdbc.update("insert into business_unit (id,code,name) values (?,?,?)",BU,"MYSQL-DEMO","MySQL 数据演示事业部");
-        account("sales","mysql_sr","数据库销售","SR");
-        account("technical","mysql_tech","数据库技术","TECH");
-        account("approver","mysql_appr","数据库评审人","APPROVER");
-        account("bu-admin","mysql_bu","数据库 BU 管理员","BU_ADMIN");
+        account("sales","mysql_sr","张明","SR");
+        account("technical","mysql_tech","李工","TECH");
+        account("approver","mysql_appr","王强","APPROVER");
+        account("bu-admin","mysql_bu","陈静","BU_ADMIN");
         account("observer","mysql_view","未授权对照账号","TECH");
         JsonNode dataset;
         try(var input=new ClassPathResource("demo/mysql-demo.json").getInputStream()){dataset=json.readTree(input);}
