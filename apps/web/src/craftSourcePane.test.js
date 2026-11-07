@@ -85,6 +85,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     assert.match(header.querySelector('[aria-label="文件保存状态"]').textContent,/文件已保存/);
     assert.ok(!container.querySelector('[aria-label="查看条款摘录"]'));
     assert.match(container.querySelector('[aria-label="原文件旁的应答标注"]')?.textContent||'',/Comply/);
+    assert.doesNotMatch(container.querySelector('[data-response-note="R"]').textContent,/Original source/,'the annotation panel does not repeat the source text');
     const {calls,emit,snapshot,setNotes,setLocation,holdLocate,releaseLocate}=await connectNative(frame,ref);
     const nativeNote={id:1,nativeKey:'word-comment:1',author:'Alex',text:'New native discussion',quote:'Original source',clauseId:'R',color:0,ranges:[],replies:[],resolved:false};
     await act(async()=>{setNotes([nativeNote]);await settle();});

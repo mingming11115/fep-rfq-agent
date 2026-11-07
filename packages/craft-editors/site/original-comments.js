@@ -13,8 +13,6 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
   const clip=root.querySelector('[data-native-clip]');
   const margin=root.querySelector('[data-margin]'), svg=root.querySelector('[data-connectors]');
   const highlights=root.querySelector('[data-native-highlights]'), backgrounds=root.querySelector('[data-native-margins]');
-  const showInlineComment = summaryOnly && documentFormat === 'DOCX';
-  highlights.style.mixBlendMode = showInlineComment ? 'normal' : '';
   const floating=root.querySelector('[data-floating]');
   for(const owner of [root,tools])for(const placeholder of owner.querySelectorAll('[data-icon]'))placeholder.outerHTML=icons[placeholder.dataset.icon]||'';
   tools.querySelector('[data-format]').hidden=!supportsFormatting;
@@ -111,39 +109,8 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
   }
   function grow(input){input.style.height='auto';input.style.height=Math.max(22,input.scrollHeight)+'px';}
   function schedule(){if(disposed)return;if(frameId)cancelAnimationFrame(frameId);frameId=requestAnimationFrame(()=>{frameId=0;layout();});}
-  function renderHighlights(view) {
-    highlights.setAttribute('viewBox', `0 0 ${view.w} ${view.h}`);
-    const notes = snapshot.notes.filter(note => note.highlight !== false);
-    if (showInlineComment) notes.sort((a, b) => Number(a.id === active) - Number(b.id === active));
-    highlights.innerHTML = notes.map(note => {
-      const {ink, fill} = palette[note.color % palette.length];
-      const ranges = note.ranges.filter(range => overlap(range, view));
-      const marks = ranges.map(range => {
-        const {w, h} = range;
-        const x = range.x - view.x;
-        const y = range.y - view.y;
-        return `<rect x="${x}" y="${y}" width="${Math.max(2, w)}" height="${h}" fill="${fill}"/><path d="M ${x} ${y} v ${h} M ${x + w} ${y} v ${h}" stroke="${ink}" stroke-width="${note.id === active ? 2 : 1}"/>`;
-      }).join('');
-      if (!showInlineComment || !note.text?.trim()) return marks;
-
-      // Keep the label inside the widest visible part of the anchor.
-      let label;
-      for (const range of ranges) {
-        const x = Math.max(range.x, view.x);
-        const w = Math.min(range.x + range.w, view.x + view.w) - x;
-        if (w > (label?.w ?? 2)) label = {x, y:range.y, w, h:range.h};
-      }
-      if (!label) return marks;
-      const {x, y, w, h} = label;
-      return marks + `<foreignObject x="${x - view.x}" y="${y - view.y}" width="${w}" height="${h}"><div xmlns="http://www.w3.org/1999/xhtml" class="wc-inline-comment" style="font-size:${h * 0.75}px;line-height:${h}px">${esc(note.text)}</div></foreignObject>`;
-    }).join('');
-  }
   function layout(){
-    if (!snapshot?.clip) {
-      highlights.replaceChildren();
-      return;
-    }
-    if (!visible) return;
+    if(!snapshot?.clip||!visible)return;
     const view=snapshot.clip;
     Object.assign(clip.style,{left:view.x+'px',top:view.y+'px',width:view.w+'px',height:view.h+'px'});
     const pages=new Map(snapshot.pages.map(p=>[p.page,p]));
@@ -186,7 +153,8 @@ export function createOriginalComments({frame, onStatus, onDirty, namespace='wor
       return `<path data-link="${n.id}" d="M ${x} ${y} H ${elbow} L ${edge-view.x} ${target}" fill="none" stroke="${palette[n.color%3].ink}" stroke-width="1.15"${n.id===active?'':' stroke-dasharray="4 4"'}/>`;
     });
     svg.setAttribute('viewBox',`0 0 ${view.w} ${view.h}`);svg.innerHTML=paths.join('');
-    renderHighlights(view);
+    highlights.setAttribute('viewBox',`0 0 ${view.w} ${view.h}`);
+    highlights.innerHTML=snapshot.notes.filter(n=>n.highlight!==false).flatMap(n=>n.ranges.filter(r=>overlap(r,view)).map(r=>`<rect x="${r.x-view.x}" y="${r.y-view.y}" width="${Math.max(2,r.w)}" height="${r.h}" fill="${palette[n.color%3].fill}"/><path d="M ${r.x-view.x} ${r.y-view.y} v ${r.h} M ${r.x+r.w-view.x} ${r.y-view.y} v ${r.h}" stroke="${palette[n.color%3].ink}" stroke-width="${n.id===active?2:1}"/>`)).join('');
     const selection=snapshot.selection;floating.hidden=!selection||!snapshot.editable;
     if(selection)Object.assign(floating.style,{left:Math.max(5,Math.min(selection.x+selection.w-view.x-110,view.w-135))+'px',top:Math.max(2,selection.y-view.y-35)+'px'});
   }

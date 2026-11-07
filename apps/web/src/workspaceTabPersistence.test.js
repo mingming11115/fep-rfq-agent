@@ -39,7 +39,7 @@ test('layout keeps the workspace tab node mounted when entering and leaving deta
  }finally{await h.close();}
 });
 
-test('MySQL SR can download the valid approved snapshot as a formal CSV',async t=>{
+test('MySQL SR previews approved clause results and downloads the annotated original',async t=>{
  const h=await harness('mysql-export');
  t.after(()=>h.close());
  const projectId='P',buId='BU',actorId='sr';
@@ -54,7 +54,7 @@ test('MySQL SR can download the valid approved snapshot as a formal CSV',async t
  const project=appState.projects[0],requirements=appState.requirementsByProject.P;
  const mapping=Object.fromEntries(['clause','original','conclusion','draft','conditions','status'].map(field=>[field,field]));
  const approvalScope={...currentProjectScope(appState,projectId),format:'mysql-business-v1',template:{id:'customer',title:'客户条款对照清单',version:'V1.3'},mapping,attachments:[]};
- const snapshot={id:'S',projectId,status:'已批准',rows:structuredClone(requirements),approvalScope,approvalFingerprint:snapshotFingerprint(approvalScope),
+ const snapshot={id:'S',projectId,status:'已批准',rows:structuredClone(requirements),mapping,approvalScope,approvalFingerprint:snapshotFingerprint(approvalScope),
   finalReview:{policy:'sr-and-technical',technicalMode:'all',reviewers,decisions:{sr:{actorId,result:'approved'},technicalByActorId:{tech:{actorId:'tech',result:'approved'}}}}};
  const snapshots=appState.snapshotsByProject.P=[snapshot];
  const permissionContext={state:appState,actorId,projectId,buId};
@@ -68,18 +68,42 @@ test('MySQL SR can download the valid approved snapshot as a formal CSV',async t
  await act(async()=>button('导出文档').click());
  assert.equal(destination,'export');
 
- const createURL=URL.createObjectURL,revokeURL=URL.revokeObjectURL,anchor=h.host.ownerDocument.defaultView.HTMLAnchorElement.prototype,click=anchor.click;
- let csv,filename;
- URL.createObjectURL=blob=>{csv=blob;return 'blob:http://localhost/export';};
+ const window=h.host.ownerDocument.defaultView;
+ const createURL=URL.createObjectURL,revokeURL=URL.revokeObjectURL,anchor=window.HTMLAnchorElement.prototype,click=anchor.click;
+ const previousFetch=globalThis.fetch,previousStorage=globalThis.localStorage;
+ globalThis.localStorage=window.localStorage;
+ localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test-token',user:{id:actorId}}));
+ const downloads=[];
+ globalThis.fetch=async (url,options)=>{
+  downloads.push([url,options.headers.Authorization]);
+  return new Response('annotated original',{headers:{'Content-Disposition':"attachment; filename*=UTF-8''%E5%AE%A2%E6%88%B7-%E6%AD%A3%E5%BC%8F%E5%BA%94%E7%AD%94.docx"}});
+ };
+ let file,filename;
+ URL.createObjectURL=blob=>{file=blob;return 'blob:http://localhost/export';};
  URL.revokeObjectURL=()=>{};
  anchor.click=function(){filename=this.download;};
- t.after(()=>{URL.createObjectURL=createURL;URL.revokeObjectURL=revokeURL;anchor.click=click;});
- await h.render(React.createElement(h.ExportPage,{project,requirements,snapshots,appState,permissionContext,actorRole:'SR',actorId,route:{page:destination},toast:()=>{}}));
- assert.equal(button('发起最终评审').disabled,true);
- await act(async()=>button('正式导出').click());
- await act(async()=>button('生成正式 CSV 文件').click());
- assert.match(filename,/正式应答_S\.csv$/);
- assert.match(await csv.text(),/批准的应答/);
+ t.after(()=>{URL.createObjectURL=createURL;URL.revokeObjectURL=revokeURL;anchor.click=click;globalThis.fetch=previousFetch;globalThis.localStorage=previousStorage;});
+ sessionStorage.setItem('rfq.export.settings.P',JSON.stringify({tab:'模板与映射',mapping:{draft:'evidence'}}));
+ const props={project,requirements,snapshots,appState,permissionContext,actorRole:'SR',actorId,route:{page:destination},toast:()=>{}};
+ await h.render(React.createElement(h.ExportPage,props));
+ assert.doesNotMatch(h.host.textContent,/模板与映射|内部草稿|提交与定稿检查/);
+ const preview=h.host.querySelector('tbody');
+ assert.match(preview.textContent,/客户要求.*Comply.*批准的应答/);
+ await act(async()=>button('导出文档',h.host).click());
+ assert.deepEqual(downloads,[['/api/rfq/projects/P/snapshots/S/annotated-export','Bearer test-token']]);
+ assert.equal(filename,'客户-正式应答.docx');
+ assert.equal(await file.text(),'annotated original');
+
+ await h.render(React.createElement(h.ExportPage,{...props,route:{page:destination,snapshotId:snapshot.id}}));
+ assert.match(document.body.textContent,/本轮逐人最终评审/);
+ assert.doesNotMatch(document.body.textContent,/模板|映射/);
+
+ const revised=requirements.map(row=>({...row,draft:'修订中的应答'}));
+ const revisedState={...appState,requirementsByProject:{P:revised}};
+ await h.render(React.createElement(h.ExportPage,{...props,requirements:revised,appState:revisedState}));
+ assert.match(h.host.querySelector('tbody').textContent,/修订中的应答/);
+ assert.doesNotMatch(h.host.textContent,/模板|映射/);
+ assert.equal(button('导出文档',h.host).disabled,true);
 });
 
 test('project workspace omits stage navigation and retains the header export action',async()=>{
@@ -93,8 +117,10 @@ test('project workspace omits stage navigation and retains the header export act
    assert.ok(!h.host.querySelector('.rfq-project-stage-tabs'),'stage navigation must be removed');
    assert.ok(!h.host.querySelector('[role="tab"]'));
    assert.ok(h.host.textContent.includes('项目内容'));
-   assert.equal(exportButton().getAttribute('aria-disabled'),'true');
+   if(page==='export')assert.equal(exportButton(),undefined);
+   else assert.equal(exportButton().getAttribute('aria-disabled'),'true');
   }
+  await render('response');
   await act(async()=>exportButton().click());
   assert.ok(document.querySelector('[role="tooltip"]')?.textContent.includes('需审批'));
   assert.deepEqual(navigations,[]);
@@ -102,11 +128,7 @@ test('project workspace omits stage navigation and retains the header export act
   await render('response',{actorRole:'技术',canDownload:false,finalReviewGate:{canExport:true,reason:'最终评审已通过'}});
   assert.equal(exportButton().getAttribute('aria-disabled'),'true');
   assert.equal(document.querySelector('[role="tooltip"]'),null);
-  await act(async()=>{
-   const {MouseEvent}=document.defaultView;
-   exportButton().dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
-   await new Promise(resolve=>setTimeout(resolve,150));
-  });
+  await act(async()=>exportButton().click());
   assert.match(document.querySelector('[role="tooltip"]')?.textContent||'',/没有导出权限.*SR/);
   assert.deepEqual(navigations,[]);
 

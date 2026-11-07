@@ -22,11 +22,11 @@ export default function ProjectWorkspace({route,summary,project,actorRole,projec
      {isDetail&&projectInfoPanel&&<UiButton className="btn" aria-haspopup="dialog" aria-expanded={infoOpen} onClick={()=>setInfoOpen(true)}><FileText size={14}/>项目信息</UiButton>}
      {canSubmitFinalReview&&!reviewInProgress&&<UiButton className="btn btn-primary" disabled={!!taskContextError} onClick={onLaunchFinalReview}><ShieldCheck size={14}/>发起最终评审</UiButton>}
      {snapshot&&<UiButton className="btn" onClick={onViewFinalReview}><ShieldCheck size={14}/>{reviewInProgress?'查看最终评审':'评审记录'}</UiButton>}
-     {canExport
+     {route.page!=='export'&&(canExport
        ? <UiButton className="btn" onClick={()=>onNavigate('export')}>{exportLabel}</UiButton>
-       : <Popover key={`${project.id}:${actorRole}:${exportReason}`} content={exportReason} trigger={['hover','click']} placement="bottomRight">
+       : <Popover key={`${project.id}:${actorRole}:${exportReason}`} content={exportReason} trigger="click" placement="bottomRight">
            <UiButton className="btn ant-btn-disabled" aria-disabled="true">{exportLabel}</UiButton>
-         </Popover>}
+         </Popover>)}
    </>} />;
  return <div className={`project-workspace ${isDetail?'project-detail-workspace':''}`}>
   {header}

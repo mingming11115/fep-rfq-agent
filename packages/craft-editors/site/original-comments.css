@@ -9,7 +9,6 @@
 .original-comments [data-native-margins]{position:absolute;inset:0}
 .original-comments .wc-connectors{position:absolute;inset:0}
 .original-comments [data-native-highlights]{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none}
-.original-comments .wc-inline-comment{box-sizing:border-box;padding-inline:3px;color:#242424;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .original-comments .wc-floating{pointer-events:auto}
 .review-tools .wc-tools{padding-right:12px}
 .review-tools .wc-file{font-size:12px}

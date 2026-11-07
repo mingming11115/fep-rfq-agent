@@ -1,4 +1,4 @@
-import { UiTag, UiButton, PageHeading, BusinessTabs, BusinessTable, UiInput, UiTextArea, UiSelect, UiCheckbox } from '../components/AntContent';
+import { UiTag, UiButton, BusinessTable, UiInput, UiTextArea, UiSelect, UiCheckbox } from '../components/AntContent';
 import ResponseReviewPanel from '../components/ResponseReviewPanel';
 import {getReviewActorIds,hasReviewConfirmation} from '../confirmationPolicy';
 import InlineReviewSurface from '../components/InlineReviewSurface';
@@ -8,9 +8,11 @@ import {applyFinalReviewDecision,isFinalReviewApproved} from '../finalReviewDoma
 import {canPerform} from '../permissions';
 import {snapshotFingerprint,latestSnapshot,checkSnapshotValidity,currentProjectScope,getFinalReviewScope} from '../snapshotDomain';
 import React, { useEffect, useRef, useState } from 'react';
-import { Upload, FileText, Check, AlertCircle, ArrowRight, Download, Plus, Search, RefreshCw, X, ShieldCheck, ChevronRight, ListChecks } from "../components/icons";
+import { FileText, AlertCircle, ArrowRight, Download } from "../components/icons";
 import { Modal, Drawer } from '../components/ui';
-import { getExportIssues, makeSnapshot, toCsv } from '../domain';
+import { getExportIssues, makeSnapshot } from '../domain';
+import { api } from '../authClient';
+import { downloadCraftBlob } from '../craftClient';
 import {getUnconfirmedComplyRows} from '../responseRecommendation';
 import UnconfirmedComplyList from '../components/UnconfirmedComplyList';
 import './workflow-pages.css';
@@ -19,7 +21,6 @@ const uid = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().to
 const now = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const isPendingReview = (review) => ['待审批', '待批准'].includes(review?.status);
 const isClosed = (review) => ['已关闭', '已完成', '批准关闭'].includes(review.status);
-const isConfirmed = (row) => row.status === '已确认';
 const asText = (value) => Array.isArray(value) ? value.map((v) => typeof v === 'string' ? v : v.name || v.title || v.id).filter(Boolean).join('；') : String(value ?? '');
 const tone = (status) => /失败|退回|逾期|不满足|失效/.test(status || '') ? 'danger' : /已确认|完成|已关闭|已批准|通过/.test(status || '') ? 'success' : /处理中|待|审批|队列|排队/.test(status || '') ? 'warning' : 'neutral';
 function Badge({ value }) { return <UiTag className={`badge ${tone(value)}`}>{value || '未设置'}</UiTag>; }
@@ -51,32 +52,32 @@ export function ReviewsPage({project,requirements=[],reviews=[],onUpdateReview,o
  </div>;
 }
 
+const exportColumns = [
+  { key: 'clause', label: '条款编号' }, { key: 'original', label: '客户要求' },
+  { key: 'conclusion', label: '应答结论' }, { key: 'draft', label: '对外答复' },
+  { key: 'conditions', label: '适用条件' }, { key: 'status', label: '确认状态' },
+];
+const defaultMapping = Object.fromEntries(exportColumns.map(({key}) => [key, key]));
+const defaultTemplate = { id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' };
+
 export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], appState, permissionContext, onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, launchOnly = false, onClose, onSubmitted, logEvent = () => {} }) {
   const databaseBacked=appState?.dataSource==='mysql';
   const canDownload=canPerform(actorRole,'export:download',permissionContext);
-  const canConfigure=canPerform(actorRole,'export:configure',permissionContext);
   const canSubmit=canPerform(actorRole,'snapshot:submit',permissionContext);
-  const columns = [{ key: 'clause', label: '条款编号', required: true }, { key: 'original', label: '客户要求', required: true }, { key: 'conclusion', label: '应答结论', required: true }, { key: 'draft', label: '对外答复', required: true }, { key: 'conditions', label: '适用条件', required: true }, { key: 'status', label: '确认状态', required: false }];
-  const templates = [{ id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' }, { id: 'customer', title: '客户条款对照清单', version: 'V1.3', description: '以客户条款为索引，保留全部必要条件与批准状态。' }, { id: 'delivery', title: '交付条件核对清单', version: 'V1.0', description: '集中核对承诺条件，供交付前再次对照确认。' }];
-  const savedExport=(()=>{try{return JSON.parse(sessionStorage.getItem(`rfq.export.settings.${project.id}`))||{};}catch{return {};}})();
-  const [tab, setTab] = useState(route?.snapshotId || actorRole === '最终审批人' ? '审批与快照' : savedExport.tab || '模板与映射');
-  const storedScope=databaseBacked?latestSnapshot(snapshots)?.approvalScope:appState?.exportScopesByProject?.[project.id];
-  const [templateId, setTemplateId] = useState(storedScope?.template?.id||savedExport.templateId||'standard');
-  const [mapping, setMapping] = useState(storedScope?.mapping||savedExport.mapping||Object.fromEntries(columns.map((c) => [c.key, c.key])));
-  const [checked, setChecked] = useState(false);
+  const projectSnapshots = snapshots.filter(s => s.projectId === project.id);
+  const latest = latestSnapshot(projectSnapshots);
+  const storedScope = appState?.exportScopesByProject?.[project.id] || latest?.approvalScope;
+  const activeTemplate = storedScope?.template || defaultTemplate;
+  const mapping = { ...(storedScope?.mapping || defaultMapping) };
+  // Earlier versions let users leave a required field unmapped in a draft.
+  for (const {key} of exportColumns) if (key !== 'status') mapping[key] = key;
   const [detailId, setDetailId] = useState(route?.snapshotId||null);
   const [action, setAction] = useState(launchOnly?'submit':null);
-  useEffect(()=>{
-    if(route?.snapshotId){setDetailId(route.snapshotId);setTab('审批与快照');}
-    else if(route?.action==='configure'){setDetailId(null);setTab('模板与映射');}
-  },[route]);
+  useEffect(()=>setDetailId(route?.snapshotId||null),[route]);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
-  const [historyPage, setHistoryPage] = useState(1);
-  const [history, setHistory] = useState(() => { let saved=[];try { const stored=databaseBacked?[]:JSON.parse(localStorage.getItem(`fep-rfq-export-history:${project.id}`) || '[]');if(Array.isArray(stored))saved=stored; } catch {} return [...new Map([...snapshots.flatMap(snapshot=>snapshot.exports||[]),...saved].map(record=>[record.id,record])).values()]; });
-  const activeTemplate = templates.find((t) => t.id === templateId) || templates[0];
-  const projectSnapshots = snapshots.filter((s) => s.projectId === project.id);
+  const [exporting, setExporting] = useState(false);
   const detail = projectSnapshots.find((s) => s.id === detailId);
   const savedApproval = (() => { if(databaseBacked)return null;try { return JSON.parse(localStorage.getItem(`fep-rfq-management-approval-${project.id}`) || 'null'); } catch { return null; } })();
   const effectiveApproval = project.approvalConfig !== undefined ? project.approvalConfig : savedApproval || { final: '最终审批人' };
@@ -88,13 +89,11 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const unimportedParsed = (documentState?.parsed || []).filter((r) => !requirements.some((current) => current.id === r.id));
   const unfinishedFiles = (documentState?.files || []).filter((f) => f.purpose === '要求来源' && !(documentState?.files || []).some((newer) => newer.previousVersionId === f.id) && ['排队中', '处理中', '失败'].includes(f.status));
   const documentIssues = [...unimportedParsed.map((r) => ({ id: `document-${r.id}`, label: `${r.clause} ${r.title}`, message: '解析条目尚未自动同步，请返回解析页完成同步' })), ...unfinishedFiles.map((f) => ({ id: `document-${f.id}`, label: f.name, message: f.status === '失败' ? `要求来源解析失败：${f.error || '请重试或补录'}` : `要求来源仍在${f.status}，请等待解析完成` }))];
-  const mappingIssues = columns.filter((c) => c.required && mapping[c.key] !== c.key).map((c) => ({ id: `mapping-${c.key}`, label: `${c.label}映射`, message: !mapping[c.key] ? '必要列尚未映射，请补全字段映射' : '必要列必须与同名业务字段对应，避免遗漏承诺或错误映射' }));
-  const issues = [...getExportIssues(requirements, reviews, project.id), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
+  const exportIssues = getExportIssues(requirements, reviews, project.id);
+  const issues = [...exportIssues, ...documentIssues, ...approvalConfigIssues];
   const unconfirmedComply=getUnconfirmedComplyRows(requirements,project.id);
-  const pending = projectSnapshots.filter((s) => s.status === '审批中'&&!s.stale);
   const approvalScope={...(databaseBacked?{format:'mysql-business-v1'}:{}),rows:requirements,sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval,personnel:getFinalReviewScope(appState,project.id)},template:activeTemplate,mapping,attachments:[]};
-  useEffect(()=>{sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({...savedExport,tab,templateId,mapping}));onExportScope?.(approvalScope);},[tab,templateId,JSON.stringify(mapping),JSON.stringify(approvalScope)]);
-  const approved = projectSnapshots.filter((s) => s.status === '已批准');
+  useEffect(()=>{onExportScope?.(approvalScope);},[JSON.stringify(approvalScope)]);
   const signature = (rows) => JSON.stringify(rows.map((r) => ({ id: r.id, version: r.version, status: r.status, original: r.original, conclusion: r.conclusion, draft: r.draft, conditions: r.conditions, evidence: r.evidence, reason: r.reason, owner: r.owner })).sort((a, b) => a.id.localeCompare(b.id)));
   function validity(snapshot) {
     if (!snapshot) return { valid: false, message: '未选择批准快照' };
@@ -103,61 +102,30 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     if (!isFinalReviewApproved(snapshot)) return { valid: false, message: 'SR与技术组尚未完成本版本所需的全部评审' };
     if (documentIssues.length) return { valid: false, message: '来源资料仍有失败任务或未同步条目，请完成解析后重新提交' };
     const scope=databaseBacked?currentProjectScope(appState,project.id,snapshot):approvalScope;
-    const scopeCheck=checkSnapshotValidity(snapshot,scope,latestSnapshot(projectSnapshots));if(!scopeCheck.valid)return {valid:false,message:scopeCheck.reasons.join('；')};
+    const scopeCheck=checkSnapshotValidity(snapshot,scope,latest);if(!scopeCheck.valid)return {valid:false,message:scopeCheck.reasons.join('；')};
     if (signature(snapshot.rows || []) !== signature(requirements)) return { valid: false, message: '当前工作内容或条目版本已变化，请重新提交新快照' };
-    if (getExportIssues(requirements, reviews, project.id).length) return { valid: false, message: '当前工作版本存在未确认内容或未关闭事项' };
+    if (exportIssues.length) return { valid: false, message: '当前工作版本存在未确认内容或未关闭事项' };
     return { valid: true, message: '与当前工作版本一致，可以正式导出' };
   }
-  const downloadable = approved.find((s) => validity(s).valid);
-  useEffect(() => { if(!databaseBacked)localStorage.setItem(`fep-rfq-export-history:${project.id}`, JSON.stringify(history)); }, [history, project.id]);
-  useEffect(()=>{if(savedExport.scroll)requestAnimationFrame(()=>window.scrollTo(0,savedExport.scroll));},[]);
-  function goIssue(issue) {
-    sessionStorage.setItem(`rfq.export.settings.${project.id}`,JSON.stringify({...savedExport,tab,templateId,mapping,scroll:window.scrollY}));
+  const exportCheck = validity(latest);
+  const previewRows = exportCheck.valid ? latest.rows : requirements;
+  function locateIssue(issue) {
+    closeAction();
     if(issue.route){navigate(issue.route.page,issue.route.requirementId,{...issue.route,returnKey:'export'});return;}
     if (issue.id === 'approval-config') navigate('settings');
-    else if (String(issue.id).startsWith('document-')) navigate('response');
-    else if (String(issue.id).startsWith('mapping-')) setTab('模板与映射');
-    else if (issue.id === 'empty-requirements') navigate('response');
-    else if (reviews.some((r) => r.id === issue.id)) navigate('reviews',issue.requirementId,{reviewId:issue.id,returnKey:'export'});
-    else navigate('response',issue.id,{returnKey:'export'});
-  }
-  function mappedRows(rows, selectedMapping) { return rows.map((row) => ({ ...row, ...Object.fromEntries(columns.map((c) => [c.key, row[selectedMapping[c.key]] ?? ''])) })); }
-  function saveFile(content, filename) {
-    const blob = new Blob(['\uFEFF', content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
-  }
-  function downloadDraft() {
-    if(!canDownload)return toast('请由SR下载应答文件','error');
-    const rows = mappedRows(requirements, mapping).map((r, index) => ({ ...r, status: `${isConfirmed(requirements[index]) ? '内部草稿 / 已确认' : '内部草稿 / 未确认'}`, draft: `${isConfirmed(requirements[index]) ? '[内部草稿] ' : '[内部草稿 / 未确认] '}${r.draft || '答复待补充'}` }));
-    const filename = `${project.name}_内部草稿_未确认内容请核对_${Date.now()}.csv`;
-    try {
-      saveFile(`内部草稿 / 包含未确认内容 / 仅供内部核对\r\n${toCsv(rows)}`, filename);
-      if(!databaseBacked)setHistory((old) => [{ id: uid('EXP'), type: '内部草稿', filename, createdAt: now(), actor: actorRole, status: '已生成', snapshotId: '当前工作版本', template: activeTemplate.title, rowCount: rows.length }, ...old]); logEvent('下载内部草稿', project.id, `${rows.length} 条；显式标记内部草稿与未确认`); toast('内部草稿已生成，未确认内容已显式标记');
-    } catch (err) { toast(`生成失败：${err.message}`); logEvent('草稿生成失败', project.id, err.message); }
+    else navigate('response');
   }
   function closeAction() { if(launchOnly)onClose?.();else setAction(null); }
-  function locateIssue(issue) {
-    if(launchOnly){
-      onClose?.();
-      if(String(issue.id).startsWith('mapping-')){
-        navigate('export',null,{snapshotId:undefined,taskId:undefined,action:'configure',returnKey:'response'});
-        return;
-      }
-    }
-    setAction(null);goIssue(issue);
-  }
-  function startAction(kind, snapshotId = null) { if (snapshotId) setDetailId(snapshotId); setAction(kind); setReason(''); setError(''); if (kind === 'submit') setChecked(true); }
+  function startAction(kind) { setAction(kind); setReason(''); setError(''); }
   function submitSnapshot() {
     if(!canSubmit)return setError('当前身份无提交快照权限');
-    const currentIssues = [...getExportIssues(requirements, reviews, project.id), ...documentIssues, ...mappingIssues, ...approvalConfigIssues];
-    if (currentIssues.length) { setError(`当前仍有 ${currentIssues.length} 个检查项未通过，请返回修正。`); return; }
-    const latest=latestSnapshot(projectSnapshots);
-    const existing = pending.find((s) => s.id===latest?.id&&s.approvalFingerprint===snapshotFingerprint(approvalScope));
-    if (existing) { setAction(null); setDetailId(existing.id); toast('当前版本已在最终评审中'); onSubmitted?.(existing.id); return; }
+    if (issues.length) { setError(`当前仍有 ${issues.length} 个检查项未通过，请返回修正。`); return; }
+    if (latest?.status==='审批中'&&!latest.stale&&latest.approvalFingerprint===snapshotFingerprint(approvalScope)) {
+      setAction(null); setDetailId(latest.id); toast('当前版本已在最终评审中'); onSubmitted?.(latest.id); return;
+    }
     const returned=latest?.status==='已退回'?latest:null;
     const snapshot = { ...makeSnapshot(project.id, requirements, actorRole), ...(returned?{revisionOf:returned.id}:{}), approvalFingerprint:snapshotFingerprint(approvalScope),approvalScope:structuredClone(approvalScope),createdById:actorId,finalReview:structuredClone(finalReviewConfig.value),template: { ...activeTemplate }, mapping: { ...mapping }, approvalConfig: { ...effectiveApproval }, submissionReason: reason.trim() || '必需人工确认已完成，系统推荐Comply未人工确认项交由本轮评审核对', history: [{ id: uid('EVENT'), action: '提交快照审批', actor: actorRole, time: now(), reason: reason.trim() || '检查通过，冻结应答快照' }], attachments: [] };
-    if(onSnapshot(snapshot)===false)return; logEvent('提交快照审批', snapshot.id, `${requirements.length} 条要求；系统推荐Comply未人工确认 ${unconfirmedComply.length} 条；${activeTemplate.title} ${activeTemplate.version}`); toast('已冻结快照，等待指定SR与技术组评审'); setAction(null); setDetailId(snapshot.id); setTab('审批与快照'); onSubmitted?.(snapshot.id);
+    if(onSnapshot(snapshot)===false)return; logEvent('提交快照审批', snapshot.id, `${requirements.length} 条要求；系统推荐Comply未人工确认 ${unconfirmedComply.length} 条`); toast('已冻结快照，等待指定SR与技术组评审'); setAction(null); setDetailId(snapshot.id); onSubmitted?.(snapshot.id);
   }
   function reviewSnapshot() {
     const current = projectSnapshots.find((s) => s.id === detailId);
@@ -165,48 +133,95 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     if (approvalConfigIssues.length) { setError(approvalConfigIssues[0].message); return; }
     if(!canBusinessAction('snapshot',current.id,'approve'))return setError('当前人员没有本轮最终评审任务');
     if (action === 'reject' && !reason.trim()) { setError('退回必须填写具体原因'); return; }
-    if(action==='approve'&&!checkSnapshotValidity(current,approvalScope,latestSnapshot(projectSnapshots)).valid){setError('批准范围已经变化，请重新提交快照');return;}
-    if (action === 'approve' && (signature(current.rows || []) !== signature(requirements) || getExportIssues(requirements, reviews, project.id).length || documentIssues.length)) { setError('当前工作数据已变化或检查未通过，请退回原快照并提交新快照'); return; }
+    if(action==='approve'&&!checkSnapshotValidity(current,approvalScope,latest).valid){setError('批准范围已经变化，请重新提交快照');return;}
+    if (action === 'approve' && (signature(current.rows || []) !== signature(requirements) || exportIssues.length || documentIssues.length)) { setError('当前工作数据已变化或检查未通过，请退回原快照并提交新快照'); return; }
     const label = action === 'approve' ? '批准定稿' : '退回快照';
     let patch;
     try{const side=getRequiredFinalReviewers(current.finalReview).find(r=>r.actorId===actorId)?.side;patch=applyFinalReviewDecision(current,{actorId,side,result:action==='approve'?'approved':'rejected',reason});}catch(e){setError(e.message);return;}
     if(onSnapshot(patch)===false)return; logEvent(label,current.id,reason);toast(patch.status==='已批准'?'SR与技术组已全部通过，可正式导出':patch.status==='已退回'?'快照已退回，修改重提后需重新评审':'本人已通过，继续等待其他必需评审人');setAction(null);
   }
 
-  function downloadFormal() {
-    if(!canDownload)return setError('请由SR正式导出');
-    const current = projectSnapshots.find((s) => s.id === detailId);
-    const check = validity(current);
-    if (!check.valid) { setError(check.message); logEvent('正式导出被阻止', current?.id || project.id, check.message); return; }
-    const rows = mappedRows(current.rows, current.mapping || Object.fromEntries(columns.map((c) => [c.key, c.key]))).map(row=>({...row,status:current.unconfirmedComplyIds?.includes(row.id)?'最终评审已通过（未逐条人工确认）':row.status}));
-    const filename = `${project.name}_正式应答_${current.id.slice(0, 18)}.csv`;
+  async function downloadFormal() {
+    if (!canDownload || !exportCheck.valid || exporting) return;
+    setExporting(true);
     try {
-      saveFile(toCsv(rows), filename);
-      if(databaseBacked){setAction(null);toast('正式应答 CSV 已生成');return;}
-      const record = { id: uid('EXP'), type: '正式应答', filename, createdAt: now(), actor: actorRole, status: '已生成', snapshotId: current.id, template: current.template?.title || '标准 RFQ 应答矩阵', rowCount: rows.length };
-      if(!databaseBacked)setHistory((old) => [record, ...old]);
-      onSnapshot({ ...current, exports: [...(current.exports || []), record],exportedAt:new Date().toISOString() }); logEvent('正式导出', current.id, `当前有效性校验通过；${rows.length} 条；CSV UTF-8`); toast('正式应答已导出，记录已绑定批准快照'); setAction(null); setTab('导出记录');
-    } catch (err) { setError(`文件生成失败：${err.message}`); logEvent('正式导出失败', current.id, err.message); }
+      const path = `/projects/${encodeURIComponent(project.id)}/snapshots/${encodeURIComponent(latest.id)}/annotated-export`;
+      const { blob, filename } = await api.download(path);
+      downloadCraftBlob(blob, filename);
+      toast('已生成带批注的正式应答');
+    } catch (err) {
+      toast(`导出失败：${err.message}`, 'error');
+    } finally {
+      setExporting(false);
+    }
   }
   function snapshotTable(snapshot) { const priority=new Set(snapshot.unconfirmedComplyIds||[]),rows=[...(snapshot.rows||[])].sort((a,b)=>Number(priority.has(b.id))-Number(priority.has(a.id)));return <div className="table-wrap flow-snapshot-table"><BusinessTable className="data-table"><thead><tr><th>条款</th><th>客户要求</th><th>最终结论</th><th>冻结答复</th><th>必要条件</th><th>人工确认</th><th>版本</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td>{r.clause}</td><td>{r.original}</td><td><Badge value={r.conclusion} /></td><td>{r.draft}</td><td>{asText(r.conditions) || '—'}</td><td>{priority.has(r.id)?'未人工确认 · 系统推荐Comply':r.status==='已确认'?'已人工确认':r.status}</td><td>V{r.version || 1}</td></tr>)}</tbody></BusinessTable></div>; }
-  const actionDialog = action && <Modal title={{ submit: '发起最终评审', approve: '通过本方最终评审', reject: '退回应答快照', formal: '正式导出检查' }[action]} width={720} onClose={closeAction} footer={<><UiButton className="btn" onClick={closeAction}>取消</UiButton><UiButton className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} disabled={action === 'submit' && (issues.length > 0 || !!taskContextError)} onClick={action === 'submit' ? submitSnapshot : action === 'formal' ? downloadFormal : reviewSnapshot}>{action === 'submit' ? '确认发起' : action === 'formal' ? '生成正式 CSV 文件' : action === 'approve' ? '确认通过本方评审' : '确认退回'}</UiButton></>}>
-      {action === 'submit' ? <><UnconfirmedComplyList rows={unconfirmedComply} onLocate={row=>locateIssue({id:row.id,route:{page:'response',requirementId:row.id,fileId:row.sourceFileId,sourceVersion:row.sourceVersion}})}/><Notice type={issues.length ? 'warning' : 'info'}>{issues.length ? `检查未通过，共 ${issues.length} 个阻断项。修正后可再次提交。` : `检查通过，将冻结 ${requirements.length} 条要求。提交后由指定SR与技术组按本轮规则评审。`}</Notice>{issues.length > 0 && <div className="flow-modal-issues">{issues.map((issue, index) => <div key={`${issue.id}-${index}`}><strong>{issue.label}</strong><p>{issue.message}</p><UiButton className="text-link" onClick={() => locateIssue(issue)}>定位修正<ArrowRight size={13} /></UiButton></div>)}</div>}<dl className="flow-description"><dt>项目</dt><dd>{project.name}</dd><dt>模板版本</dt><dd>{activeTemplate.title} {activeTemplate.version}</dd><dt>人工确认</dt><dd>{requirements.filter(isConfirmed).length} / {requirements.length} 条已确认；系统推荐 Comply 未人工确认 {unconfirmedComply.length} 条</dd><dt>SR评审人</dt><dd>{requiredFinalReviewers.filter(r=>r.side==='sr').map(r=>personName(appState,r.actorId)).join('、')||'尚未配置'}</dd><dt>技术评审人</dt><dd>{requiredFinalReviewers.filter(r=>r.side==='technical').map(r=>personName(appState,r.actorId)).join('、')||'尚未配置'}</dd><dt>通过规则</dt><dd>SR方通过 + {finalReviewConfig.value?.technicalMode==='representative'?'技术负责人代表通过':'技术组全员通过'}</dd><dt>提交身份</dt><dd>{personName(appState,actorId)} · {actorRole}</dd><dt>对外附件</dt><dd>0 个 · 不包含内部证据</dd></dl>{actorRole === '最终审批人' && <Notice type="warning">请由SR提交快照，并分别完成SR与技术组评审。</Notice>}</> : <><div className="flow-modal-object"><strong className="flow-snapshot-id">{detail?.id || '快照不可用'}</strong><span>{detail?.rows?.length || 0} 条 · {detail?.template?.title || '标准模板'}</span></div>{action === 'formal' ? <><Notice type={validity(detail).valid ? 'info' : 'error'}>{validity(detail).message}</Notice><dl className="flow-description"><dt>已批准快照</dt><dd>{detail?.status || '—'}</dd><dt>条目版本校验</dt><dd>{validity(detail).valid ? '通过 · 与当前版本逐条一致' : '未通过'}</dd><dt>对外字段</dt><dd>条款、客户要求、应答结论、最终答复、适用条件、确认状态</dd><dt>附件清单</dt><dd>0 个 · 不打包内部证据</dd><dt>生成格式</dt><dd>CSV · UTF-8 BOM</dd></dl></> : <Notice>{action === 'approve' ? '核对冻结内容及必要条件后批准。批准仅绑定本快照；后续工作修改需重新审批。' : '退回原因会保存至快照历史。原快照内容继续保留，修订后需提交新快照。'}</Notice>}</>}
-      {action !== 'formal' && <Field label={action === 'reject' ? '退回原因' : action === 'submit' ? '发起说明' : '处理意见'} required={action === 'reject'} wide><UiTextArea className="input flow-textarea" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={action === 'reject' ? '请说明需要修订的条目和原因' : action === 'submit' ? '补充本轮评审说明（选填）' : '补充核对意见（选填）'} /></Field>}{error && <p className="flow-error-inline" role="alert">{error}</p>}
-    </Modal>;
+
+  const actionDialog = action && <Modal
+    title={{ submit: '发起最终评审', approve: '通过本方最终评审', reject: '退回应答快照' }[action]}
+    width={720} onClose={closeAction}
+    footer={<>
+      <UiButton className="btn" onClick={closeAction}>取消</UiButton>
+      <UiButton className={action === 'reject' ? 'btn btn-danger' : 'btn btn-primary'}
+        disabled={action === 'submit' && (issues.length > 0 || !!taskContextError)}
+        onClick={action === 'submit' ? submitSnapshot : reviewSnapshot}>
+        {{ submit: '确认发起', approve: '确认通过本方评审', reject: '确认退回' }[action]}
+      </UiButton>
+    </>}>
+    {action === 'submit' ? <>
+      <UnconfirmedComplyList rows={unconfirmedComply} onLocate={row=>locateIssue({id:row.id,route:{page:'response',requirementId:row.id,fileId:row.sourceFileId,sourceVersion:row.sourceVersion}})}/>
+      <Notice type={issues.length ? 'warning' : 'info'}>{issues.length
+        ? <>检查未通过，共 {issues.length} 个阻断项。修正后可再次提交。</>
+        : <>检查通过，将冻结 {requirements.length} 条要求。提交后由指定 SR 与技术组按本轮规则评审。</>}</Notice>
+      {issues.length > 0 && <div className="flow-modal-issues">{issues.map((issue, index) => <div key={issue.id+'-'+index}><strong>{issue.label}</strong><p>{issue.message}</p><UiButton className="text-link" onClick={() => locateIssue(issue)}>定位修正<ArrowRight size={13} /></UiButton></div>)}</div>}
+      <dl className="flow-description">
+        <dt>项目</dt><dd>{project.name}</dd>
+        <dt>人工确认</dt><dd>{requirements.filter(row=>row.status==='已确认').length} / {requirements.length} 条已确认 · 系统推荐 Comply 未人工确认 {unconfirmedComply.length} 条</dd>
+        <dt>SR 评审人</dt><dd>{requiredFinalReviewers.filter(r=>r.side==='sr').map(r=>personName(appState,r.actorId)).join('、')||'尚未配置'}</dd>
+        <dt>技术评审人</dt><dd>{requiredFinalReviewers.filter(r=>r.side==='technical').map(r=>personName(appState,r.actorId)).join('、')||'尚未配置'}</dd>
+        <dt>通过规则</dt><dd>SR 方通过 + {finalReviewConfig.value?.technicalMode==='representative'?'技术负责人代表通过':'技术组全员通过'}</dd>
+        <dt>提交身份</dt><dd>{personName(appState,actorId)} · {actorRole}</dd>
+        <dt>对外附件</dt><dd>0 个 · 不包含内部证据</dd>
+      </dl>
+    </> : <>
+      <div className="flow-modal-object"><strong className="flow-snapshot-id">{detail?.id || '快照不可用'}</strong><span>{detail?.rows?.length || 0} 条</span></div>
+      <Notice>{action === 'approve' ? '核对冻结内容及必要条件后批准。批准仅绑定本快照。' : '退回原因会保存至快照历史，修订后需重新提交评审。'}</Notice>
+    </>}
+    <Field label={action === 'reject' ? '退回原因' : action === 'submit' ? '发起说明' : '处理意见'} required={action === 'reject'} wide>
+      <UiTextArea className="input flow-textarea" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={action === 'reject' ? '请说明需要修订的条目和原因' : '补充说明（选填）'} />
+    </Field>
+    {error && <p className="flow-error-inline" role="alert">{error}</p>}
+  </Modal>;
   if(launchOnly)return actionDialog;
   return <div className="flow-page">
-    <PageHeading title={<>{actorRole==='技术'?'应答最终评审':'导出文档'}</>} description={<>核对模板与字段，冻结应答快照，由指定SR与技术组共同评审。</>} actions={<><div className="page-actions"><UiButton className="btn" disabled={!canDownload} onClick={downloadDraft}><Download size={16} />下载内部草稿</UiButton><UiButton className="btn btn-primary" disabled={!!taskContextError||!canSubmit} onClick={() => startAction('submit')}><ShieldCheck size={16} />发起最终评审</UiButton></div></>} />
-    {!canDownload&&<Notice>模板与映射为只读。SR提交快照；技术组按BU规则评审，SR方仍须单独通过。应答文件由SR下载。</Notice>}
-    <div className="flow-export-steps"><div className="flow-step done"><span>1</span><div><strong>核对内容与模板</strong><small>完成条目确认及字段映射</small></div></div><ChevronRight size={18} /><div className={`flow-step ${pending.length || approved.length ? 'done' : ''}`}><span>2</span><div><strong>冻结快照并审批</strong><small>指定SR与技术组核对</small></div></div><ChevronRight size={18} /><div className={`flow-step ${downloadable ? 'done' : ''}`}><span>3</span><div><strong>正式导出</strong><small>校验批准及当前有效性</small></div></div></div>
-    {issues.length ? <Notice type="warning">当前有 <b>{issues.length}</b> 个提交阻断项。可随时生成内部草稿；正式应答需完成必需人工确认、事项关闭及最终评审。<UiButton className="text-link flow-notice-action" onClick={() => { setChecked(true); document.getElementById('flow-export-checks')?.scrollIntoView({ behavior: 'smooth' }); }}>查看检查结果</UiButton></Notice> : <Notice>当前工作版本检查通过。{downloadable ? '已有当前有效的批准快照，可执行正式导出。' : '请完成指定SR与技术组的本轮最终评审。'}</Notice>}
-    <section className="panel"><BusinessTabs className="tabs">{['模板与映射', '内容预览', '审批与快照', '导出记录'].map((t) => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t}{t === '审批与快照' && <span>{projectSnapshots.length}</span>}{t === '导出记录' && <span>{history.length}</span>}</button>)}</BusinessTabs>
-      {tab === '模板与映射' && <div className="panel-body"><div className="flow-section-title"><h3>选择内置模板</h3><span className="muted flow-small">本原型实际生成 UTF-8 CSV 文件</span></div><div className="flow-template-grid">{templates.map((template) => <button key={template.id} disabled={!!taskContextError||!canConfigure} className={`flow-template-card ${templateId === template.id ? 'active' : ''}`} onClick={() => {if(canConfigure)setTemplateId(template.id);}}><FileText size={25} /><div><strong>{template.title}</strong><p>{template.description}</p><span>CSV · {template.version}</span></div>{templateId === template.id && <Check size={17} className="flow-template-check" />}</button>)}</div><div className="flow-section-title flow-spaced"><h3>字段映射</h3><span className="muted flow-small">必要列不可缺省；条件按原文保留</span></div><div className="table-wrap"><BusinessTable className="data-table"><thead><tr><th>模板列名</th><th>来源字段</th><th>要求</th><th>检查结果</th></tr></thead><tbody>{columns.map((column) => <tr key={column.key}><td>{column.label}</td><td><UiSelect className="select" aria-label={`${column.label}映射`} disabled={!!taskContextError||!canConfigure} value={mapping[column.key]} onChange={(e) => {if(canConfigure)setMapping((old) => ({ ...old, [column.key]: e.target.value }));}}><option value="">不映射</option>{columns.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</UiSelect></td><td>{column.required ? <span className="flow-required">必填 / 保留</span> : '可选'}</td><td>{mapping[column.key] === column.key ? <span className="flow-check-ok"><Check size={14} />映射正确</span> : column.required ? <span className="flow-red">请修正映射</span> : <span className="muted">未映射 / 自定义</span>}</td></tr>)}</tbody></BusinessTable></div><Notice>对外文件包含本次要求、最终答复及必要条件；内部评审、成本、历史项目名称、批注和检索引用不进入 CSV。内部证据不自动作为对外附件。</Notice></div>}
-      {tab === '内容预览' && <><div className="panel-header"><div><h2>{activeTemplate.title}</h2><span className="muted flow-small">当前工作版本预览 · {requirements.length} 条要求 · 非审批快照</span></div><UiButton className="btn btn-sm" disabled={!canDownload} onClick={downloadDraft}><Download size={14} />内部草稿</UiButton></div><div className="table-wrap"><BusinessTable className="data-table"><thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{mappedRows(requirements.slice((page - 1) * 6, page * 6), mapping).map((row) => <tr key={row.id}><td>{row.clause || '—'}</td><td className="flow-preview-requirement">{row.original}</td><td><Badge value={row.conclusion} /></td><td className="flow-preview-reply">{row.draft || <span className="flow-red">待补充</span>}</td><td>{asText(row.conditions) || '—'}</td><td><Badge value={row.status} /></td></tr>)}</tbody></BusinessTable></div>{!requirements.length && <NoRows title="暂无可预览条目">请先解析要求；空项目仍可下载带内部草稿标记的 CSV。</NoRows>}<Pager count={requirements.length} page={page} onChange={setPage} /><div className="flow-attachment-panel"><h4>附件分标检查</h4><div><span>内部证据引用</span><b>{requirements.filter((r) => asText(r.evidence)).length} 条</b><span>拟对外批准附件</span><b>0 个</b></div><p className="muted">本次 CSV 不打包任何附件。内部证据引用仅用于核对，不作为自动外发附件。</p></div></>}
-      {tab === '审批与快照' && <><div className="panel-header"><h2>应答快照</h2><span className="muted flow-small">源数据修改不覆盖已有快照</span></div><div className="table-wrap"><BusinessTable className="data-table"><thead><tr><th>快照编号 / 模板</th><th>条目</th><th>提交人 / 时间</th><th>审批状态</th><th>当前有效性</th><th>操作</th></tr></thead><tbody>{[...projectSnapshots].reverse().map((snapshot) => <tr key={snapshot.id}><td><UiButton className="text-link flow-snapshot-id" onClick={() => setDetailId(snapshot.id)}>{snapshot.id}</UiButton><div className="muted flow-small">{snapshot.template?.title || '标准 RFQ 应答矩阵'} · {snapshot.template?.version || 'V2.1'}</div></td><td>{snapshot.rows?.length || 0}</td><td>{snapshot.createdBy}<div className="muted flow-small">{new Date(snapshot.createdAt).toLocaleString('zh-CN', { hour12: false })}</div></td><td><Badge value={snapshot.status} /></td><td><span className={validity(snapshot).valid ? 'flow-check-ok' : 'muted flow-small'}>{validity(snapshot).valid ? <><Check size={14} />当前有效</> : snapshot.stale ? '本轮已失效，请重新提交' : snapshot.status === '已批准' ? '工作版本已变化 / 不可重新导出' : '待批准后校验'}</span></td><td><div className="flow-inline-actions"><UiButton className="text-link" onClick={() => setDetailId(snapshot.id)}>{snapshot.status === '审批中' && canBusinessAction('snapshot',snapshot.id,'approve') ? '审批' : '查看'}</UiButton>{snapshot.status === '已批准' && <UiButton className="text-link" disabled={!canDownload||!validity(snapshot).valid} onClick={() => startAction('formal', snapshot.id)}>正式导出</UiButton>}</div></td></tr>)}</tbody></BusinessTable></div>{!projectSnapshots.length && <NoRows title="尚未创建应答快照">完成检查后提交审批，系统将冻结本次条目及版本。</NoRows>}</>}
-      {tab === '导出记录' && <><div className="panel-header"><h2>文件生成记录</h2><span className="muted flow-small">正式文件绑定实际批准快照</span></div><div className="table-wrap"><BusinessTable className="data-table"><thead><tr><th>文件名称</th><th>类型 / 结果</th><th>快照</th><th>生成时间 / 人员</th><th>操作</th></tr></thead><tbody>{history.slice((historyPage - 1) * 6, historyPage * 6).map((item) => { const snapshot = projectSnapshots.find((s) => s.id === item.snapshotId); return <tr key={item.id}><td className="flow-history-file"><FileText size={15} />{item.filename}<div className="muted flow-small">{item.template} · {item.rowCount} 条 · UTF-8 CSV</div></td><td><Badge value={item.type} /><div className="muted flow-small">{item.status}</div></td><td><span className="flow-small flow-snapshot-id">{item.snapshotId}</span>{snapshot && <div className={`flow-small ${validity(snapshot).valid ? 'flow-check-ok' : 'flow-red'}`}>{validity(snapshot).valid ? '当前可重新导出' : '历史记录：当前不可重新导出'}</div>}</td><td className="flow-nowrap">{item.createdAt}<div className="muted flow-small">{item.actor}</div></td><td>{snapshot ? <UiButton className="text-link" onClick={() => setDetailId(snapshot.id)}>文件包详情</UiButton> : <UiButton className="text-link" onClick={downloadDraft}>生成当前草稿</UiButton>}</td></tr>; })}</tbody></BusinessTable></div>{!history.length && <NoRows title="暂无导出记录">下载内部草稿或正式应答后，将生成可追溯记录。</NoRows>}<Pager count={history.length} page={historyPage} onChange={setHistoryPage} /></>}
+
+    <section className="panel">
+      <div className="panel-header">
+        <div>
+          <h2>条款结果预览</h2>
+          <span className="muted flow-small">{exportCheck.valid ? '已批准快照' : '当前工作版本'} · {previewRows.length} 条</span>
+        </div>
+        <UiButton className="btn btn-primary" disabled={!canDownload || !exportCheck.valid} loading={exporting} onClick={downloadFormal}>
+          <Download size={16}/>导出文档
+        </UiButton>
+      </div>
+      {(!canDownload || !exportCheck.valid) && <Notice>{canDownload ? exportCheck.message : '正式文档仅由 SR 导出。'}</Notice>}
+      {previewRows.length ? <>
+        <div className="table-wrap"><BusinessTable className="data-table">
+          <thead><tr>{exportColumns.map(({key,label}) => <th key={key}>{label}</th>)}</tr></thead>
+          <tbody>{previewRows.slice((page - 1) * 6, page * 6).map(row => <tr key={row.id}>
+            <td>{row.clause || '—'}</td>
+            <td className="flow-preview-requirement">{row.original}</td>
+            <td><Badge value={row.conclusion}/></td>
+            <td className="flow-preview-reply">{row.draft || '—'}</td>
+            <td>{asText(row.conditions) || '—'}</td>
+            <td>{row.status && <Badge value={exportCheck.valid && latest.unconfirmedComplyIds?.includes(row.id) ? '最终评审已通过（未逐条人工确认）' : row.status}/>}</td>
+          </tr>)}</tbody>
+        </BusinessTable></div>
+        <Pager count={previewRows.length} page={page} onChange={setPage}/>
+      </> : <NoRows title="暂无可预览条款">解析客户要求后可在这里查看条款结果。</NoRows>}
     </section>
-    <section className="panel" id="flow-export-checks"><div className="panel-header"><h2><ListChecks size={18} />提交与定稿检查</h2><UiButton className="btn btn-sm" onClick={() => { setChecked(true); toast(issues.length ? `检查完成：${issues.length} 个阻断项` : '全部检查通过，可提交快照审批'); }}><RefreshCw size={14} />重新检查</UiButton></div><div className="flow-check-summary"><span className={`flow-check-indicator ${issues.length ? 'warning' : 'success'}`}>{issues.length ? <AlertCircle size={21} /> : <ShieldCheck size={21} />}</span><div><strong>{issues.length ? `${issues.length} 个待修正项` : '当前工作版本检查通过'}</strong><p>人工确认 {requirements.filter(isConfirmed).length} / {requirements.length} 条 · 系统推荐 Comply 未人工确认 {unconfirmedComply.length} 条 · 未关闭事项 {reviews.filter((r) => !isClosed(r)).length} 个 · {checked ? '已重新核对当前版本' : '实时检查结果'}</p></div></div>{issues.length > 0 && <div className="flow-issue-list">{issues.map((issue, index) => <div className="flow-issue-row" key={`${issue.id}-${index}`}><AlertCircle size={15} /><div><strong>{issue.label}</strong><p>{issue.message}</p></div><UiButton className="text-link" onClick={() => goIssue(issue)}>前往修正<ArrowRight size={13} /></UiButton></div>)}</div>}<div className="flow-bottom-actions"><span className="muted">审批快照不可编辑；新工作版本需要重新提交和批准。</span><div className="flow-inline-actions"><UiButton className="btn" onClick={() => { setTab('审批与快照'); }}>查看快照</UiButton><UiButton className="btn btn-primary" disabled={!canDownload||!downloadable} onClick={() => startAction('formal', downloadable?.id)}><Download size={16} />正式导出</UiButton></div></div></section>
-    {detail && <Drawer title="应答快照 · 只读审批" width={1000} onClose={() => setDetailId(null)} footer={<><UiButton className="btn" onClick={() => setDetailId(null)}>返回列表</UiButton>{detail.status === '审批中' && <><UiButton className="btn btn-danger" disabled={!canBusinessAction('snapshot',detail.id,'approve')} onClick={() => startAction('reject', detail.id)}>退回</UiButton><UiButton className="btn btn-primary" disabled={!canBusinessAction('snapshot',detail.id,'approve')} onClick={() => startAction('approve', detail.id)}>通过本方评审</UiButton></>}{detail.status === '已批准' && <UiButton className="btn btn-primary" disabled={!canDownload||!validity(detail).valid} onClick={() => startAction('formal', detail.id)}><Download size={15} />正式导出</UiButton>}</>}><UnconfirmedComplyList frozen rows={(detail.rows||[]).filter(row=>detail.unconfirmedComplyIds?.includes(row.id))}/><div className="flow-detail-top"><div><span className="muted flow-small">固定快照编号</span><h3 className="flow-snapshot-id">{detail.id}</h3></div><Badge value={detail.status} /></div><dl className="flow-description"><dt>提交人 / 时间</dt><dd>{detail.createdBy} / {new Date(detail.createdAt).toLocaleString('zh-CN', { hour12: false })}</dd><dt>模板版本</dt><dd>{detail.template?.title || '标准 RFQ 应答矩阵'} {detail.template?.version || 'V2.1'}</dd><dt>批准人</dt><dd>{detail.reviewedBy || '查看下方逐人评审记录'}</dd><dt>处理意见</dt><dd>{detail.reviewReason || detail.submissionReason || '—'}</dd><dt>外发附件</dt><dd>0 个；内部证据不自动作为对外附件</dd></dl><Notice type={detail.status === '已批准' && !validity(detail).valid ? 'warning' : 'info'}>{detail.stale ? '本轮快照已失效，请按当前人员与规则重新提交。' : detail.status === '已批准' ? validity(detail).message : '此处展示冻结快照，不随当前工作内容修改。当前身份：' + actorRole + '；SR与技术组均须通过。'}</Notice><FinalReviewProgress snapshot={detail} appState={appState}/><h4 className="flow-spaced">冻结应答内容（{detail.rows?.length || 0} 条）</h4>{snapshotTable(detail)}<h4 className="flow-spaced">审批与导出记录</h4><div className="flow-timeline">{(detail.history || []).map((entry, index) => <div className="flow-timeline-item" key={entry.id || index}><i /><strong>{entry.action}</strong><small>{entry.time} · {entry.actor}</small><p>{entry.reason}</p></div>)}{(detail.exports || []).map((record) => <div className="flow-timeline-item" key={record.id}><i /><strong>正式导出 CSV</strong><small>{record.createdAt} · {record.actor}</small><p>{record.filename}</p></div>)}</div></Drawer>}
+    {detail && <Drawer title="应答快照 · 只读审批" width={1000} onClose={() => setDetailId(null)} footer={<><UiButton className="btn" onClick={() => setDetailId(null)}>关闭</UiButton>{detail.status === '审批中' && <><UiButton className="btn btn-danger" disabled={!canBusinessAction('snapshot',detail.id,'approve')} onClick={() => startAction('reject', detail.id)}>退回</UiButton><UiButton className="btn btn-primary" disabled={!canBusinessAction('snapshot',detail.id,'approve')} onClick={() => startAction('approve', detail.id)}>通过本方评审</UiButton></>}</>}><UnconfirmedComplyList frozen rows={(detail.rows||[]).filter(row=>detail.unconfirmedComplyIds?.includes(row.id))}/><div className="flow-detail-top"><div><span className="muted flow-small">固定快照编号</span><h3 className="flow-snapshot-id">{detail.id}</h3></div><Badge value={detail.status} /></div><dl className="flow-description"><dt>提交人 / 时间</dt><dd>{detail.createdBy} / {new Date(detail.createdAt).toLocaleString('zh-CN', { hour12: false })}</dd><dt>批准人</dt><dd>{detail.reviewedBy || '查看下方逐人评审记录'}</dd><dt>处理意见</dt><dd>{detail.reviewReason || detail.submissionReason || '—'}</dd><dt>外发附件</dt><dd>0 个；内部证据不自动作为对外附件</dd></dl><Notice type={detail.status === '已批准' && !validity(detail).valid ? 'warning' : 'info'}>{detail.stale ? '本轮快照已失效，请按当前人员与规则重新提交。' : detail.status === '已批准' ? validity(detail).message : '此处展示冻结快照，不随当前工作内容修改。当前身份：' + actorRole + '；SR与技术组均须通过。'}</Notice><FinalReviewProgress snapshot={detail} appState={appState}/><h4 className="flow-spaced">冻结应答内容（{detail.rows?.length || 0} 条）</h4>{snapshotTable(detail)}<h4 className="flow-spaced">审批与导出记录</h4><div className="flow-timeline">{(detail.history || []).map((entry, index) => <div className="flow-timeline-item" key={entry.id || index}><i /><strong>{entry.action}</strong><small>{entry.time} · {entry.actor}</small><p>{entry.reason}</p></div>)}{(detail.exports || []).map((record) => <div className="flow-timeline-item" key={record.id}><i /><strong>正式导出 CSV</strong><small>{record.createdAt} · {record.actor}</small><p>{record.filename}</p></div>)}</div></Drawer>}
     {actionDialog}
   </div>;
 }
