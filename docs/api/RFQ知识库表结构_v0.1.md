@@ -127,7 +127,7 @@ V1__init.sql 建立身份、BU 隔离、项目、文档、解析与需求抽取�
 
 ## 二、知识库表草案（V3，尚未落库）
 
-现状：知识库（历史 RFQ 条款知识）目前无任何数据库表——文档元数据、条款与审核存浏览器 localStorage（`rfq.history.documents.v1` / `rfq.reference.knowledge.v1`），原件存 IndexedDB。以下草案按《历史 RFQ 文档上传与条款知识》设计（docs/superpowers/specs/2026-11-03-history-knowledge-upload-design.md）落地为共享存储，供升级"共享后端知识库"路线使用。
+原型阶段，历史 RFQ 条款知识的文档元数据、条款与审核存于浏览器 localStorage（`rfq.history.documents.v1` / `rfq.reference.knowledge.v1`），原件存于 IndexedDB。以下草案描述将这部分数据迁移到共享后端知识库所需的表结构。
 
 设计要点：
 
