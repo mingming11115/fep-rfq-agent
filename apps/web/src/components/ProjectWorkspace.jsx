@@ -1,4 +1,4 @@
-import { UiButton, BusinessTabs } from './AntContent';
+import { UiButton } from './AntContent';
 import React,{useEffect,useState} from 'react';
 import {Drawer} from 'antd';
 import { PageContainer } from '@ant-design/pro-components';
@@ -23,7 +23,6 @@ export default function ProjectWorkspace({route,summary,project,actorRole,projec
    </>} />;
  return <div className={`project-workspace ${isDetail?'project-detail-workspace':''}`}>
   {header}
-  <BusinessTabs className="tabs project-stage-tabs rfq-project-stage-tabs">{[['documents','RFQ解析'],['response','RFQ细则比对'],['export','导出文档']].map(([key,label])=><button key={key} className={((isDetail?'response':route.page)===key)?'active':''} disabled={key==='export'&&!canExport} title={key==='export'?exportReason:undefined} onClick={()=>onNavigate(key)}>{label}</button>)}</BusinessTabs>
   {taskContextError&&<div className="response-notice response-notice-warning"><span>{taskContextError}</span><UiButton className="btn btn-sm" onClick={onExitTask}>进入最新工作上下文</UiButton></div>}
   {children}
   {isDetail&&projectInfoPanel&&<Drawer title="项目信息" open={infoOpen} onClose={()=>setInfoOpen(false)} width="min(760px, 100vw)" forceRender rootClassName="rfq-project-info-drawer" className="rfq-ant-drawer"><div key={project.id+':'+actorRole}>{projectInfoPanel}</div></Drawer>}

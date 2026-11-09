@@ -1,17 +1,8 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Input } from 'antd';
 import { login } from '../authClient';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../demoAccounts';
 import './login-page.css';
-
-const DEMO_PASSWORD = 'Rfq@2026';
-
-const DEMO_ACCOUNTS = [
-  { username: 'sr01', name: '张明', role: '销售负责人', hint: '建项目 · 传文件 · 提交应答' },
-  { username: 'tech01', name: '李工', role: '技术确认人', hint: '核对条款 · 确认技术应答' },
-  { username: 'appr01', name: '王强', role: '最终审批人', hint: '审阅偏离 · 批准定稿' },
-  { username: 'bu01', name: '陈静', role: 'BU 管理员', hint: '人员授权 · 看板 · 审计' },
-  { username: 'admin', name: '系统管理员', role: '平台管理', hint: '目录 · 机型 · 系统配置' },
-];
 
 const CAPABILITIES = [
   ['01', '条款自动抽取', '保留客户章节与原始编号，不合并、不杜撰'],
@@ -106,7 +97,7 @@ export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
             onFinish={(values) => submit(values)}
           >
             <Form.Item name="username" label="账号" rules={[{ required: true, message: '请输入账号' }]}>
-              <Input prefix={<UserGlyph />} placeholder="如 sr01" autoComplete="username" autoFocus />
+              <Input prefix={<UserGlyph />} placeholder="如 mysql_sr" autoComplete="username" autoFocus />
             </Form.Item>
             <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
               <Input.Password prefix={<LockGlyph />} placeholder="请输入密码" autoComplete="current-password" />
@@ -139,7 +130,7 @@ export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
                   <span className="login-demo-avatar">{account.name[0]}</span>
                   <span className="login-demo-text">
                     <strong>{account.name}<em>{account.role}</em></strong>
-                    <small>{account.hint}</small>
+                    <small>{account.username} · {account.hint}</small>
                   </span>
                   <span className="login-demo-action">{pending === account.username ? '登录中…' : '一键登录'}</span>
                 </button>

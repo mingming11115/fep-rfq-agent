@@ -13,6 +13,21 @@ test('failure and unknown local sources never generate substitute clauses',async
  await assert.rejects(()=>parseRfqSource('P',{backendDocumentId:'D'},{post:async()=>({status:'failed',message:'解析失败'})}),/解析失败/);
 });
 
+test('the semiconductor demo project uploads the selected bytes and uses only backend clauses',async()=>{
+ const projectId='RFQ-DEMO-UPLOAD',calls=[],original=new Blob(['unique uploaded requirement']);
+ const api={
+  get:async path=>{calls.push(path);return path.includes('/requirements?')?{list:[{id:'REAL',documentId:'D',originalText:'unique uploaded requirement'},{id:'OTHER',documentId:'OTHER-D',originalText:'other document'}],totalPages:1}:{id:'BACKEND'};},
+  upload:async(path,body)=>{calls.push(path);assert.equal(await body.get('file').text(),await original.text());return {id:'D',version:1};},
+  post:async path=>{calls.push(path);return {id:'RUN',status:'partial',requirementCount:1,issueCount:1};},
+ };
+ const file=await uploadRfqSource(projectId,original,{id:'F',name:'new.docx',version:'V1.0'},api,{id:projectId,name:'半导体薄膜沉积设备'});
+ const {run,rows}=await parseRfqSource(projectId,file,api);
+ assert.ok(calls.includes('/projects/BACKEND/documents'));
+ assert.ok(calls.includes('/documents/D/parse-runs'));
+ assert.deepEqual(rows.map(row=>row.original),['unique uploaded requirement']);
+ assert.equal(run.status,'partial');assert.equal(rows[0].draft,'');assert.equal(rows[0].conclusion,'');
+});
+
 test('a migrated local project uploads and reads clauses using its backend ID while preserving its source binding',async()=>{
  const calls=[];
  const api={get:async path=>{calls.push(path);return path.includes('requirements')?{list:[{id:'R',documentId:'D',originalText:'精度要求'}],totalPages:1}:{id:'BACKEND'};},upload:async path=>{calls.push(path);return {id:'D',version:1};},post:async()=>({status:'completed',requirementCount:1})};

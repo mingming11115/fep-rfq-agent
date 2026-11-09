@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import useContentTransition from './useContentTransition';
-import { Avatar, Badge, Button, Grid, Select, Space, Tag, Tooltip, theme } from 'antd';
+import { Avatar, Badge, Button, Grid, Select, Space, Tooltip, theme } from 'antd';
 import { PageContainer, ProLayout } from '@ant-design/pro-components';
 import { LogoutOutlined,ReloadOutlined } from '@ant-design/icons';
 import { Bell, HelpCircle, Search } from "./icons";
 
 export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, onCollapse, onNavigate, onHome,
   onSearch, onHelp, pending, identity, identities, actorName, onIdentityChange, onLogout, pageTitle, isDetail,
-  contentKey, body, footer, children, dataSourceLabel, onRefresh }) {
+  contentKey, body, footer, children, onRefresh, quickAccounts=[], identityLoading=false }) {
   const screens = Grid.useBreakpoint();
   const { token } = theme.useToken();
   const compact = !screens.sm;
@@ -31,7 +31,6 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
         onClick={event => { event.preventDefault(); onNavigate(item.targetPage); if (mobile) setMobileCollapsed(true); }}>{dom}</button>}
       menuFooterRender={() => <span className="rfq-layout-menu-footer">{collapsed ? 'RFQ' : 'FEP · RFQ 工作空间'}</span>}
       actionsRender={() => [
-        dataSourceLabel ? <Tag key="data-source" color="blue">{dataSourceLabel}</Tag> : null,
         onRefresh ? <Tooltip key="refresh" title="刷新数据库数据"><Button type="text" aria-label="刷新数据库数据" icon={<ReloadOutlined/>} onClick={onRefresh}/></Tooltip> : null,
         compact ? null : <Tooltip key="search" title="搜索页面和项目"><Button type="text" aria-label="搜索页面和项目" icon={<Search size={18}/>} onClick={onSearch}/></Tooltip>,
         <Tooltip key="help" title="使用指南"><Button type="text" aria-label="使用指南" icon={<HelpCircle size={18}/>} onClick={onHelp}/></Tooltip>,

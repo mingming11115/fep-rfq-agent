@@ -22,7 +22,7 @@ export function mapDatabaseRequirement(row,files,owner){
  return {...row,clause:row.customerClauseNo||'',original:row.originalText||'',sourceOriginal:row.originalText||'',
   source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',sectionPath:sectionPath(row.sectionPath),
   category:'未分类',status:'待确认',conclusion:'',draft:'',conditions:row.conditionsText||'',evidence:'',reason:'',
-  matchLevel:'none',score:0,backendVersion:row.version,version:row.version,owner,
+  matchLevel:'none',score:0,backendVersion:row.version,version:Math.max(1,row.version),owner,
   parserNote:row.reviewReasons||'',needsReview:row.extractionStatus!=='VALID',
  };
 }

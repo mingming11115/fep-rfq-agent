@@ -19,6 +19,7 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
   const advice=buildResponseAdvice(row,suggestion,{check,retrieval});
   return <section className="response-advice" aria-label="AI 应答建议">
     <header className="response-advice-heading"><span className="response-advice-avatar"><Sparkles size={16} aria-hidden="true"/></span><h3>AI 应答建议</h3></header>
+    {(row.backendDocumentId||row.documentId)&&<p role="note">条款来源：后端文件解析。{!suggestion?.evidence&&'尚无匹配证据，请核对原文并补充应答依据。'}{row.parserNote&&` 解析提示：${row.parserNote}`}</p>}
     <dl>
       <dt>建议结论</dt><dd className="response-advice-conclusion"><strong>{advice.conclusion}</strong></dd>
     </dl>

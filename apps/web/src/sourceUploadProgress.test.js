@@ -25,6 +25,10 @@ test('upload UI advances, shows measured progress and retries only the failed tr
  const click=async text=>act(async()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent.replace(/\s/g,'').includes(text));assert.ok(button,text);button.click();await settle();});
  try{
   await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},onClose:()=>{},onSubmit:rows=>{if(!accept)return false;result=rows;}}));await settle();});
+  assert.equal(document.querySelector('input[aria-label="文件版本"]').value,'V1.0');
+  assert.equal(document.querySelector('input[aria-label="文件版本"]').disabled,true,'automatically assigned versions cannot be edited');
+  await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},files:[{id:'old',name:'old.pdf',version:'V2.0'},{id:'older',name:'older.pdf',version:'V1.0'}],onClose:()=>{},onSubmit:rows=>{if(!accept)return false;result=rows;}}));await settle();});
+  assert.equal(document.querySelector('input[aria-label="文件版本"]').value,'V3.0','next version follows the highest existing version, regardless of order');
   const input=document.querySelector('input[type="file"]');Object.defineProperty(input,'files',{configurable:true,value:[new File(['data'],'source.pdf',{type:'application/pdf'})]});
   await act(async()=>{input.dispatchEvent(new window.Event('change',{bubbles:true}));await settle();});
   await click('上传并开始解析');assert.equal(requests.length,1,'upload requests use progress transport');
@@ -38,10 +42,12 @@ test('upload UI advances, shows measured progress and retries only the failed tr
   assert.equal(result,undefined);assert.match(document.body.textContent,/提交解析未完成/);
   accept=true;await click('重试提交');assert.equal(requests.length,3,'retrying handoff must not upload acknowledged files again');
   assert.equal(result.length,1);assert.equal(result[0].backendDocumentId,'D');assert.equal(result[0].craft.id,'C');
+  assert.equal(result[0].version,'V3.0','the assigned version is preserved through upload and retry');
   assert.match(document.querySelector('.ant-steps-item-process').textContent,/提交解析/);
   await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},open:false,onClose:()=>{},onSubmit:()=>{}}));await settle();});
   await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},open:true,onClose:()=>{},onSubmit:()=>{}}));await settle();});
-  assert.equal(document.querySelectorAll('.ant-upload-list-item').length,0,'reopening starts a new selection rather than a disabled completed session');
+  // rc-motion retains removed rows until CSS transitionend (not emitted by Happy DOM).
+  assert.equal(document.querySelectorAll('.ant-upload-list-item-container:not(.ant-upload-animate-leave) .ant-upload-list-item').length,0,'reopening starts a new selection rather than a disabled completed session');
   const reopenedInput=document.querySelector('input[type="file"]');Object.defineProperty(reopenedInput,'files',{configurable:true,value:[new File(['next'],'next.pdf')]});
   await act(async()=>{reopenedInput.dispatchEvent(new window.Event('change',{bubbles:true}));await settle();});
   await click('上传并开始解析');assert.equal(requests.length,4);

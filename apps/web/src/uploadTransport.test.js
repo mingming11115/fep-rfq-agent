@@ -33,3 +33,19 @@ test('unknown upload size stays indeterminate and abort rejects with AbortError'
   await assert.rejects(pending,{name:'AbortError'});
  }finally{globalThis.XMLHttpRequest=previous;}
 });
+
+test('empty responses settle and upload authentication failures clear the session',async()=>{
+ const upload=await transport(),previousXHR=globalThis.XMLHttpRequest,previousStorage=globalThis.localStorage;let xhr;
+ const entries=new Map();globalThis.localStorage={getItem:key=>entries.get(key),setItem:(key,value)=>entries.set(key,value),removeItem:key=>entries.delete(key)};
+ globalThis.XMLHttpRequest=class extends UploadRequest{constructor(){super();xhr=this;}};
+ try{
+  const empty=upload('/upload');xhr.status=204;xhr.responseText='';xhr.onload();assert.equal((await empty).status,204);
+  const {api,persistSession,readSession,subscribeSession}=await import('./authClient.js');
+  persistSession({token:'test-token',user:{id:'U'}});const snapshots=[],unsubscribe=subscribeSession(value=>snapshots.push(value));
+  try{
+   const denied=api.upload('/documents',new FormData(),{onUploadProgress:()=>{}});
+   assert.equal(xhr.headers.authorization,'Bearer test-token');xhr.status=401;xhr.responseText='{"code":401,"msg":"expired"}';xhr.onload();
+   await assert.rejects(denied,{message:'expired',status:401});assert.equal(readSession(),null);assert.deepEqual(snapshots,[null]);
+  }finally{unsubscribe();}
+ }finally{globalThis.XMLHttpRequest=previousXHR;globalThis.localStorage=previousStorage;}
+});

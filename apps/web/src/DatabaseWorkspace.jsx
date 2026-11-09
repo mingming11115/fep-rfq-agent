@@ -14,5 +14,5 @@ export default function DatabaseWorkspace(){
  },[userId,revision]);
  if(error)return <Result status="error" title="未能读取数据库数据" subTitle={error} extra={[<Button key="retry" type="primary" onClick={()=>setRevision(value=>value+1)}>重新加载</Button>,<Button key="logout" onClick={logout}>重新登录</Button>]}/>;
  if(!state)return <div style={{minHeight:'100vh',display:'grid',placeItems:'center'}}><Spin tip="正在读取工作空间…" size="large"><div style={{padding:48}}/></Spin></div>;
- return <App key={`${userId}:${revision}`} initialState={state} onReload={()=>setRevision(value=>value+1)}/>;
+ return <App key={`${userId}:${revision}`} initialState={state} onReload={()=>{setState(null);setRevision(value=>value+1);}}/>;
 }

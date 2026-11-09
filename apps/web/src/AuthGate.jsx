@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { readSession, subscribeSession, persistLoginIdentity } from './authClient';
 import LoginPage from './pages/LoginPage';
 import { resolveLoginIdentity } from './sessionPersonnel';
@@ -18,5 +18,5 @@ export default function AuthGate({ children, loginAccounts }) {
   }
 
   if (!session) return <LoginPage onLogin={handleLogin} accounts={loginAccounts} />;
-  return children;
+  return <Fragment key={session.user.id}>{children}</Fragment>;
 }

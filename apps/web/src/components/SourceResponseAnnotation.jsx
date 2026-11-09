@@ -15,7 +15,7 @@ export default function SourceResponseAnnotation({ row, annotation, color, activ
       <button type="button" className="wc-icon" aria-label={`标注操作 ${row.clause || row.title}`} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><Ellipsis size={14}/></button>
     </div>
     <div className="wc-mobile-quote">{row.sourceOriginal ?? row.original}</div>
-    <p className="wc-note-body">{annotation.wording || 'Comply'}<span className="wc-format" aria-hidden="true"> ↵</span></p>
+    <p className="wc-note-body">{annotation.wording || annotation.label}<span className="wc-format" aria-hidden="true"> ↵</span></p>
     {menuOpen && <div className="wc-menu">
       <button type="button" onClick={select}>定位原文</button>
       {onOpen && <button type="button" onClick={() => { setMenuOpen(false); onOpen(row); }}>查看应答</button>}

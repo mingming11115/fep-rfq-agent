@@ -90,10 +90,15 @@ test('not-applicable wording includes its basis and keeps missing scope explicit
  const incomplete=model.generateRecommendedWording({...row,conclusion:'不适用'});
  assert.ok(incomplete.includes('不适用范围及依据尚待确认'));
 });
-test('pending and incomplete conditional wording do not invent a satisfied commitment',()=>{
- const pending=model.generateRecommendedWording({...row,conclusion:'待确认',reason:'客户尚未提供最终图纸'});
- assert.ok(pending.includes('尚待核实'));
- assert.ok(pending.includes('客户尚未提供最终图纸'));
+test('pending or missing conclusions do not generate wording or change the manual draft',()=>{
+ for(const conclusion of ['待确认',undefined,'','未评估']){
+  const input={...row,conclusion,reason:'客户尚未提供最终图纸',draft:'已有人工草稿'};
+  const before=structuredClone(input);
+  assert.equal(model.generateRecommendedWording(input),'');
+  assert.deepEqual(input,before);
+ }
+});
+test('incomplete conditional wording does not invent a satisfied commitment',()=>{
  const conditional=model.generateRecommendedWording({...row,conclusion:'有条件 Comply'});
  assert.ok(conditional.includes('适用条件尚待确认'));
  assert.ok(!conditional.includes('已满足'));
@@ -109,10 +114,10 @@ test('source margin shows only Comply for a compliant clause, without its saved 
  assert.deepEqual(input,before);
 });
 
-test('every non-Comply conclusion shows its corresponding recommendation in the source margin',()=>{
+test('explicit exception conclusions show their corresponding recommendation in the source margin',()=>{
  for(const [conclusion,phrase] of [
   ['有条件 Comply','有条件响应'],['不满足','无法满足'],
-  ['不适用','不适用'],['待确认','尚待核实'],
+  ['不适用','不适用'],
  ]){
   const annotation=model.buildSourceResponseAnnotation?.({...row,clause:'2.1',conclusion,conditions:'采用选配 X',reason:'需核对最终范围'});
   assert.equal(annotation?.kind,'recommendation',conclusion);
@@ -141,13 +146,13 @@ test('source margin uses the latest saved response rather than an old parsed con
  assert.equal(compliant?.wording,'');
 });
 
-test('missing or unrecognized source conclusions produce pending wording instead of a Comply marker',()=>{
- for(const conclusion of [undefined,'','未评估']){
+test('pending, missing or unrecognized source conclusions show only a pending marker',()=>{
+ for(const conclusion of ['待确认',undefined,'','未评估']){
   const annotation=model.buildSourceResponseAnnotation?.({...row,conclusion});
-  assert.equal(annotation?.kind,'recommendation');
+  assert.equal(annotation?.kind,'pending');
+  assert.equal(annotation?.label,'待确认');
   assert.equal(annotation?.conclusion,'待确认');
-  assert.ok(annotation?.wording.includes('尚待核实'));
-  assert.ok(annotation?.wording.includes('暂不作出满足性承诺'));
+  assert.equal(annotation?.wording,'');
  }
 });
 
