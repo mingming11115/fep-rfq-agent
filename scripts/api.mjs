@@ -11,6 +11,7 @@ const tools=path.join(os.homedir(),'.rfq-tools');
 const localMaven=path.join(tools,'apache-maven-3.9.16','bin',process.platform==='win32'?'mvn.cmd':'mvn');
 const executable=process.env.MVN_CMD||(existsSync(localMaven)?localMaven:process.platform==='win32'?'mvn.cmd':'mvn');
 const env={...process.env};
+if(process.argv[2]==='dev')env.SERVER_PORT||='48084';
 const localJava=path.join(tools,'jdk-17.0.20.1+1');
 if(!env.JAVA_HOME&&existsSync(localJava))env.JAVA_HOME=localJava;
 if(env.JAVA_HOME)env.PATH=path.join(env.JAVA_HOME,'bin')+path.delimiter+env.PATH;

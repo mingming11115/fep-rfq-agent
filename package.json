@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
+    "start": "powershell -NoProfile -File scripts/start.ps1",
     "dev:api": "node scripts/api.mjs dev",
     "test": "node scripts/check-layout.mjs && npm run test:tools && npm run test:web && npm run test:editors",
     "test:web": "node --test --test-concurrency=1 apps/web/src/*.test.js",

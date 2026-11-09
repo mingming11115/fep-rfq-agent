@@ -4,6 +4,7 @@ import {AimOutlined,FullscreenOutlined,FullscreenExitOutlined} from '@ant-design
 import {FileText,MoreHorizontal,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftFile,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
+import {importDatabaseOriginal} from '../databaseSource.js';
 import CraftResponseAdvice from './CraftResponseAdvice';
 import {AnnotationFilterView} from './annotationFilterView';
 import classicTemplate from '../../../../packages/craft-editors/site/classic.html?raw';
@@ -51,7 +52,8 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
         let ref=reference;
         if(!ref){
           const old=file?.office||read('fep-rfq-office-source:'+craftSourceKey(source));
-          if(old)ref=await importOfficeReview(old,source,abort.signal);
+          if(file?.backendDocumentId)ref=await importDatabaseOriginal(file,source,abort.signal);
+          else if(old)ref=await importOfficeReview(old,source,abort.signal);
           else if(craftDemoAsset(source))ref=await loadCraftDemo(source,abort.signal);
           else if(file?.realSource&&file.localUrl){
             const url=new URL(file.localUrl,location.origin);

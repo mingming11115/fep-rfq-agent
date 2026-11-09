@@ -3,14 +3,14 @@ import { Tag, Drawer as AntDrawer, Empty, Modal as AntModal, Pagination as AntPa
 import { normalizeTaskStatus } from '../taskStatus';
 import { statusTone } from '../antdAdapters';
 
-export function Modal({ onClose, children, footer = null, width = 640, ...props }) {
-  return <AntModal {...props} open onCancel={onClose} width={width} footer={footer}
+export function Modal({ onClose, children, footer = null, width = 640, open=true, ...props }) {
+  return <AntModal {...props} open={open} onCancel={onClose} width={width} footer={footer}
     className="rfq-ant-modal" styles={{ body: { paddingTop: 16, maxHeight: '70dvh', overflowY: 'auto' } }}>
     {children}
   </AntModal>;
 }
-export function Drawer({ onClose, children, footer, width = 660, ...props }) {
-  return <AntDrawer {...props} open onClose={onClose} width={width} footer={footer}
+export function Drawer({ onClose, children, footer, width = 660, open=true, ...props }) {
+  return <AntDrawer {...props} open={open} onClose={onClose} width={width} footer={footer}
     className="rfq-ant-drawer">{children}</AntDrawer>;
 }
 export const displayStatus = status => normalizeTaskStatus(status === '待复核' ? '待确认' : status);

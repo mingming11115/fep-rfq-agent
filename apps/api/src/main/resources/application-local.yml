@@ -1,3 +1,6 @@
 logging:
   level:
     com.naura.rfq: DEBUG
+rfq:
+  demo-data:
+    enabled: ${RFQ_DEMO_DATA_ENABLED:false}

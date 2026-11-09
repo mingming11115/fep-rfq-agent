@@ -16,6 +16,23 @@ RFQ 应答与审核工程，包含 React 前端、Java 后端，以及 Word/PDF 
 
 ## 前端开发
 
+### 单一 MySQL 工作空间
+
+保留原来的完整页面、导航和 RFQ 工作台，只提供一个入口：[http://127.0.0.1:5173](http://127.0.0.1:5173)。页面登录后经 Java 后端读取 MySQL 的项目、原件、条款和成员，不读取前端演示核心缓存；空库和无授权账号保持空列表，连接失败时显示错误和重试。
+
+```sh
+npm run dev:api        # Java 后端，默认 48084
+npm run dev            # 原工作台 UI，默认 5173
+```
+
+两个命令分别在终端运行。Windows 已配置好本机工具时，可运行 `npm start` 启动已配置的 MySQL、后端和唯一前端。MySQL 继续使用 `RFQ_DB_URL`、`RFQ_DB_USER`、`RFQ_DB_PASSWORD`，默认连接 `127.0.0.1:3306/rfq`。
+
+前端模拟入口、独立数据库表格页和 `5174` 服务已取消。登录页只使用数据库账号，不提供本机模拟身份。已有库内记录（包括先前按请求插入的演示记录）保留；开发和生产环境均默认关闭演示初始化，不会因启动重新插入或重置。
+
+原件读取、新建项目、上传和解析使用现有后端接口。应答、评审、最终批准、知识目录等尚缺完整后端持久化的操作保持未开放，不把浏览器写入提示为数据库保存。部分旧页面组件中的模拟工具保留供单元测试使用，产品入口不会调用它们。
+
+构建使用 `npm run build`，输出到 `apps/web/dist`。数据库核对可使用 [SQL 脚本](docs/development/mysql-demo-check.sql)。
+
 需要 Node.js 22.12+。在工程根目录执行：
 
 ```sh
@@ -23,7 +40,7 @@ npm ci --prefix apps/web
 npm run dev
 ```
 
-访问 http://127.0.0.1:5173 。前端默认代理到本机 `48083` 的 RFQ/Craft 接口及 `48081` 的 Office 接口；可用 `RFQ_API_TARGET`、`RFQ_CRAFT_API_TARGET`、`RFQ_BACKEND_URL` 调整，详见 [前端说明](apps/web/README.md)。
+访问 http://127.0.0.1:5173 。前端默认代理到本机 `48084` 的 RFQ/Craft 接口及 `48081` 的 Office 接口；可用 `RFQ_API_TARGET`、`RFQ_CRAFT_API_TARGET`、`RFQ_BACKEND_URL` 调整，详见 [前端说明](apps/web/README.md)。
 
 普通开发无需编译 Rust：启动与构建会校验 `packages/craft-editors/site` 中的预编译资源，并复制到前端生成目录。
 

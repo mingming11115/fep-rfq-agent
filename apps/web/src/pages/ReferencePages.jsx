@@ -26,10 +26,11 @@ import './reference-pages.css';
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}`;
 function useSaved(baseKey, initial, writable=true,context,kind='knowledge') {
+  const databaseBacked=context?.state?.dataSource==='mysql';
   const key=resourceStorageKey(baseKey,context?.buId);
-  const [raw,setRaw]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{return context?.buId==='BU-DEMO'?initial:[];}});
+  const [raw,setRaw]=useState(()=>{if(databaseBacked)return [];try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{return context?.buId==='BU-DEMO'?initial:[];}});
   const value=selectReadableResources(raw,context,kind);
-  const readLatest=()=>{try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{return raw;}};
+  const readLatest=()=>{if(databaseBacked)return [];try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{return raw;}};
   const setValue=updater=>{if(!writable)return;const latest=readLatest(),visible=selectReadableResources(latest,context,kind),ids=new Set(visible.map(r=>`${r.id}:${r.version}`)),next=typeof updater==='function'?updater(visible):updater;const merged=[...latest.filter(r=>!ids.has(`${r.id}:${r.version}`)),...next.map(r=>({...r,buId:r.buId||context.buId,...(r.scope==='仅当前项目'&&!r.projectId?{projectId:context.projectId}: {})}))];localStorage.setItem(key,JSON.stringify(merged));setRaw(merged);};
   useEffect(()=>{if(writable&&localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(raw));const refresh=e=>{if(e?.key&&e.key!==key)return;setRaw(readLatest());};window.addEventListener('storage',refresh);window.addEventListener('rfq-history-change',refresh);return()=>{window.removeEventListener('storage',refresh);window.removeEventListener('rfq-history-change',refresh);};},[key,writable]);
   const reload=()=>setRaw(readLatest());

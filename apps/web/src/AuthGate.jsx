@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { readSession, subscribeSession, persistLoginIdentity } from './authClient';
 import LoginPage from './pages/LoginPage';
 import { resolveLoginIdentity } from './sessionPersonnel';
 
 export { resolveLoginIdentity } from './sessionPersonnel';
 
-export default function AuthGate({ children }) {
+export default function AuthGate({ children, loginAccounts }) {
   const [session, setSession] = useState(() => readSession());
 
   useEffect(() => subscribeSession(setSession), []);
@@ -17,6 +17,6 @@ export default function AuthGate({ children }) {
     setSession(next);
   }
 
-  if (!session) return <LoginPage onLogin={handleLogin} />;
-  return children;
+  if (!session) return <LoginPage onLogin={handleLogin} accounts={loginAccounts} />;
+  return <Fragment key={session.user.id}>{children}</Fragment>;
 }

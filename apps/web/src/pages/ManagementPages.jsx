@@ -15,9 +15,9 @@ import { makeDocumentDemo } from '../documentMocks';
 const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5)}`;
 const roles = ['SR', '技术', '质量确认人', '商务确认人', '服务确认人', '最终审批人'];
-function useSaved(key, initial) {
-  const [value, setValue] = useState(() => { try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; } });
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* In-memory editing remains available. */ } }, [key, value]);
+function useSaved(key, initial, enabled=true) {
+  const [value, setValue] = useState(() => { if(!enabled)return initial;try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; } });
+  useEffect(() => { if(!enabled)return;try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* In-memory editing remains available. */ } }, [key, value]);
   return [value, setValue];
 }
 function Heading({ title, description, actions }) { return <PageHeading title={<>{title}</>} description={<>{description}</>} actions={<><div className="page-actions">{actions}</div></>} />; }
@@ -35,9 +35,9 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
   const [knowledgeOpen,setKnowledgeOpen]=useState(false),[knowledgeRoute,setKnowledgeRoute]=useState({page:'capabilities',groupId:project.groupId});
   const [form, setForm] = useState({ name: project.name, customer: project.customer, owner: project.owner, ownerId: project.ownerId||'', deadline: project.deadline });
   const [reason, setReason] = useState(''), [error, setError] = useState(''), [memberForm, setMemberForm] = useState(null), [memberReason, setMemberReason] = useState('');
-  const [approval, setApproval] = useSaved(`fep-rfq-management-approval-${project.id}`, { technical: '技术', quality: '质量确认人', business: '商务确认人', service: '服务确认人', professional: '技术', final: '最终审批人', knowledge: '独立知识批准人' });
+  const [approval, setApproval] = useSaved(`fep-rfq-management-approval-${project.id}`, { technical: '技术', quality: '质量确认人', business: '商务确认人', service: '服务确认人', professional: '技术', final: '最终审批人', knowledge: '独立知识批准人' },appState?.dataSource!=='mysql');
   const [approvalDraft, setApprovalDraft] = useState(approval);
-  const canEdit = actorRole === 'SR';
+  const canEdit = actorRole === 'SR' && appState?.dataSource!=='mysql';
   const technicalRows = requirements.filter((row) => row.category === '技术');
   const changed = Object.keys(form).some((key) => form[key] !== project[key]);
   const incomplete = Object.entries(approvalDraft).filter(([key, value]) => !value && key !== 'knowledge').length;

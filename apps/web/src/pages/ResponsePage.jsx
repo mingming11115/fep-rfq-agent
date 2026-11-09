@@ -1,5 +1,6 @@
 import {applyCollaborationEdit} from '../craftCommentSync';
 import { playContentMotion } from '../contentMotion';
+import usePanePreference from '../components/usePanePreference';
 import { UiButton, UiSelect, UiCheckbox, UiInput, UiTextArea, BusinessTable } from '../components/AntContent';
 import {buildReviewRequest,reviewEvidenceHref} from '../reviewRequest';
 import ReviewerPicker from '../components/ReviewerPicker';
@@ -81,7 +82,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [outlineOpen, setOutlineOpen] = useState(false), [activeCommentId, setActiveCommentId] = useState(null);
   const [commentEditRequest,setCommentEditRequest]=useState(null),[nativeDiscussion,setNativeDiscussion]=useState(null);
   const detailLayoutRef = useRef(null), detailSideRef = useRef(null);
-  const [paneShare, setPaneShare] = useState(()=>window.matchMedia('(min-width:768px)').matches?60:55);
+  const [paneShare, setPaneShare] = usePanePreference(actorId,project.id,narrowWorkbench?'vertical':'horizontal',narrowWorkbench?55:60);
   useEffect(() => { const frame=requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));return()=>cancelAnimationFrame(frame); }, [paneShare, narrowWorkbench]);
   function resizeWithKeyboard(event) {
     if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Enter'].includes(event.key))return;

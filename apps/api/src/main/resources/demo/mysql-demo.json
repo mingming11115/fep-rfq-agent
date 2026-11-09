@@ -1,0 +1,405 @@
+{
+  "id": "mysql-business-demo-v1",
+  "projects": [
+    {
+      "id": "MYSQL-DEMO-001",
+      "name": "新能源精密切割产线",
+      "customer": "华东新能源客户（模拟）",
+      "stage": "REVIEWING",
+      "deadline": "2026-12-15",
+      "requirements": [
+        {
+          "clause": "S1",
+          "title": "门禁联锁",
+          "original": "防护门打开时停止危险运动，复位后方可恢复。",
+          "sectionPath": [
+            "Safety"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "4.2",
+          "title": "付款里程碑",
+          "original": "付款安排按采购合同约定的预付款、发运款和验收款执行。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "合同付款附件经双方授权人员签署后生效。",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "P3",
+          "title": "交货周期承诺（待处理示例）",
+          "original": "合同生效后 8 周内完成交货。",
+          "sectionPath": [
+            "待处理"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "P4",
+          "title": "厂房土建与公用设施（待处理示例）",
+          "original": "报价应包括厂房改造与公用设施施工。",
+          "sectionPath": [
+            "待处理"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "P5",
+          "title": "新材料工艺适用性（待处理示例）",
+          "original": "设备需适用客户新开发复合材料，具体材料成分将在澄清后提供。",
+          "sectionPath": [
+            "待处理"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "R1",
+          "title": "安全防护与联锁（评审中示例）",
+          "original": "设备应配置防护门与安全联锁，防护门开启时停止危险运动。",
+          "sectionPath": [
+            "评审中"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "F1",
+          "title": "公用设施接口",
+          "original": "提供设备电力、冷却水和排风接口要求，注明额定值及允许范围。",
+          "sectionPath": [
+            "Facility"
+          ],
+          "conditions": "客户现场公用设施参数与最终接口表一致后实施。",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "4.1",
+          "title": "交货周期承诺",
+          "original": "合同生效后 8 周内完成交货。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "R4",
+          "title": "厂房土建与公用设施（评审中示例）",
+          "original": "报价应包括厂房改造与公用设施施工。",
+          "sectionPath": [
+            "评审中"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "2.4",
+          "title": "新材料工艺适用性",
+          "original": "设备需适用客户新开发复合材料，具体材料成分将在澄清后提供。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "F2",
+          "title": "安装条件",
+          "original": "安装位置应预留设备维护空间，具体尺寸见布局附件。",
+          "sectionPath": [
+            "Facility"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "2.3",
+          "title": "加工精度验证",
+          "original": "按客户提供的样品与图纸，提交重复加工精度验证报告。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "限模拟机型 DEMO-CUT 300 V2.1；样品、测量方法与环境条件按附件 A。",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "C3",
+          "title": "交货周期承诺（已确认示例）",
+          "original": "合同生效后 8 周内完成交货。",
+          "sectionPath": [
+            "已确认"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "6.1",
+          "title": "厂房土建与公用设施",
+          "original": "报价应包括厂房改造与公用设施施工。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "C5",
+          "title": "新材料工艺适用性（已确认示例）",
+          "original": "设备需适用客户新开发复合材料，具体材料成分将在澄清后提供。",
+          "sectionPath": [
+            "已确认"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        }
+      ]
+    },
+    {
+      "id": "MYSQL-DEMO-002",
+      "name": "半导体薄膜沉积设备",
+      "customer": "华北半导体客户（模拟）",
+      "stage": "DRAFT",
+      "deadline": "2026-12-15",
+      "requirements": []
+    },
+    {
+      "id": "MYSQL-DEMO-003",
+      "name": "精密零件加工设备",
+      "customer": "苏州精密制造客户（模拟）",
+      "stage": "APPROVED",
+      "deadline": "2026-12-15",
+      "requirements": [
+        {
+          "clause": "2.1",
+          "title": "安全防护与联锁",
+          "original": "设备应配置防护门与安全联锁，防护门开启时停止危险运动。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "3.1",
+          "title": "出厂验收文件",
+          "original": "出厂前提供检验记录、装箱清单及双方确认的 FAT 报告。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "5.1",
+          "title": "质保与故障响应",
+          "original": "供应商应明确质保期限、响应方式和服务范围。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        }
+      ]
+    },
+    {
+      "id": "MYSQL-DEMO-004",
+      "name": "实验室样品验证设备",
+      "customer": "华南材料研究客户（模拟）",
+      "stage": "EXPORTED",
+      "deadline": "2026-12-15",
+      "requirements": [
+        {
+          "clause": "2.1",
+          "title": "安全防护与联锁",
+          "original": "设备应配置防护门与安全联锁，防护门开启时停止危险运动。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "3.1",
+          "title": "出厂验收文件",
+          "original": "出厂前提供检验记录、装箱清单及双方确认的 FAT 报告。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "5.1",
+          "title": "质保与故障响应",
+          "original": "供应商应明确质保期限、响应方式和服务范围。",
+          "sectionPath": [
+            "模拟客户要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        }
+      ]
+    },
+    {
+      "id": "MYSQL-DEMO-005",
+      "name": "解析中示例 · 智能应答对比",
+      "customer": "演示客户（模拟）",
+      "stage": "PARSING",
+      "deadline": "2026-12-15",
+      "requirements": []
+    },
+    {
+      "id": "MYSQL-DEMO-006",
+      "name": "【数据库模拟】部分条款待评审 · 工艺验证设备",
+      "customer": "演示客户（模拟）",
+      "stage": "REVIEWING",
+      "deadline": "2026-12-15",
+      "requirements": [
+        {
+          "clause": "1",
+          "title": "安全防护与联锁",
+          "original": "防护门开启时停止危险运动，复位确认后方可恢复。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "2",
+          "title": "公用设施接口",
+          "original": "提供电力、冷却水和排风接口要求及允许范围。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "【模拟】现场参数与双方确认的接口表一致后实施。",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "3",
+          "title": "加工精度验证",
+          "original": "按双方确认的样品和测量方案提供精度验证记录。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "NEEDS_REVIEW"
+        },
+        {
+          "clause": "4",
+          "title": "交货周期",
+          "original": "合同生效后8周内完成设备交付。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "NEEDS_REVIEW"
+        }
+      ]
+    },
+    {
+      "id": "MYSQL-DEMO-007",
+      "name": "【数据库模拟】待发起最终评审 · 接口配套设备",
+      "customer": "演示客户（模拟）",
+      "stage": "REVIEWING",
+      "deadline": "2026-12-15",
+      "requirements": [
+        {
+          "clause": "1",
+          "title": "安全防护与联锁",
+          "original": "防护门开启时停止危险运动，复位确认后方可恢复。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "2",
+          "title": "公用设施接口",
+          "original": "提供电力、冷却水和排风接口要求及允许范围。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "【模拟】现场参数与双方确认的接口表一致后实施。",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "3",
+          "title": "加工精度验证",
+          "original": "按双方确认的样品和测量方案提供精度验证记录。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "4",
+          "title": "交货周期",
+          "original": "合同生效后8周内完成设备交付。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        }
+      ]
+    },
+    {
+      "id": "MYSQL-DEMO-008",
+      "name": "【数据库模拟】最终评审通过 · 安全防护设备",
+      "customer": "演示客户（模拟）",
+      "stage": "APPROVED",
+      "deadline": "2026-12-15",
+      "requirements": [
+        {
+          "clause": "1",
+          "title": "安全防护与联锁",
+          "original": "防护门开启时停止危险运动，复位确认后方可恢复。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "2",
+          "title": "公用设施接口",
+          "original": "提供电力、冷却水和排风接口要求及允许范围。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "【模拟】现场参数与双方确认的接口表一致后实施。",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "3",
+          "title": "加工精度验证",
+          "original": "按双方确认的样品和测量方案提供精度验证记录。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        },
+        {
+          "clause": "4",
+          "title": "交货周期",
+          "original": "合同生效后8周内完成设备交付。",
+          "sectionPath": [
+            "模拟要求"
+          ],
+          "conditions": "",
+          "extractionStatus": "VALID"
+        }
+      ]
+    }
+  ]
+}

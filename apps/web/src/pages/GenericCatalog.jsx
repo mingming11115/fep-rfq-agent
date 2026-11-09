@@ -5,12 +5,12 @@ import AdminPageHeader from '../components/AdminPageHeader';
 import React,{useState} from 'react';
 import {Alert,Button,Card,Checkbox,Input,InputNumber,Modal,Select,Space,Table,Tree,Typography,Descriptions,Tag,Empty} from 'antd';
 import {canPerform} from '../permissions';
-import {fieldTypes,readGenericCatalog,writeGenericCatalog,saveNode,nodePath} from '../genericCatalog';
+import {fieldTypes,readGenericCatalog,writeGenericCatalog,saveNode,nodePath,migrateCatalog} from '../genericCatalog';
 const uid=()=>crypto.randomUUID();
 const typeNames={text:'文本',number:'数字',select:'单选',multiselect:'多选',date:'日期'};
 export default function GenericCatalog({context,legacyCatalog,capabilities,projects=[],initialGroupId,buName,businessUnits=[],onBuChange,onBack,onCapability,onReview,canEditCapability,canApproveCapability,onAssignCapabilities}){
  const groupScope=useKnowledgeGroup();
- const [localCatalog,setLocalCatalog]=useState(()=>{try{return readGenericCatalog(localStorage,context.buId,legacyCatalog,capabilities);}catch(e){return {buId:context.buId,loadError:e.message,schema:{title:'分组与能力配置',levels:[]},nodes:[],attachments:[]};}});
+ const [localCatalog,setLocalCatalog]=useState(()=>{if(context.state.dataSource==='mysql')return migrateCatalog(context.buId);try{return readGenericCatalog(localStorage,context.buId,legacyCatalog,capabilities);}catch(e){return {buId:context.buId,loadError:e.message,schema:{title:'分组与能力配置',levels:[]},nodes:[],attachments:[]};}});
  const [schema,setSchema]=useState(null),[draft,setDraft]=useState(null),[localSelected,setLocalSelected]=useState(initialGroupId||''),[error,setError]=useState(''),[attachment,setAttachment]=useState(null);
  const catalog=groupScope?.catalog||localCatalog,selected=groupScope?.groupId||localSelected;
  const setSelected=id=>groupScope?groupScope.selectGroup(id):setLocalSelected(id);

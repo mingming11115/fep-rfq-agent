@@ -22,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Runs only when the user table is empty so real data is never overwritten.
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="rfq.demo-data.enabled",havingValue="true")
+@org.springframework.core.annotation.Order(0)
 @RequiredArgsConstructor
 public class DemoDataInitializer implements CommandLineRunner {
 

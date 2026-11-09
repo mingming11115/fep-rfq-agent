@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Button, Select, Space } from 'antd';
 import { ProDescriptions, ProTable } from '@ant-design/pro-components';
 import { Drawer, StatusBadge } from '../components/ui';
+import OverlayPresence from '../components/OverlayPresence';
 
 export default function AnalysisRecordsPage({ appState, onOpenProject }) {
   const [projectId, setProjectId] = useState(''), [detail, setDetail] = useState(null);
@@ -26,11 +27,11 @@ export default function AnalysisRecordsPage({ appState, onOpenProject }) {
       <ProTable className="rfq-ant-table" rowKey="id" columns={columns} dataSource={runs} search={false} headerTitle="分析运行记录"
         options={{ reload: false, density: true, setting: true, fullScreen: true }} scroll={{ x: 1160 }} pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无本轮分析记录，解析文件后会保留运行结果' }}/>
     </section>
-    {detail && <Drawer title="本次分析详情" onClose={() => setDetail(null)}><ProDescriptions column={1} dataSource={detail} columns={[
+    <OverlayPresence>{detail && <Drawer title="本次分析详情" onClose={() => setDetail(null)}><ProDescriptions column={1} dataSource={detail} columns={[
       { title: '批次', dataIndex: 'id' }, { title: '项目', render: () => projectName(detail.projectId) },
       { title: '来源文件', render: () => detail.fileName || detail.fileId }, { title: '来源版本', dataIndex: 'sourceVersion' },
       { title: '状态', render: () => <StatusBadge status={detail.status}/> },
       { title: '执行说明', render: () => detail.detail || '来源及执行结果见记录。重新解析从当前文件发起，原记录保留。' },
-    ]}/></Drawer>}
+    ]}/></Drawer>}</OverlayPresence>
   </div>;
 }

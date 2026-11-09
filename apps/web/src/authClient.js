@@ -1,3 +1,4 @@
+import {uploadWithProgress} from './uploadTransport.js';
 const SESSION_KEY = 'fep-rfq-auth';
 const API_BASE = '/api/rfq';
 
@@ -60,19 +61,21 @@ export function clearSession() {
 }
 
 async function request(path, options = {}) {
+  const {onUploadProgress,...requestOptions}=options;
   const session = readSession();
   const isFormData = options.body instanceof FormData;
   const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
   if (session?.token) headers.Authorization = `Bearer ${session.token}`;
   let response;
   try {
-    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  } catch {
+    response = onUploadProgress?await uploadWithProgress(`${API_BASE}${path}`,{...requestOptions,headers},onUploadProgress):await fetch(`${API_BASE}${path}`, { ...requestOptions, headers });
+  } catch(error) {
+    if(error.name==='AbortError')throw error;
     throw new Error('无法连接后端服务，请确认 48083 端口的服务已启动');
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.code !== 0) {
-    if (response.status === 401 && session) {
+    if (response.status === 401 && session && path !== '/auth/login') {
       clearSession();
       broadcastSession();
     }
@@ -113,5 +116,5 @@ export const api = {
   post: (path, body) => request(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body ?? {}) }),
   patch: (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
   delete: (path) => request(path, { method: 'DELETE' }),
-  upload: (path, formData) => request(path, { method: 'POST', body: formData }),
+  upload: (path, formData, options={}) => request(path, { ...options, method: 'POST', body: formData }),
 };
