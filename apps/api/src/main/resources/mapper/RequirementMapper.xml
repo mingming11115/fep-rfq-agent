@@ -13,6 +13,10 @@
         where id = #{id}
     </select>
 
+    <select id="findByIdForUpdate" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
+        select <include refid="columns"/> from requirement where id = #{id} for update
+    </select>
+
     <select id="findByProjectIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement

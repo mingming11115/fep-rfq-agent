@@ -35,11 +35,7 @@ public class BusinessRecordService {
             "snapshots",rows("select payload from response_snapshot where project_id=? order by id",id));
     }
     private boolean readable(CurrentUser user,JsonNode row){
-        String projectId=row.path("projectId").asText(row.path("sourceProjectId").asText());
-        if(projectId.isBlank()&&java.util.Set.of("草稿","待审核","退回","候选").contains(row.path("status").asText())){
-            var matcher=java.util.regex.Pattern.compile("MYSQL-DEMO-\\d{3}").matcher(row.path("source").asText()+" "+row.path("sourceLocation").asText());
-            if(matcher.find())projectId=matcher.group();
-        }
+        String projectId=KnowledgePublicationAccess.recordProjectId(row);
         if(projectId.isBlank())return !row.path("scope").asText().equals("仅当前项目");
         try{guard.requireProject(user,projects.findById(projectId).orElse(null));return true;}
         catch(BusinessException denied){return false;}
@@ -47,7 +43,7 @@ public class BusinessRecordService {
     public Map<String,Object> resources(CurrentUser user,String buId){
         guard.requireBu(user,buId);
         var result=new LinkedHashMap<String,Object>();
-        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","knowledge_record","evidence","evidence_record","historyDocuments","history_document","historyClauses","history_clause").entrySet())
+        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document","historyClauses","`history-rfq-record`").entrySet())
             result.put(entry.getKey(),rows("select payload from "+entry.getValue()+" where bu_id=? order by id,version",buId).stream().filter(row->readable(user,row)).toList());
         var catalog=rows("select payload from knowledge_group_catalog where bu_id=?",buId);
         result.put("catalog",catalog.isEmpty()?json.nullNode():catalog.get(0));

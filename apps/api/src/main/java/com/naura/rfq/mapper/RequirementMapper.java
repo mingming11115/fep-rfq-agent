@@ -12,6 +12,8 @@ public interface RequirementMapper {
 
     Optional<Requirement> findById(@Param("id") String id);
 
+    Optional<Requirement> findByIdForUpdate(@Param("id") String id);
+
     List<Requirement> findByProjectIdOrderBySortOrder(@Param("projectId") String projectId);
 
     List<Requirement> findByDocumentIdOrderBySortOrder(@Param("documentId") String documentId);

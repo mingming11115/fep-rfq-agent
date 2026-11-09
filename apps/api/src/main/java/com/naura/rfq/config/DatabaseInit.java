@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.ResourceProvider;
 import org.flywaydb.core.api.resource.LoadableResource;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Configuration(proxyBeanMethods = false)
 class DatabaseInit {
     private static final String BASELINE_NAME = "B10__rfq_schema.sql";
+    private static final String V11_NAME = "V11__standard_reply_records.sql";
+    private static final String V11_START = "-- RFQ_MIGRATION_V11\n";
+    private static final String V11_END = "-- RFQ_MIGRATION_V11_END";
+    private static final String V12_START = "-- RFQ_MIGRATION_V12\n";
+    private static final String V12_END = "-- RFQ_MIGRATION_V12_END";
+    private static final String V13_START = "-- RFQ_MIGRATION_V13\n";
+    private static final String V13_END = "-- RFQ_MIGRATION_V13_END";
+    private static final String V14_START = "-- RFQ_MIGRATION_V14\n";
+    private static final String V14_END = "-- RFQ_MIGRATION_V14_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -40,26 +50,42 @@ class DatabaseInit {
     @Bean
     FlywayConfigurationCustomizer initSqlBaseline() {
         // Keep the same schema baseline identity for databases already initialized.
-        String schema = sql.substring(0, sql.indexOf(ASSET_SCHEMA));
-        LoadableResource baseline = new LoadableResource() {
-            @Override public StringReader read() { return new StringReader(schema); }
-            @Override public String getFilename() { return BASELINE_NAME; }
-            @Override public String getRelativePath() { return BASELINE_NAME; }
-            @Override public String getAbsolutePath() { return "classpath:db/init.sql"; }
-            @Override public String getAbsolutePathOnDisk() { return getAbsolutePath(); }
-        };
+        int migration = sql.indexOf(V11_START);
+        var baseline = resource(BASELINE_NAME, sql.substring(0, migration), "classpath:db/init.sql");
+        var standardReplies = resource(V11_NAME, sql.substring(migration + V11_START.length(), sql.indexOf(V11_END)),
+                "classpath:db/init.sql#V11");
+        var history = resource("V12__history_rfq_publication.sql",
+                sql.substring(sql.indexOf(V12_START) + V12_START.length(), sql.indexOf(V12_END)),
+                "classpath:db/init.sql#V12");
+        var capability = resource("V13__capability_library.sql",
+                sql.substring(sql.indexOf(V13_START) + V13_START.length(), sql.indexOf(V13_END)),
+                "classpath:db/init.sql#V13");
+        var match = resource("V14__requirement_match.sql",
+                sql.substring(sql.indexOf(V14_START) + V14_START.length(), sql.indexOf(V14_END)),
+                "classpath:db/init.sql#V14");
+        var resources = List.of(baseline, standardReplies, history, capability, match);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {
-                return BASELINE_NAME.equals(name) ? baseline : null;
+                return resources.stream().filter(resource -> resource.getFilename().equals(name)).findFirst().orElse(null);
             }
 
             @Override
             public Collection<LoadableResource> getResources(String prefix, String[] suffixes) {
-                return BASELINE_NAME.startsWith(prefix) && Arrays.stream(suffixes).anyMatch(BASELINE_NAME::endsWith)
-                    ? List.of(baseline) : List.of();
+                return resources.stream().filter(resource -> resource.getFilename().startsWith(prefix)
+                        && Arrays.stream(suffixes).anyMatch(resource.getFilename()::endsWith)).toList();
             }
         });
+    }
+
+    private LoadableResource resource(String filename, String source, String path) {
+        return new LoadableResource() {
+            @Override public StringReader read() { return new StringReader(source); }
+            @Override public String getFilename() { return filename; }
+            @Override public String getRelativePath() { return filename; }
+            @Override public String getAbsolutePath() { return path; }
+            @Override public String getAbsolutePathOnDisk() { return path; }
+        };
     }
 
     @Bean
@@ -71,7 +97,15 @@ class DatabaseInit {
                     && hasTable(jdbc, "rfq_demo_document")
                     && jdbc.queryForObject("select count(*) from rfq_demo_seed where id=? and initialized_at is not null",
                         Integer.class, IMPORT_MARKER) == 1) {
-                flyway.baseline();
+                if (hasTable(jdbc, "standard-reply-record") && hasTable(jdbc, "history-rfq-record")
+                        && hasTable(jdbc, "standard_reply_index_sync")) {
+                    String version = hasTable(jdbc, "requirement_match_result") ? "14"
+                            : hasColumn(jdbc, "capability_record", "source_fingerprint") ? "13"
+                            : hasTable(jdbc, "history_rfq_index_sync") ? "12" : "11";
+                    Flyway.configure().configuration(flyway.getConfiguration()).baselineVersion(version).load().baseline();
+                } else {
+                    flyway.baseline();
+                }
             }
             flyway.migrate();
             if (!demoEnabled || alreadySeeded(jdbc)) return;
@@ -99,5 +133,12 @@ class DatabaseInit {
     private boolean hasTable(JdbcTemplate jdbc, String table) {
         return jdbc.queryForObject("select exists (select 1 from information_schema.tables where table_schema=database() and table_name=?)",
             Boolean.class, table);
+    }
+
+    private boolean hasColumn(JdbcTemplate jdbc, String table, String column) {
+        return jdbc.queryForObject("""
+            select exists (select 1 from information_schema.columns
+                           where table_schema=database() and table_name=? and column_name=?)
+            """, Boolean.class, table, column);
     }
 }

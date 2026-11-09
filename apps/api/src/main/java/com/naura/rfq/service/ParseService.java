@@ -54,6 +54,7 @@ public class ParseService {
     private final AuditService audit;
     private final ProjectMapper projects;
     private final AccessGuard access;
+    private final RequirementMatchService matches;
 
     public record ParseRunView(String id, String documentId, String status, int totalBlocks,
             int processedBlocks, int requirementCount, int issueCount, String message,
@@ -151,6 +152,7 @@ public class ParseService {
         run.setMessage(truncate(run.getMessage(), 990));
         runs.update(run);
         documents.update(document);
+        matches.parsed(project, document, saved.stream().map(Saved::requirement).toList());
         audit.successInBu(actorId, project.getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
         return view(run);

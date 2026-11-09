@@ -25,6 +25,7 @@ public class RequirementService {
     private final com.naura.rfq.mapper.CustomerDocumentMapper documents;
     private final AccessGuard access;
     private final AuditService audit;
+    private final RequirementMatchService matches;
 
     public PageView<RequirementView> list(CurrentUser user, String projectId,
             int page,
@@ -52,9 +53,10 @@ public class RequirementService {
         access.requireActiveProject(project);
 
         // Use the same document lock as re-parsing so a human edit cannot be lost mid-run.
-        documents.findByIdForUpdate(requirement.getDocumentId())
+        var document = documents.findByIdForUpdate(requirement.getDocumentId())
             .orElseThrow(() -> new BusinessException(404, "文档不存在"));
-        requirement = requirements.findById(id).orElseThrow(() -> new BusinessException(409, "条款已重新解析，请刷新后重试"));
+        requirement = requirements.findByIdForUpdate(id)
+                .orElseThrow(() -> new BusinessException(409, "条款已重新解析，请刷新后重试"));
         if (request.version() != null && !request.version().equals(requirement.getVersion())) {
             throw new BusinessException(409, "条款已被他人修改，请刷新后重试");
         }
@@ -80,6 +82,7 @@ public class RequirementService {
             throw new BusinessException(409, "条款已被他人修改，请刷新后重试");
         }
         requirement.setVersion(requirement.getVersion() + 1);
+        matches.corrected(project, document, requirement);
         audit.successInBu(user.id(), project.getBuId(), "修正抽取条款", "requirement", id, request.reviewReasons());
         return RequirementView.of(requirement);
     }

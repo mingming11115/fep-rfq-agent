@@ -132,6 +132,27 @@ OCR 使用本项目定义的轻量 HTTP JSON 协议，可通过适配服务对�
 
 没有填写真实服务地址和凭据时，可完整使用上传与原生文字/规则解析。当前通过本地 HTTP 假服务验证成功、错误、超时和降级，尚未与指定供应商实网联调。
 
+## 标准回复导入与发布
+
+标准回复按 BU 管理。上传 `.xlsx`、`.xls` 或 UTF-8 `.csv` 文件，表头使用「回复标题、客户要求、标准回复、适用条件」。Excel 使用一个数据工作表，单个文件最多 5 MiB、1,000 条数据。导入返回新增草稿、重复行和错误行。同一 BU 重复导入字节相同的文件会跳过已保存的行。草稿保存文件名、文件 SHA-256 和行号。
+
+以下接口的路径前缀为 `/api/rfq/business-units/{buId}/standard-replies`。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `POST /import` | multipart 字段 `file`，返回 `items`、`skippedRows` 和 `errors`。 |
+| `GET /{id}/versions/{version}` | 读取指定版本、修改序号 `revision` 和索引状态 `indexStatus`。BU 资源列表继续通过 `GET /api/rfq/business-units/{buId}/resources` 的 `knowledge` 读取。 |
+| `PATCH /{id}/versions/{version}` | 更新草稿，提交 `revision`、`title`、`requirement`、`answer` 和 `conditions`。 |
+| `POST /{id}/versions/{version}/{action}` | `submit`、`publish`、`return`、`revise` 或 `revoke`。提交 `revision` 和 `reason`，退回和撤销须填写原因。 |
+
+同一版本由另一位具有 `knowledge-publish` 资格的本 BU 管理员审核。修订生成新草稿，批准新版本后替代原发布版本。审核通过与索引同步分别记录。导入的 BU 共享标准回复在发布和撤销时登记同步任务，数据库事务提交后由后台发送。
+
+索引同步使用 `RFQ_STANDARD_REPLY_INDEX_BASE_URL` 和 `RFQ_STANDARD_REPLY_INDEX_API_KEY`，并在 Spring 配置中为每个 BU 指定独立数据集，例如 `rfq.standard-reply-index.datasets[BU-FEP]=rfq.fep.standard-reply`。缺少配置的 BU 将保留待处理任务。配置示例使用测试环境地址和服务端密钥注入。
+
+```sh
+export SPRING_APPLICATION_JSON='{"rfq":{"standard-reply-index":{"datasets":{"[BU-FEP]":"rfq.fep.standard-reply"}}}}'
+```
+
 ## 本机运行与验证
 
 需要 JDK 17+、Maven 3.9+、MySQL 8。配置 `RFQ_DB_URL`、`RFQ_DB_USER`、`RFQ_DB_PASSWORD` 和 `RFQ_JWT_SECRET`，默认端口 48081。[init.sql](src/main/resources/db/init.sql) 包含建表语句、演示数据和 Word 原件。新电脑启动及旧演示库重建步骤见 [启动指南](../../启动.md)。
@@ -164,7 +185,101 @@ ONLYOFFICE 使用 `.env.example` 中的 `ONLYOFFICE_*` 配置和 `docker compose
 
 `POST /api/rfq/history/parse` 接收 multipart `file`、可选 `responseFile`、必填 `buId`。请求使用现有 JWT，服务端校验所属 BU，支持该 BU 的维护角色。文件支持真实 DOCX/PDF、每个不超过 30 MiB，复用原件内容校验及 OCR 读取器；临时文件在读取结束后清理。
 
-响应包含 `metadata`、`clauses`、`sources`、`issues`。条款的 `answer` 合并原文件的答复与结论列，不生成结论字段。配套答复只按唯一编号关联；重复或未关联内容通过来源与异常返回。PDF 历史入口保留逐行唯一锚点，项目 RFQ 的原读取行为保持不变。该接口只做解析，知识草稿／审核仍由当前前端原型保存，不意味着已提供服务器知识库。
+响应包含 `metadata`、`clauses`、`sources`、`issues`。条款的 `answer` 合并原文件的答复与结论列。配套答复只按唯一编号关联，重复或未关联内容通过来源与异常返回。PDF 历史入口保留逐行唯一锚点。需要持久化时，使用下文的入库接口。
+
+## 历史 RFQ 入库与发布
+
+以下路径以 `/api/rfq/business-units/{buId}/history-rfq` 为前缀。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `POST /import` | 上传 DOCX 或 PDF 的 `file` 和可选的 `responseFile`。必须选择 `shareWithBu=true` 或指定 `projectId`。服务端保存原件、解析异常和条款草稿，返回 `document`、`clauses`、`duplicate`。同一范围内重复上传相同文件组合时返回已有记录。 |
+| `GET /documents/{id}/original?part=main` | 下载保存的主原件。传 `part=answer` 下载配套答复原件。 |
+| `GET /clauses/{id}/versions/{version}` | 读取指定条款版本、`revision` 和索引状态。BU 资源列表的 `historyDocuments`、`historyClauses` 提供记录入口。 |
+| `PATCH /clauses/{id}/versions/{version}` | 修改草稿或退回版本，提交 `revision`、`title`、`requirement`、`answer` 和 `conditions`。 |
+| `POST /clauses/{id}/versions/{version}/{action}` | `submit`、`publish`、`return`、`revise` 或 `revoke`。提交 `revision`，退回和撤销时还须提供 `reason`。 |
+
+`POST /api/rfq/projects/{projectId}/snapshots/{snapshotId}/history-rfq` 从数据库内指定的已批准定稿快照生成历史候选，保存快照与来源文件版本。候选默认仅当前项目可见，具备发布资格的本 BU 管理员可传 `shareWithBu=true` 生成 BU 共享候选。该接口独立于 RFQ 正式导出。
+
+历史条款提交后，由另一位具备 `knowledge-publish` 资格的本 BU 管理员审核。BU 共享条款发布后由 `history_rfq_index_sync` 异步同步，撤销后登记索引删除。项目范围条款按项目权限读取，不进入 BU 数据集。历史数据集与标准回复数据集分开配置，例如 `rfq.standard-reply-index.history-datasets[BU-FEP]=rfq.fep.history-clause`。索引连接复用上面的服务地址和密钥，缺少历史数据集配置时同步任务保留在队列中。
+
+现有前端解析页仍调用 `POST /api/rfq/history/parse`。服务端入库、审核与快照候选目前通过上述接口触发。
+
+## 机型能力边界库
+
+以下接口以 `/api/rfq/business-units/{buId}/capability-library` 为前缀。已有 BU 资源列表仍提供 `models`、`processes`、`capabilities` 和 `evidence`。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `POST /models`、`POST /processes` | 本 BU 管理员保存机型和工艺基础配置。机型提交 `code`、`name`、`modelRevision`、`config`。工艺提交 `modelId`、`modelVersion`、`code`、`name`、`enabled`。使用各自的 `/{id}/versions/{version}/revise` 从最新版本换版。 |
+| `POST /evidence` | 登记证据元数据，提交 `name`、`source`、`location`，可选 `expiry`（`YYYY-MM-DD`）和 `projectId`。`GET /evidence/{id}/versions/{version}` 读取该版本，`POST` 同路径后加 `/revise` 登记新版，或加 `/verify`、`/revoke` 核对、撤销该版。 |
+| `POST /capabilities` | 手动保存草稿。可指定 `projectId`，省略时为 BU 共享。可先保存待补齐的字段。 |
+| `POST /capabilities/import` | multipart 字段 `file` 和可选 `projectId`，返回成功草稿 `items`、重复行 `skippedRows` 和错误 `errors`。保留文件名、SHA-256、工作表和行号。 |
+| `POST /history/{id}/versions/{version}/candidate` | 从有权查看的已发布历史 RFQ 条款生成草稿，固定来源版本并保留来源的项目限制。录入人补充实际能力值和证据。 |
+| `GET /capabilities/{id}/versions/{version}` | 读取固定版本、修改序号 `revision` 和当前可用状态 `eligible`。 |
+| `PATCH /capabilities/{id}/versions/{version}` | 提交 `revision` 和完整草稿字段，更新草稿或退回版本。共享范围在创建时确定。 |
+| `POST /capabilities/{id}/versions/{version}/{action}` | `submit`、`publish`、`return`、`revise`、`revoke`。提交 `revision` 和 `reason`，替代、退回或撤销须填写原因。 |
+| `GET /published` | 精确查询当前可用能力。传入 `modelId`、`modelVersion`、`processId`、`processVersion`、`config`、`metricCode`，可选 `projectId`。同一范围有多条时返回全部。 |
+
+草稿提交和发布都会检查机型、配置、启用工艺、指标编码和定义、数值、单位、值类型、适用条件及证据。证据须指定同 BU 内的 `id`、`version` 和 `location`，项目证据只允许支持同项目能力。证据由具备 `capability-publish` 资格的本 BU 管理员核对，核对人与登记人分开。能力由具备同一资格的管理员审核，审核人与提交人分开。修订保留原发布版本，新版本获批才替代。证据撤销或到期时，依赖该版证据的能力自动退出可用查询。能力数据保存在 MySQL。
+
+草稿 JSON 示例：
+
+```json
+{
+  "modelId": "MOD-1", "modelVersion": 1, "processId": "PROC-1", "processVersion": 1, "config": "CFG-R2",
+  "metricCode": "position-accuracy", "metric": "定位精度", "operator": "LE", "upper": "5", "unit": "μm",
+  "valueType": "保证值", "conditions": "硅材料，测试方法 M1", "limits": "仅适用标准模块",
+  "evidence": [{"id": "EV-1", "version": 1, "location": "第 8 页，表 2"}]
+}
+```
+
+`LT`、`LE` 填 `upper`，`GT`、`GE`、`EQ` 填 `lower`，`RANGE` 填两端及 `lowerInclusive`、`upperInclusive`。数值按十进制字符串保存，值类型为「保证值」「典型值」或「单次测试值」。
+
+Excel 支持单工作表 `.xlsx`，最多 5 MiB、1,000 条数据。首行按顺序填写以下表头，区间端点列用「是」或「否」。同一范围、文件名、工作表、行号和内容重复导入时跳过已有行。公式单元格返回行错误。
+
+```text
+机型ID,机型版本,工艺ID,工艺版本,配置基线,指标编码,指标名称,运算符,下限,上限,含下限,含上限,单位,值类型,适用条件,限制,证据ID,证据版本,证据位置
+```
+
+旧的文本能力版本保留回查。缺少精确机型、工艺和证据引用的记录需补齐并审核后才能进入可用查询。
+
+## 项目条款自动比对
+
+解析或人工修正保存有效条款时，同一事务生成比对轮次。设置 `RFQ_MATCH_WORKER_ENABLED=true` 开启后台自动执行。后台按轮次保存的 BU 顺序逐库执行，首次命中后保留后续库的 `not_run` 状态。索引同步等待会自动继续，服务超时或限流会退避重试。结果回查会重新核对条款输入和当前可用来源。项目应答表单与工作台可以通过下列接口接入。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET /api/rfq/business-units/{buId}/match-policy` | 查询顺序和配置版本，初始顺序为 `standard_reply → history_rfq → capability`。 |
+| `PUT /api/rfq/business-units/{buId}/match-policy` | 本 BU 管理员提交 `version` 和由三个库组成的 `matchOrder`。新顺序用于此后建的轮次。 |
+| `GET /api/rfq/projects/{projectId}/match-results` | 分页查询当前轮次和分库状态。支持 `documentId`、`parseRunId`、`page`、`size`。 |
+| `GET /api/rfq/requirements/{id}/match-runs/{runId}` | 查看分库状态、建议及候选的精确版本。原文或来源变化后返回待重跑状态。 |
+| `POST /api/rfq/requirements/{id}/match-runs` | 提交 `sourceRequirementVersion` 和唯一 `requestId` 重跑。相同操作 ID 返回原轮次。 |
+| `GET /api/rfq/requirements/{id}/match-input` | 查询当前条款已确认的适用条件和设备指标。 |
+| `PUT /api/rfq/requirements/{id}/match-input` | 提交 `sourceRequirementVersion`、输入 `version` 及 `context`。保存后自动比对。 |
+
+标准回复和 BU 共享历史 RFQ 通过各自的知识中台数据集召回，服务端只传当前授权的 ID，并按发布版本回源。当前版本的二次评分是本地字符二元组重合度，并校验数字、运算符及否定词。标准回复要求分数严格大于 `0.80`，历史 RFQ 使用独立的 `0.74` 阈值，供人工核对。项目专属历史条款在本地匹配。分数需要试点样本校准。索引地址、密钥和数据集沿用上面的发布配置。
+
+能力比对使用明确确认的机型、工艺、配置和工况。缺少设备输入时继续查看排在后面的文本库。只有工况一致、单位可比较且证据有效的保证值才能支持肯定或否定结论。没有充分依据时保留待确认。
+
+```json
+{
+  "sourceRequirementVersion": 0, "version": 0,
+  "context": {
+    "verifiedConditions": "硅材料，测试方法 M1",
+    "capabilityApplicable": true,
+    "devices": [{
+      "deviceId": "设备1", "modelId": "MOD-1", "modelVersion": 1,
+      "processId": "PROC-1", "processVersion": 1, "config": "CFG-R2",
+      "conditions": "硅材料，测试方法 M1",
+      "metrics": [{"metricCode": "position-accuracy", "operator": "LE", "upper": "5", "unit": "μm"}]
+    }]
+  }
+}
+```
+
+各设备项和指标同时满足才支持整体结论。范围端点、运算符与能力库使用相同字段。`capabilityApplicable=false` 表示经确认不适用机型能力。以 `knowledgeGap=true` 表示三库均成功查询且全部未命中。知识缺口和建议随比对结果保存，前端展示、建议采纳以及偏离事项流转尚未接入。
+
 # RFQ 原件存储切换
 
 默认 `RFQ_STORAGE_TYPE=local`，原件存储在 `RFQ_STORAGE_DIR`（默认 `./data/rfq-files`）。使用 MinIO 时设置以下环境变量后重启后端：

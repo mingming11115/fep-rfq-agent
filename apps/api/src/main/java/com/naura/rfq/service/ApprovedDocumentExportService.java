@@ -140,7 +140,7 @@ public class ApprovedDocumentExportService {
         catch (java.time.format.DateTimeParseException e) { return Instant.EPOCH; }
     }
 
-    private static boolean approved(JsonNode snapshot) {
+    static boolean approved(JsonNode snapshot) {
         if (!"已批准".equals(snapshot.path("status").asText()) || snapshot.path("stale").asBoolean()
                 || snapshot.path("approvalFingerprint").asText().isBlank()) return false;
         var review = snapshot.path("finalReview");

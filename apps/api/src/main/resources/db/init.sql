@@ -231,6 +231,119 @@ create table response_confirmation_history (
     primary key (requirement_id, kind, entry_version)
 );
 
+-- RFQ_MIGRATION_V11
+-- Retain original history versions. A same-key record with different content
+-- remains available as a separate draft for reconciliation.
+insert into history_clause (bu_id,id,version,project_id,scope,payload)
+select k.bu_id,k.id,k.version,k.project_id,k.scope,k.payload
+from knowledge_record k left join history_clause h
+    on h.bu_id=k.bu_id and h.id=k.id and h.version=k.version
+where json_unquote(json_extract(k.payload,'$.type'))='history' and h.id is null;
+
+insert into history_clause (bu_id,id,version,project_id,scope,payload)
+select k.bu_id,concat('HIST-LEGACY-',sha2(json_array(k.bu_id,k.id,k.version),256)),k.version,k.project_id,k.scope,
+    json_set(k.payload,'$.id',concat('HIST-LEGACY-',sha2(json_array(k.bu_id,k.id,k.version),256)),
+        '$.legacyId',k.id,'$.legacyStatus',json_extract(k.payload,'$.status'),'$.status','草稿','$.validity','待核对')
+from knowledge_record k join history_clause h
+    on h.bu_id=k.bu_id and h.id=k.id and h.version=k.version
+where json_unquote(json_extract(k.payload,'$.type'))='history'
+  and not (json_remove(k.payload,'$.documentId') <=> json_remove(h.payload,'$.documentId')
+      and (coalesce(json_type(json_extract(k.payload,'$.documentId')),'NULL') <> 'STRING'
+          or trim(json_unquote(json_extract(k.payload,'$.documentId')))=''
+          or json_extract(k.payload,'$.documentId') <=> json_extract(h.payload,'$.documentId'))
+      and k.project_id <=> h.project_id and k.scope <=> h.scope);
+
+delete from knowledge_record where json_unquote(json_extract(payload,'$.type'))='history';
+
+rename table knowledge_record to `standard-reply-record`, history_clause to `history-rfq-record`;
+alter table `standard-reply-record` add column revision bigint not null default 0;
+
+create table standard_reply_index_sync (
+    bu_id varchar(64) not null,
+    reply_id varchar(128) not null,
+    version int not null,
+    operation varchar(8) not null,
+    payload json,
+    updated_at datetime(6) not null,
+    next_attempt_at datetime(6) not null default current_timestamp(6),
+    lease_token varchar(64),
+    lease_until datetime(6),
+    attempts int not null default 0,
+    last_error varchar(255),
+    job_id varchar(255),
+    synced_at datetime(6),
+    primary key (bu_id, reply_id),
+    index idx_standard_reply_index_due (bu_id, synced_at, next_attempt_at)
+);
+-- RFQ_MIGRATION_V11_END
+
+-- RFQ_MIGRATION_V12
+alter table history_document
+    add column fingerprint varchar(255),
+    add column originals json,
+    add unique key uk_history_document_fingerprint (bu_id, fingerprint);
+alter table `history-rfq-record` add column revision bigint not null default 0;
+create table history_rfq_index_sync like standard_reply_index_sync;
+-- RFQ_MIGRATION_V12_END
+
+-- RFQ_MIGRATION_V13
+alter table capability_record
+    add column revision bigint not null default 0,
+    add column source_fingerprint varchar(255),
+    add unique key uk_capability_source (bu_id, source_fingerprint);
+alter table evidence_record add column revision bigint not null default 0;
+-- RFQ_MIGRATION_V13_END
+
+-- RFQ_MIGRATION_V14
+create table bu_match_policy (
+    bu_id varchar(64) primary key,
+    match_order json not null,
+    version bigint not null,
+    changed_by varchar(64) not null,
+    changed_at datetime(6) not null
+);
+create table requirement_match_input (
+    requirement_id varchar(64) primary key,
+    source_fingerprint char(64) not null,
+    version bigint not null,
+    payload json not null
+);
+create table requirement_match_run (
+    id varchar(64) primary key,
+    bu_id varchar(64) not null,
+    project_id varchar(64) not null,
+    requirement_id varchar(64) not null,
+    requirement_version bigint not null,
+    document_id varchar(64) not null,
+    document_version int not null,
+    parse_run_id varchar(64),
+    input_fingerprint char(64) not null,
+    policy_version bigint not null,
+    match_order json not null,
+    input_snapshot json not null,
+    request_key varchar(80) not null,
+    trigger_reason varchar(24) not null,
+    current_run tinyint,
+    status varchar(24) not null,
+    attempts int not null default 0,
+    next_attempt_at datetime(6),
+    lease_until datetime(6),
+    lease_token varchar(64),
+    progress json,
+    created_at datetime(6) not null default current_timestamp(6),
+    unique key uk_match_current (requirement_id, current_run),
+    unique key uk_match_request (requirement_id, request_key),
+    index idx_match_due (next_attempt_at, status, lease_until),
+    index idx_match_project (project_id, document_id, parse_run_id, current_run)
+);
+create table requirement_match_result (
+    run_id varchar(64) primary key,
+    scope_stamp json not null,
+    payload json not null,
+    completed_at datetime(6) not null default current_timestamp(6)
+);
+-- RFQ_MIGRATION_V14_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,
@@ -309,15 +422,13 @@ INSERT INTO `evidence_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, 
 INSERT INTO `evidence_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','DOC-009',1,'MYSQL-DEMO-001','仅当前项目','{\"id\": \"DOC-009\", \"buId\": \"BU-MYSQL-DEMO\", \"name\": \"Hesper E360R 标准配置清单.xlsx\", \"refs\": [], \"group\": \"项目资料\", \"model\": \"Hesper E360R R2\", \"owner\": \"李明\", \"scope\": \"仅当前项目\", \"expiry\": \"2027-10-17\", \"seeded\": true, \"source\": \"供应商技术资料\", \"status\": \"待核对\", \"history\": [{\"date\": \"2026-10-18\", \"text\": \"李明录入资料元数据，等待专业核对\"}], \"purpose\": \"补充附件\", \"version\": 1, \"external\": false, \"fileSize\": \"184 KB\", \"fileType\": \"XLSX\", \"location\": \"配置表 · B4:F18\", \"checkedBy\": \"尚未完成专业核对\", \"projectId\": \"MYSQL-DEMO-001\", \"conditions\": \"标准模块 S；选配 X 尚待确认。\", \"sourceDate\": \"2026-10-18\"}');
 INSERT INTO `evidence_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','DOC-015',1,'MYSQL-DEMO-001','仅当前项目','{\"id\": \"DOC-015\", \"buId\": \"BU-MYSQL-DEMO\", \"name\": \"客户 RFQ 原始要求.xlsx\", \"refs\": [{\"id\": \"REQ-001\", \"page\": \"documents\", \"type\": \"要求\", \"title\": \"MYSQL-DEMO-001 · 原始要求清单\"}], \"group\": \"项目资料\", \"model\": \"Hesper E360R R2\", \"owner\": \"李明\", \"scope\": \"仅当前项目\", \"expiry\": \"2027-10-15\", \"seeded\": true, \"source\": \"客户提供 RFQ v1\", \"status\": \"有效\", \"history\": [{\"date\": \"2026-10-17\", \"text\": \"确认客户要求来源与当前文件版本一致\"}], \"purpose\": \"要求来源\", \"version\": 1, \"external\": false, \"fileSize\": \"426 KB\", \"fileType\": \"XLSX\", \"location\": \"Technical Requirements · A1:H46\", \"checkedBy\": \"李明 · 2026-10-17\", \"projectId\": \"MYSQL-DEMO-001\", \"conditions\": \"MYSQL-DEMO-001 当前项目要求来源；不作为能力证明。\", \"sourceDate\": \"2026-10-16\"}');
 INSERT INTO `evidence_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','T-01',2,NULL,'FEP 授权项目','{\"id\": \"T-01\", \"buId\": \"BU-MYSQL-DEMO\", \"name\": \"Hesper E360R 能力测试报告.pdf\", \"refs\": [{\"id\": \"REQ-021\", \"page\": \"response\", \"type\": \"要求\", \"title\": \"MYSQL-DEMO-001 · 加工厚度\"}, {\"id\": \"K-018\", \"page\": \"knowledge\", \"type\": \"知识\", \"title\": \"标准知识 · 自动上料\"}, {\"id\": \"CAP-002\", \"page\": \"capabilities\", \"type\": \"能力\", \"title\": \"Hesper E360R R2 · 定位精度\"}], \"group\": \"共享能力资料\", \"model\": \"Hesper E360R R2\", \"owner\": \"王工\", \"scope\": \"FEP 授权项目\", \"expiry\": \"2027-09-11\", \"seeded\": true, \"source\": \"内网测试记录 TR-2026-018\", \"status\": \"有效\", \"history\": [{\"date\": \"2026-09-15\", \"text\": \"王工核对来源、适用条件及有效期，标记为有效\"}, {\"date\": \"2026-09-12\", \"text\": \"更新 v2；保留 v1 追溯\"}], \"purpose\": \"能力依据\", \"version\": 2, \"external\": false, \"fileSize\": \"2.4 MB\", \"fileType\": \"PDF\", \"location\": \"报告第 8 页 · 指标表\", \"checkedBy\": \"王工 · 2026-09-15\", \"conditions\": \"CFG-HESPER-E360R-R2 v1 + 模块 X；硅材料；厚度 0.5–1.0 mm；Si 工艺 / 测试方法 M1。\", \"sourceDate\": \"2026-09-12\"}');
-INSERT INTO `history_clause` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-007',1,NULL,'FEP 授权项目','{\"id\": \"K-007\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"history\", \"scope\": \"FEP 授权项目\", \"title\": \"定位精度的历史处理经验\", \"answer\": \"Comply：采用模块 X，在硅材料、厚度 0.5–1.0 mm 及测试方法 M1 下保证定位精度 ≤5 μm。\", \"author\": \"陈工\", \"source\": \"历史 RFQ-012 / 已批准答复\", \"status\": \"已发布\", \"history\": [{\"date\": \"2026-10-10\", \"text\": \"王工批准发布 v1；有效证据已核对\"}], \"version\": 1, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2；模块 X；硅材料；Si 工艺；方法 M1\", \"documentId\": \"MYSQL-HISTORY-2\", \"requirement\": \"定位精度 ≤5 μm。\", \"submitterRole\": \"SR\"}');
-INSERT INTO `history_clause` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-021',1,NULL,'FEP 授权项目','{\"id\": \"K-021\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"history\", \"scope\": \"FEP 授权项目\", \"title\": \"加工厚度要求\", \"answer\": \"Conditional Comply：需使用增强夹持模块，并在约定材料、工艺条件下完成样品验证。\", \"author\": \"李明\", \"source\": \"MYSQL-DEMO-001 定稿条款 2.1\", \"status\": \"草稿\", \"history\": [{\"date\": \"2026-10-19\", \"text\": \"MYSQL-DEMO-001 定稿后生成知识候选 · 李明\"}], \"version\": 1, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2 / 配置 C；硅材料；Si 工艺；需样品验证\", \"documentId\": \"MYSQL-HISTORY-1\", \"requirement\": \"设备需支持加工 1.2 mm 硅晶圆。\", \"submitterRole\": \"SR\"}');
+INSERT INTO `history-rfq-record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-007',1,NULL,'FEP 授权项目','{\"id\": \"K-007\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"history\", \"scope\": \"FEP 授权项目\", \"title\": \"定位精度的历史处理经验\", \"answer\": \"Comply：采用模块 X，在硅材料、厚度 0.5–1.0 mm 及测试方法 M1 下保证定位精度 ≤5 μm。\", \"author\": \"陈工\", \"source\": \"历史 RFQ-012 / 已批准答复\", \"status\": \"已发布\", \"history\": [{\"date\": \"2026-10-10\", \"text\": \"王工批准发布 v1；有效证据已核对\"}], \"version\": 1, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2；模块 X；硅材料；Si 工艺；方法 M1\", \"documentId\": \"MYSQL-HISTORY-2\", \"requirement\": \"定位精度 ≤5 μm。\", \"submitterRole\": \"SR\"}');
+INSERT INTO `history-rfq-record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-021',1,NULL,'FEP 授权项目','{\"id\": \"K-021\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"history\", \"scope\": \"FEP 授权项目\", \"title\": \"加工厚度要求\", \"answer\": \"Conditional Comply：需使用增强夹持模块，并在约定材料、工艺条件下完成样品验证。\", \"author\": \"李明\", \"source\": \"MYSQL-DEMO-001 定稿条款 2.1\", \"status\": \"草稿\", \"history\": [{\"date\": \"2026-10-19\", \"text\": \"MYSQL-DEMO-001 定稿后生成知识候选 · 李明\"}], \"version\": 1, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2 / 配置 C；硅材料；Si 工艺；需样品验证\", \"documentId\": \"MYSQL-HISTORY-1\", \"requirement\": \"设备需支持加工 1.2 mm 硅晶圆。\", \"submitterRole\": \"SR\"}');
 INSERT INTO `history_document` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','MYSQL-HISTORY-1',1,NULL,'FEP 授权项目','{\"id\": \"MYSQL-HISTORY-1\", \"buId\": \"BU-MYSQL-DEMO\", \"name\": \"MYSQL-DEMO-001 定稿条款 2.1\", \"scope\": \"FEP 授权项目\", \"issues\": [], \"legacy\": false, \"manual\": true, \"sources\": [], \"version\": \"V1.0\", \"metadata\": {}, \"createdAt\": \"\", \"legacyIds\": [\"K-021\"], \"parseStatus\": \"manual\", \"legacyImported\": true}');
 INSERT INTO `history_document` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','MYSQL-HISTORY-2',1,NULL,'FEP 授权项目','{\"id\": \"MYSQL-HISTORY-2\", \"buId\": \"BU-MYSQL-DEMO\", \"name\": \"历史 RFQ-012 / 已批准答复\", \"scope\": \"FEP 授权项目\", \"issues\": [], \"legacy\": false, \"manual\": true, \"sources\": [], \"version\": \"V1.0\", \"metadata\": {}, \"createdAt\": \"\", \"legacyIds\": [\"K-007\"], \"parseStatus\": \"manual\", \"legacyImported\": true}');
 INSERT INTO `knowledge_group_catalog` (`bu_id`, `payload`) VALUES ('BU-MYSQL-DEMO','{\"buId\": \"BU-MYSQL-DEMO\", \"nodes\": [{\"id\": \"MOD-A-R2\", \"name\": \"Hesper E360R\", \"values\": {\"code\": \"HESPER-E360R\", \"config\": \"CFG-HESPER-E360R-R2 v1\", \"revision\": \"R2\"}, \"enabled\": true, \"levelId\": \"model\", \"parentId\": \"\", \"legacyModelId\": \"MOD-A-R2\"}, {\"id\": \"MOD-A-R1\", \"name\": \"Hesper E360R\", \"values\": {\"code\": \"HESPER-E360R\", \"config\": \"CFG-HESPER-E360R-R1 v1\", \"revision\": \"R1\"}, \"enabled\": true, \"levelId\": \"model\", \"parentId\": \"\", \"legacyModelId\": \"MOD-A-R1\"}, {\"id\": \"PROC-A-R2-P1\", \"name\": \"Si\", \"values\": {\"code\": \"Si\", \"conditions\": \"硅材料；测试方法 M1（演示）\"}, \"enabled\": true, \"levelId\": \"process\", \"parentId\": \"MOD-A-R2\", \"legacyModelId\": \"MOD-A-R2\", \"legacyProcessId\": \"PROC-A-R2-P1\"}, {\"id\": \"PROC-A-R2-P2\", \"name\": \"SiP\", \"values\": {\"code\": \"SiP\", \"conditions\": \"SiP 工艺；适用条件待技术确认（演示）\"}, \"enabled\": true, \"levelId\": \"process\", \"parentId\": \"MOD-A-R2\", \"legacyModelId\": \"MOD-A-R2\", \"legacyProcessId\": \"PROC-A-R2-P2\"}, {\"id\": \"PROC-A-R2-GESI\", \"name\": \"GeSi\", \"values\": {\"code\": \"GeSi\", \"conditions\": \"GeSi 工艺；适用条件待技术确认（演示）\"}, \"enabled\": true, \"levelId\": \"process\", \"parentId\": \"MOD-A-R2\", \"legacyModelId\": \"MOD-A-R2\", \"legacyProcessId\": \"PROC-A-R2-GESI\"}, {\"id\": \"PROC-A-R1-P1\", \"name\": \"Si\", \"values\": {\"code\": \"Si\", \"conditions\": \"仅适用 R1\"}, \"enabled\": false, \"levelId\": \"process\", \"parentId\": \"MOD-A-R1\", \"legacyModelId\": \"MOD-A-R1\", \"legacyProcessId\": \"PROC-A-R1-P1\"}], \"schema\": {\"title\": \"分组与能力配置\", \"levels\": [{\"id\": \"model\", \"name\": \"机型\", \"fields\": [{\"id\": \"code\", \"name\": \"编码\", \"type\": \"text\"}, {\"id\": \"revision\", \"name\": \"版本\", \"type\": \"text\"}, {\"id\": \"config\", \"name\": \"配置\", \"type\": \"text\"}]}, {\"id\": \"process\", \"name\": \"工艺\", \"fields\": [{\"id\": \"code\", \"name\": \"编码\", \"type\": \"text\"}, {\"id\": \"conditions\", \"name\": \"适用条件\", \"type\": \"text\"}]}]}, \"version\": 1, \"attachments\": [{\"nodeId\": \"PROC-A-R2-P1\", \"version\": 2, \"capabilityId\": \"CAP-001\"}, {\"nodeId\": \"PROC-A-R2-P1\", \"version\": 1, \"capabilityId\": \"CAP-002\"}, {\"nodeId\": \"MOD-A-R2\", \"version\": 1, \"capabilityId\": \"CAP-003\"}, {\"nodeId\": \"MOD-A-R2\", \"version\": 1, \"capabilityId\": \"CAP-004\"}, {\"nodeId\": \"MOD-A-R1\", \"version\": 1, \"capabilityId\": \"CAP-005\"}]}');
-INSERT INTO `knowledge_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-007',1,NULL,'FEP 授权项目','{\"id\": \"K-007\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"history\", \"scope\": \"FEP 授权项目\", \"title\": \"定位精度的历史处理经验\", \"answer\": \"Comply：采用模块 X，在硅材料、厚度 0.5–1.0 mm 及测试方法 M1 下保证定位精度 ≤5 μm。\", \"author\": \"陈工\", \"source\": \"历史 RFQ-012 / 已批准答复\", \"status\": \"已发布\", \"history\": [{\"date\": \"2026-10-10\", \"text\": \"王工批准发布 v1；有效证据已核对\"}], \"version\": 1, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2；模块 X；硅材料；Si 工艺；方法 M1\", \"requirement\": \"定位精度 ≤5 μm。\", \"submitterRole\": \"SR\"}');
-INSERT INTO `knowledge_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-012',3,NULL,'FEP 授权项目','{\"id\": \"K-012\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"standard\", \"scope\": \"FEP 授权项目\", \"title\": \"产能条件说明\", \"answer\": \"典型产能为 120 片/小时，实际产能受工艺节拍及上料方式影响，需依据样品条件评估。\", \"author\": \"陈工\", \"source\": \"标准应答库 / 专业确认\", \"status\": \"已发布\", \"history\": [{\"date\": \"2026-10-12\", \"text\": \"v3 独立审批发布\"}], \"version\": 3, \"evidence\": \"T-01 v2，第 9 页\", \"conditions\": \"Hesper E360R R2；标准模块 S；单片工艺时间 ≤25 秒\", \"requirement\": \"产能达到 120 片/小时。\", \"submitterRole\": \"技术\"}');
-INSERT INTO `knowledge_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-018',2,NULL,'FEP 授权项目','{\"id\": \"K-018\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"standard\", \"scope\": \"FEP 授权项目\", \"title\": \"可选配置与自动上料\", \"answer\": \"Comply：配置标准上料模块 S，支持 300 mm 硅晶圆。\", \"author\": \"王工\", \"source\": \"历史 RFQ-018 / 条款 3.2\", \"status\": \"待审核\", \"history\": [{\"date\": \"2026-10-18\", \"text\": \"v2 由王工修订并提交审核\"}], \"version\": 2, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2；标准模块 S；晶圆尺寸 300 mm\", \"requirement\": \"支持自动上料及 300 mm 晶圆。\", \"submitterRole\": \"SR\"}');
-INSERT INTO `knowledge_record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-021',1,NULL,'FEP 授权项目','{\"id\": \"K-021\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"history\", \"scope\": \"FEP 授权项目\", \"title\": \"加工厚度要求\", \"answer\": \"Conditional Comply：需使用增强夹持模块，并在约定材料、工艺条件下完成样品验证。\", \"author\": \"李明\", \"source\": \"MYSQL-DEMO-001 定稿条款 2.1\", \"status\": \"草稿\", \"history\": [{\"date\": \"2026-10-19\", \"text\": \"MYSQL-DEMO-001 定稿后生成知识候选 · 李明\"}], \"version\": 1, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2 / 配置 C；硅材料；Si 工艺；需样品验证\", \"requirement\": \"设备需支持加工 1.2 mm 硅晶圆。\", \"submitterRole\": \"SR\"}');
+INSERT INTO `standard-reply-record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-012',3,NULL,'FEP 授权项目','{\"id\": \"K-012\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"standard\", \"scope\": \"FEP 授权项目\", \"title\": \"产能条件说明\", \"answer\": \"典型产能为 120 片/小时，实际产能受工艺节拍及上料方式影响，需依据样品条件评估。\", \"author\": \"陈工\", \"source\": \"标准应答库 / 专业确认\", \"status\": \"已发布\", \"history\": [{\"date\": \"2026-10-12\", \"text\": \"v3 独立审批发布\"}], \"version\": 3, \"evidence\": \"T-01 v2，第 9 页\", \"conditions\": \"Hesper E360R R2；标准模块 S；单片工艺时间 ≤25 秒\", \"requirement\": \"产能达到 120 片/小时。\", \"submitterRole\": \"技术\"}');
+INSERT INTO `standard-reply-record` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','K-018',2,NULL,'FEP 授权项目','{\"id\": \"K-018\", \"buId\": \"BU-MYSQL-DEMO\", \"type\": \"standard\", \"scope\": \"FEP 授权项目\", \"title\": \"可选配置与自动上料\", \"answer\": \"Comply：配置标准上料模块 S，支持 300 mm 硅晶圆。\", \"author\": \"王工\", \"source\": \"历史 RFQ-018 / 条款 3.2\", \"status\": \"待审核\", \"history\": [{\"date\": \"2026-10-18\", \"text\": \"v2 由王工修订并提交审核\"}], \"version\": 2, \"evidence\": \"T-01 v2，第 8 页指标表\", \"conditions\": \"Hesper E360R R2；标准模块 S；晶圆尺寸 300 mm\", \"requirement\": \"支持自动上料及 300 mm 晶圆。\", \"submitterRole\": \"SR\"}');
 INSERT INTO `model_definition` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','MOD-A-R1',1,NULL,'FEP 授权项目','{\"id\": \"MOD-A-R1\", \"buId\": \"BU-MYSQL-DEMO\", \"code\": \"HESPER-E360R\", \"name\": \"Hesper E360R\", \"scope\": \"FEP 授权项目\", \"config\": \"CFG-HESPER-E360R-R1 v1\", \"series\": \"精密加工系列\", \"source\": \"研发配置基线 Hesper E360R R1（演示）\", \"status\": \"已发布\", \"history\": [{\"date\": \"2025-03-10\", \"text\": \"历史型号版本归档\"}], \"options\": \"模块 X1：精密定位\", \"version\": 1, \"approver\": \"BU管理员\", \"revision\": \"R1\", \"standard\": \"标准模块 S1；200 mm 晶圆上料\", \"lifecycle\": \"停产\", \"submitterRole\": \"技术\"}');
 INSERT INTO `model_definition` (`bu_id`, `id`, `version`, `project_id`, `scope`, `payload`) VALUES ('BU-MYSQL-DEMO','MOD-A-R2',1,NULL,'FEP 授权项目','{\"id\": \"MOD-A-R2\", \"buId\": \"BU-MYSQL-DEMO\", \"code\": \"HESPER-E360R\", \"name\": \"Hesper E360R\", \"scope\": \"FEP 授权项目\", \"config\": \"CFG-HESPER-E360R-R2 v1\", \"series\": \"精密加工系列\", \"source\": \"研发配置基线 Hesper E360R R2（演示）\", \"status\": \"已发布\", \"history\": [{\"date\": \"2026-09-10\", \"text\": \"技术提交配置基线，BU管理员独立批准发布\"}], \"options\": \"模块 X：精密定位；模块 C：增强夹持\", \"version\": 1, \"approver\": \"BU管理员\", \"revision\": \"R2\", \"standard\": \"标准模块 S；300 mm 晶圆上料；Si / SiP / GeSi 工艺（演示）\", \"lifecycle\": \"量产\", \"submitterRole\": \"技术\"}');
 INSERT INTO `parse_run` (`id`, `document_id`, `status`, `total_blocks`, `processed_blocks`, `requirement_count`, `issue_count`, `message`, `started_at`, `finished_at`, `created_by`, `extractor`) VALUES ('MYSQL-DEMO-001-PARSE','MYSQL-DEMO-001-DOC','completed',15,15,15,0,NULL,'2026-11-07 09:15:39','2026-11-07 09:15:39','mysql-demo-sales','rule-based-v1');

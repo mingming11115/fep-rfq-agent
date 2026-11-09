@@ -32,6 +32,13 @@ mybatis:
 rfq:
   demo-data:
     enabled: ${RFQ_DEMO_DATA_ENABLED:false}
+  standard-reply-index:
+    base-url: ${RFQ_STANDARD_REPLY_INDEX_BASE_URL:}
+    api-key: ${RFQ_STANDARD_REPLY_INDEX_API_KEY:}
+    poll-interval-ms: ${RFQ_STANDARD_REPLY_INDEX_POLL_INTERVAL_MS:5000}
+  match:
+    worker-enabled: ${RFQ_MATCH_WORKER_ENABLED:false}
+    poll-interval-ms: ${RFQ_MATCH_POLL_INTERVAL_MS:3000}
   storage-type: ${RFQ_STORAGE_TYPE:local}
   storage-dir: ${RFQ_STORAGE_DIR:./data/rfq-files}
   minio:

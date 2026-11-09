@@ -34,15 +34,41 @@ public class HistoryParseService {
         List<HistorySource> sources = new ArrayList<>();
         sources.add(read(file, "main:"));
         if (responseFile != null && !responseFile.isEmpty()) sources.add(read(responseFile, "answer:"));
+        return extract(sources);
+    }
+
+    HistoryParseView extract(List<HistorySource> sources) {
         var result = extractor.extract(sources.get(0).blocks(), sources.size() > 1 ? sources.get(1).blocks() : List.of());
         return new HistoryParseView(result.metadata(), result.clauses(), sources, result.issues());
     }
+
     private HistorySource read(MultipartFile file, String prefix) throws IOException {
-        String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        String name = fileName(file);
+        var saved = storage.save("history-" + UUID.randomUUID(), file, extension(name));
+        try {
+            return readStored(saved, name, prefix);
+        } finally {
+            storage.delete(saved.storageRef());
+        }
+    }
+
+    static String fileName(MultipartFile file) {
+        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().replace('\\', '/');
+        String name = original.substring(original.lastIndexOf('/') + 1);
+        if (name.length() > 255 || name.chars().anyMatch(Character::isISOControl)) {
+            throw new BusinessException(400, "历史 RFQ 文件名无效");
+        }
+        return name;
+    }
+
+    static String extension(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         String extension = lower.endsWith(".docx") ? ".docx" : lower.endsWith(".pdf") ? ".pdf" : "";
         if (extension.isBlank()) throw new BusinessException(400, "历史 RFQ 当前支持 DOCX 和 PDF，请先转换其他格式");
-        var saved = storage.save("history-" + UUID.randomUUID(), file, extension);
+        return extension;
+    }
+
+    HistorySource readStored(DocumentStorage.StoredFile saved, String name, String prefix) throws IOException {
         try (var lease = storage.open(saved.storageRef(), saved.size(), saved.sha256())) {
             var reader = readers.stream().filter(candidate -> candidate.supports(name, null)).findFirst()
                 .orElseThrow(() -> new BusinessException(400, "没有可用的文件读取器"));
@@ -50,9 +76,9 @@ public class HistoryParseService {
             List<RawBlock> blocks = reader instanceof PdfBlockReader pdf ? pdf.readForHistory(path) : reader.read(path);
             if (blocks.stream().mapToLong(block -> block.text() == null ? 0 : block.text().length()).sum() > 2_000_000)
                 throw new BusinessException(413, "文档内容过多，请拆分后上传");
-            return new HistorySource(name.replace('\\', '/').substring(name.replace('\\', '/').lastIndexOf('/') + 1), prefix, blocks);
+            return new HistorySource(name, prefix, blocks);
         } catch (DocumentReadException exception) {
             throw new BusinessException(400, exception.getMessage());
-        } finally { storage.delete(saved.storageRef()); }
+        }
     }
 }
