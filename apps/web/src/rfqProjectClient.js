@@ -13,6 +13,11 @@ export async function createBackendProject(project,api=defaultApi,user=readSessi
  return api.post('/projects',{code:project.code||project.id,name:project.name.trim(),customer:project.customer||'',ownerId:project.ownerId,buId:backendBu(project,user),deadline:project.deadline});
 }
 
+export function updateBackendProjectArchive(project,archive,reason,api=defaultApi){
+ const id=encodeURIComponent(project.backendProjectId||project.id);
+ return api.post(`/projects/${id}/${archive?'archives':'restorations'}`,{version:project.version,reason:reason.trim()});
+}
+
 export async function ensureBackendProject(project,api=defaultApi,user=readSession()?.user){
  try{return await api.get(`/projects/${encodeURIComponent(project.backendProjectId||project.id)}`);}
  catch(error){if(error.status!==404||project.backendProjectId)throw error;}

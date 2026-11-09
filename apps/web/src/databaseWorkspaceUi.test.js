@@ -17,9 +17,22 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
  localStorage.setItem('fep-rfq-app-v1',JSON.stringify({projects:[{id:'FAKE',name:'不应出现的前端模拟项目'}]}));
  const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',stage:'DRAFT',version:0};
- let parsed=false,parseCalls=0;
+ let parsed=false,parseCalls=0,archived=false,projectVersion=0;
+ const projectActions=[];
  const source={id:'D',projectId:'P',name:'客户.docx',version:0,status:'PARSING'};
- globalThis.fetch=async url=>{
+ globalThis.fetch=async (url,options)=>{
+  if(url.endsWith('/projects/P/archives')||url.endsWith('/projects/P/restorations')){
+   const body=JSON.parse(options.body);
+   projectActions.push({url,method:options.method,...body});
+   if(body.version!==projectVersion||!body.reason?.trim())return new Response(JSON.stringify({code:1,msg:'无效的项目操作'}),{status:409});
+   archived=url.endsWith('/archives');projectVersion++;
+   return new Response(JSON.stringify({code:0,data:{...project,version:projectVersion,archived}}));
+  }
+  if(url.startsWith('/api/rfq/projects?')){
+   const archiveList=new URL(url,'http://localhost').searchParams.get('archived')==='true';
+   const list=archived===archiveList?[{...project,version:projectVersion,archived,stage:archived?'CANCELLED':'DRAFT',archiveReason:archived?'客户暂停项目':null}]:[];
+   return new Response(JSON.stringify({code:0,data:{list,total:list.length}}));
+  }
   if(url.endsWith('/requirements/R/match-result'))return new Response(JSON.stringify({code:0,data:{
    runId:'MATCH-DB',status:'completed',matchOrder:['history_rfq','standard_reply','capability'],
    result:{matchedLibrary:'history_rfq',conclusion:'待确认',stages:{history_rfq:{status:'hit',candidates:[{id:'H',version:2,title:'数据库历史候选',answer:'真实参考答复'}]}}}
@@ -49,5 +62,33 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.equal(parseCalls,2,'retry targets the failed file without reparsing successful sources');
   assert.ok(node.textContent.includes('客户的真实要求'));
   for(const label of ['载入示例','人工补录','历史批注示例'])assert.ok(![...node.querySelectorAll('button')].some(button=>button.textContent.includes(label)),label+' must not create browser-only records');
+  const settle=async()=>{for(let i=0;i<16;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  const click=(label,selector='button')=>act(async()=>{
+   const control=[...document.querySelectorAll(selector)].find(element=>element.textContent.trim()===label||element.getAttribute('aria-label')===label);
+   assert.ok(control,`missing control: ${label} (${window.location.hash}, ${node.textContent.slice(-240)})`);control.click();await settle();
+  });
+  const fillReason=(label,value)=>act(async()=>{
+   const input=document.querySelector(`textarea[aria-label="${label}"]`);assert.ok(input,label);
+   Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(input,value);
+   input.dispatchEvent(new window.Event('input',{bubbles:true}));await settle();
+  });
+  await act(async()=>{window.location.hash='#/projects';window.dispatchEvent(new window.HashChangeEvent('hashchange'));await settle();});
+  await click('更多操作 从数据库读取的项目');
+  await click('归档项目','[role="menuitem"]');
+  assert.ok([...document.querySelectorAll('button')].find(button=>button.textContent==='确认归档')?.disabled,'archive requires a reason');
+  await fillReason('归档原因','客户暂停项目');
+  await click('确认归档');
+  assert.deepEqual(projectActions,[{url:'/api/rfq/projects/P/archives',method:'POST',version:0,reason:'客户暂停项目'}]);
+  assert.ok(!node.textContent.includes('从数据库读取的项目'),'an archived project leaves the active list');
+  await act(async()=>{root.render(React.createElement(AntApp,null,React.createElement(Workspace,{key:'fresh-load'})));await settle();});
+  await click('已归档','[role="tab"]');
+  assert.ok(node.textContent.includes('从数据库读取的项目'));assert.ok(node.textContent.includes('客户暂停项目'));
+  await click('恢复项目');
+  await fillReason('恢复原因','客户重启项目');
+  await click('确认恢复');
+  assert.deepEqual(projectActions.at(-1),{url:'/api/rfq/projects/P/restorations',method:'POST',version:1,reason:'客户重启项目'});
+  assert.ok(!node.textContent.includes('从数据库读取的项目'),'a restored project leaves the archive');
+  await click('全部','[role="tab"]');
+  assert.ok(node.textContent.includes('从数据库读取的项目'),'restored project returns to the active list');
  }finally{await act(async()=>root.unmount());await window.happyDOM.cancelAsync();globalThis.MessageChannel=previousChannel;globalThis.fetch=previousFetch;}
 });

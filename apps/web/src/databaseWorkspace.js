@@ -3,10 +3,11 @@ import {hydrateSessionPersonnel} from './sessionPersonnel.js';
 import {reconcileTasks} from './taskDomain.js';
 
 const roleNames={SR:'SR',TECH:'技术',APPROVER:'技术'};
-async function pages(path,api){
+async function pages(path,api,filters={}){
  const rows=[];
  for(let page=1;;page++){
-  const result=await api.get(`${path}?page=${page}&size=100`),items=result.list||[];
+  const query=new URLSearchParams({page,size:100,...filters});
+  const result=await api.get(`${path}?${query}`),items=result.list||[];
   rows.push(...items);
   if(rows.length>=result.total)return rows;
   if(!items.length)throw new Error('数据库分页数据不完整，请刷新重试');
@@ -28,8 +29,8 @@ export function mapDatabaseRequirement(row,files,owner){
   parserNote:row.reviewReasons||'',needsReview:row.extractionStatus!=='VALID',
  };
 }
-export function mapDatabaseWorkspace({user,projects,directories,details,resources={}}){
- const state={dataSource:'mysql',personnelSchemaVersion:1,schemaVersion:3,projects:[],businessUnits:[...(user.bus||[])],
+export function mapDatabaseWorkspace({user,projects,archivedProjects=[],directories,details,resources={}}){
+ const state={dataSource:'mysql',personnelSchemaVersion:1,schemaVersion:3,projects:[],archivedProjects,businessUnits:[...(user.bus||[])],
   accountsById:{},buPersonnelByBuId:{},buReviewSettingsByBuId:{},members:[],membersByProject:{},
   requirementsByProject:{},documentsByProject:{},reviewsByProject:{},snapshotsByProject:{},commentsByProject:{},exportScopesByProject:{},
   tasksById:{},analysisRuns:[],audit:[],deletedProjectsById:{},navigationContext:{},responseReviewSchemaVersion:1,resourcesByBuId:resources,
@@ -80,7 +81,7 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
 }
 export async function loadDatabaseWorkspace(user,api=defaultApi){
  if(!user?.id)throw new Error('登录会话不存在，请重新登录');
- const projects=await pages('/projects',api);
+ const [projects,archivedProjects]=await Promise.all([pages('/projects',api),pages('/projects',api,{archived:true})]);
  const buIds=[...new Set([...(user.roles||[]).map(grant=>grant.buId),...projects.map(project=>project.buId)])];
  const [directories,details,resources]=await Promise.all([
   Promise.all(buIds.map(async id=>[id,await api.get(`/business-units/${encodeURIComponent(id)}/members`)])),
@@ -91,5 +92,5 @@ export async function loadDatabaseWorkspace(user,api=defaultApi){
   })),
   Promise.all(buIds.map(async id=>[id,await api.get(`/business-units/${encodeURIComponent(id)}/resources`)])),
  ]);
- return mapDatabaseWorkspace({user,projects,directories:Object.fromEntries(directories),details:Object.fromEntries(details),resources:Object.fromEntries(resources)});
+ return mapDatabaseWorkspace({user,projects,archivedProjects,directories:Object.fromEntries(directories),details:Object.fromEntries(details),resources:Object.fromEntries(resources)});
 }

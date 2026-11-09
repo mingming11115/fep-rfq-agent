@@ -9,7 +9,7 @@ import RfqAppLayout from './components/RfqAppLayout';
 import { consumeLoginIdentity, readSession, logout } from './authClient';
 import {loadLibraryResources} from './knowledgeLibraryClient';
 import { hydrateSessionPersonnel, mergeMemberDirectory } from './sessionPersonnel';
-import {createBackendProject} from './rfqProjectClient';
+import {createBackendProject,updateBackendProjectArchive} from './rfqProjectClient';
 import BuAdminPage,{ProjectPersonnelPanel,PlatformAdminPage} from './pages/BuAdminPage';
 import {canAccessProject,getPersonnelContext,personName,getProjectFinalReview,getRequiredFinalReviewers,configureProjectFinalReviewers,assignProjectDuty} from './personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomain';
@@ -131,8 +131,24 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
  function taskAction(id,action){const s=stateRef.current,t=s.tasksById[id];try{if(action.type==='transfer'){if(databaseBacked)return unavailable();update(st=>event(transferBusinessTask(st,{taskId:id,to:action.to,reason:action.reason}),'转办任务',id,action.reason));return true;}const next=applyTaskAction(t,{...action,actorId:s.actorId,objectVersion:t?.objectVersion,at:new Date().toISOString()},s);update(s=>event({...s,tasksById:{...s.tasksById,[id]:next}},action.type==='transfer'?'转办任务':'接手任务',id,action.reason||''));return true;}catch(e){toast(e.message,'error');return false;}}
  function openTask(task,mode='view',returnKey='tasks'){guarded(()=>{const t=stateRef.current.tasksById[task.id];if(!t||!canAccessProject(stateRef.current,stateRef.current.actorId,t.projectId)){toast('任务不存在，请刷新后查看','error');return;}if(mode==='start'&&!taskAction(t.id,{type:'start'}))return;update(s=>({...s,activeProjectId:t.projectId}));rawNavigate(t.objectType==='requirement'||t.kind==='response-revise'?'response':t.objectType==='review'?'reviews':'export',{projectId:t.projectId,requirementId:t.requirementId,reviewId:t.reviewId,snapshotId:t.snapshotId,taskId:t.id,action:mode,returnKey});});}
  function openProject(id,mode='view',details={}){if(mode==='continue'){const task=selectMyTasks(stateRef.current,{actorId:stateRef.current.actorId,projectId:id})[0];if(task){openTask(task,'start','projects');return;}}selectProject(id,['documents','settings','versions'].includes(mode)?mode:mode==='view'?'settings':'response',details);}
- function deleteProject(id){if(databaseBacked)return unavailable();try{update(s=>event(removeProject(s,id),'删除项目',id,'项目及相关待办已移出，可撤销删除'));toast('项目已删除，可在列表中撤销');return true;}catch(error){toast(error.message,'error');return false;}}
- function undoDeleteProject(id){if(databaseBacked)return unavailable();try{update(s=>event(restoreProject(s,id),'撤销删除项目',id,'项目及相关工作记录已恢复'));toast('项目已恢复');return true;}catch(error){toast(error.message,'error');return false;}}
+ async function persistProjectArchive(project,archive,reason){
+  try{await updateBackendProjectArchive(project,archive,reason);}
+  catch(error){toast(error.message,'error');return false;}
+  toast(archive?'项目已归档':'项目已恢复');
+  const {actorId,actorRole,activeBuId}=stateRef.current;
+  onReload?.({actorId,actorRole,activeBuId});
+  return true;
+ }
+ function deleteProject(project,reason){
+  if(databaseBacked)return persistProjectArchive(project,true,reason);
+  const {id}=project;
+  try{update(s=>event(removeProject(s,id),'删除项目',id,'项目及相关待办已移出，可撤销删除'));toast('项目已删除，可在列表中撤销');return true;}catch(error){toast(error.message,'error');return false;}
+ }
+ function undoDeleteProject(project,reason){
+  if(databaseBacked)return persistProjectArchive(project,false,reason);
+  const {id}=project;
+  try{update(s=>event(restoreProject(s,id),'撤销删除项目',id,'项目及相关工作记录已恢复'));toast('项目已恢复');return true;}catch(error){toast(error.message,'error');return false;}
+ }
  function uploadFromDetail(incoming){
   if(!allow('source:manage'))return false;
   const pid=routeRef.current.projectId||stateRef.current.activeProjectId;
@@ -153,7 +169,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
    const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId,technicalMode,srId,technicalIds,technicalRepresentativeId});
    const saved=await createBackendProject({...form,id:code,buId});
    const id=saved.id;
-   const p={...projectForm,...binding,id,code:saved.code,backendProjectId:id,backendBuId:saved.buId,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:saved.createdAt||new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:saved.version||1};
+   const p={...projectForm,...binding,id,code:saved.code,backendProjectId:id,backendBuId:saved.buId,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:saved.createdAt||new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:databaseBacked?saved.version:saved.version||1};
    if(databaseBacked)p.defaultConfirmationAssigneeId=current.actorId;
    update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.groupPath||[p.modelName,p.modelRevision,p.processCode,p.processName].filter(Boolean).join(" / ")}`));
    toast('项目已创建，请上传 RFQ 资料');rawNavigate('response',{projectId:id,upload:'true'});return true;

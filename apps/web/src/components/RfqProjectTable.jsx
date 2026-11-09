@@ -5,7 +5,7 @@ import { ProTable } from '@ant-design/pro-components';
 import { StatusBadge } from './ui';
 import { getProjectSummary } from '../projectSelectors';
 
-export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, onOpenProject, onOpenModel, onTransfer, onDelete, viewControl }) {
+export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, onOpenProject, onOpenModel, onTransfer, onDelete, canArchive, archiveEnabled, viewControl }) {
   const data = rows.map(project => ({ ...project, summary: getProjectSummary(appState, project.id, appState.actorId) }));
   const columns = [
     { title: '项目 / 客户', dataIndex: 'name', width: 260, render: (_, p) => <><Button type="link" onClick={() => onOpenProject(p.id, 'view')}>{p.name}</Button><small className="rfq-table-meta">{p.id} · {p.customer || '客户待补充'}</small></> },
@@ -22,8 +22,8 @@ export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, 
         ...(canManage && p.ownerId===appState.actorId ? [
           { type:'divider' },
           { key:'transfer',label:'移交负责人',onClick:()=>onTransfer(p) },
-          { key:'delete',label:'删除项目',danger:true,onClick:()=>onDelete(p) },
         ] : []),
+        ...(canArchive(p) ? [{ key:'delete',label:archiveEnabled?'归档项目':'删除项目',danger:true,onClick:()=>onDelete(p) }] : []),
       ] }}><Button type="text" aria-label={`更多操作 ${p.name}`} icon={<MoreHorizontal/>}/></Dropdown>
     </Space> },
   ];

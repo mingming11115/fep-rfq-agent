@@ -45,8 +45,10 @@ test('database tasks and confirmation permissions use the explicit assignee or p
  assert.equal(canPerform('SR','response:confirm',{...context,actorId:owner.userId}),false);
 });
 test('workspace reads every project page and each server document and requirement',async()=>{
+ const archivedProject={...project,id:'ARCHIVED',stage:'CANCELLED',version:1,archived:true,archivedFromStage:'APPROVED'};
  const requests=[];const api={get:async path=>{
   requests.push(path);
+  if(path.includes('archived=true'))return {list:[archivedProject],total:1};
   if(path.startsWith('/projects?'))return {list:[project],total:1};
   if(path.endsWith('/members'))return [member];
   if(path.includes('/documents?'))return {list:[document],total:1};
@@ -56,6 +58,9 @@ test('workspace reads every project page and each server document and requiremen
  }};
  const state=await loadDatabaseWorkspace(user,api);
  assert.equal(state.projects[0].name,'数据库项目');assert.equal(state.requirementsByProject.P.length,1);
+ assert.deepEqual(state.archivedProjects,[archivedProject]);
+ assert.deepEqual(state.projects.map(row=>row.id),['P']);
+ assert.ok(!requests.some(path=>path.startsWith('/projects/ARCHIVED/')),'archive summaries do not load work data');
  assert.ok(requests.some(path=>path.includes('/requirements?')));
 });
 test('a database failure remains a failure rather than showing frontend seeds',async()=>{
