@@ -25,14 +25,21 @@ public class AccessGuard {
             throw new BusinessException(404, "项目不存在");
         }
         requireBu(user, project.getBuId());
+        if (!hasProjectRoleOrMembership(user, project)) {
+            throw new BusinessException(403, "无权访问该项目，请联系 BU 管理员授权");
+        }
+    }
+
+    public boolean canAccessProject(CurrentUser user, Project project) {
+        return project != null && user.canReach(project.getBuId()) && hasProjectRoleOrMembership(user, project);
+    }
+
+    private boolean hasProjectRoleOrMembership(CurrentUser user, Project project) {
         boolean manager = user.roles().stream().anyMatch(grant -> project.getBuId().equals(grant.buId()) && BU_ADMIN.equals(grant.role()));
         boolean business = user.roles().stream().anyMatch(grant -> project.getBuId().equals(grant.buId())
                 && java.util.Set.of("SR", "TECH", "APPROVER").contains(grant.role()));
-        if (manager || business && (user.id().equals(project.getOwnerId())
-                || members.find(project.getId(), user.id()).map(member -> member.isEnabled()).orElse(false))) {
-            return;
-        }
-        throw new BusinessException(403, "无权访问该项目，请联系 BU 管理员授权");
+        return manager || business && (user.id().equals(project.getOwnerId())
+                || members.find(project.getId(), user.id()).map(member -> member.isEnabled()).orElse(false));
     }
 
     public void requireProjectAccessManager(CurrentUser user, Project project) {

@@ -3,7 +3,6 @@ package com.naura.rfq.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.security.AccessGuard;
@@ -74,13 +73,7 @@ public class BusinessRecordService {
         if(projectId.isBlank()) {
             return !row.path("scope").asText().equals("仅当前项目");
         }
-        try {
-            guard.requireProject(user, projects.findById(projectId).orElse(null));
-            return true;
-        } catch (BusinessException denied) {
-            log.error("检查业务记录读取权限失败", denied);
-            return false;
-        }
+        return guard.canAccessProject(user, projects.findById(projectId).orElse(null));
     }
     public Map<String,Object> resources(CurrentUser user,String buId){
         guard.requireBu(user,buId);
