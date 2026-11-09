@@ -28,11 +28,11 @@ for(const fileType of ['docx','pdf'])test(`${fileType} file menu saves the revie
   globalThis.fetch=async(url,options={})=>{
     requests.push({url,options});
     if(options.method==='PUT'){
-      if(holdPut)await new Promise(resolve=>{releasePut=resolve;});
-      if(failPut)return new Response(JSON.stringify({code:503,msg:'存储暂不可用'}),{status:503});
+      if(holdPut) { await new Promise(resolve=>{releasePut=resolve;}); }
+      if(failPut) { return new Response(JSON.stringify({code:503,msg:'存储暂不可用'}),{status:503}); }
       meta={...meta,revision:meta.revision+1};return new Response(JSON.stringify({code:0,data:meta}));
     }
-    if(url.includes('/download'))return failDownload?new Response(JSON.stringify({code:503,msg:'下载暂不可用'}),{status:503}):new Response(url.endsWith('original')?'immutable original':'saved review');
+    if(url.includes('/download')) { return failDownload?new Response(JSON.stringify({code:503,msg:'下载暂不可用'}),{status:503}):new Response(url.endsWith('original')?'immutable original':'saved review'); }
     return new Response(JSON.stringify({code:0,data:meta}));
   };
   const settle=async()=>{for(let i=0;i<12;i++)await new Promise(resolve=>setTimeout(resolve,0));};
@@ -40,7 +40,7 @@ for(const fileType of ['docx','pdf'])test(`${fileType} file menu saves the revie
   const render=async()=>act(async()=>{root.render(React.createElement(CraftSourcePane,{file:{id:'F',name:meta.name,craft:meta},source,user,rows,canManage:writable,canEditRow:()=>writable,allComments:[],selectedAnchor:{...source,requirementId:'R'},showResponses:false,toolbar:{fileSelector:React.createElement('span',null,'Customer source')},onProjectCommentsChange:()=>{}},React.createElement('p',null,'Excerpt')));await settle();});
   const trigger=()=>node.querySelector('[aria-label="更多文件操作"]'),menu=()=>document.querySelector('[role="menu"]');
   const item=text=>[...menu().querySelectorAll('[role="menuitem"]')].find(el=>el.textContent.includes(text));
-  const open=async()=>{if(trigger().getAttribute('aria-expanded')!=='true')await click(trigger());assert.ok(menu());};
+  const open=async()=>{if(trigger().getAttribute('aria-expanded')!=='true') { await click(trigger()); } assert.ok(menu());};
   const action=async text=>{await open();await click(item(text));};
   const fileState=()=>node.querySelector('[aria-label="文件保存状态"]')?.textContent;
   const puts=()=>requests.filter(request=>request.options.method==='PUT');
@@ -51,7 +51,7 @@ for(const fileType of ['docx','pdf'])test(`${fileType} file menu saves the revie
     const snapshot=()=>({document:'session',fileName:meta.name,applied,complete:true,author:user.name,editable:writable,notes:[],pages:[],active:null,source:{status:'unsupported',selectedId:'R'}});
     const emit=(type,data={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:engine+':'+type,...data}}));
     const packet=text=>({name:meta.name,bytes:new TextEncoder().encode(text).buffer,review:snapshot()});
-    native.postMessage=message=>{nativeCalls.push(message);if(message.type===engine+':open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));if(message.type===engine+':review'){const request=JSON.parse(message.payload);applied=request.request;queueMicrotask(()=>{if(request.action==='save'&&failNativeSave){emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:false,error:'Native serialization unavailable'})});return;}if(request.action==='save')emit('save',packet('latest local review'));emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});}};
+    native.postMessage=message=>{nativeCalls.push(message);if(message.type===engine+':open') { queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())})); } if(message.type===engine+':review'){const request=JSON.parse(message.payload);applied=request.request;queueMicrotask(()=>{if(request.action==='save'&&failNativeSave){emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:false,error:'Native serialization unavailable'})});return;}if(request.action==='save') { emit('save',packet('latest local review')); } emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});}};
     await act(async()=>{emit('ready');await settle();});assert.match(fileState(),/文件已保存/);
     assert.notEqual(item('保存批阅稿').getAttribute('aria-disabled'),'true');assert.match(item('保存批阅稿').textContent,/Ctrl.*S/);
     await act(async()=>{menu().dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await settle();});assert.equal(trigger().getAttribute('aria-expanded'),'false');assert.equal(document.activeElement,trigger());

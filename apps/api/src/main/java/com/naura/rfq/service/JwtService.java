@@ -11,9 +11,11 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Optional;
 import javax.crypto.SecretKey;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class JwtService {
 
     private final SecretKey key;
@@ -43,6 +45,7 @@ public class JwtService {
                     .getPayload();
             return Optional.ofNullable(claims.getSubject());
         } catch (JwtException | IllegalArgumentException ex) {
+            log.error("验证会话 JWT 失败 errorType={}", ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }

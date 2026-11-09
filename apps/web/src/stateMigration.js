@@ -30,7 +30,7 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     state.commentsByProject[project.id] ||= [];
     const reviews=state.reviewsByProject[project.id],counts=new Map();
     for (const row of state.requirementsByProject[project.id]) {
-      if (row.status !== '待复核') continue;
+      if (row.status !== '待复核') { continue; }
       row.status = reviews.some(review => review.requirementId === row.id && !['已关闭', '已取消'].includes(review.status)) ? '评审中' : '待确认';
       row.needsReview = true;
       row.confirmationReason ||= '评审结果或来源内容已变化，请重新确认应答。';
@@ -40,20 +40,20 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     for(const review of reviews)counts.set(review.id,(counts.get(review.id)||0)+1);
     const used=new Set(reviews.filter(r=>counts.get(r.id)===1).map(r=>r.id));
     reviews.forEach((review,index)=>{
-      if(counts.get(review.id)<2)return;
+      if(counts.get(review.id)<2) { return; }
       const legacyId=review.id;let id=`${legacyId}--${review.requirementId||'item'}-${index+1}`;
       while(used.has(id))id+='-copy';used.add(id);
       review.id=id;review.legacyId=legacyId;
     });
     for(const comment of state.commentsByProject[project.id])for(const [kind,id]of Object.entries(comment.linkedIssues||{})){
       const review=reviews.find(r=>r.legacyId===id&&r.requirementId===comment.anchor?.requirementId&&(r.kind||'review')===kind);
-      if(review)comment.linkedIssues[kind]=review.id;
+      if(review) { comment.linkedIssues[kind]=review.id; }
     }
-    for(const row of state.requirementsByProject[project.id])if(row.pendingReviewProposal){const review=reviews.find(r=>r.legacyId===row.pendingReviewProposal.reviewId&&r.requirementId===row.id);if(review)row.pendingReviewProposal.reviewId=review.id;}
+    for(const row of state.requirementsByProject[project.id])if(row.pendingReviewProposal){const review=reviews.find(r=>r.legacyId===row.pendingReviewProposal.reviewId&&r.requirementId===row.id);if(review) { row.pendingReviewProposal.reviewId=review.id; }}
     state.membersByProject[project.id] ||= structuredClone(state.members);
     const trustedDemo=demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer);
     if(trustedDemo){project.createdById ||= 'demo-sales';project.ownerId ||= 'demo-sales';project.participantIds ||= ['demo-sales','demo-technical','demo-approver'];}
-    else project.participantIds ||= project.ownerId?[project.ownerId]:[];
+    else { project.participantIds ||= project.ownerId?[project.ownerId]:[]; }
     seedClauseStatusExamples(state, project);
     seedTaskDeadlineExamples(state, project, now);
   }
@@ -70,10 +70,10 @@ function seedDemoProcessLinks(state,demo){
   const processId=processByProject[project.id];
   const trusted=demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer)
    ||project.id==='RFQ-DEMO-PARSING'&&project.sample&&project.customer==='演示客户（模拟）';
-  if(!processId||!trusted||project.buId!=='BU-DEMO'||project.demoProcessBindingVersion===1)continue;
+  if(!processId||!trusted||project.buId!=='BU-DEMO'||project.demoProcessBindingVersion===1) { continue; }
   // Seed only missing demo associations once; saved replies and frozen approvals remain intact.
   project.demoProcessBindingVersion=1;
-  if(project.modelId||project.processId)continue;
+  if(project.modelId||project.processId) { continue; }
   Object.assign(project,resolveRfqProcessBinding({models:MODELS,processes:PROCESSES,buId:'BU-DEMO',modelId:'MOD-A-R2',processId}));
  }
  return state;
@@ -82,7 +82,7 @@ function seedDemoProcessLinks(state,demo){
 function migrateProjectReviewSettings(state){
  for(const project of [...state.projects,...Object.values(state.deletedProjectsById||{}).map(backup=>backup.project)]){
   const previous=state.buReviewSettingsByBuId?.[project.buId];
-  if(!project.technicalReviewSettings&&previous)project.technicalReviewSettings=structuredClone(previous);
+  if(!project.technicalReviewSettings&&previous) { project.technicalReviewSettings=structuredClone(previous); }
  }
  return state;
 }
@@ -90,11 +90,11 @@ function migrateProjectReviewSettings(state){
 function mergeLegacyFollowups(state,now){
  for(const project of state.projects){
   for(const review of state.reviewsByProject[project.id]||[]){
-   if(review.customerCommunication==='待客户澄清')review.customerCommunication='待客户反馈';
-   if(review.type==='客户澄清')review.type='条件待核对';
-   if(review.kind!=='clarification')continue;
+   if(review.customerCommunication==='待客户澄清') { review.customerCommunication='待客户反馈'; }
+   if(review.type==='客户澄清') { review.type='条件待核对'; }
+   if(review.kind!=='clarification') { continue; }
    review.legacyKind=review.kind;review.kind='review';
-   if(review.status==='跟进中')review.status='处理中';
+   if(review.status==='跟进中') { review.status='处理中'; }
    const previousOwnerId=review.ownerId;
    const people=getEligiblePersonnel(state,{buId:project.buId,projectId:project.id,duty:'confirm'}).filter(m=>m.roles.includes('技术'));
    review.ownerId=people.find(m=>m.userId===review.ownerId)?.userId||people[0]?.userId||null;
@@ -103,31 +103,31 @@ function mergeLegacyFollowups(state,now){
    review.history=[...(review.history||[]),{action:'并入评审',actor:'系统',previousOwnerId,time:now.toISOString(),reason:'统一按评审流程处理，原有回复和处理记录保留。'}];
    delete project.responseReviewSchemaVersion;
   }
-  for(const comment of state.commentsByProject[project.id]||[]){if(comment.linkedIssues?.clarification&&!comment.linkedIssues.review)comment.linkedIssues.review=comment.linkedIssues.clarification;}
+  for(const comment of state.commentsByProject[project.id]||[]){if(comment.linkedIssues?.clarification&&!comment.linkedIssues.review) { comment.linkedIssues.review=comment.linkedIssues.clarification; }}
   for(const row of state.requirementsByProject[project.id]||[]){
-   if(row.pendingReviewProposal?.kind==='clarification')row.pendingReviewProposal.kind='review';
-   if(row.confirmationReason?.startsWith('客户澄清已完成'))row.confirmationReason='评审已完成，请核对结果并确认应答。';
+   if(row.pendingReviewProposal?.kind==='clarification') { row.pendingReviewProposal.kind='review'; }
+   if(row.confirmationReason?.startsWith('客户澄清已完成')) { row.confirmationReason='评审已完成，请核对结果并确认应答。'; }
   }
  }
  return state;
 }
 
 function migrateResponseReviews(state){
- if(state.responseReviewSchemaVersion&&state.projects.every(p=>p.responseReviewSchemaVersion))return state;
+ if(state.responseReviewSchemaVersion&&state.projects.every(p=>p.responseReviewSchemaVersion)) { return state; }
  state.implicitConfirmationIdsByProject ||= {};
  for(const project of state.projects){
-  if(state.responseReviewSchemaVersion&&project.responseReviewSchemaVersion)continue;
+  if(state.responseReviewSchemaVersion&&project.responseReviewSchemaVersion) { continue; }
   for(const row of state.requirementsByProject[project.id]||[]){
    const ambiguousLegacyAudit=(state.audit||[]).some(e=>e.action==='分派条款确认人'&&!e.projectId&&!e.requirementId&&(e.buId===project.buId||e.object===project.buId)&&e.after===row.confirmationAssigneeId);
    const explicit=ambiguousLegacyAudit||row.confirmationAssignmentSource==='explicit'||Object.values(state.tasksById||{}).some(t=>t.projectId===project.id&&t.objectType==='requirement'&&t.objectId===row.id&&(t.history||[]).some(h=>h.action==='transfer'&&h.to===row.confirmationAssigneeId))||(state.audit||[]).some(e=>e.action==='分派条款确认人'&&e.projectId===project.id&&e.requirementId===row.id&&e.after===row.confirmationAssigneeId);
    if(ambiguousLegacyAudit&&row.confirmationAssignmentSource!=='explicit'){state.confirmationMigrationNotesByProject ||= {};state.confirmationMigrationNotesByProject[project.id] ||= {};state.confirmationMigrationNotesByProject[project.id][row.id]='旧分派记录未包含具体条款，已保留现有确认人；可清除当前指派，恢复默认分工。';}
    if(row.confirmationAssigneeId==='demo-technical'&&!explicit){
-    if(row.status==='已确认'){state.implicitConfirmationIdsByProject[project.id] ||= [];if(!state.implicitConfirmationIdsByProject[project.id].includes(row.id))state.implicitConfirmationIdsByProject[project.id].push(row.id);}
-    else delete row.confirmationAssigneeId;
+    if(row.status==='已确认'){state.implicitConfirmationIdsByProject[project.id] ||= [];if(!state.implicitConfirmationIdsByProject[project.id].includes(row.id)) { state.implicitConfirmationIdsByProject[project.id].push(row.id); }}
+    else { delete row.confirmationAssigneeId; }
    }
   }
   for(const review of state.reviewsByProject[project.id]||[]){
-   if(review.kind==='clarification')continue;
+   if(review.kind==='clarification') { continue; }
    review.reviewerIds ||= review.ownerId?[review.ownerId]:[];
    review.confirmations ||= {};
    review.legacyApproval ||= review.approverId?{approverId:review.approverId,status:review.status,approvedById:review.approvedById}:undefined;
@@ -149,19 +149,19 @@ function seedTaskDeadlineExamples(state, project, now) {
   function scheduleObject(type,id,legacyDate,days){
     const objects=type==='requirement'?state.requirementsByProject[project.id]:state.reviewsByProject[project.id];
     const object=objects.find(o=>o.id===id);
-    if(!object||object.demoTaskDeadlinesVersion===1||(object.version||1)!==1||(object.round||1)!==1||object.deadline&&object.deadline!==legacyDate)return;
+    if(!object||object.demoTaskDeadlinesVersion===1||(object.version||1)!==1||(object.round||1)!==1||object.deadline&&object.deadline!==legacyDate) { return; }
     object.deadline=dateAfter(days);object.demoTaskDeadlinesVersion=1;
     for(const task of Object.values(state.tasksById)){
-      if(task.projectId===project.id&&task.objectType===type&&task.objectId===id&&task.objectVersion===1&&task.round===1&&task.dueAt===legacyDate&&['待处理','处理中'].includes(normalizeTaskStatus(task.status)))task.dueAt=object.deadline;
+      if(task.projectId===project.id&&task.objectType===type&&task.objectId===id&&task.objectVersion===1&&task.round===1&&task.dueAt===legacyDate&&['待处理','处理中'].includes(normalizeTaskStatus(task.status))) { task.dueAt=object.deadline; }
     }
   }
   if(project.id==='RFQ-BHEL-2018'&&project.historicalDemo&&project.customer==='BHEL Electronics Division · Bangalore'&&project.deadline==='2018-01-31'){
     // The sourced procurement date stays historical; these are internal demo work deadlines.
-    for(const [index,row]of state.requirementsByProject[project.id].entries())if(row.realSource&&/^BHEL-REQ-\d{3}$/.test(row.id))scheduleObject('requirement',row.id,'2018-01-31',2+index%5);
-    for(const [index,review]of state.reviewsByProject[project.id].entries())if(/^BHEL-DEV-0[1-4]$/.test(review.id))scheduleObject('review',review.id,'2026-10-25',2+index);
+    for(const [index,row]of state.requirementsByProject[project.id].entries())if(row.realSource&&/^BHEL-REQ-\d{3}$/.test(row.id)) { scheduleObject('requirement',row.id,'2018-01-31',2+index%5); }
+    for(const [index,review]of state.reviewsByProject[project.id].entries())if(/^BHEL-DEV-0[1-4]$/.test(review.id)) { scheduleObject('review',review.id,'2026-10-25',2+index); }
     return;
   }
-  if(project.id!=='RFQ-001'||project.customer!=='华东新能源客户（模拟）'||project.demoTaskDeadlinesVersion===1||project.deadline!=='2026-10-25')return;
+  if(project.id!=='RFQ-001'||project.customer!=='华东新能源客户（模拟）'||project.demoTaskDeadlinesVersion===1||project.deadline!=='2026-10-25') { return; }
   const schedule=[
     ['requirement','req-21','2026-10-25',-1],
     ['requirement','req-26','2026-10-25',0],
@@ -182,8 +182,8 @@ function seedTaskDeadlineExamples(state, project, now) {
 function seedProjectStageExamples(state,demo) {
   // Existing rows, files and signatures are never replaced by freshly generated examples.
   state.demoProjectStagesVersion ||= demo.demoProjectStagesVersion;
-  if(state.demoParsingExampleVersion===1)return;
-  if(!state.projects.some(project=>demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer)))return;
+  if(state.demoParsingExampleVersion===1) { return; }
+  if(!state.projects.some(project=>demo.projects?.some(example=>example.id===project.id&&example.customer===project.customer))) { return; }
   const id='RFQ-DEMO-PARSING';
   if(!state.projects.some(project=>project.id===id)&&!state.deletedProjectsById?.[id]){
     state.projects.push({id,name:'解析中示例 · 智能应答对比',customer:'演示客户（模拟）',equipment:'DEMO-CUT 300 · V2.1',owner:'林晓',ownerId:'demo-sales',createdById:'demo-sales',participantIds:['demo-sales','demo-technical','demo-approver'],buId:'BU-DEMO',deadline:'2026-11-10',sample:true});
@@ -199,7 +199,7 @@ function seedProjectStageExamples(state,demo) {
 
 function seedClauseStatusExamples(state, project) {
   // Curated workflow examples are separate from parsing, which always imports unconfirmed rows.
-  if (project.id !== 'RFQ-001' || project.customer !== '华东新能源客户（模拟）' || project.clauseStatusExamplesVersion === 2) return;
+  if (project.id !== 'RFQ-001' || project.customer !== '华东新能源客户（模拟）' || project.clauseStatusExamplesVersion === 2) { return; }
   const rows = state.requirementsByProject[project.id], reviews = state.reviewsByProject[project.id];
   const examples = makeDocumentDemo(project.id).parsed.filter(row => row.sourceFileId === `${project.id}-DEMO-FILE-CLAUSE-STATUSES`);
   const answers = [
@@ -209,17 +209,17 @@ function seedClauseStatusExamples(state, project) {
   ];
   examples.forEach((example, index) => {
     const current = rows.find(row => row.id === example.id);
-    if (current) return;
+    if (current) { return; }
     const seeded = { ...example, category: '技术', ...answers[index], demoStatusExample: true };
     rows.push(seeded);
-    if (seeded.status === '评审中') reviews.push({
+    if (seeded.status === '评审中') { reviews.push({
       id: `${project.id}-DEMO-REVIEW-CLAUSE-STATUS`, requirementId: seeded.id, kind: 'review', title: '公用设施接口参数核对', type: '条件差异', source: '示例流程',
       status: '处理中', owner: '技术确认人',ownerId:'demo-technical',approverId:'demo-approver', deadline: project.deadline, version: 1, round: 1, requirementVersion: seeded.version,
       description: '客户现场电力、冷却水和排风参数尚待核对，需要明确额定值及允许范围。',
       plan: '核对客户现场参数，完善接口表后确认最终应答。', evidence: seeded.evidence,
       proposedDraft: seeded.draft, proposedConclusion: seeded.conclusion, conditions: seeded.conditions,
       history: [{ time: '2026/10/24 09:00:00', actor: '销售负责人', action: '建立示例评审并分派技术确认人' }],
-    });
+    }); }
   });
   project.clauseStatusExamplesVersion = 2;
 }

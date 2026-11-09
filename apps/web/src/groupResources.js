@@ -6,11 +6,11 @@ export function resourceGroupIds(kind,row={},catalog){
  return [...new Set(values)].filter(id=>catalog.nodes.some(n=>n.id===id));
 }
 export function matchesResourceGroup(kind,row,groupId,catalog){
- if(row.buId&&row.buId!==catalog.buId)return false;
- if(groupId===ALL_GROUPS)return true;
+ if(row.buId&&row.buId!==catalog.buId) { return false; }
+ if(groupId===ALL_GROUPS) { return true; }
  const ids=resourceGroupIds(kind,row,catalog);return groupId===UNGROUPED?!ids.length:ids.includes(groupId);
 }
 export function validateResourceGroups(catalog,values=[],previous=[]){
- if(!Array.isArray(values))throw new Error('分组关联格式无效');
- const ids=[...new Set(values)];for(const id of ids){if(!catalog.nodes.some(n=>n.id===id))throw new Error('关联分组不存在或不属于当前BU');if(!previous.includes(id)&&!nodeEnabled(catalog,id))throw new Error('不能关联停用的分组');}return ids;
+ if(!Array.isArray(values)) { throw new Error('分组关联格式无效'); }
+ const ids=[...new Set(values)];for(const id of ids){if(!catalog.nodes.some(n=>n.id===id)) { throw new Error('关联分组不存在或不属于当前BU'); } if(!previous.includes(id)&&!nodeEnabled(catalog,id)) { throw new Error('不能关联停用的分组'); }}return ids;
 }

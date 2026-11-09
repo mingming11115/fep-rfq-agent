@@ -34,7 +34,7 @@ const run = async () => {
     await page.waitForTimeout(700);
     const check = await page.evaluate(() => {
       const dd = document.querySelector('.ant-select-dropdown');
-      if (!dd) return { dom: false };
+      if (!dd) { return { dom: false }; }
       const cs = getComputedStyle(dd);
       const r = dd.getBoundingClientRect();
       const vw = window.innerWidth, vh = window.innerHeight;

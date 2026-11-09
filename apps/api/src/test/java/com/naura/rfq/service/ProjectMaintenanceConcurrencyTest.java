@@ -7,6 +7,7 @@ import com.naura.rfq.support.AcceptanceSupport;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.executor.Executor;
 import org.apache.ibatis.mapping.MappedStatement;
 import org.apache.ibatis.plugin.*;
@@ -27,6 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @Import(ProjectMaintenanceConcurrencyTest.Scheduling.class)
+@Slf4j
 class ProjectMaintenanceConcurrencyTest extends AcceptanceSupport {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
@@ -40,14 +42,25 @@ class ProjectMaintenanceConcurrencyTest extends AcceptanceSupport {
 
     @Test void parseWaitingForHumanEditMustSeeItsCommittedVersionAndPreserveIt() throws Exception {
         String token=token("sr01");var tx=freshTransaction();
-        Source source=tx.execute(status->{try{return fixture(token);}catch(Exception e){throw new RuntimeException(e);}});
+        Source source = tx.execute(status -> {
+            try {
+                return fixture(token);
+            } catch (Exception e) {
+                log.error("准备项目维护并发测试数据失败", e);
+                throw new RuntimeException(e);
+            }
+        });
         var editor=Executors.newSingleThreadExecutor(r->new Thread(r,"project-maintenance-concurrent-worker"));
         var parser=Executors.newSingleThreadExecutor(r->new Thread(r,"project-maintenance-parse-waiter"));
         pause.arm("RequirementMapper.updateWithVersion");
         try {
             Future<?> edited=editor.submit(()->{
-                try { mvc.perform(business(source,token,false)).andExpect(status().isOk()); }
-                catch(Exception e){throw new RuntimeException(e);}
+                try {
+                    mvc.perform(business(source, token, false)).andExpect(status().isOk());
+                } catch (Exception e) {
+                    log.error("并发测试提交人工业务修改失败", e);
+                    throw new RuntimeException(e);
+                }
             });
             assertThat(pause.waiting.await(60,TimeUnit.SECONDS)).isTrue();
             Future<org.springframework.test.web.servlet.MvcResult> reparsed=parser.submit(()->mvc.perform(business(source,token,true)).andReturn());
@@ -86,13 +99,24 @@ class ProjectMaintenanceConcurrencyTest extends AcceptanceSupport {
     }
     void interleave(boolean archiveFirst,boolean parse) throws Exception {
         String token=token("sr01");var tx=freshTransaction();
-        Source source=tx.execute(status->{try{return fixture(token);}catch(Exception e){throw new RuntimeException(e);}});
+        Source source = tx.execute(status -> {
+            try {
+                return fixture(token);
+            } catch (Exception e) {
+                log.error("准备项目维护并发测试数据失败", e);
+                throw new RuntimeException(e);
+            }
+        });
         var worker=Executors.newSingleThreadExecutor(r->new Thread(r,"project-maintenance-concurrent-worker"));
         pause.arm(archiveFirst?"ProjectMapper.updateWithVersion":"CustomerDocumentMapper.findByIdForUpdate");
         try {
             Future<?> first=worker.submit(()->{
-                try { mvc.perform(archiveFirst?archive(source,token):business(source,token,parse)).andExpect(status().isOk()); }
-                catch(Exception e){throw new RuntimeException(e);}
+                try {
+                    mvc.perform(archiveFirst ? archive(source, token) : business(source, token, parse)).andExpect(status().isOk());
+                } catch (Exception e) {
+                    log.error("提交首个项目维护并发请求失败", e);
+                    throw new RuntimeException(e);
+                }
             });
             assertThat(pause.waiting.await(60,TimeUnit.SECONDS)).isTrue();
             // The database timeout proves contention on a real row lock; no sleep guesses the order.
@@ -101,22 +125,32 @@ class ProjectMaintenanceConcurrencyTest extends AcceptanceSupport {
                 jdbc.execute("set session innodb_lock_wait_timeout=1");
                 try {
                     mvc.perform(archiveFirst?business(source,token,parse):archive(source,token)).andExpect(status().isConflict());
-                } catch(Exception e){throw new RuntimeException(e);}
+                } catch (Exception e) {
+                    log.error("提交第二个项目维护并发请求失败", e);
+                    throw new RuntimeException(e);
+                }
                 finally { jdbc.execute("set session innodb_lock_wait_timeout="+previous);status.setRollbackOnly(); }
                 return null;
             });
             pause.release.countDown();first.get(60,TimeUnit.SECONDS);
             tx.execute(status->{
-                try { mvc.perform(archiveFirst?business(source,token,parse):archive(source,token))
-                        .andExpect(archiveFirst?org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isConflict():org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk()); }
-                catch(Exception e){throw new RuntimeException(e);}
-                finally { if(archiveFirst)status.setRollbackOnly(); }
+                try {
+                    mvc.perform(archiveFirst ? business(source, token, parse) : archive(source, token))
+                            .andExpect(archiveFirst ? org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isConflict() : org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+                } catch (Exception e) {
+                    log.error("项目维护并发测试清理失败", e);
+                    throw new RuntimeException(e);
+                }
+                finally { if(archiveFirst) { status.setRollbackOnly(); } }
                 return null;
             });
             tx.execute(status->{
                 assertThat(jdbc.queryForObject("select stage from project where id=?",String.class,source.project())).isEqualTo("CANCELLED");
-                if(parse)assertThat(jdbc.queryForObject("select count(*) from parse_run where document_id=?",Long.class,source.document())).isEqualTo(archiveFirst?1L:2L);
-                else assertThat(jdbc.queryForObject("select version from requirement where id=?",Long.class,source.requirement())).isEqualTo(archiveFirst?0L:1L);
+                if(parse) {
+                    assertThat(jdbc.queryForObject("select count(*) from parse_run where document_id=?",Long.class,source.document())).isEqualTo(archiveFirst?1L:2L);
+                } else {
+                    assertThat(jdbc.queryForObject("select version from requirement where id=?",Long.class,source.requirement())).isEqualTo(archiveFirst?0L:1L);
+                }
                 return null;
             });
         } finally {
@@ -146,9 +180,11 @@ class ProjectMaintenanceConcurrencyTest extends AcceptanceSupport {
         void arm(String target){this.target=target;waiting=new CountDownLatch(1);release=new CountDownLatch(1);parseProjectAttempt=new CountDownLatch(1);used.set(false);}
         @Override public Object intercept(Invocation invocation) throws Throwable {
             String id=((MappedStatement)invocation.getArgs()[0]).getId();
-            if(Thread.currentThread().getName().equals("project-maintenance-parse-waiter") && id.endsWith("ProjectMapper.findByIdForUpdate"))parseProjectAttempt.countDown();
+            if(Thread.currentThread().getName().equals("project-maintenance-parse-waiter") && id.endsWith("ProjectMapper.findByIdForUpdate")) {
+                parseProjectAttempt.countDown();
+            }
             if(Thread.currentThread().getName().equals("project-maintenance-concurrent-worker") && id.endsWith(target) && used.compareAndSet(false,true)) {
-                waiting.countDown();if(!release.await(60,TimeUnit.SECONDS))throw new IllegalStateException("scheduler timeout");
+                waiting.countDown();if(!release.await(60,TimeUnit.SECONDS)) { throw new IllegalStateException("scheduler timeout"); }
             }
             return invocation.proceed();
         }

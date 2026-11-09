@@ -12,47 +12,48 @@ const oldProcesses={
   'PROC-A-R1-P1':{code:'P1',name:'旧版基础工艺',conditions:'仅适用 R1'},
 };
 function updateSeed(row){
-  if((row.buId||'BU-DEMO')!=='BU-DEMO'||row.updatedById||row.submitterId)return row;
+  if((row.buId||'BU-DEMO')!=='BU-DEMO'||row.updatedById||row.submitterId) { return row; }
   const oldProcess=oldProcesses[row.id];
   if(oldProcess){
-    if(row.code!==oldProcess.code||row.name!==oldProcess.name)return row;
+    if(row.code!==oldProcess.code||row.name!==oldProcess.name) { return row; }
     const process=PROCESSES.find(item=>item.id===row.id);
     return {...row,code:process.code,name:process.name,conditions:row.conditions===oldProcess.conditions?process.conditions:row.conditions};
   }
-  if(!seededIds.has(row.id)||row.id.startsWith('MOD-')&&row.name!=='机型 A')return row;
+  if(!seededIds.has(row.id)||row.id.startsWith('MOD-')&&row.name!=='机型 A') { return row; }
   const next={...row};
-  for(const field of ['name','standard','config','source','conditions','model','answer'])if(typeof next[field]==='string')next[field]=displayText(next[field]);
-  if(next.code==='FEP-A')next.code='HESPER-E360R';
-  if(row.id==='MOD-A-R2'&&row.standard==='标准模块 S；300 mm 晶圆上料；基础工艺 P1')next.standard=MODELS.find(item=>item.id===row.id).standard;
-  if(next.refs)next.refs=next.refs.map(ref=>({...ref,title:typeof ref.title==='string'?displayText(ref.title):ref.title}));
+  for(const field of ['name','standard','config','source','conditions','model','answer'])if(typeof next[field]==='string') { next[field]=displayText(next[field]); }
+  if(next.code==='FEP-A') { next.code='HESPER-E360R'; }
+  if(row.id==='MOD-A-R2'&&row.standard==='标准模块 S；300 mm 晶圆上料；基础工艺 P1') { next.standard=MODELS.find(item=>item.id===row.id).standard; }
+  if(next.refs) { next.refs=next.refs.map(ref=>({...ref,title:typeof ref.title==='string'?displayText(ref.title):ref.title})); }
   return next;
 }
 
 // Update the stock FEP demo once; stable IDs, authored records and other BUs stay intact.
 export function migrateFepDemoCatalog(storage){
-  if(storage.getItem(marker))return;
+  if(storage.getItem(marker)) { return; }
   const before=new Map(keys.map(key=>[key,storage.getItem(key)]));
   const rows=keys.map(key=>{
     const value=before.get(key);
-    if(value===null)return null;
+    if(value===null) { return null; }
     const parsed=JSON.parse(value);
-    if(!Array.isArray(parsed))throw new Error('演示资料格式异常，保留原有数据');
+    if(!Array.isArray(parsed)) { throw new Error('演示资料格式异常，保留原有数据'); }
     return parsed;
   });
   const [models,processes,capabilities]=rows;
   const hasModel=models===null||models.some(row=>row.id==='MOD-A-R2'&&(row.buId||'BU-DEMO')==='BU-DEMO');
   const hasOldProcesses=hasModel&&processes?.some(row=>row.modelId==='MOD-A-R2'&&oldProcesses[row.id]?.code===row.code&&oldProcesses[row.id]?.name===row.name&&(row.buId||'BU-DEMO')==='BU-DEMO'&&!row.updatedById);
   const updated=rows.map(items=>items?.map(updateSeed)??null);
-  if(models)updated[0]=updated[0].filter(row=>!(row.id==='MOD-B-R1'&&row.name==='机型 B'&&row.code==='FEP-B'&&(row.version||1)===1&&!row.updatedById&&!row.submitterId&&(row.buId||'BU-DEMO')==='BU-DEMO'&&![...(processes||[]),...(capabilities||[])].some(child=>child.modelId===row.id)));
+  if(models) { updated[0]=updated[0].filter(row=>!(row.id==='MOD-B-R1'&&row.name==='机型 B'&&row.code==='FEP-B'&&(row.version||1)===1&&!row.updatedById&&!row.submitterId&&(row.buId||'BU-DEMO')==='BU-DEMO'&&![...(processes||[]),...(capabilities||[])].some(child=>child.modelId===row.id))); }
   const geSi=PROCESSES.find(row=>row.code==='GeSi');
-  if(hasOldProcesses&&!updated[1].some(row=>row.id===geSi.id||row.modelId==='MOD-A-R2'&&(row.buId||'BU-DEMO')==='BU-DEMO'&&String(row.code).toLowerCase()==='gesi'))updated[1].push(structuredClone(geSi));
+  if(hasOldProcesses&&!updated[1].some(row=>row.id===geSi.id||row.modelId==='MOD-A-R2'&&(row.buId||'BU-DEMO')==='BU-DEMO'&&String(row.code).toLowerCase()==='gesi')) { updated[1].push(structuredClone(geSi)); }
   const changes=keys.flatMap((key,index)=>updated[index]!==null&&JSON.stringify(updated[index])!==before.get(key)?[[key,JSON.stringify(updated[index])]]:[]);
-  if(changes.length&&storage.getItem(backup)===null)storage.setItem(backup,JSON.stringify(Object.fromEntries(before)));
+  if(changes.length&&storage.getItem(backup)===null) { storage.setItem(backup,JSON.stringify(Object.fromEntries(before))); }
   const written=[];
   try{
     for(const [key,value]of changes){storage.setItem(key,value);written.push(key);}
     storage.setItem(marker,'1');
   }catch(error){
+    console.error('写入 FEP 演示资料失败', error);
     for(const key of written.reverse())storage.setItem(key,before.get(key));
     throw error;
   }

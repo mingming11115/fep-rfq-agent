@@ -29,7 +29,9 @@ class MinioObjectStoreTest {
                         exchange.sendResponseHeaders(200, -1);
                     } else if (method.equals("GET")) {
                         exchange.sendResponseHeaders(200, bytes.length); exchange.getResponseBody().write(bytes);
-                    } else exchange.sendResponseHeaders(204, -1);
+                    } else {
+                        exchange.sendResponseHeaders(204, -1);
+                    }
                 }
             } finally { exchange.close(); }
         });

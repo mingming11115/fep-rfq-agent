@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 
 // Missing exports produce assertion failures while the test-first API is being built.
 const domain = await import('./domain.js').catch((error) => {
-  if (error.code === 'ERR_MODULE_NOT_FOUND') return {};
+  console.error('导入领域测试模块失败', error);
+  if (error.code === 'ERR_MODULE_NOT_FOUND') { return {}; }
   throw error;
 });
 const data = await import('./data.js').catch((error) => {
-  if (error.code === 'ERR_MODULE_NOT_FOUND') return {};
+  console.error('导入测试数据模块失败', error);
+  if (error.code === 'ERR_MODULE_NOT_FOUND') { return {}; }
   throw error;
 });
 const call = (name, ...args) => {
@@ -222,7 +224,8 @@ test('demo projects have independent working rows and do not imply standard hits
 });
 
 const workflow = await import('./rfqWorkflow.js').catch((error) => {
-  if (error.code === 'ERR_MODULE_NOT_FOUND') return {};
+  console.error('导入 RFQ 流程测试模块失败', error);
+  if (error.code === 'ERR_MODULE_NOT_FOUND') { return {}; }
   throw error;
 });
 const workflowCall = (name, ...args) => {
@@ -306,7 +309,8 @@ test('reclassified clauses reroute open reviews but preserve closed history and 
 });
 
 const structure = await import('./documentStructure.js').catch((error) => {
-  if (error.code === 'ERR_MODULE_NOT_FOUND') return {};
+  console.error('导入文档结构测试模块失败', error);
+  if (error.code === 'ERR_MODULE_NOT_FOUND') { return {}; }
   throw error;
 });
 test('document outline preserves customer hierarchy and source order without merging duplicate or missing numbers', () => {

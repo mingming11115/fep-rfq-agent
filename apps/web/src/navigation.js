@@ -12,16 +12,16 @@ const pages=['dashboard','tasks','projects','analysis',...PROJECT_PAGES,...ADMIN
 const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload','buId','modelId','groupId'];
 export function parseWorkRoute(hash='') {
  const [path,query='']=hash.replace(/^#\/?/,'').split('?');const route={page:path==='documents'?'response':pages.includes(path)?path:'dashboard'};
- const params=new URLSearchParams(query);for(const key of fields)if(params.has(key))route[key]=params.get(key);
+ const params=new URLSearchParams(query);for(const key of fields)if(params.has(key)) { route[key]=params.get(key); }
  return route;
 }
 export function buildWorkRoute(route) {
- const params=new URLSearchParams();for(const key of fields)if(route[key]!=null&&route[key]!=='')params.set(key,route[key]);
+ const params=new URLSearchParams();for(const key of fields)if(route[key]!=null&&route[key]!=='') { params.set(key,route[key]); }
  return `#/${route.page==='documents'?'response':pages.includes(route.page)?route.page:'dashboard'}${params.size?'?'+params:''}`;
 }
 export function getSourceUploadRoute(route, role) {
  const next={page:'response',projectId:route.projectId};
- if(!canPerform(role,'source:manage'))return next;
+ if(!canPerform(role,'source:manage')) { return next; }
  return ['response','settings','reviews','versions'].includes(route.page)?{...route,upload:'true'}:{...next,upload:'true'};
 }
 export function shouldOpenSourceUpload(route, role) {
@@ -32,6 +32,6 @@ export function getSourceUploadExitRoute(route, submitted=false) {
  const origin=['response','settings','reviews','versions'].includes(route.returnKey)?route.returnKey:'response';
  return {page:submitted?'response':origin,projectId:route.projectId,returnKey:'projects'};
 }
-export function saveReturnContext(key,context,storage=globalThis.sessionStorage){try{storage?.setItem(`rfq.return:${key}`,JSON.stringify(context));}catch{}}
-export function readReturnContext(key,storage=globalThis.sessionStorage){try{return JSON.parse(storage?.getItem(`rfq.return:${key}`)||'null');}catch{return null;}}
+export function saveReturnContext(key,context,storage=globalThis.sessionStorage){try{storage?.setItem(`rfq.return:${key}`,JSON.stringify(context));}catch (error){ console.error('保存返回页面上下文失败', error); }}
+export function readReturnContext(key,storage=globalThis.sessionStorage){try{return JSON.parse(storage?.getItem(`rfq.return:${key}`)||'null');}catch{ console.error('读取返回页面上下文失败'); return null;}}
 

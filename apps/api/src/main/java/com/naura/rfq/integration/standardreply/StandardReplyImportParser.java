@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 @Component
+@Slf4j
 public class StandardReplyImportParser {
     private static final int MAX_BYTES = 5 * 1024 * 1024;
     private static final int MAX_DATA_ROWS = 1000;
@@ -109,6 +111,7 @@ public class StandardReplyImportParser {
             }
             return bytes;
         } catch (IOException exception) {
+            log.error("读取标准回复导入文件失败", exception);
             throw new BusinessException(400, "无法读取标准回复文件");
         }
     }
@@ -128,14 +131,20 @@ public class StandardReplyImportParser {
                     for (var cell : row) {
                         boolean unsupported = cell.getCellType() == CellType.FORMULA || cell.getCellType() == CellType.ERROR;
                         String value = unsupported ? "" : formatter.formatCellValue(cell);
-                        if (!unsupported && value.isBlank()) continue;
+                        if (!unsupported && value.isBlank()) {
+                            continue;
+                        }
                         int column = cell.getColumnIndex();
                         checkColumnCount(column + 1, row.getRowNum() + 1);
                         while (values.size() <= column) values.add("");
                         values.set(column, value);
-                        if (unsupported) invalid.add(column);
+                        if (unsupported) {
+                            invalid.add(column);
+                        }
                     }
-                    if (values.isEmpty()) continue;
+                    if (values.isEmpty()) {
+                        continue;
+                    }
                     if (dataSheet != -1 && dataSheet != sheet) {
                         throw new BusinessException(400, "请在一个 Excel 工作表中填写标准回复");
                     }
@@ -145,8 +154,10 @@ public class StandardReplyImportParser {
             }
             return rows;
         } catch (BusinessException exception) {
+            log.error("校验标准回复 Excel 文件失败 errorType={}", exception.getClass().getSimpleName());
             throw exception;
         } catch (IOException | RuntimeException exception) {
+            log.error("解析标准回复 Excel 文件失败 errorType={}", exception.getClass().getSimpleName());
             throw new BusinessException(400, "无法解析 Excel 标准回复文件，请检查文件格式或加密设置");
         }
     }
@@ -156,6 +167,7 @@ public class StandardReplyImportParser {
         try {
             input = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes)).toString();
         } catch (CharacterCodingException exception) {
+            log.error("解码标准回复 CSV 文件失败", exception);
             throw new BusinessException(400, "CSV 文件须使用 UTF-8 编码");
         }
         input = input.replace("\r\n", "\n").replace('\r', '\n');
@@ -179,7 +191,9 @@ public class StandardReplyImportParser {
                     }
                 } else {
                     field.append(character);
-                    if (character == '\n') line++;
+                    if (character == '\n') {
+                        line++;
+                    }
                 }
             } else if (character == ',' || character == '\n') {
                 checkColumnCount(fields.size() + 1, rowStart);
@@ -199,7 +213,9 @@ public class StandardReplyImportParser {
                 field.append(character);
             }
         }
-        if (quoted) throw invalidCsv(rowStart);
+        if (quoted) {
+            throw invalidCsv(rowStart);
+        }
         if (!fields.isEmpty() || field.length() > 0) {
             checkColumnCount(fields.size() + 1, rowStart);
             fields.add(field.toString());
@@ -209,7 +225,9 @@ public class StandardReplyImportParser {
     }
 
     private static void addRow(List<SourceRow> rows, int number, List<String> values, Set<Integer> invalid) {
-        if (invalid.isEmpty() && values.stream().allMatch(String::isBlank)) return;
+        if (invalid.isEmpty() && values.stream().allMatch(String::isBlank)) {
+            return;
+        }
         if (rows.size() == MAX_DATA_ROWS + 1) {
             throw new BusinessException(400, "每次最多导入 1000 条标准回复");
         }
@@ -217,7 +235,9 @@ public class StandardReplyImportParser {
     }
 
     private static void checkColumnCount(int count, int row) {
-        if (count > MAX_COLUMNS) throw new BusinessException(400, "第 " + row + " 行超过 64 列");
+        if (count > MAX_COLUMNS) {
+            throw new BusinessException(400, "第 " + row + " 行超过 64 列");
+        }
     }
 
     private static BusinessException invalidCsv(int row) {
@@ -237,7 +257,9 @@ public class StandardReplyImportParser {
         }
         List<String> missing = new ArrayList<>();
         for (Field field : Field.values()) {
-            if (!columns.containsKey(field)) missing.add(field.label);
+            if (!columns.containsKey(field)) {
+                missing.add(field.label);
+            }
         }
         if (!missing.isEmpty()) {
             throw new BusinessException(400, "表头缺少：" + String.join("、", missing));
@@ -265,6 +287,7 @@ public class StandardReplyImportParser {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (NoSuchAlgorithmException exception) {
+            log.error("计算标准回复文件的 SHA-256 摘要失败", exception);
             throw new IllegalStateException("SHA-256 unavailable", exception);
         }
     }

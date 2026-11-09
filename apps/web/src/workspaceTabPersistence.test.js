@@ -117,8 +117,8 @@ test('project workspace omits stage navigation and retains the header export act
    assert.ok(!h.host.querySelector('.rfq-project-stage-tabs'),'stage navigation must be removed');
    assert.ok(!h.host.querySelector('[role="tab"]'));
    assert.ok(h.host.textContent.includes('项目内容'));
-   if(page==='export')assert.equal(exportButton(),undefined);
-   else assert.equal(exportButton().getAttribute('aria-disabled'),'true');
+   if(page==='export') { assert.equal(exportButton(),undefined); }
+   else { assert.equal(exportButton().getAttribute('aria-disabled'),'true'); }
   }
   await render('response');
   await act(async()=>exportButton().click());

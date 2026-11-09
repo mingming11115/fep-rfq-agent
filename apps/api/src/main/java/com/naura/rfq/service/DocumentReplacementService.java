@@ -42,7 +42,9 @@ public class DocumentReplacementService {
     public ObjectNode upload(CurrentUser user, String projectId, String oldId, MultipartFile file) throws IOException {
         var project = locked(user, projectId);
         var source = document(project, oldId);
-        if (work.inactiveDocuments(projectId).contains(oldId)) throw new BusinessException(409, "请选择当前生效的原件");
+        if (work.inactiveDocuments(projectId).contains(oldId)) {
+            throw new BusinessException(409, "请选择当前生效的原件");
+        }
         if (work.replacements(projectId).stream().anyMatch(row -> row.oldDocumentId().equals(oldId) && "pending".equals(row.status()))) {
             throw new BusinessException(409, "该原件已有待核对的新版");
         }
@@ -67,7 +69,9 @@ public class DocumentReplacementService {
         var replacement = replacement(projectId, newId);
         var impact = impact(project, replacement);
         String reason = input.reason() == null ? "" : input.reason().trim();
-        if (reason.isBlank() || reason.length() > 900) throw new BusinessException(400, "请填写来源完整性和影响范围核对说明");
+        if (reason.isBlank() || reason.length() > 900) {
+            throw new BusinessException(400, "请填写来源完整性和影响范围核对说明");
+        }
         if (!impact.path("canActivate").asBoolean() || !impact.path("fingerprint").asText().equals(input.fingerprint())) {
             throw new BusinessException(409, "解析或影响范围已变化，请重新核对");
         }
@@ -99,7 +103,9 @@ public class DocumentReplacementService {
                     """, "新版原件已生效，须重新确认", projectId, row.getId());
         }
         for (var file : documents.findByProjectIdOrderByCreatedAtDesc(projectId)) {
-            if (work.retired(projectId, file.getId())) continue;
+            if (work.retired(projectId, file.getId())) {
+                continue;
+            }
             for (var row : requirements.findByDocumentIdForUpdate(file.getId())) matches.corrected(project, file, row);
         }
         audit.successInBu(user.id(), project.getBuId(), "生效 RFQ 新版原件", "document", newId, reason);
@@ -109,11 +115,15 @@ public class DocumentReplacementService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void cancel(CurrentUser user, String projectId, String newId, String reason) {
         var project = locked(user, projectId);
-        if (reason == null || reason.isBlank() || reason.length() > 900) throw new BusinessException(400, "请填写取消原因");
+        if (reason == null || reason.isBlank() || reason.length() > 900) {
+            throw new BusinessException(400, "请填写取消原因");
+        }
         if (jdbc.update("""
                 update rfq_document_replacement set status='cancelled',reason=?
                 where project_id=? and new_document_id=? and status='pending'
-                """, reason.trim(), projectId, newId) != 1) throw new BusinessException(409, "没有待核对的新版");
+                """, reason.trim(), projectId, newId) != 1) {
+            throw new BusinessException(409, "没有待核对的新版");
+        }
         jdbc.update("""
                 update requirement_match_run set current_run=null,status='superseded',next_attempt_at=null,lease_token=null,lease_until=null
                 where document_id=? and project_id=? and current_run=1

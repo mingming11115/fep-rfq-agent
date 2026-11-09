@@ -12,11 +12,11 @@ export default function AuthGate({ children, loginAccounts }) {
 
   function handleLogin(next) {
     const identity = resolveLoginIdentity(next?.user);
-    if (identity) persistLoginIdentity(identity);
+    if (identity) { persistLoginIdentity(identity); }
     window.history.replaceState(null, '', identity?.actorRole === '后台管理' ? '#/admin' : '#/dashboard');
     setSession(next);
   }
 
-  if (!session) return <LoginPage onLogin={handleLogin} accounts={loginAccounts} />;
+  if (!session) { return <LoginPage onLogin={handleLogin} accounts={loginAccounts} />; }
   return <Fragment key={session.user.id}>{children}</Fragment>;
 }

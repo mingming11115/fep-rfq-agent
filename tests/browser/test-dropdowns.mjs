@@ -12,7 +12,7 @@ const run = async () => {
 
   const consoleMsgs = [];
   page.on('console', m => {
-    if (['error', 'warning'].includes(m.type())) consoleMsgs.push(`[${m.type()}] ${m.text()}`);
+    if (['error', 'warning'].includes(m.type())) { consoleMsgs.push(`[${m.type()}] ${m.text()}`); }
   });
   page.on('pageerror', e => consoleMsgs.push(`[pageerror] ${e.message}`));
 
@@ -40,7 +40,7 @@ const run = async () => {
     // 打印下拉面板的 computed style，排查透明/被遮挡
     const style = await page.evaluate(() => {
       const dd = document.querySelector('.ant-select-dropdown');
-      if (!dd) return null;
+      if (!dd) { return null; }
       const cs = getComputedStyle(dd);
       const r = dd.getBoundingClientRect();
       return { display: cs.display, visibility: cs.visibility, opacity: cs.opacity, zIndex: cs.zIndex, rect: { x: r.x, y: r.y, w: r.width, h: r.height }, childCount: dd.children.length };

@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.encryption.*;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -29,9 +30,17 @@ import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+@Slf4j
 class DocumentAcceptanceTest extends AcceptanceSupport {
     static final Path ROOT;
-    static { try { ROOT=Files.createTempDirectory("rfq-document-acceptance-"); } catch(Exception e){throw new RuntimeException(e);} }
+    static {
+        try {
+            ROOT = Files.createTempDirectory("rfq-document-acceptance-");
+        } catch (Exception e) {
+            log.error("创建原件验收测试临时目录失败", e);
+            throw new RuntimeException(e);
+        }
+    }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("rfq.storage-dir",()->ROOT.toString());}
     @Autowired CustomerDocumentMapper documents;
     @Autowired DocumentStorage storage;
@@ -151,8 +160,14 @@ class DocumentAcceptanceTest extends AcceptanceSupport {
         String sr=token("sr01"), project=newProject(sr,"P"+unique());var tx=new TransactionTemplate(transactions);var ref=new AtomicReference<String>();
         try {
             assertThatThrownBy(()->tx.execute(status->{
-                try {String id=upload(sr,project,"rollback.pdf","application/pdf",pdf("rollback",false)).path("id").asText();ref.set(documents.findById(id).orElseThrow().getStorageRef());}
-                catch(Exception e){throw new RuntimeException(e);}throw new IllegalStateException("force rollback");
+                try {
+                    String id = upload(sr, project, "rollback.pdf", "application/pdf", pdf("rollback", false)).path("id").asText();
+                    ref.set(documents.findById(id).orElseThrow().getStorageRef());
+                } catch (Exception e) {
+                    log.error("原件回滚测试上传失败", e);
+                    throw new RuntimeException(e);
+                }
+                throw new IllegalStateException("force rollback");
             })).isInstanceOf(IllegalStateException.class);
             assertThat(Files.exists(storage.resolve(ref.get()))).isFalse();assertThat(documents.countByProjectId(project)).isZero();
             var current=ok(auth(get("/api/rfq/projects/"+project),sr));assertThat(current.path("version").asLong()).isZero();assertThat(current.path("stage").asText()).isEqualTo("DRAFT");

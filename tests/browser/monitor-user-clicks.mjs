@@ -24,7 +24,7 @@ console.log('开始监听 60 秒 —— 请现在在这个 Chrome 窗口里点�
 for (let i = 0; i < 20; i++) {
   await page.waitForTimeout(3000);
   const log = await page.evaluate(() => { const l = window.__log.splice(0); return l; });
-  if (log.length) log.forEach(l => console.log(`  ${l}`));
+  if (log.length) { log.forEach(l => console.log(`  ${l}`)); }
 }
 console.log('监听结束');
 await browser.close();

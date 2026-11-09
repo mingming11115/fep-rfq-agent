@@ -5,7 +5,7 @@ const BASE = 'http://127.0.0.1:5173';
 const OUT = fileURLToPath(new URL('../../.local/artifacts/browser/', import.meta.url));
 mkdirSync(OUT,{recursive:true});
 const PROFILE = process.env.RFQ_CHROME_PROFILE;
-if (!PROFILE) throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.');
+if (!PROFILE) { throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.'); }
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   channel: 'chrome', headless: false,
@@ -22,9 +22,9 @@ await page.waitForTimeout(2500);
 // 扩展状态
 const extInfo = await page.evaluate(async () => {
   try {
-    const mod = await import('chrome://extensions-internals-page.mjs').catch(() => null);
+    const mod = await import('chrome://extensions-internals-page.mjs').catch((error) => { console.error('导入 Chrome 扩展信息模块失败', error); return null; });
     return 'n/a';
-  } catch { return 'n/a'; }
+  } catch (error) { console.error('读取 Chrome 扩展信息失败', error); return 'n/a'; }
 });
 
 await page.fill('input[placeholder="如 sr01"]', 'sr01');
@@ -43,7 +43,7 @@ await page.mouse.down();
 await page.waitForTimeout(500);
 const r1 = await page.evaluate(() => {
   const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-  if (!dd) return { dom: false };
+  if (!dd) { return { dom: false }; }
   const r = dd.getBoundingClientRect();
   const cs = getComputedStyle(dd);
   return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && r.height > 0 };
@@ -53,7 +53,7 @@ await page.mouse.up();
 await page.waitForTimeout(900);
 const r2 = await page.evaluate(() => {
   const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-  if (!dd) return { dom: false };
+  if (!dd) { return { dom: false }; }
   const r = dd.getBoundingClientRect();
   const cs = getComputedStyle(dd);
   return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && r.height > 0 };

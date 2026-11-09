@@ -16,7 +16,7 @@ test('RFQ creation sends the selected group to the server',async()=>{
 });
 test('legacy local project is created once and reused by code after a missing record',async()=>{
  let creates=0,stored=null;
- const api={get:async path=>{if(path.startsWith('/projects?'))return {list:stored?[stored]:[]};throw Object.assign(new Error('项目不存在'),{status:404});},post:async(path,body)=>{creates++;return stored={id:'BACKEND',...body};}};
+ const api={get:async path=>{if(path.startsWith('/projects?')) { return {list:stored?[stored]:[]}; } throw Object.assign(new Error('项目不存在'),{status:404});},post:async(path,body)=>{creates++;return stored={id:'BACKEND',...body};}};
  assert.equal((await ensureBackendProject(project,api,user)).id,'BACKEND');
  assert.equal((await ensureBackendProject(project,api,user)).id,'BACKEND');assert.equal(creates,1);
 });

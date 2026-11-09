@@ -6,6 +6,7 @@ import com.naura.rfq.storage.DocumentStorage;
 import com.naura.rfq.support.AcceptanceSupport;
 import com.naura.rfq.support.document.SampleRfqBuilder;
 import java.util.concurrent.*;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
@@ -20,6 +21,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @Transactional(propagation=Propagation.NOT_SUPPORTED)
+@Slf4j
 class DocumentVersionConcurrencyTest extends AcceptanceSupport {
     @Autowired CustomerDocumentMapper documents;
     @Autowired DocumentStorage storage;
@@ -41,8 +43,21 @@ class DocumentVersionConcurrencyTest extends AcceptanceSupport {
         try {
             tx().execute(status->{
                 assertThat(jdbc.queryForObject("select count(*) from customer_document where project_id=?",Long.class,project)).isZero();
-                tx().execute(other->{try{assertThat(upload(token,project,bytes).path("version").asInt()).isEqualTo(1);}catch(Exception e){throw new RuntimeException(e);}return null;});
-                try { assertThat(upload(token,project,bytes).path("version").asInt()).isEqualTo(2); }catch(Exception e){throw new RuntimeException(e);}
+                tx().execute(other -> {
+                    try {
+                        assertThat(upload(token, project, bytes).path("version").asInt()).isEqualTo(1);
+                    } catch (Exception e) {
+                        log.error("原件版本并发测试上传第一版失败", e);
+                        throw new RuntimeException(e);
+                    }
+                    return null;
+                });
+                try {
+                    assertThat(upload(token, project, bytes).path("version").asInt()).isEqualTo(2);
+                } catch (Exception e) {
+                    log.error("原件版本并发测试上传第二版失败", e);
+                    throw new RuntimeException(e);
+                }
                 return null;
             });
             assertThat(jdbc.queryForObject("select count(distinct version) from customer_document where project_id=?",Long.class,project)).isEqualTo(2);

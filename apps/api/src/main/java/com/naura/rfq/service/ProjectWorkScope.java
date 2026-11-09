@@ -42,8 +42,11 @@ class ProjectWorkScope {
     Set<String> inactiveDocuments(String project) {
         var excluded = new HashSet<String>();
         for (var row : replacements(project)) {
-            if ("active".equals(row.status())) excluded.add(row.oldDocumentId());
-            else excluded.add(row.newDocumentId());
+            if ("active".equals(row.status())) {
+                excluded.add(row.oldDocumentId());
+            } else {
+                excluded.add(row.newDocumentId());
+            }
         }
         return excluded;
     }
@@ -56,6 +59,8 @@ class ProjectWorkScope {
     }
 
     void requireEditable(String project, String document) {
-        if (retired(project, document)) throw new BusinessException(409, "该原件已退出当前工作范围");
+        if (retired(project, document)) {
+            throw new BusinessException(409, "该原件已退出当前工作范围");
+        }
     }
 }

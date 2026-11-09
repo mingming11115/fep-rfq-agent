@@ -19,11 +19,17 @@ final class MatchTextScorer {
 
     double score(String current, String candidate) {
         String left = canonical(current), right = canonical(candidate);
-        if (left.isEmpty() || right.isEmpty() || !critical(current).equals(critical(candidate))) return 0;
-        if (left.equals(right)) return 1;
+        if (left.isEmpty() || right.isEmpty() || !critical(current).equals(critical(candidate))) {
+            return 0;
+        }
+        if (left.equals(right)) {
+            return 1;
+        }
         Set<String> a = bigrams(left), b = bigrams(right);
         int total = a.size() + b.size();
-        if (total == 0) return 0;
+        if (total == 0) {
+            return 0;
+        }
         a.retainAll(b);
         return 2.0 * a.size() / total;
     }

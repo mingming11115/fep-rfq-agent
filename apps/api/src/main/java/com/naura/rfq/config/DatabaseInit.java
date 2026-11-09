@@ -126,7 +126,9 @@ class DatabaseInit {
                 }
             }
             flyway.migrate();
-            if (!demoEnabled || alreadySeeded(jdbc)) return;
+            if (!demoEnabled || alreadySeeded(jdbc)) {
+                return;
+            }
 
             jdbc.execute(sql.substring(sql.indexOf(ASSET_SCHEMA) + ASSET_SCHEMA.length(), sql.indexOf("START TRANSACTION;")));
             var seedScript = new EncodedResource(new ByteArrayResource(sql.substring(
@@ -134,7 +136,9 @@ class DatabaseInit {
                 StandardCharsets.UTF_8);
             new TransactionTemplate(new JdbcTransactionManager(dataSource)).executeWithoutResult(status -> {
                 jdbc.update("insert into rfq_demo_seed (id) values (?) on duplicate key update id=id", SEED_LOCK);
-                if (alreadySeeded(jdbc)) return;
+                if (alreadySeeded(jdbc)) {
+                    return;
+                }
                 jdbc.execute((ConnectionCallback<Void>) connection -> {
                     ScriptUtils.executeSqlScript(connection, seedScript);
                     return null;

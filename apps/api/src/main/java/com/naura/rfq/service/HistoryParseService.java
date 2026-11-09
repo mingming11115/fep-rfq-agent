@@ -17,11 +17,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class HistoryParseService {
     private final AccessGuard access;
     private final DocumentStorage storage;
@@ -33,7 +35,9 @@ public class HistoryParseService {
         access.requireBu(user, buId);
         List<HistorySource> sources = new ArrayList<>();
         sources.add(read(file, "main:"));
-        if (responseFile != null && !responseFile.isEmpty()) sources.add(read(responseFile, "answer:"));
+        if (responseFile != null && !responseFile.isEmpty()) {
+            sources.add(read(responseFile, "answer:"));
+        }
         return extract(sources);
     }
 
@@ -64,7 +68,9 @@ public class HistoryParseService {
     static String extension(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         String extension = lower.endsWith(".docx") ? ".docx" : lower.endsWith(".pdf") ? ".pdf" : "";
-        if (extension.isBlank()) throw new BusinessException(400, "历史 RFQ 当前支持 DOCX 和 PDF，请先转换其他格式");
+        if (extension.isBlank()) {
+            throw new BusinessException(400, "历史 RFQ 当前支持 DOCX 和 PDF，请先转换其他格式");
+        }
         return extension;
     }
 
@@ -74,10 +80,12 @@ public class HistoryParseService {
                 .orElseThrow(() -> new BusinessException(400, "没有可用的文件读取器"));
             var path = lease.path();
             List<RawBlock> blocks = reader instanceof PdfBlockReader pdf ? pdf.readForHistory(path) : reader.read(path);
-            if (blocks.stream().mapToLong(block -> block.text() == null ? 0 : block.text().length()).sum() > 2_000_000)
+            if (blocks.stream().mapToLong(block -> block.text() == null ? 0 : block.text().length()).sum() > 2_000_000) {
                 throw new BusinessException(413, "文档内容过多，请拆分后上传");
+            }
             return new HistorySource(name, prefix, blocks);
         } catch (DocumentReadException exception) {
+            log.error("读取历史 RFQ 原件失败 errorType={}", exception.getClass().getSimpleName());
             throw new BusinessException(400, exception.getMessage());
         }
     }

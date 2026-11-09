@@ -38,11 +38,11 @@ function useSaved(baseKey, initial, writableInDemo=true,context,kind='knowledge'
   const databaseBacked=context?.state?.dataSource==='mysql';
   const key=resourceStorageKey(baseKey,context?.buId);
   const writable=writableInDemo&&!databaseBacked;
-  const [raw,setRaw]=useState(()=>{if(databaseBacked)return context.state.resourcesByBuId?.[context.buId]?.[kind==='capability'?'capabilities':kind]||[];try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{return context?.buId==='BU-DEMO'?initial:[];}});
+  const [raw,setRaw]=useState(()=>{if(databaseBacked) { return context.state.resourcesByBuId?.[context.buId]?.[kind==='capability'?'capabilities':kind]||[]; } try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{ console.error('读取参考资料失败'); return context?.buId==='BU-DEMO'?initial:[];}});
   const value=databaseBacked?context.state.resourcesByBuId?.[context.buId]?.[kind==='capability'?'capabilities':kind]||[]:selectReadableResources(raw,context,kind);
-  const readLatest=()=>{if(databaseBacked)return context.state.resourcesByBuId?.[context.buId]?.[kind==='capability'?'capabilities':kind]||[];try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{return raw;}};
-  const setValue=updater=>{if(!writable)return;const latest=readLatest(),visible=selectReadableResources(latest,context,kind),ids=new Set(visible.map(r=>`${r.id}:${r.version}`)),next=typeof updater==='function'?updater(visible):updater;const merged=[...latest.filter(r=>!ids.has(`${r.id}:${r.version}`)),...next.map(r=>({...r,buId:r.buId||context.buId,...(r.scope==='仅当前项目'&&!r.projectId?{projectId:context.projectId}: {})}))];localStorage.setItem(key,JSON.stringify(merged));setRaw(merged);};
-  useEffect(()=>{if(databaseBacked)return;if(writable&&localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(raw));const refresh=e=>{if(e?.key&&e.key!==key)return;setRaw(readLatest());};window.addEventListener('storage',refresh);window.addEventListener('rfq-history-change',refresh);return()=>{window.removeEventListener('storage',refresh);window.removeEventListener('rfq-history-change',refresh);};},[key,writable,databaseBacked]);
+  const readLatest=()=>{if(databaseBacked) { return context.state.resourcesByBuId?.[context.buId]?.[kind==='capability'?'capabilities':kind]||[]; } try{return JSON.parse(localStorage.getItem(key))||(context?.buId==='BU-DEMO'?initial:[]);}catch{ console.error('刷新本地参考资料失败'); return raw;}};
+  const setValue=updater=>{if(!writable) { return; } const latest=readLatest(),visible=selectReadableResources(latest,context,kind),ids=new Set(visible.map(r=>`${r.id}:${r.version}`)),next=typeof updater==='function'?updater(visible):updater;const merged=[...latest.filter(r=>!ids.has(`${r.id}:${r.version}`)),...next.map(r=>({...r,buId:r.buId||context.buId,...(r.scope==='仅当前项目'&&!r.projectId?{projectId:context.projectId}: {})}))];localStorage.setItem(key,JSON.stringify(merged));setRaw(merged);};
+  useEffect(()=>{if(databaseBacked) { return; } if(writable&&localStorage.getItem(key)===null) { localStorage.setItem(key,JSON.stringify(raw)); } const refresh=e=>{if(e?.key&&e.key!==key) { return; } setRaw(readLatest());};window.addEventListener('storage',refresh);window.addEventListener('rfq-history-change',refresh);return()=>{window.removeEventListener('storage',refresh);window.removeEventListener('rfq-history-change',refresh);};},[key,writable,databaseBacked]);
   const reload=()=>setRaw(readLatest());
   return [value,setValue,reload];
 }
@@ -75,7 +75,7 @@ function Heading({ eyebrow, title, description, actions }) { return <AdminPageHe
 function ReviewDialog({ item, action, onClose, onConfirm, impact = 0, busy=false, requestError='' }) {
   const [reason, setReason] = useState(''); const [error, setError] = useState('');
   const needReason = ['退回', '撤销', '停用', '替代'].includes(action)||action==='批准发布'&&item.revisionOfVersion!=null;
-  return <Dialog title={`${action}${item.id ? ` · ${item.id}` : ''}`} onClose={busy?()=>{}:onClose} footer={<><UiButton className="btn" onClick={onClose} disabled={busy}>取消</UiButton><UiButton disabled={busy} className={`btn ${['撤销', '停用', '退回'].includes(action) ? 'btn-danger' : 'btn-primary'}`} onClick={() => { if (needReason && !reason.trim()) return setError('请填写操作原因。'); onConfirm(reason); }}>{action === '批准发布' ? '确认批准并发布' : `确认${action}`}</UiButton></>}><KeyValues entries={[["对象版本", `${item.title || item.name || item.metric} · v${item.version || 1}`], ['当前状态', item.status], ['适用范围', item.conditions || item.scope || item.config || 'FEP 授权项目']]}/><Notice warning={impact > 0}>{impact > 0 ? `本次变更影响 ${impact} 个可访问引用；将标记为待复核并保留原版本。` : '操作将保留版本和审核记录。只有已发布、有效且范围匹配的资料可作为应答依据。'}</Notice><Field label={needReason ? '操作原因' : '审核意见'} required={needReason}><Area value={reason} onChange={setReason} placeholder={needReason ? '说明原因及需要注意的影响…' : '填写适用范围、证据核对结果…'}/></Field>{error && <p className="ref-error" role="alert">{error}</p>}{requestError&&<p className="ref-error" role="alert">{requestError}</p>}</Dialog>;
+  return <Dialog title={`${action}${item.id ? ` · ${item.id}` : ''}`} onClose={busy?()=>{}:onClose} footer={<><UiButton className="btn" onClick={onClose} disabled={busy}>取消</UiButton><UiButton disabled={busy} className={`btn ${['撤销', '停用', '退回'].includes(action) ? 'btn-danger' : 'btn-primary'}`} onClick={() => { if (needReason && !reason.trim()) { return setError('请填写操作原因。'); } onConfirm(reason); }}>{action === '批准发布' ? '确认批准并发布' : `确认${action}`}</UiButton></>}><KeyValues entries={[["对象版本", `${item.title || item.name || item.metric} · v${item.version || 1}`], ['当前状态', item.status], ['适用范围', item.conditions || item.scope || item.config || 'FEP 授权项目']]}/><Notice warning={impact > 0}>{impact > 0 ? `本次变更影响 ${impact} 个可访问引用；将标记为待复核并保留原版本。` : '操作将保留版本和审核记录。只有已发布、有效且范围匹配的资料可作为应答依据。'}</Notice><Field label={needReason ? '操作原因' : '审核意见'} required={needReason}><Area value={reason} onChange={setReason} placeholder={needReason ? '说明原因及需要注意的影响…' : '填写适用范围、证据核对结果…'}/></Field>{error && <p className="ref-error" role="alert">{error}</p>}{requestError&&<p className="ref-error" role="alert">{requestError}</p>}</Dialog>;
 }
 
 function ImportWizard({ kind, onClose, onFinish, toast, capabilityScope }) {
@@ -99,8 +99,8 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
   const refresh=()=>onLibraryRefresh?.(buId);
   const mutation=useLibraryMutation(refresh,toast);
   let sourceEvidence;
-  if(permissionContext?.state?.dataSource==='mysql')sourceEvidence=permissionContext.state.resourcesByBuId?.[permissionContext.buId]?.evidence||[];
-  else try { sourceEvidence = JSON.parse(localStorage.getItem(resourceStorageKey('rfq.reference.evidence.v1',permissionContext?.buId))) || EVIDENCE; } catch { sourceEvidence = EVIDENCE; }
+  if(permissionContext?.state?.dataSource==='mysql') { sourceEvidence=permissionContext.state.resourcesByBuId?.[permissionContext.buId]?.evidence||[]; }
+  else { try { sourceEvidence = JSON.parse(localStorage.getItem(resourceStorageKey('rfq.reference.evidence.v1',permissionContext?.buId))) || EVIDENCE; } catch { console.error('读取知识库证据失败'); sourceEvidence = EVIDENCE; } }
   const sourceOptions = databaseBacked?undefined:buildKnowledgeSourceOptions(permissionContext,sourceEvidence);
   const [items, setItems] = useSaved('rfq.reference.knowledge.v1', KNOWLEDGE,canEdit||canApprove,permissionContext,'knowledge');
   const tab=knowledgeType; const setTab=type=>navigate?.(type==='history'?'history':'knowledge'); const [query, setQuery] = useState(''); const [status, setStatus] = useState('全部状态'); const [scope, setScope] = useState('全部项目'); const [selected, setSelected] = useState('K-021:1'); const [drawer, setDrawer] = useState(null); const [form, setForm] = useState(null); const [error, setError] = useState(''); const [review, setReview] = useState(null); const [importing, setImporting] = useState(false);
@@ -111,28 +111,28 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
   const pageItems = filtered.slice((Math.min(page,Math.max(1,Math.ceil(filtered.length/pageSize)))-1)*pageSize,Math.min(page,Math.max(1,Math.ceil(filtered.length/pageSize)))*pageSize);
   const current = filtered.find((r) => `${r.id}:${r.version}` === selected) || filtered[0];
   const notify = (message) => { toast?.(message); logEvent?.(message); };
-  const edit = (item) => { if(!canEdit)return; setError('');
+  const edit = (item) => { if(!canEdit) { return; } setError('');
     if(databaseBacked){
-      if(!item)return;
+      if(!item) { return; }
       if(['已发布','已撤销'].includes(item.status)){
         return mutation.run(()=>library.transition('reply',item,'revise'),saved=>{setSelected(`${saved.id}:${saved.version}`);setForm(saved);},cause=>toast?.(cause.message,'error'));
       }
-      if(['草稿','退回'].includes(item.status))setForm({...item});
+      if(['草稿','退回'].includes(item.status)) { setForm({...item}); }
       return;
     }
     setForm(item ? {...item,groupIds:groupScope?.groups('reply',item)||item.groupIds||[], newVersion:item.status === '已发布'} : {id:uid('K'),groupIds:groupScope?.defaultGroupIds||[], type:tab, title:'', requirement:'', answer:'', conditions:'', scope:'FEP 授权项目', source:'', sourceType:'', status:'草稿', version:1, author:'当前用户', history:[]}); };
-  const save = () => { if(!canEdit)return; if (!form.title.trim() || !form.requirement.trim() || !form.answer.trim()) return setError(form.type === 'history' ? '请填写知识标题、历史要求和最终答复。' : '请填写回复标题、客户要求和标准回复。'); if(databaseBacked){
-    if(!form.conditions?.trim())return setError('请填写适用条件。');
+  const save = () => { if(!canEdit) { return; } if (!form.title.trim() || !form.requirement.trim() || !form.answer.trim()) { return setError(form.type === 'history' ? '请填写知识标题、历史要求和最终答复。' : '请填写回复标题、客户要求和标准回复。'); } if(databaseBacked){
+    if(!form.conditions?.trim()) { return setError('请填写适用条件。'); }
     return mutation.run(()=>library.saveReply(form),saved=>{
       setSelected(`${saved.id}:${saved.version}`);setForm(null);notify('标准回复草稿已保存');
     },cause=>setError(cause.message));
   }
-  let sourcedForm; try { sourcedForm = prepareKnowledgeSource(form,sourceOptions);if(groupScope)sourcedForm.groupIds=groupScope.validate(form.groupIds||[],groupScope.groups('reply',items.find(r=>r.id===form.id&&r.version===form.version)||{})); } catch (error) { return setError(error.message); } const item = {...sourcedForm, status:'草稿', submitterRole:actorRole,submitterId:actorId, version:form.newVersion ? Math.max(...items.filter((r) => r.id === form.id).map((r) => r.version)) + 1 : form.version, history:[...(form.history || []), {date:today(),text:`${actorRole} 保存${form.newVersion ? '新版本' : ''}草稿`}]}; delete item.newVersion; setItems((all) => all.some((r) => r.id === item.id && r.version === item.version) ? all.map((r) => r.id === item.id && r.version === item.version ? item : r) : [...all, item]); setSelected(`${item.id}:${item.version}`); setForm(null); if(item.type!==tab)setTab(item.type); notify(`${item.type === 'history' ? '历史 RFQ 知识' : '标准回复'}草稿已保存；发布前需核对适用条件与来源`); };
-  const requestAction = (item, action) => { if(!(action==='提交审核'?canEdit:canApprove))return toast?.('当前身份无此资料操作权限','error'); if (['提交审核','批准发布'].includes(action) && !item.conditions?.trim()) return toast?.('缺少适用条件，请先修订补齐', 'error'); if (['批准发布','撤销','退回'].includes(action) && actorRole !== 'BU管理员') return toast?.('当前角色无知识批准权，请切换为BU管理员', 'error'); if (action === '批准发布' && item.submitterId === actorId) return toast?.('同一版本不得自审，请由独立审批角色处理', 'error'); setError('');setReview({item,action}); };
+  let sourcedForm; try { sourcedForm = prepareKnowledgeSource(form,sourceOptions);if(groupScope) { sourcedForm.groupIds=groupScope.validate(form.groupIds||[],groupScope.groups('reply',items.find(r=>r.id===form.id&&r.version===form.version)||{})); } } catch (error) { console.error('校验知识资料来源失败', error); return setError(error.message); } const item = {...sourcedForm, status:'草稿', submitterRole:actorRole,submitterId:actorId, version:form.newVersion ? Math.max(...items.filter((r) => r.id === form.id).map((r) => r.version)) + 1 : form.version, history:[...(form.history || []), {date:today(),text:`${actorRole} 保存${form.newVersion ? '新版本' : ''}草稿`}]}; delete item.newVersion; setItems((all) => all.some((r) => r.id === item.id && r.version === item.version) ? all.map((r) => r.id === item.id && r.version === item.version ? item : r) : [...all, item]); setSelected(`${item.id}:${item.version}`); setForm(null); if(item.type!==tab) { setTab(item.type); } notify(`${item.type === 'history' ? '历史 RFQ 知识' : '标准回复'}草稿已保存；发布前需核对适用条件与来源`); };
+  const requestAction = (item, action) => { if(!(action==='提交审核'?canEdit:canApprove)) { return toast?.('当前身份无此资料操作权限','error'); } if (['提交审核','批准发布'].includes(action) && !item.conditions?.trim()) { return toast?.('缺少适用条件，请先修订补齐', 'error'); } if (['批准发布','撤销','退回'].includes(action) && actorRole !== 'BU管理员') { return toast?.('当前角色无知识批准权，请切换为BU管理员', 'error'); } if (action === '批准发布' && item.submitterId === actorId) { return toast?.('同一版本不得自审，请由独立审批角色处理', 'error'); } setError('');setReview({item,action}); };
   const actions = (item) => item && <>{databaseBacked&&rights.configure&&<ResourceGroupControl key={`${item.id}:${item.version}`}
     kind="reply" row={item} client={library} refresh={refresh} toast={toast}/>}<UiButton className="btn btn-sm" disabled={!canEdit||mutation.busy||databaseBacked&&(item.status==='待审核'||item.validity==='被替代'||items.some(row=>row.id===item.id&&row.version>item.version))} onClick={() => edit(item)}>{['已发布','已撤销'].includes(item.status) ? '修订新版本' : '编辑草稿'}</UiButton>{['草稿','退回'].includes(item.status) && <UiButton className="btn btn-primary btn-sm" disabled={!canEdit} onClick={() => requestAction(item,'提交审核')}>提交审核</UiButton>}{item.status === '待审核' && <><UiButton className="btn btn-primary btn-sm" disabled={!canApprove} onClick={() => requestAction(item,'批准发布')}>批准发布</UiButton><UiButton className="btn btn-sm" disabled={!canApprove} onClick={() => requestAction(item,'退回')}>退回</UiButton></>}{item.status === '已发布' && (!databaseBacked||item.validity!=='被替代') && <UiButton className="btn btn-danger btn-sm" disabled={!canApprove} onClick={() => requestAction(item,'撤销')}>撤销</UiButton>}</>;
   const detail = (item) => <><div className="ref-detail-title"><div><span className="ref-eyebrow">{item.id} / VERSION {item.version}</span><h3>{item.title}</h3></div><Tag>{item.status}</Tag></div><div className="ref-content-section"><span className="ref-label">历史要求</span><p>{item.requirement}</p></div><div className="ref-answer"><span className="ref-label">最终答复 / 已批准口径</span><p>{item.answer}</p></div><KeyValues entries={[["适用条件",<ConditionTags value={item.conditions}/>],['来源',item.source],['有效性',item.validity || (item.status === '已发布' ? '有效' : '待核对')],['维护 / 提交角色',`${item.author} / ${item.submitterRole}`]]}/><Notice>发布内容修订后生成新版本，需重新审核。</Notice><div className="ref-action-row">{actions(item)}<UiButton className="btn btn-sm" onClick={() => setDrawer(item)}>版本与审核记录</UiButton></div></>;
-  return <div className="ref-page"><Heading eyebrow={tab==='history'?'RFQ HISTORY':'KNOWLEDGE'} title={tab==='history'?'历史 RFQ':'标准回复库'} description={tab==='history'?'沉淀历史 RFQ 的要求、答复与适用条件，复用可追溯的项目经验。':undefined} actions={<><UiButton className="btn" disabled={!canEdit} onClick={() => {if(canEdit)setImporting(true);}}><Upload size={16}/>批量导入</UiButton>{!databaseBacked&&<UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => edit(null)}><Plus size={16}/>{tab === 'history' ? '新增历史 RFQ 知识' : '新增标准回复'}</UiButton>}</>}/><Notice>{databaseBacked?(canEdit?'上传标准回复文件生成草稿，由另一位具备发布资格的 BU 管理员审核。':'当前账号只能查看或按资格审核已有标准回复。'):canEdit?'所有角色均可维护应答知识；发布由BU管理员独立审核。':actorRole==='BU管理员'?'当前身份负责审核；应答知识可由所有角色维护。':'当前知识库为只读；请核对账号状态及所属BU权限。'}</Notice><div className="admin-stat-grid">{[['已发布知识',tabItems.filter(r=>r.status==='已发布').length],['候选与草稿',tabItems.filter(r=>['草稿','退回'].includes(r.status)).length],['待知识审核',tabItems.filter(r=>r.status==='待审核').length],['知识总数',tabItems.length]].map(([title,value])=><AdminCard key={title} size="small"><AdminStatistic title={title} value={value}/></AdminCard>)}</div><section className="panel"><QueryFilter className="rfq-query-form" layout="vertical" defaultCollapsed={false}
+  return <div className="ref-page"><Heading eyebrow={tab==='history'?'RFQ HISTORY':'KNOWLEDGE'} title={tab==='history'?'历史 RFQ':'标准回复库'} description={tab==='history'?'沉淀历史 RFQ 的要求、答复与适用条件，复用可追溯的项目经验。':undefined} actions={<><UiButton className="btn" disabled={!canEdit} onClick={() => {if(canEdit) { setImporting(true); }}}><Upload size={16}/>批量导入</UiButton>{!databaseBacked&&<UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => edit(null)}><Plus size={16}/>{tab === 'history' ? '新增历史 RFQ 知识' : '新增标准回复'}</UiButton>}</>}/><Notice>{databaseBacked?(canEdit?'上传标准回复文件生成草稿，由另一位具备发布资格的 BU 管理员审核。':'当前账号只能查看或按资格审核已有标准回复。'):canEdit?'所有角色均可维护应答知识；发布由BU管理员独立审核。':actorRole==='BU管理员'?'当前身份负责审核；应答知识可由所有角色维护。':'当前知识库为只读；请核对账号状态及所属BU权限。'}</Notice><div className="admin-stat-grid">{[['已发布知识',tabItems.filter(r=>r.status==='已发布').length],['候选与草稿',tabItems.filter(r=>['草稿','退回'].includes(r.status)).length],['待知识审核',tabItems.filter(r=>r.status==='待审核').length],['知识总数',tabItems.length]].map(([title,value])=><AdminCard key={title} size="small"><AdminStatistic title={title} value={value}/></AdminCard>)}</div><section className="panel"><QueryFilter className="rfq-query-form" layout="vertical" defaultCollapsed={false}
  initialValues={{query:'',status:'全部状态',scope:'全部项目'}}
  onFinish={async values=>{setQuery(values.query||'');setStatus(values.status||'全部状态');setScope(values.scope||'全部项目');return true;}}
  onReset={()=>{setQuery('');setStatus('全部状态');setScope('全部项目');}}>
@@ -141,7 +141,7 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
  {!databaseBacked&&<ProFormSelect name="scope" label="项目范围" options={['全部项目','当前项目 RFQ-001'].map(value=>({value,label:value}))}/>}
  </QueryFilter><div className="ref-knowledge-layout"><div className="ref-knowledge-list ref-table-list"><div className="ref-list-heading">知识清单 <span>{filtered.length} 条</span></div><div className="table-wrap"><BusinessTable className="data-table"><thead><tr><th>编号 / 知识标题</th><th>状态</th><th>版本</th><th>操作</th></tr></thead><tbody>{pageItems.map((item) => <tr key={`${item.id}:${item.version}`} className={current?.id === item.id && current?.version === item.version ? 'ref-selected-row' : ''} onClick={() => setSelected(`${item.id}:${item.version}`)}><td><UiButton className="text-link" onClick={() => setSelected(`${item.id}:${item.version}`)}>{item.title}</UiButton><small>{item.id} · {item.source}</small></td><td><Tag>{item.status}</Tag></td><td>v{item.version}</td><td><UiButton className="text-link" onClick={() => {setSelected(`${item.id}:${item.version}`);setDrawer(item);}}>详情</UiButton></td></tr>)}</tbody></BusinessTable>{!filtered.length && <Empty/>}</div><Paginator total={filtered.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/></div><div className="ref-knowledge-detail">{filtered.length && current ? detail(current) : <Empty>选择一条知识查看详情</Empty>}</div></div></section>
   {form && <KnowledgeEditor form={form} isNew={!items.some(item => item.id === form.id)} error={error} sourceOptions={sourceOptions} lockedSource={databaseBacked} saving={mutation.busy}
-    onChange={next => { setForm(next); if (error) setError(''); }} onSave={save} onClose={() => setForm(null)}/>}
+    onChange={next => { setForm(next); if (error) { setError(''); } }} onSave={save} onClose={() => setForm(null)}/>}
   {drawer && <Dialog drawer title={`${drawer.id} · 版本与审核记录`} onClose={() => setDrawer(null)}><KeyValues entries={[["当前版本",`v${drawer.version}`],['当前状态',drawer.status],['原始来源',drawer.source]]}/><h3 className="ref-section-title">版本链</h3>{items.filter((r) => r.id === drawer.id).sort((a,b) => b.version-a.version).map((r) => <div className="ref-version-row" key={r.version}><strong>v{r.version}</strong><Tag>{r.status}</Tag><UiButton className="text-link" onClick={() => {setTab(r.type);setSelected(`${r.id}:${r.version}`);setDrawer(null);}}>查看版本</UiButton></div>)}<h3 className="ref-section-title">审核与维护记录</h3><div className="ref-timeline">{(drawer.history || []).slice().reverse().map((h,i) => <div key={i}><span>{h.date}</span><p>{h.text}</p></div>)}</div></Dialog>}
   {review && <ReviewDialog {...review} onClose={() => setReview(null)} impact={!databaseBacked&&review.action === '撤销' ? 2 : 0} busy={mutation.busy} requestError={error} onConfirm={(reason) => {
     if(databaseBacked){
@@ -150,15 +150,15 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
         setReview(null);notify(`已${review.action}`);
       },cause=>setError(cause.message));
     }
-    if(!(review.action==='提交审核'?canEdit:canApprove))return;const next = {'提交审核':'待审核','批准发布':'已发布','退回':'退回','撤销':'已撤销'}[review.action]; const item = {...review.item,status:next,validity:next === '已发布' ? '有效' : next === '已撤销' ? '已撤销' : '待核对',submitterId:review.action === '提交审核'?actorId:review.item.submitterId,submitterRole:review.action === '提交审核' ? actorRole : review.item.submitterRole,history:[...(review.item.history || []),{date:today(),text:`${actorRole} ${review.action}${reason ? `：${reason}` : ''}`}]}; setItems((all) => all.map((r) => r.id === item.id && r.version === item.version ? item : r.id === item.id && r.status === '已发布' && next === '已发布' ? {...r,validity:'被替代'} : r)); setReview(null); notify(`${item.id} v${item.version} 已${review.action}`); }}/>}
+    if(!(review.action==='提交审核'?canEdit:canApprove)) { return; } const next = {'提交审核':'待审核','批准发布':'已发布','退回':'退回','撤销':'已撤销'}[review.action]; const item = {...review.item,status:next,validity:next === '已发布' ? '有效' : next === '已撤销' ? '已撤销' : '待核对',submitterId:review.action === '提交审核'?actorId:review.item.submitterId,submitterRole:review.action === '提交审核' ? actorRole : review.item.submitterRole,history:[...(review.item.history || []),{date:today(),text:`${actorRole} ${review.action}${reason ? `：${reason}` : ''}`}]}; setItems((all) => all.map((r) => r.id === item.id && r.version === item.version ? item : r.id === item.id && r.status === '已发布' && next === '已发布' ? {...r,validity:'被替代'} : r)); setReview(null); notify(`${item.id} v${item.version} 已${review.action}`); }}/>}
   {importing && databaseBacked && <LibraryImportDialog title="导入标准回复" accept=".xlsx,.xls,.csv"
     hint="文件表头为回复标题、客户要求、标准回复、适用条件。"
     onClose={()=>setImporting(false)} onImport={async file=>{
       const result=await library.importReplies(file);
-      await refresh().catch(error=>toast?.(error.message,'error'));
+      await refresh().catch(error=>{ console.error('刷新知识库列表失败', error); return toast?.(error.message,'error'); });
       return result;
     }}/>}
-  {importing && !databaseBacked && <ImportWizard kind="knowledge" toast={toast} onClose={() => setImporting(false)} onFinish={(rows) => {if(!canEdit)return;setItems((all) => [...all,...rows.filter((r) => !all.some((a) => a.id === r.id)).map((r) => ({...r,groupIds:groupScope?.defaultGroupIds||[],type:tab,requirement:r.title,scope:'FEP 授权项目',version:1,status:'草稿',author:actorRole,submitterRole:actorRole,submitterId:actorId,history:[{date:today(),text:'导入生成候选'}]}))]);setTab(tab);notify('导入已处理，重复候选自动跳过'); }}/>}
+  {importing && !databaseBacked && <ImportWizard kind="knowledge" toast={toast} onClose={() => setImporting(false)} onFinish={(rows) => {if(!canEdit) { return; } setItems((all) => [...all,...rows.filter((r) => !all.some((a) => a.id === r.id)).map((r) => ({...r,groupIds:groupScope?.defaultGroupIds||[],type:tab,requirement:r.title,scope:'FEP 授权项目',version:1,status:'草稿',author:actorRole,submitterRole:actorRole,submitterId:actorId,history:[{date:today(),text:'导入生成候选'}]}))]);setTab(tab);notify('导入已处理，重复候选自动跳过'); }}/>}
   </div>;
 }
 
@@ -179,12 +179,12 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
   const resources=permissionContext?.state?.resourcesByBuId?.[buId];
   const visibleProjects=appState?.projects?.filter(row=>row.buId===buId&&canAccessProject(appState,actorId,row.id))||[];
   const [evidenceOpen,setEvidenceOpen]=useState(false);
-  const loadCatalog=()=>{try{return readRfqCatalog(localStorage,permissionContext);}catch(e){return {models:[],processes:[],error:e.message};}};
+  const loadCatalog=()=>{try{return readRfqCatalog(localStorage,permissionContext);}catch(e){ console.error('加载机型和工艺目录失败', e); return {models:[],processes:[],error:e.message};}};
   const [catalog,setCatalog]=useState(loadCatalog);
   const {models,processes}=catalog;
   useEffect(()=>{
     const refresh=()=>setCatalog(loadCatalog());
-    const changed=e=>{if(!e.key||['rfq.reference.models.v1','rfq.reference.processes.v1'].some(base=>e.key===resourceStorageKey(base,buId)))refresh();};
+    const changed=e=>{if(!e.key||['rfq.reference.models.v1','rfq.reference.processes.v1'].some(base=>e.key===resourceStorageKey(base,buId))) { refresh(); }};
     refresh();window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);
   },[buId,actorId,permissionContext?.state]);
   const [items,setItems,reloadItems]=useSaved('rfq.reference.capabilities.v1',CAPABILITIES,canEdit||canApprove,permissionContext,'capability');
@@ -215,8 +215,8 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
   const current=activeNode.kind==='capability'?activeNode.record:null;
   useEffect(()=>setPage(1),[query,status,source,actualModelId,modelVersion,processId]);
   let evidence;
-  if(permissionContext?.state?.dataSource==='mysql')evidence=permissionContext.state.resourcesByBuId?.[buId]?.evidence||[];
-  else try{evidence=JSON.parse(localStorage.getItem(resourceStorageKey('rfq.reference.evidence.v1',buId)))||(buId==='BU-DEMO'?EVIDENCE:[]);}catch{evidence=[];}
+  if(permissionContext?.state?.dataSource==='mysql') { evidence=permissionContext.state.resourcesByBuId?.[buId]?.evidence||[]; }
+  else { try{evidence=JSON.parse(localStorage.getItem(resourceStorageKey('rfq.reference.evidence.v1',buId)))||(buId==='BU-DEMO'?EVIDENCE:[]);}catch{ console.error('读取能力目录证据失败'); evidence=[];} }
   evidence=selectReadableResources(evidence,permissionContext,'evidence');
   const evidenceIsValid=value=>evidence.some(r=>value?.startsWith(`${r.id} v${r.version}`)&&r.status==='有效'&&r.expiry>=today()&&r.purpose==='能力依据');
   const notify=(action,object,detail='')=>{toast?.(`${object} ${action}`);logEvent?.(action,object,`${buName} · ${detail}`);};
@@ -224,30 +224,30 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
   useEffect(()=>{setSelection(route?.modelId?`model:${route.modelId}`:'');setModelVersion('');clearFilters();},[route?.modelId]);
   const chooseModel=id=>{setSelection(`model:${id}`);setModelVersion('');};
   const chooseNode=node=>{setSelection(node.key);setModelVersion('');setPage(1);};
-  const selectKey=key=>{const node=findCapabilityTreeNode(tree,key);if(node)chooseNode(node);};
+  const selectKey=key=>{const node=findCapabilityTreeNode(tree,key);if(node) { chooseNode(node); }};
   const openForm=(item,type='capability')=>{
     if(databaseBacked&&type==='capability'){
-      if(!canEdit||mutation.busy)return;
+      if(!canEdit||mutation.busy) { return; }
       setError('');setDrawer(null);setFormType(type);
       if(item&&['已发布','已撤销'].includes(item.status)){
         return mutation.run(()=>library.transition('capability',item,'revise'),saved=>setForm({...saved,persisted:true}),cause=>toast?.(cause.message,'error'));
       }
-      if(item&&['草稿','退回'].includes(item.status))setForm({...item,persisted:true});
-      else if(!item)setForm({metric:'',valueType:'保证值',conditions:'',limits:'',evidenceRefs:[]});
+      if(item&&['草稿','退回'].includes(item.status)) { setForm({...item,persisted:true}); }
+      else if(!item) { setForm({metric:'',valueType:'保证值',conditions:'',limits:'',evidenceRefs:[]}); }
       return;
     }
-    if(!(type==='model'?(item?canConfigure:canCreate):canEdit)||type==='capability'&&!item?.modelId&&!item?.groupId&&!groupScope&&!model)return;
+    if(!(type==='model'?(item?canConfigure:canCreate):canEdit)||type==='capability'&&!item?.modelId&&!item?.groupId&&!groupScope&&!model) { return; }
     setDrawer(null);
     setFormType(type);setError('');
-    if(type==='model')setForm(item?{...item}: {id:uid('MOD'),buId,code:'',name:'',series:'精密加工系列',revision:'R1',version:1,lifecycle:'研发',standard:'',options:'',config:'',source:'BU配置',scope:'FEP 授权项目',history:[]});
-    else setForm(item?{...item,processId:item.processId||'',newVersion:item.status==='已发布'}:{id:uid('CAP'),buId,modelId:model.id,processId:activeProcess?.enabled!==false?activeProcess?.id||'':'',version:1,metric:'',value:'',valueType:'保证值',config:model.config||'',conditions:activeProcess?.conditions||'',limits:'',evidence:'',source:'手动补充',sourceLocation:'能力库 / 手动添加',approver:'BU管理员',status:'草稿',validity:'待核对',refs:[],history:[]});
+    if(type==='model') { setForm(item?{...item}: {id:uid('MOD'),buId,code:'',name:'',series:'精密加工系列',revision:'R1',version:1,lifecycle:'研发',standard:'',options:'',config:'',source:'BU配置',scope:'FEP 授权项目',history:[]}); }
+    else { setForm(item?{...item,processId:item.processId||'',newVersion:item.status==='已发布'}:{id:uid('CAP'),buId,modelId:model.id,processId:activeProcess?.enabled!==false?activeProcess?.id||'':'',version:1,metric:'',value:'',valueType:'保证值',config:model.config||'',conditions:activeProcess?.conditions||'',limits:'',evidence:'',source:'手动补充',sourceLocation:'能力库 / 手动添加',approver:'BU管理员',status:'草稿',validity:'待核对',refs:[],history:[]}); }
   };
   const save=()=>{
     if(databaseBacked){
       setError('');
       const isModel=formType==='model';
-      if(!isModel&&!form.metric?.trim())return setError('请填写能力指标名称');
-      if(!isModel&&(form.evidenceRefs||[]).some(ref=>!ref.id||!ref.location?.trim()))return setError('请选择证据版本并填写原文位置');
+      if(!isModel&&!form.metric?.trim()) { return setError('请填写能力指标名称'); }
+      if(!isModel&&(form.evidenceRefs||[]).some(ref=>!ref.id||!ref.location?.trim())) { return setError('请选择证据版本并填写原文位置'); }
       return mutation.run(()=>isModel?library.saveModel(form,models.some(row=>row.id===form.id)):
         library.saveCapability(form,form.persisted),saved=>{
           setForm(null);setDrawer(null);clearFilters();notify(isModel?'机型配置已保存':'能力草稿已保存',saved.id);
@@ -255,13 +255,13 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
     }
     try{
       if(formType==='model'){
-        if(!(models.some(m=>m.id===form.id)?canConfigure:canCreate))return;
+        if(!(models.some(m=>m.id===form.id)?canConfigure:canCreate)) { return; }
         setCatalog(saveRfqCatalogRecord(localStorage,permissionContext,'model',form));
         chooseModel(form.id);clearFilters();notify('已保存配置',form.name,'机型配置保存生效，保留之前版本');
       }else{
-        if(!canEdit)return;
-        if(!form.metric.trim())throw new Error('请填写能力指标；其他缺项可保存后补齐。');
-        if(groupScope){groupScope.validate(form.groupIds||[],groupScope.groups('capability',items.find(r=>r.id===form.id&&r.version===form.version)||{}));}else if(form.groupId)resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog,items),form.groupId,buId);else assertCapabilityProcess(form,{models,processes,buId,requireEnabled:false});
+        if(!canEdit) { return; }
+        if(!form.metric.trim()) { throw new Error('请填写能力指标；其他缺项可保存后补齐。'); }
+        if(groupScope){groupScope.validate(form.groupIds||[],groupScope.groups('capability',items.find(r=>r.id===form.id&&r.version===form.version)||{}));}else if(form.groupId) { resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog,items),form.groupId,buId); } else { assertCapabilityProcess(form,{models,processes,buId,requireEnabled:false}); }
         const version=form.newVersion?Math.max(...items.filter(r=>r.id===form.id).map(r=>r.version))+1:form.version;
         const item={...form,...(groupScope?{groupId:form.groupIds?.[0]||'',groupIds:form.groupIds||[]}:{}),buId,version,status:'草稿',validity:'待核对',submitterRole:actorRole,submitterId:actorId,history:[...(form.history||[]),{date:today(),text:`${actorRole} 保存能力候选草稿`}]};delete item.newVersion;
         setItems(all=>all.some(r=>r.id===item.id&&r.version===version)?all.map(r=>r.id===item.id&&r.version===version?item:r):[...all,item]);
@@ -269,10 +269,10 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
       }
 
       setForm(null);setDrawer(null);
-    }catch(e){setError(e.message);}
+    }catch(e){ console.error('保存能力目录记录失败', e); setError(e.message);}
   };
   const openProcess=(item,selectedModel=model)=>{
-    if(!(item?canConfigure:canCreate)||!item&&!selectedModel)return;
+    if(!(item?canConfigure:canCreate)||!item&&!selectedModel) { return; }
     setError('');
     setProcessForm(item?{...item,modelVersion:item.modelVersion??1}:{id:uid('PROC'),buId,modelId:selectedModel.id,modelVersion:selectedModel.version,code:'',name:'',conditions:'',enabled:true});
   };
@@ -283,46 +283,46 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
         setProcessForm(null);notify('工艺配置已保存',saved.id);
       },cause=>setError(cause.message));
     }
-    try{if(!(processes.some(p=>p.id===processForm.id)?canConfigure:canCreate))return;setCatalog(saveRfqCatalogRecord(localStorage,permissionContext,'process',processForm));setSelection(`process:${processForm.id}`);setModelVersion('');clearFilters();notify('已保存工艺配置',processForm.name,processForm.enabled?'启用':'停用；历史能力关系保留');setProcessForm(null);}catch(e){setError(e.message);}
+    try{if(!(processes.some(p=>p.id===processForm.id)?canConfigure:canCreate)) { return; } setCatalog(saveRfqCatalogRecord(localStorage,permissionContext,'process',processForm));setSelection(`process:${processForm.id}`);setModelVersion('');clearFilters();notify('已保存工艺配置',processForm.name,processForm.enabled?'启用':'停用；历史能力关系保留');setProcessForm(null);}catch(e){ console.error('保存工艺记录失败', e); setError(e.message);}
   };
   const directoryActions=node=>{
-    if(!['model','process','capability'].includes(node.kind))return null;
+    if(!['model','process','capability'].includes(node.kind)) { return null; }
     const editable=node.kind==='capability'?canEdit:canConfigure;
-    if(!editable&&!canConfigure)return null;
-    return <div className="cap-tree-actions">{editable&&<button className="cap-tree-action" title={`编辑${node.label}`} aria-label={`编辑${node.label}`} onClick={()=>{chooseNode(node);if(node.kind==='process')openProcess(node.record);else openForm(node.record,node.kind);}}><Pencil size={13}/></button>}{canConfigure&&<button className="cap-tree-action danger" title={`删除${node.label}`} aria-label={`删除${node.label}`} onClick={()=>{setDeleteTarget(node);setDeleteError('');}}><Trash2 size={13}/></button>}</div>;
+    if(!editable&&!canConfigure) { return null; }
+    return <div className="cap-tree-actions">{editable&&<button className="cap-tree-action" title={`编辑${node.label}`} aria-label={`编辑${node.label}`} onClick={()=>{chooseNode(node);if(node.kind==='process') { openProcess(node.record); } else { openForm(node.record,node.kind); }}}><Pencil size={13}/></button>}{canConfigure&&<button className="cap-tree-action danger" title={`删除${node.label}`} aria-label={`删除${node.label}`} onClick={()=>{setDeleteTarget(node);setDeleteError('');}}><Trash2 size={13}/></button>}</div>;
   };
   const confirmDelete=()=>{
     try{
-      if(!canConfigure)throw new Error('没有本BU的目录管理权限');
+      if(!canConfigure) { throw new Error('没有本BU的目录管理权限'); }
       setCatalog(deleteRfqCatalogRecord(localStorage,permissionContext,deleteTarget.kind,deleteTarget.record));
       reloadItems();
       setSelection(deleteTarget.kind==='model'?tree.key:deleteTarget.kind==='process'?`model:${deleteTarget.modelId}`:deleteTarget.processId==='unassigned'?`unassigned:${deleteTarget.modelId}`:`process:${deleteTarget.processId}`);
       setModelVersion('');setPage(1);setDeleteTarget(null);setDrawer(null);notify('已删除目录条目',deleteTarget.label);
-    }catch(e){setDeleteError(e.message);}
+    }catch(e){ console.error('删除能力目录记录失败', e); setDeleteError(e.message);}
   };
   const problems=item=>{
-    if(databaseBacked)return [];
+    if(databaseBacked) { return []; }
     const missing=[['实际能力值',item.value],['配置要求',item.config],['适用条件',<ConditionTags value={item.conditions}/>],['有效证据',evidenceIsValid(item.evidence)],['指定批准人',item.approver==='BU管理员']].filter(([,v])=>typeof v==='string'?!v.trim():!v).map(([k])=>k);
-    try{if(groupScope){if(!item.groupIds?.length)throw new Error('请关联分组后提交审核');for(const id of item.groupIds)resolveGroupBinding(groupScope.catalog,id,buId);}else if(item.groupId)resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog,items),item.groupId,buId);else assertCapabilityProcess(item,{models,processes,buId});}catch(e){missing.unshift(e.message);}
+    try{if(groupScope){if(!item.groupIds?.length) { throw new Error('请关联分组后提交审核'); } for(const id of item.groupIds)resolveGroupBinding(groupScope.catalog,id,buId);}else if(item.groupId) { resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog,items),item.groupId,buId); } else { assertCapabilityProcess(item,{models,processes,buId}); }}catch(e){ console.error('校验能力资料分组失败', e); missing.unshift(e.message);}
     return missing;
   };
   const requestAction=(item,action)=>{
-    if(!(action==='提交审核'?canEdit:canApprove))return;
-    if(['提交审核','批准发布'].includes(action)&&problems(item).length)return toast?.(`无法${action}：${problems(item).join('、')}`,'error');
-    if(action==='批准发布'&&item.submitterId===actorId)return toast?.('同一版本不能自审，请由另一位有能力发布资格的BU管理员审核。','error');
+    if(!(action==='提交审核'?canEdit:canApprove)) { return; }
+    if(['提交审核','批准发布'].includes(action)&&problems(item).length) { return toast?.(`无法${action}：${problems(item).join('、')}`,'error'); }
+    if(action==='批准发布'&&item.submitterId===actorId) { return toast?.('同一版本不能自审，请由另一位有能力发布资格的BU管理员审核。','error'); }
     setError('');setReview({item:{...item,title:`${item.metric} ${item.value}`},action});
   };
   const confirmAction=reason=>{
     const {item:target,action}=review,item=items.find(r=>r.id===target.id&&r.version===target.version);
-    if(!item||!(action==='提交审核'?canEdit:canApprove))return;
+    if(!item||!(action==='提交审核'?canEdit:canApprove)) { return; }
     if(databaseBacked){
       setError('');
       return mutation.run(()=>library.transition('capability',target,reviewAction[action],reason),saved=>{
         setReview(null);setDrawer(null);notify(`已${action}`,saved.id,reason);
       },cause=>setError(cause.message));
     }
-    if(['提交审核','批准发布'].includes(action)&&problems(item).length)return toast?.(`无法${action}：${problems(item).join('、')}`,'error');
-    if(action==='批准发布'&&item.submitterId===actorId)return toast?.('同一版本不能自审','error');
+    if(['提交审核','批准发布'].includes(action)&&problems(item).length) { return toast?.(`无法${action}：${problems(item).join('、')}`,'error'); }
+    if(action==='批准发布'&&item.submitterId===actorId) { return toast?.('同一版本不能自审','error'); }
     const status={'提交审核':'待审核','批准发布':'已发布','退回':'退回','撤销':'已撤销'}[action];
     const next={...item,status,validity:action==='批准发布'?'有效':action==='撤销'?'已撤销':item.validity,submitterId:action==='提交审核'?actorId:item.submitterId,refs:(item.refs||[]).map(r=>({...r,needsReview:['批准发布','撤销'].includes(action)})),history:[...(item.history||[]),{date:today(),text:`${actorRole} ${action}${reason?`：${reason}`:''}`}]};
     setItems(all=>all.map(r=>r.id===item.id&&r.version===item.version?next:r.id===item.id&&r.status==='已发布'&&action==='批准发布'?{...r,validity:'被替代'}:r));
@@ -348,7 +348,7 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
     <div className="cap-subheading"><h3>能力边界 · {filtered.length} 条资料版本</h3><div className="cap-context-actions">{activeNode.kind==='process'&&<><UiButton className="btn btn-sm" disabled={!canEdit||activeProcess?.enabled===false} onClick={()=>setImportType('excel')}><Upload size={14}/>Excel 上传</UiButton><UiButton className="btn btn-sm" disabled={!canEdit||activeProcess?.enabled===false} onClick={()=>setImportType('history')}><History size={14}/>历史 RFQ 自动抽取</UiButton></>}{manualCapabilityButton()}</div></div>
     {pageItems.length?<><div className="table-wrap"><BusinessTable className="data-table cap-node-table"><thead><tr><th>能力指标 / 版本</th><th>能力值</th><th>值类型</th><th>状态</th></tr></thead><tbody>{pageItems.map(item=><tr key={`${item.id}:${item.version}`}><td><UiButton className="text-link" onClick={()=>selectKey(`capability:${item.id}:${item.version}`)}>{item.metric}</UiButton><small>{item.id} · v{item.version}{item.validity==='被替代'?' · 历史版本':''}</small></td><td>{item.value||'待补充'}</td><td>{item.valueType}</td><td><Tag>{item.status}</Tag></td></tr>)}</tbody></BusinessTable></div><Paginator total={filtered.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/></>:<Empty>当前工艺下暂无符合条件的能力</Empty>}
   </>;
-  const genericContent=<GenericCatalog key={buId} context={permissionContext} legacyCatalog={catalog} capabilities={items} projects={appState?.projects||[]} initialGroupId={route?.groupId} buName={buName} businessUnits={businessUnits} onBuChange={id=>{if(route?.buId)navigate('capabilities',null,{buId:id,returnKey:route.returnKey});else onSelectBu(id);}} onBack={route?.returnKey==='projects'?()=>navigate('projects'):undefined} onViewCapability={databaseBacked?item=>openDetail(item):undefined} onCapability={(node,item)=>{if(databaseBacked)return openForm(item);openForm(item?{...item,groupIds:groupScope?.groups('capability',item)||item.groupIds||[node.id]}:{id:uid('CAP'),buId,groupIds:groupScope?.defaultGroupIds||[node.id],groupId:groupScope?groupScope.defaultGroupIds[0]||'':node.id,version:1,metric:'',value:'',valueType:'保证值',config:'',conditions:'',limits:'',evidence:'',source:'手动补充',sourceLocation:'能力库 / 手动添加',approver:'BU管理员',status:'草稿',validity:'待核对',refs:[],history:[]});}} onReview={(item,action)=>{requestAction(item,action);}} canEditCapability={canEdit} canApproveCapability={canApprove} onAssignCapabilities={!databaseBacked&&groupScope?(nodeId,selectedKeys)=>{if(!canEdit)return;const selected=new Set(selectedKeys);setItems(all=>all.map(item=>{const before=groupScope.groups('capability',item),has=before.includes(nodeId),chosen=selected.has(`${item.id}:${item.version||1}`);if(has===chosen)return item;const groupIds=chosen?[...before,nodeId]:before.filter(id=>id!==nodeId);groupScope.validate(groupIds,before);return {...item,groupIds,groupId:groupIds[0]||''};}));}:undefined}/>;
+  const genericContent=<GenericCatalog key={buId} context={permissionContext} legacyCatalog={catalog} capabilities={items} projects={appState?.projects||[]} initialGroupId={route?.groupId} buName={buName} businessUnits={businessUnits} onBuChange={id=>{if(route?.buId) { navigate('capabilities',null,{buId:id,returnKey:route.returnKey}); } else { onSelectBu(id); }}} onBack={route?.returnKey==='projects'?()=>navigate('projects'):undefined} onViewCapability={databaseBacked?item=>openDetail(item):undefined} onCapability={(node,item)=>{if(databaseBacked) { return openForm(item); } openForm(item?{...item,groupIds:groupScope?.groups('capability',item)||item.groupIds||[node.id]}:{id:uid('CAP'),buId,groupIds:groupScope?.defaultGroupIds||[node.id],groupId:groupScope?groupScope.defaultGroupIds[0]||'':node.id,version:1,metric:'',value:'',valueType:'保证值',config:'',conditions:'',limits:'',evidence:'',source:'手动补充',sourceLocation:'能力库 / 手动添加',approver:'BU管理员',status:'草稿',validity:'待核对',refs:[],history:[]});}} onReview={(item,action)=>{requestAction(item,action);}} canEditCapability={canEdit} canApproveCapability={canApprove} onAssignCapabilities={!databaseBacked&&groupScope?(nodeId,selectedKeys)=>{if(!canEdit) { return; } const selected=new Set(selectedKeys);setItems(all=>all.map(item=>{const before=groupScope.groups('capability',item),has=before.includes(nodeId),chosen=selected.has(`${item.id}:${item.version||1}`);if(has===chosen) { return item; } const groupIds=chosen?[...before,nodeId]:before.filter(id=>id!==nodeId);groupScope.validate(groupIds,before);return {...item,groupIds,groupId:groupIds[0]||''};}));}:undefined}/>;
   const latestProcesses=[...new Map([...processes].sort((a,b)=>a.version-b.version).map(row=>[row.id,row])).values()];
   const modelActions=[{key:'add-model',label:'新建机型'},...latestModels.map(row=>({key:`model:${row.id}`,label:row.name}))];
   const processActions=[...latestModels.map(row=>({key:`add-process:${row.id}`,label:`为 ${row.name} 新建工艺`})),
@@ -394,11 +394,11 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
       hint="使用单工作表 Excel，按顺序填写机型ID、机型版本、工艺ID、工艺版本、配置基线、指标编码、指标名称、运算符、下限、上限、含下限、含上限、单位、值类型、适用条件、限制、证据ID、证据版本、证据位置。"
       onClose={()=>setImportType(null)} onImport={async (file,projectId)=>{
         const result=await library.importCapabilities(file,projectId);
-        await refresh().catch(error=>toast?.(error.message,'error'));
+        await refresh().catch(error=>{ console.error('刷新能力资料列表失败', error); return toast?.(error.message,'error'); });
         return result;
       }}/>}
     {importType&&!databaseBacked&&<ImportWizard kind={importType} capabilityScope={{buId,buName,model,process:activeProcess}} toast={toast} onClose={()=>setImportType(null)} onFinish={rows=>{
-      if(!canEdit||!activeProcess||activeProcess.enabled===false)return;
+      if(!canEdit||!activeProcess||activeProcess.enabled===false) { return; }
       setItems(all=>[...all,...prepareCapabilityImports(all,rows,activeProcess.id).map(r=>({...r,buId,modelId:model.id,processId:activeProcess.id,version:1,valueType:r.metric==='产能'?'典型值':'保证值',config:model.config,status:'草稿',validity:'待核对',limits:'仅适用所列条件，其他工况需重新评审。',sourceLocation:importType==='history'?'历史 RFQ-018 / 条款 2.1':'能力边界.xlsx / 能力表',approver:'BU管理员',submitterRole:actorRole,submitterId:actorId,refs:[],history:[{date:today(),text:`${actorRole} 导入工艺 ${activeProcess.code} 能力候选`}]}))]);
       setSource('全部来源');setStatus('全部状态');notify('已处理导入',`${model.name} / ${activeProcess.name}`);
     }}/>}

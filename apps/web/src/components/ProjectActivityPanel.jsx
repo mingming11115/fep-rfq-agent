@@ -6,9 +6,9 @@ import { EmptyState } from './ui';
 import './project-activity.css';
 
 function getConfirmationChange({ action, objectType, detail }, accountsById) {
-  if (action !== '分派条款确认人' || objectType !== 'requirement') return null;
+  if (action !== '分派条款确认人' || objectType !== 'requirement') { return null; }
   const assignment = /^(.+?) -> (.+?)：([\s\S]*)$/.exec(detail || '');
-  if (!assignment) return null;
+  if (!assignment) { return null; }
 
   const [, beforeId, afterId, reason] = assignment;
   const before = beforeId === 'null' ? '默认确认人' : accountsById[beforeId]?.name || beforeId;
@@ -19,12 +19,12 @@ function getConfirmationChange({ action, objectType, detail }, accountsById) {
 export default function ProjectActivityPanel({ project, requirements, reviews, snapshots = [], audit = [], databaseBacked, accountsById = {} }) {
   const [activity, setActivity] = useState(null);
   useEffect(() => {
-    if (!databaseBacked) return;
+    if (!databaseBacked) { return; }
     let cancelled = false;
     api.get(`/projects/${encodeURIComponent(project.id)}/activity`).then(events => {
-      if (!cancelled) setActivity({ events });
+      if (!cancelled) { setActivity({ events }); }
     }, error => {
-      if (!cancelled) setActivity({ error: error.message });
+      if (!cancelled) { setActivity({ error: error.message }); }
     });
     return () => { cancelled = true; };
   }, [databaseBacked, project.id]);

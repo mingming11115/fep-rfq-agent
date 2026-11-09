@@ -34,8 +34,10 @@ public final class ExternalCallLog {
 
     public void failed(Exception exception) {
         Throwable cause = exception;
-        if (exception instanceof ExecutionException && exception.getCause() != null) cause = exception.getCause();
-        log.warn("external.call.failed callId={} service={} operation={} errorType={} durationMs={}",
+        if (exception instanceof ExecutionException && exception.getCause() != null) {
+            cause = exception.getCause();
+        }
+        log.error("external.call.failed callId={} service={} operation={} errorType={} durationMs={}",
             callId, service, operation, cause.getClass().getSimpleName(), durationMs());
     }
 

@@ -28,7 +28,7 @@ test('every active role can maintain knowledge and reach both library pages',()=
 test('knowledge maintenance still rejects disabled accounts and unrelated business units',()=>{
  for(const [actorId,role] of [['sr','SR'],['tech','技术'],['bu','BU管理员'],['system','后台管理']]){
   const context=knowledgeContext(actorId);
-  if(role!=='后台管理')assert.equal(policy.canPerform(role,'knowledge:edit',{...context,buId:'B'}),false,role);
+  if(role!=='后台管理') { assert.equal(policy.canPerform(role,'knowledge:edit',{...context,buId:'B'}),false,role); }
   assert.equal(policy.canPerform(role,'knowledge:edit',{...context,buId:'missing'}),false,role);
   context.state.accountsById[actorId].enabled=false;
   assert.equal(policy.canPerform(role,'knowledge:edit',context),false,role);
@@ -45,7 +45,7 @@ test('BU administrators can browse their RFQ pages without gaining response or a
  const context={state,actorId:'bu',buId:'A',projectId:'P'};
  for(const page of ['projects','documents','response','reviews','versions','settings','export']){
   assert.equal(policy.canAccessPage('BU管理员',page,context),true,page);
-  if(page!=='projects')assert.equal(policy.canAccessPage('BU管理员',page,{...context,projectId:'OTHER'}),false,page);
+  if(page!=='projects') { assert.equal(policy.canAccessPage('BU管理员',page,{...context,projectId:'OTHER'}),false,page); }
  }
  for(const action of ['response:edit','response:confirm','snapshot:approve','snapshot:submit','export:download','source:manage'])assert.equal(policy.canPerform('BU管理员',action,context),false,action);
  assert.equal(policy.getRoleNavigation('BU管理员',context).some(item=>item.page==='projects'),true);

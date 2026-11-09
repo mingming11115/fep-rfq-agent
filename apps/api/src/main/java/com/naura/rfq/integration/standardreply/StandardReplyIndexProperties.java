@@ -5,10 +5,12 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 @ConfigurationProperties("rfq.standard-reply-index")
+@Slf4j
 public record StandardReplyIndexProperties(String baseUrl, String apiKey, Map<String, String> datasets,
         Map<String, String> historyDatasets) {
     private static final Pattern DATASET_KEY = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,127}");
@@ -36,6 +38,7 @@ public record StandardReplyIndexProperties(String baseUrl, String apiKey, Map<St
             try {
                 uri = URI.create(baseUrl.strip());
             } catch (IllegalArgumentException e) {
+                log.error("解析知识中台地址失败 errorType={}", e.getClass().getSimpleName());
                 throw new IllegalArgumentException("知识中台地址不合法");
             }
             if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null

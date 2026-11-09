@@ -11,7 +11,7 @@ const run = async () => {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 
   const logs = [];
-  page.on('console', m => { if (['error', 'warning'].includes(m.type())) logs.push(`[${m.type()}] ${m.text()}`); });
+  page.on('console', m => { if (['error', 'warning'].includes(m.type())) { logs.push(`[${m.type()}] ${m.text()}`); } });
   page.on('pageerror', e => logs.push(`[pageerror] ${e.message}`));
 
   await page.goto(BASE, { waitUntil: 'networkidle', timeout: 30000 });

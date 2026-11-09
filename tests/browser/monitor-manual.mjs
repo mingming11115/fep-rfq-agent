@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core';
 const BASE = 'http://127.0.0.1:5173';
 const PROFILE = process.env.RFQ_CHROME_PROFILE;
-if (!PROFILE) throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.');
+if (!PROFILE) { throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.'); }
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   channel: 'chrome', headless: false,
@@ -9,7 +9,7 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
   args: ['--start-maximized', '--profile-directory=Default']
 });
 const page = ctx.pages().find(p => p.url().includes('5173')) || ctx.pages()[0] || await ctx.newPage();
-if (!page.url().includes('5173')) await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+if (!page.url().includes('5173')) { await page.goto(BASE, { waitUntil: 'domcontentloaded' }); }
 await page.waitForTimeout(2000);
 
 await page.evaluate(() => {
@@ -22,7 +22,7 @@ await page.evaluate(() => {
   ['pointerdown','mousedown','mouseup','click'].forEach(ty => document.addEventListener(ty, t, true));
   new MutationObserver(() => {
     const dd = [...document.querySelectorAll('.ant-select-dropdown')].map(d => d.className.includes('hidden') ? 'dropdown:hidden' : 'dropdown:VISIBLE rect=' + JSON.stringify(d.getBoundingClientRect()));
-    if (dd.length) window.__log.push('DOM → ' + dd.join(' | '));
+    if (dd.length) { window.__log.push('DOM → ' + dd.join(' | ')); }
   }).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
 });
 
@@ -31,8 +31,8 @@ for (let i = 0; i < 60; i++) {
   await page.waitForTimeout(3000);
   try {
     const log = await page.evaluate(() => window.__log.splice(0));
-    if (log.length) log.forEach(l => console.log(`  ${l}`));
-  } catch (e) { console.log('连接丢失(窗口被关闭?):', e.message); break; }
+    if (log.length) { log.forEach(l => console.log(`  ${l}`)); }
+  } catch (e) { console.error('读取浏览器监控日志失败', e); break; }
 }
 console.log('监听结束, 窗口即将关闭');
 await ctx.close();

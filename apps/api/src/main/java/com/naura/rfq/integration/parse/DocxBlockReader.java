@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @lombok.RequiredArgsConstructor
+@Slf4j
 public class DocxBlockReader implements DocumentBlockReader {
 
     private final OcrClient ocr;
@@ -47,6 +49,7 @@ public class DocxBlockReader implements DocumentBlockReader {
             readBody(document.getBodyElements(), blocks, sections, images, "body");
             return blocks;
         } catch (Exception exception) {
+            log.error("读取 DOCX 文档失败 errorType={}", exception.getClass().getSimpleName());
             throw new DocumentReadException("DOCX 读取失败，请确认文件完整且未加密", exception);
         }
     }
@@ -59,16 +62,24 @@ public class DocxBlockReader implements DocumentBlockReader {
             if (element instanceof XWPFParagraph paragraph) {
                 String text = clean(paragraph.getText());
                 int level = headingLevel(paragraph.getStyle());
-                if (level > 0 && !text.isBlank()) applyHeading(sections, level, text);
-                if (!text.isBlank()) blocks.add(RawBlock.paragraph(blocks.size(), text, sectionPath(sections), null, anchor));
+                if (level > 0 && !text.isBlank()) {
+                    applyHeading(sections, level, text);
+                }
+                if (!text.isBlank()) {
+                    blocks.add(RawBlock.paragraph(blocks.size(), text, sectionPath(sections), null, anchor));
+                }
                 readPictures(paragraph, blocks, sections, images, anchor);
             } else if (element instanceof XWPFTable table) {
                 List<List<String>> rows = new ArrayList<>();
                 for (XWPFTableRow row : table.getRows()) {
                     List<String> cells = row.getTableCells().stream().map(c -> clean(c.getText())).toList();
-                    if (cells.stream().anyMatch(c -> !c.isBlank())) rows.add(cells);
+                    if (cells.stream().anyMatch(c -> !c.isBlank())) {
+                        rows.add(cells);
+                    }
                 }
-                if (!rows.isEmpty()) blocks.add(RawBlock.table(blocks.size(), rows, sectionPath(sections), anchor));
+                if (!rows.isEmpty()) {
+                    blocks.add(RawBlock.table(blocks.size(), rows, sectionPath(sections), anchor));
+                }
                 int rowIndex = 0;
                 for (XWPFTableRow row : table.getRows()) {
                     int cellIndex = 0;
@@ -94,8 +105,11 @@ public class DocxBlockReader implements DocumentBlockReader {
                     continue;
                 }
                 var data = picture.getPictureData();
-                if (data == null) blocks.add(ocr.pending(blocks.size(), sectionPath(sections), location, "图片数据缺失，待人工核对"));
-                else blocks.add(ocr.recognise(blocks.size(), data.getData(), data.getPackagePart().getContentType(), sectionPath(sections), location));
+                if (data == null) {
+                    blocks.add(ocr.pending(blocks.size(), sectionPath(sections), location, "图片数据缺失，待人工核对"));
+                } else {
+                    blocks.add(ocr.recognise(blocks.size(), data.getData(), data.getPackagePart().getContentType(), sectionPath(sections), location));
+                }
             }
         }
     }

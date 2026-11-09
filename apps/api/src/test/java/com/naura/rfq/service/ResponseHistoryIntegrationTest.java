@@ -99,7 +99,9 @@ class ResponseHistoryIntegrationTest {
 
     private String write(long version, long sourceVersion, String draft) {
         var request = json.createObjectNode().put("version", version).put("sourceVersion", sourceVersion);
-        if (draft != null) request.putObject("patch").put("conclusion", "Comply").put("draft", draft);
+        if (draft != null) {
+            request.putObject("patch").put("conclusion", "Comply").put("draft", draft);
+        }
         return request.toString();
     }
 
@@ -110,7 +112,9 @@ class ResponseHistoryIntegrationTest {
 
     private ResultActions request(MockHttpServletRequestBuilder request, CurrentUser actor, String... body) throws Exception {
         request.header("Authorization", "Bearer " + jwt.issue(actor.id()));
-        if (body.length > 0) request.contentType(MediaType.APPLICATION_JSON).content(body[0]);
+        if (body.length > 0) {
+            request.contentType(MediaType.APPLICATION_JSON).content(body[0]);
+        }
         return mvc.perform(request);
     }
 

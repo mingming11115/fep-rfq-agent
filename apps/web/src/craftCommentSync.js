@@ -16,10 +16,10 @@ const plainObject = value => value !== null && typeof value === 'object' && !Arr
 function businessDelta(current, baseline, next, protectedFields = new Set()) {
   let updated = current;
   for (const field of new Set([...Object.keys(baseline), ...Object.keys(next)])) {
-    if (protectedFields.has(field) || same(baseline[field], next[field])) continue;
+    if (protectedFields.has(field) || same(baseline[field], next[field])) { continue; }
     if (!Object.hasOwn(next, field)) {
       if (Object.hasOwn(updated, field)) {
-        if (updated === current) updated = { ...current };
+        if (updated === current) { updated = { ...current }; }
         delete updated[field];
       }
       continue;
@@ -27,8 +27,8 @@ function businessDelta(current, baseline, next, protectedFields = new Set()) {
     const value = plainObject(next[field]) && (baseline[field] == null || plainObject(baseline[field]))
       ? businessDelta(plainObject(current[field]) ? current[field] : {}, baseline[field] || {}, next[field])
       : next[field];
-    if (same(current[field], value)) continue;
-    if (updated === current) updated = { ...current };
+    if (same(current[field], value)) { continue; }
+    if (updated === current) { updated = { ...current }; }
     updated[field] = value;
   }
   return updated;
@@ -36,11 +36,11 @@ function businessDelta(current, baseline, next, protectedFields = new Set()) {
 
 function matchingReply(reply, candidates, position, allowPosition = true) {
   let index = candidates.findIndex(candidate => candidate.reply === reply);
-  if (index < 0 && keyOf(reply)) index = candidates.findIndex(candidate => keyOf(candidate.reply) === keyOf(reply));
-  if (index < 0 && reply.id) index = candidates.findIndex(candidate => candidate.reply.id === reply.id);
-  if (index < 0 && reply.at) index = candidates.findIndex(candidate => candidate.reply.by === reply.by && candidate.reply.at === reply.at);
-  if (index < 0 && allowPosition) index = candidates.findIndex(candidate => candidate.reply.by === reply.by && candidate.reply.at === reply.at && candidate.reply.text === reply.text);
-  if (index < 0 && allowPosition) index = candidates.findIndex(candidate => candidate.index === position && candidate.reply.by === reply.by);
+  if (index < 0 && keyOf(reply)) { index = candidates.findIndex(candidate => keyOf(candidate.reply) === keyOf(reply)); }
+  if (index < 0 && reply.id) { index = candidates.findIndex(candidate => candidate.reply.id === reply.id); }
+  if (index < 0 && reply.at) { index = candidates.findIndex(candidate => candidate.reply.by === reply.by && candidate.reply.at === reply.at); }
+  if (index < 0 && allowPosition) { index = candidates.findIndex(candidate => candidate.reply.by === reply.by && candidate.reply.at === reply.at && candidate.reply.text === reply.text); }
+  if (index < 0 && allowPosition) { index = candidates.findIndex(candidate => candidate.index === position && candidate.reply.by === reply.by); }
   return index;
 }
 
@@ -51,16 +51,16 @@ function collaborationReplies(current, baseline, next) {
   for (let position = 0; position < baseline.length; position++) {
     const before = baseline[position];
     const nextIndex = matchingReply(before, remainingNext, position);
-    if (nextIndex < 0) continue; // This UI has no reply deletion action.
+    if (nextIndex < 0) { continue; } // This UI has no reply deletion action.
     const [{ reply: after }] = remainingNext.splice(nextIndex, 1);
     const currentIndex = matchingReply(before, remainingCurrent, position);
-    if (currentIndex < 0) continue; // A stale edit cannot restore a deleted reply.
+    if (currentIndex < 0) { continue; } // A stale edit cannot restore a deleted reply.
     const [{ reply: latest, index }] = remainingCurrent.splice(currentIndex, 1);
     updated[index] = businessDelta(latest, before, after, replyMetadata);
   }
   for (const { reply } of remainingNext) {
     // Stable IDs or the original local author/time identify a retried append.
-    if (matchingReply(reply, updated.map((item, index) => ({ reply: item, index })), -1, false) < 0) updated.push(reply);
+    if (matchingReply(reply, updated.map((item, index) => ({ reply: item, index })), -1, false) < 0) { updated.push(reply); }
   }
   return updated.length === current.length && updated.every((reply, index) => reply === current[index]) ? current : updated;
 }
@@ -72,7 +72,7 @@ export function applyCollaborationEdit(current = [], baseline = [], next = []) {
   const known = new Set(current.map(comment => comment.id));
   const additions = [];
   for (const comment of next) {
-    if (before.has(comment.id) || known.has(comment.id)) continue;
+    if (before.has(comment.id) || known.has(comment.id)) { continue; }
     additions.push(comment);
     known.add(comment.id);
   }
@@ -80,18 +80,18 @@ export function applyCollaborationEdit(current = [], baseline = [], next = []) {
     const original = before.get(comment.id), action = after.get(comment.id);
     // Omitting a visible record does not request deletion. Tombstones and
     // concurrent native records remain in their current state.
-    if (!original || !action || comment.nativeDeleted) return comment;
+    if (!original || !action || comment.nativeDeleted) { return comment; }
     let updated = businessDelta(comment, original, action, commentMetadata);
     if (!same(original.replies, action.replies)) {
       const replies = collaborationReplies(comment.replies || [], original.replies || [], action.replies || []);
-      if (replies !== comment.replies) updated = { ...updated, replies };
+      if (replies !== comment.replies) { updated = { ...updated, replies }; }
     }
     return updated;
   })];
 }
 
 function scopedRows(rows = [], source) {
-  if (!source?.projectId || !source.fileId || source.sourceVersion == null) return [];
+  if (!source?.projectId || !source.fileId || source.sourceVersion == null) { return []; }
   return rows.filter(row => sourceMatches(makeSourceAnchor(row), source));
 }
 
@@ -107,8 +107,8 @@ function anchorRow(comment, rows, source) {
 // The caller guards the iframe's session token. Optional host metadata provides
 // another boundary; the native document token is not the backend document ID.
 function validSnapshot(snapshot, source, documentId) {
-  if (!documentId || !text(snapshot?.document) || !Array.isArray(snapshot?.notes)) return false;
-  if (snapshot.documentId != null && snapshot.documentId !== documentId) return false;
+  if (!documentId || !text(snapshot?.document) || !Array.isArray(snapshot?.notes)) { return false; }
+  if (snapshot.documentId != null && snapshot.documentId !== documentId) { return false; }
   return ['projectId', 'fileId', 'sourceVersion'].every(field => snapshot.source?.[field] == null || String(snapshot.source[field]) === String(source?.[field]));
 }
 
@@ -154,7 +154,7 @@ function noteIndex(notes) {
   const byKey = new Map(), duplicates = new Set();
   for (const note of notes) {
     const key = keyOf(note);
-    if (byKey.has(key)) duplicates.add(key);
+    if (byKey.has(key)) { duplicates.add(key); }
     byKey.set(key, note);
   }
   return { byKey, duplicates };
@@ -181,8 +181,8 @@ function reconcileReplyKeys(comment, projection, context) {
   const available = [...projection.replies];
   const replies = (comment.replies || []).map(reply => {
     let index = available.findIndex(native => keyOf(reply) && native.key === keyOf(reply));
-    if (index < 0 && !keyOf(reply)) index = available.findIndex(native => native.text === text(reply.text) && native.author === displayAuthor(reply, context.people, context.actor, true));
-    if (index < 0) return reply;
+    if (index < 0 && !keyOf(reply)) { index = available.findIndex(native => native.text === text(reply.text) && native.author === displayAuthor(reply, context.people, context.actor, true)); }
+    if (index < 0) { return reply; }
     const [native] = available.splice(index, 1);
     return { ...reply, nativeAuthor: reply.nativeAuthor ?? native.author, nativeRef: replyRef(reply, { nativeKey: native.key }, context) };
   });
@@ -226,26 +226,26 @@ function savedProjection(ref) {
   try {
     const saved = JSON.parse(ref.savedFingerprint);
     return saved && !saved.deleted && typeof saved.text === 'string' && Array.isArray(saved.replies) ? saved : undefined;
-  } catch { return undefined; }
+  } catch { console.error('读取已保存的批注投影失败'); return undefined; }
 }
 
 /** Pure native -> collaboration merge. Unassociated notes remain only in the file. */
 export function mergeNativeComments({ comments = [], snapshot, source, documentId, revision, engine, rows = [], actor, people = [], associations = {}, draftNativeKeys = [], freshNativeKeys = [], canEditRow }) {
   const unlinked = [], conflicts = [];
-  if (!validSnapshot(snapshot, source, documentId)) return { comments, unlinked, conflicts, changed: false };
+  if (!validSnapshot(snapshot, source, documentId)) { return { comments, unlinked, conflicts, changed: false }; }
   const currentRows = scopedRows(rows, source);
   const context = { source, documentId, revision, engine, snapshot, actor, people, canEditRow };
   const { byKey, duplicates } = noteIndex(snapshot.notes);
   let next = [...comments];
   for (const note of snapshot.notes) {
     const key = keyOf(note);
-    if(freshNativeKeys.includes(key))next=next.map(comment=>{
-      if(!comment.nativeDeleted||comment.nativeRef?.documentId!==documentId||comment.nativeRef.key!==key||!sourceMatches(comment.anchor,source))return comment;
+    if(freshNativeKeys.includes(key)) { next=next.map(comment=>{
+      if(!comment.nativeDeleted||comment.nativeRef?.documentId!==documentId||comment.nativeRef.key!==key||!sourceMatches(comment.anchor,source)) { return comment; }
       const {key:deletedKey,...ref}=comment.nativeRef;
       return {...comment,nativeRef:{...ref,deletedKey,state:'deleted'}};
-    });
+    }); }
     const bound = next.map((comment, index) => ({ comment, index })).filter(({ comment }) => comment.nativeRef?.documentId === documentId && comment.nativeRef.key === key && sourceMatches(comment.anchor, source));
-    if (!bound.length && !draftNativeKeys.includes(key) && !text(note.text).trim() && !(note.replies || []).some(reply => text(reply.text).trim())) continue;
+    if (!bound.length && !draftNativeKeys.includes(key) && !text(note.text).trim() && !(note.replies || []).some(reply => text(reply.text).trim())) { continue; }
     if (!key || duplicates.has(key)) {
       unlinked.push({ ...note, reason: key ? 'duplicate-native-key' : 'missing-native-key' });
       continue;
@@ -266,10 +266,10 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
     const native = nativeProjection(note, row);
     if (!existing) {
       const pending = next.map((comment, index) => ({ comment, index })).filter(({ comment }) => {
-        if (comment.nativeDeleted || comment.nativeRef?.key || (comment.nativeRef?.documentId && comment.nativeRef.documentId !== documentId) || !owns(comment.createdBy, actor) || anchorRow(comment, currentRows, source)?.id !== row.id) return false;
+        if (comment.nativeDeleted || comment.nativeRef?.key || (comment.nativeRef?.documentId && comment.nativeRef.documentId !== documentId) || !owns(comment.createdBy, actor) || anchorRow(comment, currentRows, source)?.id !== row.id) { return false; }
         return same(businessProjection(reconcileReplyKeys(comment, native, context), context), native);
       });
-      if (pending.length === 1) existing = pending[0];
+      if (pending.length === 1) { existing = pending[0]; }
     }
     if (!existing) {
       const imported=importNative(note, row, native, context),baseId=imported.id;
@@ -279,7 +279,7 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
     }
     const current = existing.comment;
     if (current.nativeDeleted) {
-      if(current.nativeRef.state==='delete-pending')continue;
+      if(current.nativeRef.state==='delete-pending') { continue; }
       // A reappearing key in the session that observed its deletion is native
       // Undo. The same key in a different session can still be an older file.
       if (current.nativeRef.documentToken === snapshot.document) {
@@ -321,8 +321,8 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
   if (snapshot.complete !== false) {
     next = next.map(comment => {
       const ref = comment.nativeRef;
-      if (ref?.documentId !== documentId || !ref.key || !anchorRow(comment, currentRows, source) || byKey.has(ref.key)) return comment;
-      if (comment.nativeDeleted) return ref.documentToken === snapshot.document && ref.state==='deleted' ? comment : { ...comment, nativeRef: { ...ref, state:'deleted', documentToken: snapshot.document } };
+      if (ref?.documentId !== documentId || !ref.key || !anchorRow(comment, currentRows, source) || byKey.has(ref.key)) { return comment; }
+      if (comment.nativeDeleted) { return ref.documentToken === snapshot.document && ref.state==='deleted' ? comment : { ...comment, nativeRef: { ...ref, state:'deleted', documentToken: snapshot.document } }; }
       const local = businessProjection(comment, context);
       const pending = !ref.base || !same(local, ref.base) || ref.state === 'pending' || ref.state === 'conflict';
       const observed = Boolean(snapshot.document && ref.documentToken === snapshot.document);
@@ -345,41 +345,41 @@ export function mergeNativeComments({ comments = [], snapshot, source, documentI
 
 function permittedProjection(comment, native, context) {
   const local = businessProjection(comment, context);
-  if (!native) return { ...local, replies: local.replies.filter((reply, index) => owns(comment.replies[index].by, context.actor)) };
+  if (!native) { return { ...local, replies: local.replies.filter((reply, index) => owns(comment.replies[index].by, context.actor)) }; }
   const rootOwn = owns(comment.createdBy, context.actor);
   const replies = [];
   for (let i = 0; i < local.replies.length; i++) {
     const reply = local.replies[i], business = comment.replies[i];
     const existing = native.replies.find(item => item.key === reply.key && reply.key);
-    if (existing) replies.push(owns(business.by, context.actor) ? { ...reply, author: existing.author } : existing);
-    else if (owns(business.by, context.actor)) replies.push(reply);
+    if (existing) { replies.push(owns(business.by, context.actor) ? { ...reply, author: existing.author } : existing); }
+    else if (owns(business.by, context.actor)) { replies.push(reply); }
   }
-  for (const reply of native.replies) if (!replies.some(item => item.key === reply.key)) replies.push(reply);
+  for (const reply of native.replies) if (!replies.some(item => item.key === reply.key)) { replies.push(reply); }
   return { ...local, text: rootOwn ? local.text : native.text, author: native.author, quote: native.quote, clauseId: native.clauseId, replies };
 }
 
 /** Pure collaboration -> native command plan; numeric IDs come from this snapshot. */
 export function planCraftWrites({ comments = [], snapshot, source, documentId, revision, rows = [], actor, people = [], canEditRow, editDocument = false }) {
-  if (!validSnapshot(snapshot, source, documentId)) return [];
+  if (!validSnapshot(snapshot, source, documentId)) { return []; }
   const currentRows = scopedRows(rows, source), { byKey, duplicates } = noteIndex(snapshot.notes);
   const context = { actor, people, revision };
   const operations = [];
   for (const comment of comments) {
     const row = anchorRow(comment, currentRows, source), ref = comment.nativeRef;
-    if (!row || !canWrite(row, comment, canEditRow) || (ref?.documentId && ref.documentId !== documentId) || ref?.state === 'conflict' || duplicates.has(ref?.key)) continue;
+    if (!row || !canWrite(row, comment, canEditRow) || (ref?.documentId && ref.documentId !== documentId) || ref?.state === 'conflict' || duplicates.has(ref?.key)) { continue; }
     const note = ref?.key ? byKey.get(ref.key) : undefined;
-    if (!note && snapshot.complete === false) continue;
+    if (!note && snapshot.complete === false) { continue; }
     if (comment.nativeDeleted) {
-      if (note && (owns(comment.createdBy, actor) || editDocument)) operations.push({ commentId: comment.id, action: 'delete', params: { id: note.id }, nativeKey: ref.key });
+      if (note && (owns(comment.createdBy, actor) || editDocument)) { operations.push({ commentId: comment.id, action: 'delete', params: { id: note.id }, nativeKey: ref.key }); }
       continue;
     }
-    if (!note && !ref?.base && !owns(comment.createdBy, actor)) continue;
+    if (!note && !ref?.base && !owns(comment.createdBy, actor)) { continue; }
     const native = note ? nativeProjection(note, row) : undefined;
     const local = businessProjection(comment, context);
-    if (native && ref?.base && !same(local, ref.base) && !same(native, ref.base) && !same(local, native)) continue;
+    if (native && ref?.base && !same(local, ref.base) && !same(native, ref.base) && !same(local, native)) { continue; }
     const projection = permittedProjection(comment, native || ref?.base, context);
-    if (native && same(projection, native)) continue;
-    if (!projection.text.trim() && !projection.replies.some(reply => reply.text.trim())) continue;
+    if (native && same(projection, native)) { continue; }
+    if (!projection.text.trim() && !projection.replies.some(reply => reply.text.trim())) { continue; }
     const params = {
       ...(note ? { id: note.id } : {}), text: projection.text, author: projection.author,
       resolved: projection.resolved, quote: projection.quote, clauseId: row.id,
@@ -392,7 +392,7 @@ export function planCraftWrites({ comments = [], snapshot, source, documentId, r
     const available = (comment.replies || []).map((reply, index) => ({ reply, index }));
     const replySources = projection.replies.map(reply => {
       const index = available.findIndex(item => reply.key ? keyOf(item.reply) === reply.key : !keyOf(item.reply) && text(item.reply.text) === reply.text && displayAuthor(item.reply, people, actor, true) === reply.author);
-      if (index < 0) return null;
+      if (index < 0) { return null; }
       const [match] = available.splice(index, 1);
       return { id: match.reply.id, by: match.reply.by, at: match.reply.at, index: match.index };
     });
@@ -403,28 +403,28 @@ export function planCraftWrites({ comments = [], snapshot, source, documentId, r
 
 /** Bind the command result using the projection captured when it was sent. */
 export function applyCraftBinding(comments, commentId, result, { documentId, engine, revision, people = [], actor } = {}) {
-  if (!documentId || !keyOf(result)) return comments;
+  if (!documentId || !keyOf(result)) { return comments; }
   const target = comments.find(comment => comment.id === commentId);
-  if (!target || (target.nativeRef?.documentId && target.nativeRef.documentId !== documentId)) return comments;
+  if (!target || (target.nativeRef?.documentId && target.nativeRef.documentId !== documentId)) { return comments; }
   const echoes = comments.filter(comment => comment.id !== commentId && comment.nativeRef?.documentId === documentId && comment.nativeRef.key === keyOf(result) && sourceMatches(comment.anchor, target.anchor));
   return comments.filter(comment => !echoes.includes(comment)).map(comment => {
-    if (comment.id !== commentId || (comment.nativeRef?.documentId && comment.nativeRef.documentId !== documentId)) return comment;
+    if (comment.id !== commentId || (comment.nativeRef?.documentId && comment.nativeRef.documentId !== documentId)) { return comment; }
     const { replySources = [], ...sent } = result.projection || businessProjection(comment, { people, actor });
     const bindings = sent.replies.map((reply, index) => ({ ...reply, source: replySources[index], returned: result.replies?.[index] }));
     const available = [...bindings];
     const replies = (comment.replies || []).map(reply => {
       let index = available.findIndex(item => keyOf(reply) ? item.key === keyOf(reply) : !item.key && item.text === text(reply.text) && item.author === displayAuthor(reply, people, actor, true));
-      if (index < 0 && !keyOf(reply)) index = available.findIndex(item => !item.key && item.source && (item.source.id ? item.source.id === reply.id : item.source.at && item.source.by === reply.by && item.source.at === reply.at));
-      if (index < 0) return reply;
+      if (index < 0 && !keyOf(reply)) { index = available.findIndex(item => !item.key && item.source && (item.source.id ? item.source.id === reply.id : item.source.at && item.source.by === reply.by && item.source.at === reply.at)); }
+      if (index < 0) { return reply; }
       const [binding] = available.splice(index, 1);
-      if (!keyOf(binding.returned)) return reply;
+      if (!keyOf(binding.returned)) { return reply; }
       return { ...reply, nativeAuthor: reply.nativeAuthor ?? binding.author, nativeRef: { ...reply.nativeRef, documentId, engine, key: keyOf(binding.returned) } };
     });
     const base = { ...sent, replies: bindings.map(binding => ({ key: keyOf(binding.returned) || binding.key, text: binding.text, author: binding.author })) };
     const replyKeys = new Set(replies.map(keyOf).filter(Boolean));
     const extras = echoes.flatMap(echo => echo.replies || []).filter(reply => {
       const key = keyOf(reply);
-      if (!key || replyKeys.has(key)) return false;
+      if (!key || replyKeys.has(key)) { return false; }
       replyKeys.add(key);
       return true;
     });
@@ -436,7 +436,7 @@ export function applyCraftBinding(comments, commentId, result, { documentId, eng
     };
     const documentToken = comment.nativeRef?.documentToken || echoes.find(echo => echo.nativeRef?.documentToken)?.nativeRef.documentToken;
     const ref = bindingRef({ ...comment.nativeRef, key: keyOf(result), ...(documentToken ? { documentToken } : {}) }, base, { documentId, engine, revision });
-    if (!same(businessProjection(updated, { people, actor }), base)) ref.state = 'pending';
+    if (!same(businessProjection(updated, { people, actor }), base)) { ref.state = 'pending'; }
     return { ...updated, nativeRef: ref };
   });
 }
@@ -445,11 +445,11 @@ export function applyCraftBinding(comments, commentId, result, { documentId, eng
 export function markCraftSaved(comments, { documentId, revision, keys, fingerprints } = {}) {
   return comments.map(comment => {
     const ref = comment.nativeRef;
-    if (ref?.documentId !== documentId || (keys && !keys.includes(ref.key) && !keys.includes(comment.id))) return comment;
+    if (ref?.documentId !== documentId || (keys && !keys.includes(ref.key) && !keys.includes(comment.id))) { return comment; }
     let captured;
-    if (fingerprints instanceof Map) captured = fingerprints.get(comment.id) ?? fingerprints.get(ref.key);
-    else if (fingerprints) captured = fingerprints[comment.id] ?? fingerprints[ref.key];
-    if (fingerprints && captured == null) return comment;
+    if (fingerprints instanceof Map) { captured = fingerprints.get(comment.id) ?? fingerprints.get(ref.key); }
+    else if (fingerprints) { captured = fingerprints[comment.id] ?? fingerprints[ref.key]; }
+    if (fingerprints && captured == null) { return comment; }
     const current = craftCommentFingerprint(comment);
     const savedFingerprint = captured ?? (comment.nativeDeleted ? current : ref.fingerprint ?? current);
     const allSaved = current === savedFingerprint && (comment.nativeDeleted || ref.fingerprint === current);

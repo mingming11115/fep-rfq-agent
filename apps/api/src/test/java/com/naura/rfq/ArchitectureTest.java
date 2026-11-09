@@ -33,7 +33,9 @@ class ArchitectureTest {
     void controllersDoNotAccessMappersOrOwnTransactions() throws Exception {
         for (Path path : sources()) {
             String source = Files.readString(path);
-            if (!source.contains("@RestController\n")) continue;
+            if (!source.contains("@RestController\n")) {
+                continue;
+            }
             assertThat(source).as(path.toString())
                     .doesNotContain("com.naura.rfq.mapper.", "@Transactional", ".transaction.annotation.Transactional");
         }
@@ -43,7 +45,9 @@ class ArchitectureTest {
     void servicesAndModelsDoNotDependOnControllers() throws Exception {
         for (Path path : sources()) {
             Path relative = ROOT.relativize(path);
-            if (!relative.startsWith("service") && !relative.startsWith("model")) continue;
+            if (!relative.startsWith("service") && !relative.startsWith("model")) {
+                continue;
+            }
             assertThat(Files.readString(path)).as(path.toString()).doesNotContain("com.naura.rfq.controller.");
         }
     }

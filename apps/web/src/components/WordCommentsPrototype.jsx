@@ -7,8 +7,8 @@ export default function WordCommentsPrototype({ projectId, onClose }) {
 
   useEffect(() => {
     const resize = (event) => {
-      if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow) return;
-      if (event.data?.type !== 'rfq-word-comments:resize' || event.data.projectId !== projectId) return;
+      if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow) { return; }
+      if (event.data?.type !== 'rfq-word-comments:resize' || event.data.projectId !== projectId) { return; }
       const value = event.data.height;
       if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
         setHeight(Math.max(400, Math.min(12000, Math.ceil(value))));

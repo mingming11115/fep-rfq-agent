@@ -16,25 +16,25 @@ function AssignmentDialog({state, project, requirementId, route, onPersonnelActi
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(state.dataSource==='mysql');
   const [people,setPeople]=useState(state.dataSource==='mysql'?[]:context.people);
   const [backendVersion]=useState(context.row.backendVersion??context.row.version??0);
-  useEffect(()=>{if(state.dataSource!=='mysql')return;let active=true;
-    confirmationCandidates(requirementId).then(rows=>{if(active)setPeople(rows);}).catch(cause=>{if(active)setError(cause.message);}).finally(()=>{if(active)setLoading(false);});
+  useEffect(()=>{if(state.dataSource!=='mysql') { return; } let active=true;
+    confirmationCandidates(requirementId).then(rows=>{if(active) { setPeople(rows); }}).catch(cause=>{ console.error('加载条款确认候选人失败', cause); if(active) { setError(cause.message); }}).finally(()=>{if(active) { setLoading(false); }});
     return()=>{active=false;};
   },[requirementId,state.dataSource]);
   const valid = !busy && !loading && context.canAssign && !!selected
     && people.some(person => person.userId === selected)
     && (baseline.expectedAssigneeIds.length !== 1 || selected !== baseline.expectedAssigneeIds[0]);
   async function save() {
-    if(!valid)return;
+    if(!valid) { return; }
     setBusy(true);setError('');
     try {
       if(state.dataSource==='mysql'){
         await onAssignConfirmation(project.id,requirementId,{userId:selected,version:backendVersion,reason:reason.trim()});
       }else if (onPersonnelAction(current => assignResponse(current, {projectId:project.id,requirementId,userIds:[selected],
-        reason,route,...baseline})) === false) return;
+        reason,route,...baseline})) === false) { return; }
       onClose();
-    } catch (cause) { setError(cause.message); } finally {setBusy(false);}
+    } catch (cause) { console.error('分派条款确认失败', cause); setError(cause.message); } finally {setBusy(false);}
   }
-  return <Modal title={context.label} onClose={()=>{if(!busy)onClose();}} width={540}
+  return <Modal title={context.label} onClose={()=>{if(!busy) { onClose(); }}} width={540}
     footer={<><UiButton className="btn" disabled={busy} onClick={onClose}>取消</UiButton><UiButton className="btn btn-primary" disabled={!valid} onClick={save}>保存确认分工</UiButton></>}>
     <div className="field"><span>新确认人 *</span>
       <PersonPicker disabled={busy||loading} label="新确认人" people={people} value={selected} onChange={setSelected}

@@ -17,8 +17,8 @@ async function mountAuthGate({session}={}) {
   const output=path.join(directory,'auth-gate-test.mjs');
   await build({entryPoints:[fileURLToPath(new URL('./AuthGate.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
   const mod=await import(pathToFileURL(output)+`?t=${Date.now()}`);
-  if(session) localStorage.setItem('fep-rfq-auth',JSON.stringify(session));
-  else localStorage.removeItem('fep-rfq-auth');
+  if(session) { localStorage.setItem('fep-rfq-auth',JSON.stringify(session)); }
+  else { localStorage.removeItem('fep-rfq-auth'); }
   const {createRoot}=await import('react-dom/client');
   const node=document.createElement('div');
   document.body.append(node);

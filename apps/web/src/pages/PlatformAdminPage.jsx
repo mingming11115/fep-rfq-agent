@@ -41,6 +41,7 @@ export default function PlatformAdminPage({ actorId }) {
       setAccounts(userPage?.list || []);
       setError('');
     } catch (failure) {
+      console.error('加载平台管理数据失败', failure);
       setError(failure.message);
     } finally {
       setLoading(false);
@@ -70,14 +71,14 @@ export default function PlatformAdminPage({ actorId }) {
     setError('');
     try {
       if (kind === 'bu') {
-        if (!edit.name?.trim()) throw new Error('请填写事业部名称');
-        if (edit.id) await adminApi.renameBusinessUnit(edit.id, edit.name.trim());
+        if (!edit.name?.trim()) { throw new Error('请填写事业部名称'); }
+        if (edit.id) { await adminApi.renameBusinessUnit(edit.id, edit.name.trim()); }
         else {
-          if (!edit.code?.trim()) throw new Error('请填写事业部编码');
+          if (!edit.code?.trim()) { throw new Error('请填写事业部编码'); }
           await adminApi.createBusinessUnit({ code: edit.code.trim(), name: edit.name.trim() });
         }
       } else {
-        if (!edit.displayName?.trim()) throw new Error('请填写姓名');
+        if (!edit.displayName?.trim()) { throw new Error('请填写姓名'); }
         const profile = {
           displayName: edit.displayName.trim(),
           email: edit.email?.trim() || null,
@@ -85,8 +86,8 @@ export default function PlatformAdminPage({ actorId }) {
         if (edit.id) {
           await adminApi.updateUser(edit.id, profile);
         } else {
-          if (!edit.username?.trim()) throw new Error('请填写账号');
-          if (edit.password.length < 8) throw new Error('密码至少 8 位');
+          if (!edit.username?.trim()) { throw new Error('请填写账号'); }
+          if (edit.password.length < 8) { throw new Error('密码至少 8 位'); }
           await adminApi.createUser({
             ...profile,
             username: edit.username.trim(),
@@ -99,6 +100,7 @@ export default function PlatformAdminPage({ actorId }) {
       await load();
       setEdit(null);
     } catch (failure) {
+      console.error('保存平台管理设置失败', failure);
       setError(failure.message);
     } finally {
       setBusy(false);
@@ -111,6 +113,7 @@ export default function PlatformAdminPage({ actorId }) {
       await adminApi.updateUserStatus(account.id, account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE');
       await load();
     } catch (failure) {
+      console.error('更新账号启用状态失败', failure);
       setError(failure.message);
     }
   }

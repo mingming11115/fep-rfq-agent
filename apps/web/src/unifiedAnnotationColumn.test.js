@@ -25,8 +25,8 @@ async function harness(name){
   // pane, a 70px control area, three file cards, then its response cards.
   const oldRect=window.HTMLElement.prototype.getBoundingClientRect;
   window.HTMLElement.prototype.getBoundingClientRect=function(){
-    if(this.matches('.craft-annotation-sidebar'))return {top:0,bottom:180,left:0,right:240,width:240,height:180};
-    let top;if(this.dataset.nativeNote)top=70+90*Number(this.dataset.nativeNote.slice(-1));
+    if(this.matches('.craft-annotation-sidebar')) { return {top:0,bottom:180,left:0,right:240,width:240,height:180}; }
+    let top;if(this.dataset.nativeNote) { top=70+90*Number(this.dataset.nativeNote.slice(-1)); }
     if(this.dataset.responseNote){const all=node.querySelectorAll('[data-response-note]').length===2;top=360+(all&&this.dataset.responseNote==='R2'?150:0);}
     if(top!==undefined){top-=panel()?.scrollTop||0;return {top,bottom:top+80,left:0,right:240,width:240,height:80};}
     return oldRect.call(this);

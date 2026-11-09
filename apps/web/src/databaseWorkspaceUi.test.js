@@ -26,7 +26,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   if(deleting||url.endsWith('/projects/P/restorations')){
    const body=deleting?{version:Number(new URL(url,'http://localhost').searchParams.get('version'))}:JSON.parse(options.body);
    projectActions.push({url,method:options.method,...body});
-   if(body.version!==projectVersion||(deleting?options.body!==undefined:!body.reason?.trim()))return new Response(JSON.stringify({code:1,msg:'无效的项目操作'}),{status:409});
+   if(body.version!==projectVersion||(deleting?options.body!==undefined:!body.reason?.trim())) { return new Response(JSON.stringify({code:1,msg:'无效的项目操作'}),{status:409}); }
    archived=deleting;projectVersion++;
    return new Response(JSON.stringify({code:0,data:{...project,version:projectVersion,archived}}));
   }
@@ -35,18 +35,18 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
    const list=archived===archiveList?[{...project,version:projectVersion,archived,stage:archived?'CANCELLED':'DRAFT',archiveReason:null}]:[];
    return new Response(JSON.stringify({code:0,data:{list,total:list.length}}));
   }
-  if(url.endsWith('/requirements/R/match-result'))return new Response(JSON.stringify({code:0,data:{
+  if(url.endsWith('/requirements/R/match-result')) { return new Response(JSON.stringify({code:0,data:{
    runId:'MATCH-DB',status:'completed',matchOrder:['history_rfq','standard_reply','capability'],
    result:{matchedLibrary:'history_rfq',conclusion:'待确认',stages:{history_rfq:{status:'hit',candidates:[{id:'H',version:2,title:'数据库历史候选',answer:'真实参考答复'}]}}}
-  }}));
-  if(url.endsWith('/download'))return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404});
+  }})); }
+  if(url.endsWith('/download')) { return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404}); }
   if(url.endsWith('/parse-runs')){
    parseCalls++;
    if(url.includes('/FAILED/')){
-    if(parseCalls===2)await failedRequest;
+    if(parseCalls===2) { await failedRequest; }
     return new Response(JSON.stringify({code:1,msg:'补充资料解析失败'}),{status:422});
    }
-   if(parsed&&!allowReparse)return new Response(JSON.stringify({code:1,msg:'已有应答，请登记新版原件后再解析'}),{status:409});
+   if(parsed&&!allowReparse) { return new Response(JSON.stringify({code:1,msg:'已有应答，请登记新版原件后再解析'}),{status:409}); }
    parsed=true;
    return new Response(JSON.stringify({code:0,data:{id:'RUN-'+parseCalls,status:'completed',requirementCount:1}}));
   }

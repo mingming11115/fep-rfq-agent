@@ -154,7 +154,9 @@ class ApprovedDocumentExportServiceTest {
             var values = value.matcher(statement.group(2));
             Map<String, String> row = new HashMap<>();
             for (String column : columns) {
-                if (!values.find()) throw new IllegalArgumentException("Missing fixture column " + column);
+                if (!values.find()) {
+                    throw new IllegalArgumentException("Missing fixture column " + column);
+                }
                 String quoted = values.group(1);
                 row.put(column, quoted == null ? values.group(2) : escape.matcher(quoted).replaceAll(match ->
                     java.util.regex.Matcher.quoteReplacement(switch (match.group(1)) {

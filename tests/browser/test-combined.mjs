@@ -25,7 +25,7 @@ const test = async (browser, { dsf, zoom, label }) => {
   await page.waitForTimeout(1200); // 等动画完成
   const r = await page.evaluate(() => {
     const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-    if (!dd) return { dom: false };
+    if (!dd) { return { dom: false }; }
     const rect = dd.getBoundingClientRect();
     const vw = window.innerWidth, vh = window.innerHeight;
     const onScreen = rect.right > 0 && rect.bottom > 0 && rect.left < vw && rect.top < vh && rect.width > 0;

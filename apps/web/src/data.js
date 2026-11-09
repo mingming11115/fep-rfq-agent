@@ -112,7 +112,7 @@ const REQUIREMENT_TEMPLATES = [
 ];
 
 export function makeRequirements(projectId) {
-  if (projectId === BHEL_ID) return makeBhelRequirements();
+  if (projectId === BHEL_ID) { return makeBhelRequirements(); }
   const projectNumber = Number(String(projectId).match(/\d+$/)?.[0] || 1);
   const offset = (projectNumber - 1) * 100;
   return REQUIREMENT_TEMPLATES.map((template, index) => ({
@@ -193,7 +193,7 @@ export function createDemoState() {
     snap.sample=true;snap.finalReview=getProjectFinalReview(state,project.id);
     for(const r of getRequiredFinalReviewers(snap.finalReview)){
       const vote={actorId:r.actorId,result:'approved',reason:'新建演示案例的模拟评审结果',at:'2026-10-24T02:00:00.000Z'};
-      if(r.side==='sr')snap.finalReview.decisions.sr=vote;else snap.finalReview.decisions.technicalByActorId[r.actorId]=vote;
+      if(r.side==='sr') { snap.finalReview.decisions.sr=vote; } else { snap.finalReview.decisions.technicalByActorId[r.actorId]=vote; }
     }
     snap.createdById='demo-sales';snap.createdBy='林晓';
     snap.rows=structuredClone(state.requirementsByProject[project.id]);

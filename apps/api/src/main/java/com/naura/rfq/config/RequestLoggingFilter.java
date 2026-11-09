@@ -43,6 +43,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         try {
             chain.doFilter(request, response);
         } catch (ServletException | IOException | RuntimeException | Error failure) {
+            log.error("http.request.failed errorType={}", failure.getClass().getSimpleName());
             aborted = true;
             throw failure;
         } finally {
@@ -56,8 +57,11 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                         .log("http.request method={} route={} status={} durationMs={} aborted={}",
                                 request.getMethod(), route, status, durationMs, aborted);
             } finally {
-                if (previousId == null) MDC.remove(REQUEST_ID_KEY);
-                else MDC.put(REQUEST_ID_KEY, previousId);
+                if (previousId == null) {
+                    MDC.remove(REQUEST_ID_KEY);
+                } else {
+                    MDC.put(REQUEST_ID_KEY, previousId);
+                }
             }
         }
     }

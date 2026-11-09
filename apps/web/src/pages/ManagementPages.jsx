@@ -17,8 +17,8 @@ const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5)}`;
 const roles = ['SR', '技术', '质量确认人', '商务确认人', '服务确认人', '最终审批人'];
 function useSaved(key, initial, enabled=true) {
-  const [value, setValue] = useState(() => { if(!enabled)return initial;try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; } });
-  useEffect(() => { if(!enabled)return;try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* In-memory editing remains available. */ } }, [key, value]);
+  const [value, setValue] = useState(() => { if(!enabled) { return initial; } try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { console.error('读取管理页面本地设置失败'); return initial; } });
+  useEffect(() => { if(!enabled) { return; } try { localStorage.setItem(key, JSON.stringify(value)); } catch (error) { console.error('保存管理页面本地设置失败', error); /* In-memory editing remains available. */ } }, [key, value]);
   return [value, setValue];
 }
 function Heading({ title, description, actions }) { return <PageHeading title={<>{title}</>} description={<>{description}</>} actions={<><div className="page-actions">{actions}</div></>} />; }
@@ -44,32 +44,32 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
   const incomplete = Object.entries(approvalDraft).filter(([key, value]) => !value && key !== 'knowledge').length;
   const saveBasic = () => {
     setError('');
-    if (!canEdit) return toast?.('当前身份只有项目设置查看权限', 'error');
-    if (['name', 'customer', 'owner', 'deadline'].some((key) => !form[key]?.trim())) return setError('请填写项目名称、客户、负责人和截止日期。');
-    if (!changed) return toast?.('项目资料没有变更');
-    if (!reason.trim()) return setError('请填写变更原因。');
+    if (!canEdit) { return toast?.('当前身份只有项目设置查看权限', 'error'); }
+    if (['name', 'customer', 'owner', 'deadline'].some((key) => !form[key]?.trim())) { return setError('请填写项目名称、客户、负责人和截止日期。'); }
+    if (!changed) { return toast?.('项目资料没有变更'); }
+    if (!reason.trim()) { return setError('请填写变更原因。'); }
 
     commitBasic(false);
   };
   const commitBasic = (invalidate) => {
-    if (!canEdit) return toast?.('当前身份没有项目设置维护权限', 'error');
+    if (!canEdit) { return toast?.('当前身份没有项目设置维护权限', 'error'); }
     const next = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value.trim()]));
-    if(onProjectChange?.({ ...next, reason },{invalidateTechnical:invalidate})===false)return;
+    if(onProjectChange?.({ ...next, reason },{invalidateTechnical:invalidate})===false) { return; }
     record(logEvent, '保存项目设置', project.id, '基本信息已更新', project, next, reason);
     setReason(''); toast?.('项目设置已保存');
   };
   const saveMember = () => {
-    if (!canEdit) return setError('当前身份没有成员职责维护权限。');
-    if (!memberForm.name?.trim() || !memberForm.role || !memberForm.scope?.trim() || !memberReason.trim()) return setError('请补齐姓名、职责、数据范围和调整原因。');
+    if (!canEdit) { return setError('当前身份没有成员职责维护权限。'); }
+    if (!memberForm.name?.trim() || !memberForm.role || !memberForm.scope?.trim() || !memberReason.trim()) { return setError('请补齐姓名、职责、数据范围和调整原因。'); }
     const existing = members.find((member) => member.id === memberForm.id);
     const next = existing ? members.map((member) => member.id === memberForm.id ? memberForm : member) : [...members, memberForm];
     onMembersChange?.(next); record(logEvent, '调整项目成员', project.id, `${memberForm.name} · ${memberForm.role} · ${memberForm.status}`, existing || null, memberForm, memberReason);
     setMemberForm(null); toast?.('成员职责已更新，既有处理记录继续保留');
   };
   const saveApproval = () => {
-    if (!canEdit) return setError('当前身份没有职责与审批链维护权限。');
-    if (!reason.trim()) return setError('请填写职责或审批链调整原因。');
-    if (['SR', '技术', '系统管理员'].includes(approvalDraft.final)) return setError('最终批准须独立于本次编制及专业确认身份，请指定最终审批人。');
+    if (!canEdit) { return setError('当前身份没有职责与审批链维护权限。'); }
+    if (!reason.trim()) { return setError('请填写职责或审批链调整原因。'); }
+    if (['SR', '技术', '系统管理员'].includes(approvalDraft.final)) { return setError('最终批准须独立于本次编制及专业确认身份，请指定最终审批人。'); }
     setApproval(approvalDraft); record(logEvent, '更新责任与审批配置', project.id, incomplete ? `配置草稿已保存，仍有 ${incomplete} 项缺项` : '职责与独立审批配置已更新', approval, approvalDraft, reason);
     onProjectChange?.({ approvalConfig: approvalDraft, reason }); setReason(''); setError(''); toast?.(incomplete ? '已保存配置草稿，缺项仍会阻止对应确认和审批' : '责任与审批配置已保存');
   };
@@ -98,7 +98,7 @@ export function VersionsPage({ appState, project, requirements = [], snapshots =
   const [versions, setVersions] = useSaved(`fep-rfq-management-versions-${project.id}`, [{ id: `${project.id}-V1`, number: 1, title: '初始工作版本', source: '客户 RFQ（模拟）.pdf', createdAt: '2026/10/20 13:40:00', createdBy: 'SR', reason: '创建模拟项目，载入示例资料。', impacted: [], rows: [], status: '已建立', unchecked: '初始范围按原始客户资料核对。' }]);
   useEffect(() => {
     const number = project.version || 1;
-    if (versions.some((version) => version.number === number)) return;
+    if (versions.some((version) => version.number === number)) { return; }
     const latestEvent = audit.find((event) => event.action === '新版本影响核对' && event.object === project.id);
     setVersions((saved) => saved.some((version) => version.number === number) ? saved : [{
       id: `${project.id}-V${number}`, number, title: '配置变更工作版本', source: project.equipment || '项目范围 / 业务配置变更',
@@ -116,9 +116,9 @@ export function VersionsPage({ appState, project, requirements = [], snapshots =
   const filtered = source.filter((row) => `${row.id} ${row.title} ${row.source || ''} ${row.createdBy}`.toLowerCase().includes(query.toLowerCase()));
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / 6)));
   const createVersion = () => {
-    if (!canCreate) return setError('当前身份没有建立项目工作版本的权限。');
-    if (!form.source.trim() || !form.reason.trim() || !form.unchecked.trim()) return setError('请填写新版来源、变更原因及未识别范围 / 核对说明。');
-    if (!form.selected.length && requirements.length) return setError('请手工选择受影响条目。');
+    if (!canCreate) { return setError('当前身份没有建立项目工作版本的权限。'); }
+    if (!form.source.trim() || !form.reason.trim() || !form.unchecked.trim()) { return setError('请填写新版来源、变更原因及未识别范围 / 核对说明。'); }
+    if (!form.selected.length && requirements.length) { return setError('请手工选择受影响条目。'); }
     const number = Math.max(project.version || 1, ...versions.map((version) => version.number)) + 1;
     const next = { id: `${project.id}-V${number}-${Date.now().toString(36)}`, number, title: `工作版本 V${number}`, source: form.source, createdAt: timestamp(), createdBy: actorRole, reason: form.reason, unchecked: form.unchecked, impacted: form.selected, before: form.before, after: form.after, rows: structuredClone(requirements.filter((row) => form.selected.includes(row.id))), status: '待确认' };
     setVersions([next, ...versions]); onInvalidateRequirements?.(form.selected, form.reason); record(logEvent, '建立新工作版本', project.id, `V${number} · ${form.selected.length} 条要求待确认`, { version: number - 1, content: form.before }, { version: number, content: form.after, impacted: form.selected }, form.reason);
@@ -137,7 +137,7 @@ export function VersionsPage({ appState, project, requirements = [], snapshots =
 }
 
 function eventType(event) { return /权限|账号|成员|身份/.test(event.action) ? '授权配置' : /快照|导出|批准/.test(event.action) ? '审批与导出' : /知识|能力/.test(event.action) ? '知识与能力' : /资料|解析|匹配/.test(event.action) ? '资料与匹配' : '项目与应答'; }
-function eventDetail(event) { try { const parsed = JSON.parse(event.detail); return parsed && typeof parsed === 'object' ? parsed : { summary: event.detail }; } catch { return { summary: event.detail }; } }
+function eventDetail(event) { try { const parsed = JSON.parse(event.detail); return parsed && typeof parsed === 'object' ? parsed : { summary: event.detail }; } catch { console.error('解析审计事件详情失败'); return { summary: event.detail }; } }
 function DisplayValue({ value }) { return value === undefined || value === null ? <p className="muted">该事件未记录结构化内容，详情以原始事件说明为准。</p> : <pre className="mg-json">{typeof value === 'string' ? value : JSON.stringify(value, null, 2)}</pre>; }
 export function AuditPage({ project, audit = [], actorRole, navigate }) {
   const emptyFilters = { query: '', actor: '', type: '', action: '', result: '', from: '', to: '', scope: 'all' };
@@ -189,18 +189,18 @@ export function AdminPage({ project, requirements = [], actorRole, onInvalidateR
   const canEdit = (kind) => kind === 'account' ? managementRole === '系统管理员' : kind === 'rule' ? managementRole === '业务配置管理员' : managementRole === '模板配置管理员';
   const openEdit = (item, kind) => { setEdit({ ...item, kind }); setReason(''); setError(''); };
   const save = () => {
-    if (!canEdit(edit.kind)) return setError('当前管理身份没有该类配置的维护权限。');
-    if (!reason.trim()) return setError('请填写变更原因。');
+    if (!canEdit(edit.kind)) { return setError('当前管理身份没有该类配置的维护权限。'); }
+    if (!reason.trim()) { return setError('请填写变更原因。'); }
     const isAccount = edit.kind === 'account';
-    if (isAccount && (!edit.name?.trim() || !edit.identity?.trim() || !edit.scope?.trim())) return setError('请填写账号姓名、内网身份映射和数据范围。');
-    if (!isAccount && (!edit.value?.trim() || !edit.scope?.trim())) return setError('请填写配置内容及适用范围。');
-    if (edit.kind === 'template' && !edit.value.includes('→')) return setError('请按“输出列 → 来源字段”填写字段映射。');
+    if (isAccount && (!edit.name?.trim() || !edit.identity?.trim() || !edit.scope?.trim())) { return setError('请填写账号姓名、内网身份映射和数据范围。'); }
+    if (!isAccount && (!edit.value?.trim() || !edit.scope?.trim())) { return setError('请填写配置内容及适用范围。'); }
+    if (edit.kind === 'template' && !edit.value.includes('→')) { return setError('请按“输出列 → 来源字段”填写字段映射。'); }
     const current = (isAccount ? accounts : edit.kind === 'rule' ? rules : templates).find((row) => row.id === edit.id);
     const next = { ...edit, version: (current?.version || 0) + 1, changedAt: timestamp(), changedBy: `${actorRole} / ${managementRole}` }; delete next.kind;
     if (next.role === '系统管理员') { next.businessApproval = false; next.knowledgeApproval = false; }
     const setter = isAccount ? setAccounts : edit.kind === 'rule' ? setRules : setTemplates;
     setter((rows) => [...(current ? rows.map((row) => row.id === next.id ? next : row) : [...rows, next])]);
-    if (edit.kind === 'rule' && edit.impact) onInvalidateRequirements?.(requirements.filter((row) => row.category === '技术').map((row) => row.id), `业务配置 ${edit.id} V${next.version} 变更：${reason}`);
+    if (edit.kind === 'rule' && edit.impact) { onInvalidateRequirements?.(requirements.filter((row) => row.category === '技术').map((row) => row.id), `业务配置 ${edit.id} V${next.version} 变更：${reason}`); }
     record(logEvent, isAccount ? '更新账号授权' : edit.kind === 'rule' ? '发布业务配置版本' : '发布模板映射版本', edit.id, `管理职责 ${managementRole} · ${project.id} · ${isAccount ? next.name : next.title}`, current || null, next, reason);
     setEdit(null); toast?.(isAccount ? '账号授权配置已保存，业务批准权独立维护' : `配置 V${next.version} 已保存，冻结快照保持原内容`);
   };

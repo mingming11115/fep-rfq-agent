@@ -12,8 +12,8 @@ async function harness(width){
   Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,HTMLBodyElement:window.HTMLBodyElement,HTMLHtmlElement:window.HTMLHtmlElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
   const browserStyle=window.getComputedStyle.bind(window);
   globalThis.getComputedStyle=element=>new Proxy(browserStyle(element),{get(target,key){
-    if(key==='getPropertyValue')return name=>{const value=target.getPropertyValue(name);return /^border-.*-width$/.test(name)&&(!value||value==='initial')?'0px':value;};
-    const value=target[key];if(/^border(Top|Bottom|Left|Right)Width$/.test(String(key))&&(!value||value==='initial'))return '0px';return typeof value==='function'?value.bind(target):value;
+    if(key==='getPropertyValue') { return name=>{const value=target.getPropertyValue(name);return /^border-.*-width$/.test(name)&&(!value||value==='initial')?'0px':value;}; }
+    const value=target[key];if(/^border(Top|Bottom|Left|Right)Width$/.test(String(key))&&(!value||value==='initial')) { return '0px'; } return typeof value==='function'?value.bind(target):value;
   }});
   window.getComputedStyle=globalThis.getComputedStyle;
   // Use the browser menu's RAF fallback; Node's MessageChannel retains ports.
@@ -36,7 +36,7 @@ async function harness(width){
     const frame=node.querySelector('iframe'),native={};Object.defineProperty(frame,'contentWindow',{configurable:true,value:native});let applied=0;
     const snapshot=()=>({document:'session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,notes:[],pages:[],active:null,source:{status:'unsupported',selectedId:'R'}});
     const emit=(kind,data={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+kind,...data}}));
-    native.postMessage=message=>{calls.push(message);if(message.type==='wordcraft:open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));if(message.type==='wordcraft:review'){const request=JSON.parse(message.payload);applied=request.request;queueMicrotask(()=>{emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});}};
+    native.postMessage=message=>{calls.push(message);if(message.type==='wordcraft:open') { queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())})); } if(message.type==='wordcraft:review'){const request=JSON.parse(message.payload);applied=request.request;queueMicrotask(()=>{emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});emit('reviewState',{payload:JSON.stringify(snapshot())});});}};
     await act(async()=>{emit('ready');await settle();});return {frame,emit};
   }
   return {window,node,props:()=>props,setProps:value=>{props={...props,...value};},render,click,button,type,resize,connect,settle,requests,writes,calls,navigations,async close(){await act(async()=>root.unmount());await window.happyDOM.cancelAsync();globalThis.fetch=oldFetch;globalThis.MessageChannel=oldChannel;}};

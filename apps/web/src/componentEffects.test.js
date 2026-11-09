@@ -7,7 +7,7 @@ import {mkdir} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 test('closed overlay retains its last content and ignores an old close after reopening',async()=>{
- const source=await import('./panePreferences.js').catch(()=>null);assert.ok(source,'component effect helpers are implemented');
+ const source=await import('./panePreferences.js').catch((error)=>{ console.error('导入窗格设置测试模块失败', error); return null; });assert.ok(source,'component effect helpers are implemented');
  const window=new Window({url:'http://localhost'});
  Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,Element:window.Element,IS_REACT_ACT_ENVIRONMENT:true});
  const cache=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(cache,{recursive:true});
@@ -24,7 +24,7 @@ test('closed overlay retains its last content and ignores an old close after reo
  }finally{await act(async()=>root.unmount());await window.happyDOM.close();}
 });
 test('pane proportions are scoped and corrupt or blocked storage falls back safely',async()=>{
- const helpers=await import('./panePreferences.js').catch(()=>null);assert.ok(helpers,'pane preference helpers are implemented');
+ const helpers=await import('./panePreferences.js').catch((error)=>{ console.error('导入窗格设置测试模块失败', error); return null; });assert.ok(helpers,'pane preference helpers are implemented');
  const storage=new Map(),api={getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)};
  const a=helpers.panePreferenceKey('alex','P','horizontal'),b=helpers.panePreferenceKey('alex','Q','horizontal');
  assert.notEqual(a,b);assert.notEqual(a,helpers.panePreferenceKey('alex','P','vertical'));

@@ -12,7 +12,7 @@ const taskGroups=[
 
 // BU management grants access to this overview, not project source or response text.
 export function selectBuDashboard(state,{actorId=state.actorId,buId=state.activeBuId||state.businessUnits?.find(b=>canManageBu(state,actorId,b.id))?.id,now=new Date(),approvalPeriodDays=30,approvalDataMode='auto'}={}){
- if(state.actorRole!=='BU管理员'||!canManageBu(state,actorId,buId))return null;
+ if(state.actorRole!=='BU管理员'||!canManageBu(state,actorId,buId)) { return null; }
  const bu=state.businessUnits.find(b=>b.id===buId);
  const scopedProjects=(state.projects||[]).filter(p=>p.buId===buId),ids=new Set(scopedProjects.map(p=>p.id));
  const tasks=Object.values(state.tasksById||{}).filter(t=>ids.has(t.projectId)&&isTaskPending(t));

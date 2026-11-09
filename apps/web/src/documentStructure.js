@@ -8,7 +8,7 @@ export function documentSections(rows, fileId) {
     const prefixes = path.length ? path.map((_, i) => path.slice(0, i + 1)) : [[]];
     for (const prefix of prefixes) {
       const key = JSON.stringify(prefix);
-      if (!sections.has(key)) sections.set(key, { key, path: prefix, rowIds: [] });
+      if (!sections.has(key)) { sections.set(key, { key, path: prefix, rowIds: [] }); }
       sections.get(key).rowIds.push(row.id);
     }
   }

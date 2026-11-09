@@ -20,26 +20,26 @@ function SourceUploadSession({project,files=[],onSubmit,onClose,open=true,afterC
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;abort.current?.abort();};},[]);
  useEffect(()=>{
   const reopening=open&&!previousOpen.current;previousOpen.current=open;
-  if(!open)abort.current?.abort();
+  if(!open) { abort.current?.abort(); }
   if(reopening){generation.current++;running.current=false;uploaded.current.clear();setBusy(false);setFileList([]);setSelected([]);setPhases({});setError('');setStage(0);setSubmitted(false);}
  },[open]);
- function status(uid,patch,phase){if(!alive.current)return;setFileList(old=>old.map(file=>file.uid===uid?{...file,...patch}:file));if(phase)setPhases(old=>({...old,[uid]:phase}));}
+ function status(uid,patch,phase){if(!alive.current) { return; } setFileList(old=>old.map(file=>file.uid===uid?{...file,...patch}:file));if(phase) { setPhases(old=>({...old,[uid]:phase})); }}
  function cancel(){abort.current?.abort();onClose();}
  async function submit(){
-  if(running.current)return;
-  if(!selected.length)return setError('请选择至少一个文件');
-  if(selected.some(file=>!/\.(docx|pdf)$/i.test(file.name)))return setError('仅支持 DOCX、PDF；DOC 请先另存为 DOCX');
-  if(duplicates&&!reason.trim())return setError('存在同名文件，请填写替换原因；旧版本将继续保留。');
+  if(running.current) { return; }
+  if(!selected.length) { return setError('请选择至少一个文件'); }
+  if(selected.some(file=>!/\.(docx|pdf)$/i.test(file.name))) { return setError('仅支持 DOCX、PDF；DOC 请先另存为 DOCX'); }
+  if(duplicates&&!reason.trim()) { return setError('存在同名文件，请填写替换原因；旧版本将继续保留。'); }
   const incoming=[];
   const attempt=++generation.current,controller=new AbortController();
   const current=()=>alive.current&&attempt===generation.current&&!controller.signal.aborted;
-  const check=()=>{if(!current())throw new DOMException('请求已取消','AbortError');};
+  const check=()=>{if(!current()) { throw new DOMException('请求已取消','AbortError'); }};
   running.current=true;setBusy(true);setStage(1);setSubmitted(false);setError('');abort.current=controller;let activeUid,transferring=true;
   try{
    for(const item of fileList){
     activeUid=item.uid;const original=item.originFileObj||item,key=JSON.stringify([item.uid,version.trim(),reason.trim()]);
     let saved=uploaded.current.get(key);
-    check();const progress=event=>{if(current())status(item.uid,{status:'uploading',percent:event.percent});};
+    check();const progress=event=>{if(current()) { status(item.uid,{status:'uploading',percent:event.percent}); }};
     if(!saved){
      const file={id:`FILE-${crypto.randomUUID()}`,name:original.name,size:original.size,mime:original.type,lastModified:original.lastModified,purpose:'要求来源',version:version.trim(),visibility:'项目成员可见',reason:reason.trim(),previousVersionId:[...files].reverse().find(old=>old.name===original.name)?.id,status:'排队中',createdAt:new Date().toLocaleString('zh-CN',{hour12:false})};
      status(item.uid,{status:'uploading',percent:undefined},'上传原件');
@@ -58,10 +58,10 @@ function SourceUploadSession({project,files=[],onSubmit,onClose,open=true,afterC
    }
    if(current()){
     transferring=false;setStage(2);
-    if(await onSubmit(incoming)===false)throw new Error('提交解析未完成，请重试');
-    if(current())setSubmitted(true);
+    if(await onSubmit(incoming)===false) { throw new Error('提交解析未完成，请重试'); }
+    if(current()) { setSubmitted(true); }
    }
-  }catch(cause){if(alive.current&&attempt===generation.current){setSubmitted(false);if(cause.name==='AbortError')status(activeUid,{status:undefined,percent:undefined},'已取消，可重新上传');else{if(transferring)status(activeUid,{status:'error'},'上传失败，可重试');setError(cause.message);}}}finally{if(attempt===generation.current){running.current=false;if(alive.current)setBusy(false);}}
+  }catch(cause){ console.error('上传原件失败', cause); if(alive.current&&attempt===generation.current){setSubmitted(false);if(cause.name==='AbortError') { status(activeUid,{status:undefined,percent:undefined},'已取消，可重新上传'); } else{if(transferring) { status(activeUid,{status:'error'},'上传失败，可重试'); } setError(cause.message);}}}finally{if(attempt===generation.current){running.current=false;if(alive.current) { setBusy(false); }}}
  }
  return <Modal open={open} afterClose={afterClose} title="上传并智能解析" onClose={cancel} footer={<><UiButton className="btn" onClick={cancel}>{busy?'取消上传':'取消'}</UiButton><UiButton className="btn btn-primary" loading={busy} disabled={busy||submitted} onClick={submit}>{busy?stage===2?'正在提交解析…':'正在上传原文件…':error?stage===2?'重试提交':'重试上传':'上传并开始解析'}</UiButton></>}>
   <Steps size="small" current={stage} status={error?'error':'process'} style={{marginBottom:20}} items={['选择文件','上传原件','提交解析'].map(title=>({title}))}/>

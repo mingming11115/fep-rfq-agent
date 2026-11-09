@@ -29,7 +29,7 @@ await page.mouse.down();
 await page.waitForTimeout(500);
 const r1 = await page.evaluate(() => {
   const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-  if (!dd) return { dom: false };
+  if (!dd) { return { dom: false }; }
   const r = dd.getBoundingClientRect();
   const cs = getComputedStyle(dd);
   return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && r.height > 0, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } };
@@ -40,7 +40,7 @@ await page.mouse.up();
 await page.waitForTimeout(900);
 const r2 = await page.evaluate(() => {
   const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-  if (!dd) return { dom: false };
+  if (!dd) { return { dom: false }; }
   const r = dd.getBoundingClientRect();
   const cs = getComputedStyle(dd);
   return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && r.height > 0, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } };

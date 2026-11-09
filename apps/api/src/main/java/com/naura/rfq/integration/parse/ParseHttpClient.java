@@ -34,8 +34,9 @@ public class ParseHttpClient {
 
     public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String parseRunId) throws Exception {
         URI uri = URI.create(settings.getUrl());
-        if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null || uri.getUserInfo() != null)
+        if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null || uri.getUserInfo() != null) {
             throw new IllegalArgumentException("服务地址未配置或不合法");
+        }
         Duration timeout = positive(settings.getTimeout());
         HttpClient client = clients.computeIfAbsent(positive(settings.getConnectTimeout()), duration -> HttpClient.newBuilder()
             .connectTimeout(duration).followRedirects(HttpClient.Redirect.NEVER).build());
@@ -43,13 +44,16 @@ public class ParseHttpClient {
         var builder = HttpRequest.newBuilder(uri).timeout(timeout)
             .header("Content-Type", "application/json; charset=UTF-8")
             .POST(HttpRequest.BodyPublishers.ofByteArray(requestBytes));
-        if (settings.getApiKey() != null && !settings.getApiKey().isBlank())
+        if (settings.getApiKey() != null && !settings.getApiKey().isBlank()) {
             builder.header("Authorization", "Bearer " + settings.getApiKey());
+        }
         var request = builder.build();
         boolean llm = settings instanceof ParseIntegrationProperties.Llm;
         boolean logPayload = settings instanceof ParseIntegrationProperties.Llm config && config.isLogPayload();
         var call = new ExternalCallLog(llm ? "llm" : "ocr", llm ? "chat_completions" : "recognise", request, parseRunId);
-        if (logPayload) logPayload(call, "request", requestBytes, settings.getApiKey());
+        if (logPayload) {
+            logPayload(call, "request", requestBytes, settings.getApiKey());
+        }
 
         CompletableFuture<HttpResponse<byte[]>> pending = null;
         HttpResponse<byte[]> response;
@@ -60,11 +64,17 @@ public class ParseHttpClient {
             call.failed(e);
             throw e;
         } finally {
-            if (pending != null && !pending.isDone()) pending.cancel(true);
+            if (pending != null && !pending.isDone()) {
+                pending.cancel(true);
+            }
         }
         call.response(response.statusCode(), response.body().length);
-        if (logPayload) logPayload(call, "response", response.body(), settings.getApiKey());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) throw new RemoteStatusException(response.statusCode());
+        if (logPayload) {
+            logPayload(call, "response", response.body(), settings.getApiKey());
+        }
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new RemoteStatusException(response.statusCode());
+        }
         try {
             return json.readTree(response.body());
         } catch (java.io.IOException e) {
@@ -75,21 +85,28 @@ public class ParseHttpClient {
 
     private static void logPayload(ExternalCallLog call, String direction, byte[] bytes, String apiKey) {
         String body = new String(bytes, StandardCharsets.UTF_8);
-        if (apiKey != null && !apiKey.isBlank()) body = body.replace(apiKey, "[REDACTED]");
+        if (apiKey != null && !apiKey.isBlank()) {
+            body = body.replace(apiKey, "[REDACTED]");
+        }
         String quoted = new String(JsonStringEncoder.getInstance().quoteAsString(body));
         log.info("external.call.payload callId={} service=llm direction={} body=\"{}\"", call.callId(), direction, quoted);
     }
     private Duration positive(Duration value) {
-        if (value == null || value.isNegative() || value.isZero()) throw new IllegalArgumentException("服务超时必须大于零");
+        if (value == null || value.isNegative() || value.isZero()) {
+            throw new IllegalArgumentException("服务超时必须大于零");
+        }
         return value;
     }
     public static String reason(Exception e) {
         Throwable reason = e;
         while (reason.getCause() != null && (reason instanceof java.util.concurrent.ExecutionException
                 || reason instanceof java.util.concurrent.CompletionException)) reason = reason.getCause();
-        if (reason instanceof java.util.concurrent.TimeoutException || reason instanceof java.net.http.HttpTimeoutException)
+        if (reason instanceof java.util.concurrent.TimeoutException || reason instanceof java.net.http.HttpTimeoutException) {
             return "请求超时";
-        if (reason instanceof RemoteStatusException status) return "HTTP " + status.status;
+        }
+        if (reason instanceof RemoteStatusException status) {
+            return "HTTP " + status.status;
+        }
         return "配置、连接或响应校验失败";
     }
     private static class RemoteStatusException extends Exception {

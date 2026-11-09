@@ -18,7 +18,7 @@ export default function BuDashboardPage({appState:state,onSelectBu,navigate}){
  const mockReference=useRef(new Date()),isMock=!databaseBacked&&dataMode==='sample';
  useEffect(()=>{const timer=setInterval(()=>setMetricRefresh(value=>value+1),60000);return()=>clearInterval(timer);},[]);
  const data=useMemo(()=>isMock?selectBuDashboardMock(state,{approvalPeriodDays,referenceTime:mockReference.current}):selectBuDashboard(state,{approvalPeriodDays}),[state,approvalPeriodDays,isMock,metricRefresh]);
- if(!data)return <Result status="403" title="暂无看板权限" subTitle="当前账号没有此 BU 的管理权限。"/>;
+ if(!data) { return <Result status="403" title="暂无看板权限" subTitle="当前账号没有此 BU 的管理权限。"/>; }
  const bus=state.businessUnits.filter(b=>canManageBu(state,state.actorId,b.id));
  const reset=()=>setFilters({query:'',stage:'all',focus:'all'});
  const filterProjects=focus=>{setFilters({query:'',stage:'all',focus});setActiveTab('projects');};

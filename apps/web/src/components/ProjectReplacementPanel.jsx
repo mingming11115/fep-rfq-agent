@@ -18,11 +18,11 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
   const activeFiles = files.filter(file => file.activeForApproval !== false && !replacements.some(item => item.oldDocumentId === file.id && item.status === 'pending'));
 
   async function run(action) {
-    if (busy) return;
+    if (busy) { return; }
     setBusy(true);
     setError('');
     try { await action(); }
-    catch (error) { setError(error.message); }
+    catch (error) { console.error('执行原件替换操作失败', error); setError(error.message); }
     finally { setBusy(false); }
   }
   async function upload() {
@@ -37,7 +37,7 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
   async function parse(id) {
     const result = await api.post(`/documents/${encodeURIComponent(id)}/parse-runs`);
     await onReload?.();
-    if (!['completed','partial'].includes(result.status)) throw new Error(result.message || '解析失败');
+    if (!['completed','partial'].includes(result.status)) { throw new Error(result.message || '解析失败'); }
     toast('新版已解析，可核对条款');
   }
   async function inspect(id) {
@@ -45,7 +45,7 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
     setReason('');
   }
   async function apply(kind) {
-    if (!reason.trim()) throw new Error('请填写处理说明');
+    if (!reason.trim()) { throw new Error('请填写处理说明'); }
     await api.post(`${path(project.id, preview.newDocumentId)}/${kind}`, {reason, fingerprint:preview.fingerprint});
     setPreview(null);
     await onReload?.();
@@ -71,7 +71,7 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
         <Button size="small" disabled={busy} onClick={() => run(() => inspect(item.newDocumentId))}>查看影响范围</Button>
       </Space></p>;
     })}
-    {preview && <Modal title="核对新版原件影响范围" width={920} onClose={() => { if (!busy) setPreview(null); }}
+    {preview && <Modal title="核对新版原件影响范围" width={920} onClose={() => { if (!busy) { setPreview(null); } }}
       footer={<Space><Button onClick={() => setPreview(null)} disabled={busy}>关闭</Button>
         {canEdit && preview.status === 'pending' && <Button danger disabled={busy} onClick={() => run(() => apply('cancel'))}>取消新版</Button>}
         {canEdit && preview.canActivate && <Button type="primary" loading={busy} onClick={() => run(() => apply('activate'))}>确认范围并生效</Button>}

@@ -11,7 +11,7 @@ function uploadBody(file, extra = {}) {
   const body = new FormData();
   body.append('file', file);
   for (const [key, value] of Object.entries(extra)) {
-    if (value != null) body.append(key, value);
+    if (value != null) { body.append(key, value); }
   }
   return body;
 }
@@ -45,7 +45,7 @@ export function createKnowledgeLibraryClient(buId, client = api) {
     saveHistoryClause:row=>saveText('history', row),
     importReplies:file=>client.upload(`${collections.reply}/import`,uploadBody(file)),
     importHistory({file,responseFile,shareWithBu,projectId,previousDocumentId,revision,changeNote}) {
-      if (Boolean(projectId) === Boolean(shareWithBu)) throw new Error('请选择 BU 共享或一个项目范围');
+      if (Boolean(projectId) === Boolean(shareWithBu)) { throw new Error('请选择 BU 共享或一个项目范围'); }
       return client.upload(`${history}/import`,uploadBody(file,{responseFile,...(shareWithBu ? {shareWithBu:'true'} : {projectId}),
         previousDocumentId,revision,changeNote}));
     },
@@ -71,7 +71,7 @@ export function createKnowledgeLibraryClient(buId, client = api) {
         upper:row.upper === '' ? null : row.upper,
         evidence:(row.evidenceRefs || []).map(ref=>fields(ref,['id','version','location'])),
       };
-      if (existing) return client.patch(versionPath(collections.capability, row),{...body,revision:row.revision ?? 0});
+      if (existing) { return client.patch(versionPath(collections.capability, row),{...body,revision:row.revision ?? 0}); }
       if (row.historySource) {
         return client.post(`${versionPath(`${capability}/history`,row.historySource)}/candidate`,body);
       }

@@ -19,9 +19,11 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 public class StandardReplyIndexClient {
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
     private static final Pattern JOB_ID = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,254}");
@@ -40,8 +42,12 @@ public class StandardReplyIndexClient {
     public SearchResult search(String buId, boolean history, String query, List<String> ids) {
         var datasets = history ? settings.historyDatasets() : settings.datasets();
         String dataset = datasets.get(buId);
-        if (dataset == null || !settings.enabled()) throw new SearchFailure("INDEX_NOT_CONFIGURED", false);
-        if (ids.isEmpty() || ids.size() > 100) throw new SearchFailure("INVALID_SEARCH_SCOPE", false);
+        if (dataset == null || !settings.enabled()) {
+            throw new SearchFailure("INDEX_NOT_CONFIGURED", false);
+        }
+        if (ids.isEmpty() || ids.size() > 100) {
+            throw new SearchFailure("INVALID_SEARCH_SCOPE", false);
+        }
         var body = json.createObjectNode().put("query", query).put("mode", "hybrid").put("top_k", Math.min(20, ids.size()));
         var filter = body.putObject("filter").putArray("and");
         filter.addObject().put("field", "bu_id").put("op", "eq").put("value", buId);
@@ -52,6 +58,7 @@ public class StandardReplyIndexClient {
         try {
             result = request("search", "/semantic-datasets/" + dataset + ":search", body);
         } catch (Failure failure) {
+            log.error("标准回复索引查询失败", failure);
             throw new SearchFailure(failure.getMessage(), List.of("TRANSPORT_ERROR", "REQUEST_TIMEOUT", "INTERRUPTED")
                     .contains(failure.getMessage()));
         }
@@ -59,7 +66,9 @@ public class StandardReplyIndexClient {
             throw new SearchFailure(result.errorCode(), result.status() == 429 || result.status() >= 500);
         }
         var hits = result.body().path("hits");
-        if (!hits.isArray() || hits.size() > Math.min(20, ids.size())) throw new SearchFailure("INVALID_SEARCH_RESPONSE", false);
+        if (!hits.isArray() || hits.size() > Math.min(20, ids.size())) {
+            throw new SearchFailure("INVALID_SEARCH_RESPONSE", false);
+        }
         var parsed = new ArrayList<SearchHit>();
         var seen = new java.util.HashSet<String>();
         for (var hit : hits) {
@@ -71,7 +80,9 @@ public class StandardReplyIndexClient {
             parsed.add(new SearchHit(id, version.asInt()));
         }
         String requestId = result.body().path("request_id").asText("");
-        if (!requestId.matches("[A-Za-z0-9_.-]{1,128}")) requestId = "";
+        if (!requestId.matches("[A-Za-z0-9_.-]{1,128}")) {
+            requestId = "";
+        }
         return new SearchResult(List.copyOf(parsed), requestId, result.body().path("index_version").asLong(0));
     }
 
@@ -89,7 +100,9 @@ public class StandardReplyIndexClient {
 
     Delivery submit(String dataset, String replyId, String operation, JsonNode payload, Instant updatedAt) {
         boolean history = settings.historyDatasets().containsValue(dataset);
-        if (!history && !settings.datasets().containsValue(dataset)) throw new Failure("DATASET_NOT_CONFIGURED", false);
+        if (!history && !settings.datasets().containsValue(dataset)) {
+            throw new Failure("DATASET_NOT_CONFIGURED", false);
+        }
         var body = json.createObjectNode();
         ObjectNode record = body.putArray("records").addObject();
         record.put("id", replyId).put("op", operation).put("updated_at", updatedAt.toString());
@@ -102,11 +115,15 @@ public class StandardReplyIndexClient {
         String path = "/semantic-datasets/" + dataset + ":ingest";
         var result = request("ingest", path, body);
         if (result.status() == 404 && "DATASET_NOT_FOUND".equals(result.errorCode())) {
-            if ("delete".equals(operation)) return new Delivery(true, null);
+            if ("delete".equals(operation)) {
+                return new Delivery(true, null);
+            }
             addDatasetConfig(body, history);
             result = request("ingest", path, body);
         }
-        if (result.status() != 202 && result.status() != 200) throw result.failure(false);
+        if (result.status() != 202 && result.status() != 200) {
+            throw result.failure(false);
+        }
         JsonNode response = result.body();
         if (response.path("accepted_count").asInt(-1) != 1 || response.path("rejected_count").asInt(-1) != 0) {
             throw new Failure(recordError(response, replyId, "RECORD_NOT_ACCEPTED"), false);
@@ -119,7 +136,9 @@ public class StandardReplyIndexClient {
     Delivery poll(String jobId, String replyId) {
         requireJobId(jobId);
         var result = request("poll", "/ingestion-jobs/" + jobId, null);
-        if (result.status() != 200) throw result.failure(result.status() == 404);
+        if (result.status() != 200) {
+            throw result.failure(result.status() == 404);
+        }
         JsonNode response = result.body();
         return switch (response.path("status").asText()) {
             case "pending", "running" -> new Delivery(false, jobId);
@@ -138,7 +157,9 @@ public class StandardReplyIndexClient {
     }
 
     private void requireJobId(String jobId) {
-        if (jobId == null || !JOB_ID.matcher(jobId).matches()) throw new Failure("INVALID_JOB_ID", true);
+        if (jobId == null || !JOB_ID.matcher(jobId).matches()) {
+            throw new Failure("INVALID_JOB_ID", true);
+        }
     }
 
     private ObjectNode projection(JsonNode payload) {
@@ -164,11 +185,16 @@ public class StandardReplyIndexClient {
     }
 
     private Reply request(String operation, String path, ObjectNode body) {
-        if (!settings.enabled()) throw new Failure("INDEX_NOT_CONFIGURED", false);
+        if (!settings.enabled()) {
+            throw new Failure("INDEX_NOT_CONFIGURED", false);
+        }
         var builder = HttpRequest.newBuilder(URI.create(settings.endpoint(path))).timeout(TIMEOUT)
             .header("X-API-Key", settings.apiKey()).header("Accept", "application/json");
-        if (body == null) builder.GET();
-        else builder.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        if (body == null) {
+            builder.GET();
+        } else {
+            builder.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        }
         var request = builder.build();
         var call = new ExternalCallLog("semantic_index", operation, request, null);
         CompletableFuture<HttpResponse<byte[]>> pending = null;
@@ -180,10 +206,13 @@ public class StandardReplyIndexClient {
             try {
                 parsed = json.readTree(response.body());
             } catch (IOException e) {
+                call.failed(e);
                 parsed = null;
             }
             if (parsed == null || !parsed.isObject()) {
-                if (response.statusCode() >= 200 && response.statusCode() < 300) throw new Failure("INVALID_RESPONSE", false);
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    throw new Failure("INVALID_RESPONSE", false);
+                }
                 parsed = json.createObjectNode();
             }
             return new Reply(response.statusCode(), parsed);
@@ -201,13 +230,17 @@ public class StandardReplyIndexClient {
             call.failed(e);
             throw e;
         } finally {
-            if (pending != null && !pending.isDone()) pending.cancel(true);
+            if (pending != null && !pending.isDone()) {
+                pending.cancel(true);
+            }
         }
     }
 
     private static String recordError(JsonNode response, String replyId, String fallback) {
         for (JsonNode error : response.path("errors")) {
-            if (replyId.equals(error.path("id").asText())) return safeCode(error.path("code").asText(), "RECORD_REJECTED");
+            if (replyId.equals(error.path("id").asText())) {
+                return safeCode(error.path("code").asText(), "RECORD_REJECTED");
+            }
         }
         return fallback;
     }

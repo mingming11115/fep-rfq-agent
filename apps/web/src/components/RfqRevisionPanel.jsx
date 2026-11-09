@@ -17,16 +17,16 @@ export default function RfqRevisionPanel({ project, requirements, actorRole,snap
   }
   function compare() {
     try {
-      const incoming = text.split('\n').filter((line) => line.trim()).map((line, index) => { const parts = line.split(/\t|\|/).map((part) => part.trim()); if (parts.length < 4) throw new Error(`第 ${index + 1} 行格式不完整，需要条款编号、标题、类别、要求原文`); return { clause: parts[0], title: parts[1], category: parts[2], original: parts[3],previousId:parts[4]||undefined }; });
+      const incoming = text.split('\n').filter((line) => line.trim()).map((line, index) => { const parts = line.split(/\t|\|/).map((part) => part.trim()); if (parts.length < 4) { throw new Error(`第 ${index + 1} 行格式不完整，需要条款编号、标题、类别、要求原文`); } return { clause: parts[0], title: parts[1], category: parts[2], original: parts[3],previousId:parts[4]||undefined }; });
       const changes = diffRfqRequirements(requirements, incoming); setPreview({ incoming, changes, base: JSON.stringify(requirements) }); setError('');
-    } catch (e) { setError(e.message); setPreview(null); }
+    } catch (e) { console.error('比对 RFQ 修订条款失败', e); setError(e.message); setPreview(null); }
   }
   function apply() {
-    if (!source.trim() || !reason.trim()) return setError('请填写新版来源与变更原因');
-    if (!preview || preview.base !== JSON.stringify(requirements)) return setError('工作条目已变化，请重新生成变更清单');
-    if (!preview.changes.some((entry) => entry.kind !== 'unchanged')) return setError('未检测到条款变化');
+    if (!source.trim() || !reason.trim()) { return setError('请填写新版来源与变更原因'); }
+    if (!preview || preview.base !== JSON.stringify(requirements)) { return setError('工作条目已变化，请重新生成变更清单'); }
+    if (!preview.changes.some((entry) => entry.kind !== 'unchanged')) { return setError('未检测到条款变化'); }
     const result = onApply?.(preview.incoming, source, reason);
-    if (!result) return;
+    if (!result) { return; }
     onRecorded?.({ id: `${project.id}-RFQ-${Date.now()}`, number: (project.version || 1) + 1, title: '客户 RFQ 条款变更', source, reason, unchecked: '按条款编号比较结构化原文；真实文件及图表解析未接入。', impacted: result.affectedIds, rows: structuredClone(result.rows.filter((row) => result.affectedIds.includes(row.id))), changes: result.changes, status: '待确认', createdAt: new Date().toLocaleString('zh-CN'), createdBy: actorRole });
     setOpen(false);
   }

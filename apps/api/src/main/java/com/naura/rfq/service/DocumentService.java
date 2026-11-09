@@ -18,11 +18,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentService {
 
     private static final List<String> SUPPORTED = List.of(".docx", ".pdf");
@@ -68,7 +70,9 @@ public class DocumentService {
         String name = file.getOriginalFilename() == null ? "unnamed" : file.getOriginalFilename();
         name = name.replace('\\', '/');
         name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "");
-        if (name.isBlank() || name.length() > 255) throw new BusinessException(400, "文件名为空或超过 255 个字符");
+        if (name.isBlank() || name.length() > 255) {
+            throw new BusinessException(400, "文件名为空或超过 255 个字符");
+        }
         String lower = name.toLowerCase(Locale.ROOT);
         String extension = SUPPORTED.stream().filter(lower::endsWith).findFirst()
                 .orElseThrow(() -> new BusinessException(400,
@@ -154,7 +158,7 @@ public class DocumentService {
                 @Override public void afterCompletion(int status) {
                     if (status != STATUS_COMMITTED) {
                         try { storage.delete(file.storageRef()); }
-                        catch (IOException e) { org.slf4j.LoggerFactory.getLogger(DocumentService.class).warn("上传回滚文件清理失败", e); }
+                        catch (IOException e) { log.error("上传回滚文件清理失败", e); }
                     }
                 }
             });
@@ -162,15 +166,24 @@ public class DocumentService {
 
     private int nextVersion(String projectId) {
         Integer latest=documents.findLatestVersionForUpdate(projectId).orElse(null);
-        if(latest==null)return 1;
-        if(latest<1)throw new BusinessException(409,"原件版本记录无效，请联系管理员核对");
-        if(latest==Integer.MAX_VALUE)throw new BusinessException(409,"原件版本已达上限，不能继续上传");
+        if(latest==null) {
+            return 1;
+        }
+        if(latest<1) {
+            throw new BusinessException(409,"原件版本记录无效，请联系管理员核对");
+        }
+        if(latest==Integer.MAX_VALUE) {
+            throw new BusinessException(409,"原件版本已达上限，不能继续上传");
+        }
         return latest+1;
     }
 
     private void insertOriginal(CustomerDocument document) {
         try {documents.insert(document);}
-        catch(org.springframework.dao.DuplicateKeyException exception) {throw new BusinessException(409,"原件版本冲突，请刷新后重试");}
+        catch(org.springframework.dao.DuplicateKeyException exception) {
+            log.error("插入原件记录时发生版本冲突 errorType={}", exception.getClass().getSimpleName());
+            throw new BusinessException(409,"原件版本冲突，请刷新后重试");
+        }
     }
 
     private Project requireProject(String projectId) {
@@ -179,8 +192,12 @@ public class DocumentService {
 
     private static String canonicalType(String name) {
         String lower=name.toLowerCase(Locale.ROOT);
-        if(lower.endsWith(".pdf"))return "application/pdf";
-        if(lower.endsWith(".docx"))return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        if(lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if(lower.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
         throw new BusinessException(409,"原件格式记录无效，请联系管理员核对");
     }
 }

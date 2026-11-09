@@ -45,6 +45,7 @@ export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
       const session = await login(username, password);
       onLogin(session);
     } catch (failure) {
+      console.error('登录失败', failure);
       setError(failure.message);
       setLoading(false);
       setPending('');

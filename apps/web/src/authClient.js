@@ -7,7 +7,7 @@ const sessionListeners = new Set();
 function broadcastSession() {
   const snapshot = readSession();
   for (const listener of sessionListeners) {
-    try { listener(snapshot); } catch { /* 监听方异常不应影响请求链路 */ }
+    try { listener(snapshot); } catch (error) { console.error('通知会话监听器失败', error); /* 监听方异常不应影响请求链路 */ }
   }
 }
 
@@ -19,7 +19,7 @@ export function subscribeSession(listener) {
 const LOGIN_IDENTITY_KEY = 'fep-rfq-login-identity';
 
 export function persistLoginIdentity(identity) {
-  try { localStorage.setItem(LOGIN_IDENTITY_KEY, JSON.stringify(identity)); } catch { /* 隐私模式忽略 */ }
+  try { localStorage.setItem(LOGIN_IDENTITY_KEY, JSON.stringify(identity)); } catch (error) { console.error('保存登录身份失败', error); /* 隐私模式忽略 */ }
 }
 
 /**
@@ -29,10 +29,11 @@ export function persistLoginIdentity(identity) {
 export function consumeLoginIdentity() {
   try {
     const raw = localStorage.getItem(LOGIN_IDENTITY_KEY);
-    if (!raw) return null;
+    if (!raw) { return null; }
     localStorage.removeItem(LOGIN_IDENTITY_KEY);
     return JSON.parse(raw);
   } catch {
+    console.error('读取登录身份失败');
     return null;
   }
 }
@@ -40,7 +41,7 @@ export function consumeLoginIdentity() {
 export function readSession() {
   try {
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
-    if (!saved?.token || !saved?.user) return null;
+    if (!saved?.token || !saved?.user) { return null; }
     if (saved.expiresInSeconds && saved.savedAt
       && Date.now() > saved.savedAt + saved.expiresInSeconds * 1000) {
       localStorage.removeItem(SESSION_KEY);
@@ -48,6 +49,7 @@ export function readSession() {
     }
     return saved;
   } catch {
+    console.error('读取登录会话失败');
     return null;
   }
 }
@@ -65,21 +67,22 @@ async function request(path, options = {}) {
   const session = readSession();
   const isFormData = options.body instanceof FormData;
   const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
-  if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+  if (session?.token) { headers.Authorization = `Bearer ${session.token}`; }
   let response;
   try {
     response = onUploadProgress?await uploadWithProgress(`${API_BASE}${path}`,{...requestOptions,headers},onUploadProgress):await fetch(`${API_BASE}${path}`, { ...requestOptions, headers });
   } catch(error) {
-    if(error.name==='AbortError')throw error;
+    console.error('连接 RFQ 后端失败', error);
+    if(error.name==='AbortError') { throw error; }
     throw new Error('无法连接后端服务，请确认 48083 端口的服务已启动');
   }
   if (binary && response.ok) {
     const disposition = response.headers.get('Content-Disposition') || '';
     const name = /(?:^|;\s*)filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
-    if (!name) throw new Error('后端未返回导出文件，请刷新后重试');
+    if (!name) { throw new Error('后端未返回导出文件，请刷新后重试'); }
     return { filename: decodeURIComponent(name), blob: await response.blob() };
   }
-  const payload = await response.json().catch(() => ({}));
+  const payload = await response.json().catch(() => { console.error('解析 RFQ 接口响应失败'); return ({}); });
   if (!response.ok || payload.code !== 0) {
     if (response.status === 401 && session && path !== '/auth/login') {
       clearSession();

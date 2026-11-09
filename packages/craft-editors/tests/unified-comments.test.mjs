@@ -18,7 +18,7 @@ test('Word and PDF use independent instances of the original comment surface', a
   for(const key of ['word','pdf']){
     native[key]={postMessage(message,origin){
       assert.equal(origin,'http://127.0.0.1:18771');
-      if(!message.type.endsWith(':review'))return;
+      if(!message.type.endsWith(':review')) { return; }
       const payload=JSON.parse(message.payload);messages[key].push({type:message.type,...payload});
       queueMicrotask(()=>send(key,'reviewResult',payload.action===rejected?{request:payload.request,ok:false,error:'PDF reply refused'}:{request:payload.request,ok:true,result:payload.action==='new'?{id:4}:{}}));
     }};

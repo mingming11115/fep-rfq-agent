@@ -3,7 +3,7 @@ const linkedTo = (row, reviews) => reviews.filter(review => review.requirementId
 export const RESPONSE_STATUS_LABELS = {pending: '待处理', waiting: '评审中', confirmed: '已确认'};
 
 function cardStatus(row, reviews) {
-  if (row.status === '已确认') return 'confirmed';
+  if (row.status === '已确认') { return 'confirmed'; }
   return row.pendingReviewProposal || linkedTo(row, reviews).some(isOpen) ? 'waiting' : 'pending';
 }
 
@@ -22,12 +22,12 @@ export function selectResponseCards(requirements = [], reviews = [], filters = {
   return requirements.filter(row => {
     const linked = linkedTo(row, reviews);
     const text = [row.clause, row.title, row.original, row.owner, ...linked.flatMap(r => [r.id, r.title, r.owner, r.description])].join(' ').toLocaleLowerCase();
-    if (query && !text.includes(query)) return false;
-    if (filters.status && filters.status !== 'all' && cardStatus(row, reviews) !== filters.status) return false;
-    if (filters.type === 'ordinary' && linked.length) return false;
-    if (filters.type === 'review' && !linked.some(r => r.kind !== 'clarification')) return false;
-    if (filters.type === 'clarification' && !linked.some(r => r.kind === 'clarification')) return false;
-    if (filters.source && filters.source !== 'all' && !linked.some(r => String(r.source || '').includes(filters.source))) return false;
+    if (query && !text.includes(query)) { return false; }
+    if (filters.status && filters.status !== 'all' && cardStatus(row, reviews) !== filters.status) { return false; }
+    if (filters.type === 'ordinary' && linked.length) { return false; }
+    if (filters.type === 'review' && !linked.some(r => r.kind !== 'clarification')) { return false; }
+    if (filters.type === 'clarification' && !linked.some(r => r.kind === 'clarification')) { return false; }
+    if (filters.source && filters.source !== 'all' && !linked.some(r => String(r.source || '').includes(filters.source))) { return false; }
     return true;
   });
 }
@@ -39,14 +39,14 @@ export function nextResponseCard(rows = [], currentId, deferredIds = []) {
 }
 
 export async function transitionConfirmedCard({ confirm, animate, advance }) {
-  if (await confirm() === false) return false;
+  if (await confirm() === false) { return false; }
   await animate();
   await advance();
   return true;
 }
 
 export function guardCardNavigation({ dirty, onBlock, previous }, next) {
-  if (!dirty) return !previous || previous(next);
-  onBlock(() => { if (!previous || previous(next)) next(); });
+  if (!dirty) { return !previous || previous(next); }
+  onBlock(() => { if (!previous || previous(next)) { next(); } });
   return false;
 }

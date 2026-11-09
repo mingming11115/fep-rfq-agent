@@ -60,9 +60,9 @@ test('legacy import reads both old versions and never overwrites the old referen
   try{
     globalThis.fetch=async(url,options)=>{
       calls.push(url);
-      if(url==='/api/office/documents/old')return response({...source,id:'old',name:'old.docx',fileType:'docx'});
-      if(url.includes('kind=original'))return new Response('old original');
-      if(url.includes('kind=review'))return new Response('old reviewed');
+      if(url==='/api/office/documents/old') { return response({...source,id:'old',name:'old.docx',fileType:'docx'}); }
+      if(url.includes('kind=original')) { return new Response('old original'); }
+      if(url.includes('kind=review')) { return new Response('old reviewed'); }
       assert.equal(await options.body.get('file').text(),'old original');
       assert.equal(await options.body.get('review').text(),'old reviewed');
       return response({...ref,revision:1});
@@ -78,7 +78,7 @@ test('legacy import reads both old versions and never overwrites the old referen
 test('queued native saves use the latest acknowledged revision and keep later edits dirty',async()=>{
   let generation=1,release;const calls=[],confirmed=[];
   const queue=createCraftSaveQueue({reference:ref,revision:2,getGeneration:()=>generation,
-    persist:async(_ref,bytes,revision)=>{calls.push([bytes,revision]);if(calls.length===1)await new Promise(resolve=>release=resolve);return {revision:revision+1};},
+    persist:async(_ref,bytes,revision)=>{calls.push([bytes,revision]);if(calls.length===1) { await new Promise(resolve=>release=resolve); } return {revision:revision+1};},
     onSaved:(meta,details)=>confirmed.push([meta.revision,details.clean])});
   const first=queue.enqueue('first',1);
   await Promise.resolve();generation=2;
@@ -90,7 +90,7 @@ test('queued native saves use the latest acknowledged revision and keep later ed
 test('a rejected save neither advances revision nor blocks a later retry',async()=>{
   let fail=true;const revisions=[];
   const queue=createCraftSaveQueue({reference:ref,revision:5,getGeneration:()=>1,
-    persist:async(_ref,_bytes,revision)=>{revisions.push(revision);if(fail)throw new Error('offline');return {revision:6};}});
+    persist:async(_ref,_bytes,revision)=>{revisions.push(revision);if(fail) { throw new Error('offline'); } return {revision:6};}});
   await assert.rejects(queue.enqueue('bytes',1),/offline/);fail=false;
   await queue.enqueue('retry',1);assert.deepEqual(revisions,[5,5]);
 });

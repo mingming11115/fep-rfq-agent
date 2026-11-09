@@ -8,7 +8,7 @@ export default function SourceResponseAnnotation({ row, annotation, color, activ
     className={`wc-note source-response-annotation source-response-${annotation.kind}${active ? ' wc-note-active' : ''}`}
     style={color} data-response-note={row.id} data-conclusion={annotation.conclusion}
     aria-label={`${row.clause || row.title || '当前条款'} 应答标注`}
-    onClick={event => { if (!event.target.closest('button') && !window.getSelection()?.toString()) select(); }}
+    onClick={event => { if (!event.target.closest('button') && !window.getSelection()?.toString()) { select(); } }}
   >
     <div className="wc-note-head">
       {onDiscuss && <button type="button" className="wc-icon" aria-label={`讨论条款 ${row.clause || row.title}`} onClick={() => onDiscuss(row)}><CornerUpLeft size={14}/></button>}

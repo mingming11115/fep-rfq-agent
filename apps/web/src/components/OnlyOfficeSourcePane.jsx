@@ -8,7 +8,7 @@ import { createOfficeClauseLink } from '../officeClauseLink';
 
 export default function OnlyOfficeSourcePane({file,source,canManage,user,rows=[],selectedAnchor,onSelectAnchor,children}) {
   const bindingKey='fep-rfq-office-source:'+officeSourceKey(source);
-  const readBinding=()=>{try{return JSON.parse(localStorage.getItem(bindingKey)||'null');}catch{return null;}};
+  const readBinding=()=>{try{return JSON.parse(localStorage.getItem(bindingKey)||'null');}catch{ console.error('读取本地 Office 文档关联失败'); return null;}};
   const [linked,setLinked]=useState(readBinding), [excerpt,setExcerpt]=useState(false), [expanded,setExpanded]=useState(false);
   const [error,setError]=useState(''),[phase,setPhase]=useState('idle'),[retry,setRetry]=useState(0),[meta,setMeta]=useState(null),[dirty,setDirty]=useState(false),[saving,setSaving]=useState(false);
   const fileInput=useRef(),editor=useRef(),active=useRef(true),dirtyRef=useRef(false),savingRef=useRef(false),changeSerial=useRef(0),metaRef=useRef(null);
@@ -18,29 +18,29 @@ export default function OnlyOfficeSourcePane({file,source,canManage,user,rows=[]
   const clauseLink=useRef(null),latestClause=useRef(null),[clauseStatus,setClauseStatus]=useState({status:'waiting'});
   latestClause.current={rows,selectedAnchor,onSelectAnchor};
   const demoAsset=demoOfficeAsset(source);
-  const [previous,setPrevious]=useState(()=>{try{return JSON.parse(localStorage.getItem(bindingKey+':previous')||'null');}catch{return null;}});
+  const [previous,setPrevious]=useState(()=>{try{return JSON.parse(localStorage.getItem(bindingKey+':previous')||'null');}catch{ console.error('读取上一次 Office 文档关联失败'); return null;}});
   const ref=file?.office || linked;
   const refKey=ref?.id, identity=officeSourceKey(source,`${user?.id}:${canManage}`);
-  function markDirty(value) { if(value&&!dirtyRef.current)dirtyBaseline.current=metaRef.current;dirtyRef.current=value;setDirty(value);if(window.__rfqOfficeUnsaved?.key===identity)window.__rfqOfficeUnsaved.dirty=value; }
-  function updateMeta(value){metaRef.current=value;setMeta(value);if(dirtyRef.current&&savedGeneration({baseline:dirtyBaseline.current,generation:changeSerial.current,flushedGeneration:flushedGeneration.current},value))markDirty(false);}
+  function markDirty(value) { if(value&&!dirtyRef.current) { dirtyBaseline.current=metaRef.current; } dirtyRef.current=value;setDirty(value);if(window.__rfqOfficeUnsaved?.key===identity) { window.__rfqOfficeUnsaved.dirty=value; } }
+  function updateMeta(value){metaRef.current=value;setMeta(value);if(dirtyRef.current&&savedGeneration({baseline:dirtyBaseline.current,generation:changeSerial.current,flushedGeneration:flushedGeneration.current},value)) { markDirty(false); }}
   useEffect(()=>{setLinked(readBinding());setExcerpt(false);setError('');},[bindingKey]);
   useEffect(()=>{
     active.current=true; window.__rfqOfficeUnsaved={key:identity,sourceKey:officeSourceKey(source),dirty:false};
     const unload=event=>{if(dirtyRef.current){event.preventDefault();event.returnValue='';}};
     window.addEventListener('beforeunload',unload);
-    return()=>{active.current=false;uploadAbort.current?.abort();demoAbort.current?.abort();window.removeEventListener('beforeunload',unload);if(window.__rfqOfficeUnsaved?.key===identity)delete window.__rfqOfficeUnsaved;};
+    return()=>{active.current=false;uploadAbort.current?.abort();demoAbort.current?.abort();window.removeEventListener('beforeunload',unload);if(window.__rfqOfficeUnsaved?.key===identity) { delete window.__rfqOfficeUnsaved; }};
   },[identity]);
   useEffect(()=>{
-    if(refKey||!demoAsset)return;
+    if(refKey||!demoAsset) { return; }
     const abort=new AbortController();demoAbort.current=abort;setInitializingDemo(true);setError('');
     loadDemoOffice(source,abort.signal).then(value=>{
-      if(abort.signal.aborted)return;
+      if(abort.signal.aborted) { return; }
       localStorage.setItem(bindingKey,JSON.stringify(value));setInitializingDemo(false);setLinked(value);
-    }).catch(cause=>{if(!abort.signal.aborted){setInitializingDemo(false);setError(cause.message);}});
+    }).catch(cause=>{ console.error('加载 Office 示例原件失败', cause); if(!abort.signal.aborted){setInitializingDemo(false);setError(cause.message);}});
     return()=>abort.abort();
   },[bindingKey,refKey,demoAsset,retry]);
   useEffect(()=>{
-    if(!refKey || excerpt)return;
+    if(!refKey || excerpt) { return; }
     const abort=new AbortController();let alive=true,instance;
     setError('');setPhase('loading');setClauseStatus({status:'waiting'});
     const channel=crypto.randomUUID();
@@ -49,39 +49,39 @@ export default function OnlyOfficeSourcePane({file,source,canManage,user,rows=[]
     const receive=event=>bridge.receive(event);window.addEventListener('message',receive);
     async function mount(){try{
       const data=await officeRequest(`/documents/${refKey}/session`,ref,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({readOnly:!canManage,userId:user?.id,userName:user?.name,pluginOrigin:location.origin,pluginChannel:channel}),signal:abort.signal});
-      const api=await loadOfficeApi(data.apiUrl);if(!alive)return;
+      const api=await loadOfficeApi(data.apiUrl);if(!alive) { return; }
       updateMeta(data.document);
       // DocEditor replaces its target element. Recreate it on each mount instead of reusing a removed React child.
-      const host=document.getElementById(containerId);if(!host)return;
+      const host=document.getElementById(containerId);if(!host) { return; }
       const target=document.createElement('div');target.id=containerId+'-editor';host.replaceChildren(target);
       instance=new api.DocEditor(target.id,{...data.config,events:{
-        onDocumentReady:()=>{if(alive)setPhase('ready');},
-        onDocumentStateChange:event=>{if(!alive)return;if(event.data===true){changeSerial.current++;markDirty(true);}else if(event.data===false){flushedGeneration.current=changeSerial.current;if(metaRef.current)updateMeta(metaRef.current);}},
+        onDocumentReady:()=>{if(alive) { setPhase('ready'); }},
+        onDocumentStateChange:event=>{if(!alive) { return; } if(event.data===true){changeSerial.current++;markDirty(true);}else if(event.data===false){flushedGeneration.current=changeSerial.current;if(metaRef.current) { updateMeta(metaRef.current); }}},
         onError:event=>{if(alive){setError(event.data?.errorDescription||'原文件打开失败，请检查文档格式和服务连接');setPhase('error');}},
-        onRequestClose:()=>{if(officeCanLeave())setExcerpt(true);},
+        onRequestClose:()=>{if(officeCanLeave()) { setExcerpt(true); }},
       }});editor.current=instance;
-    }catch(cause){if(alive&&cause.name!=='AbortError'){setError(cause.message);setPhase('error');}}}
+    }catch(cause){ console.error('启动 Office 编辑器失败', cause); if(alive&&cause.name!=='AbortError'){setError(cause.message);setPhase('error');}}}
     mount();
-    return()=>{alive=false;abort.abort();window.removeEventListener('message',receive);bridge.destroy();if(clauseLink.current===bridge)clauseLink.current=null;instance?.destroyEditor();if(editor.current===instance)editor.current=null;};
+    return()=>{alive=false;abort.abort();window.removeEventListener('message',receive);bridge.destroy();if(clauseLink.current===bridge) { clauseLink.current=null; } instance?.destroyEditor();if(editor.current===instance) { editor.current=null; }};
   },[refKey,identity,retry,excerpt]);
   useEffect(()=>{clauseLink.current?.update(rows,selectedAnchor?.requirementId);},[rows,selectedAnchor?.requirementId]);
   useEffect(()=>{
-    if(!refKey||excerpt)return;
+    if(!refKey||excerpt) { return; }
     let alive=true;const abort=new AbortController();
-    const timer=setInterval(async()=>{try{const data=await officeRequest(`/documents/${refKey}`,ref,{signal:abort.signal});if(alive)updateMeta(data);}catch{/* Explicit actions report connection failures; polling never erases the last durable status. */}},3000);
+    const timer=setInterval(async()=>{try{const data=await officeRequest(`/documents/${refKey}`,ref,{signal:abort.signal});if(alive) { updateMeta(data); }}catch (error){ console.error('查询 Office 文档状态失败', error); /* Explicit actions report connection failures; polling never erases the last durable status. */}},3000);
     return()=>{alive=false;abort.abort();clearInterval(timer);};
   },[refKey,identity,excerpt]);
   async function attach(event){
-    const original=event.target.files?.[0];event.target.value='';if(!original||!canManage)return;
+    const original=event.target.files?.[0];event.target.value='';if(!original||!canManage) { return; }
     if(!supportsOffice(original.name)){setError('请选择 DOCX 或 PDF；旧 DOC 请先另存为 DOCX');return;}
     demoAbort.current?.abort();setInitializingDemo(false);
     uploadAbort.current?.abort();const abort=new AbortController();uploadAbort.current=abort;
     setPhase('uploading');setError('');
-    try{const value=await uploadOfficeFile(original,source,abort.signal);if(abort.signal.aborted)return;localStorage.setItem(bindingKey,JSON.stringify(value));setLinked(value);setExcerpt(false);}
-    catch(cause){if(cause.name!=='AbortError'){setError(cause.message);setPhase('error');}}
+    try{const value=await uploadOfficeFile(original,source,abort.signal);if(abort.signal.aborted) { return; } localStorage.setItem(bindingKey,JSON.stringify(value));setLinked(value);setExcerpt(false);}
+    catch(cause){ console.error('上传 Office 文档失败', cause); if(cause.name!=='AbortError'){setError(cause.message);setPhase('error');}}
   }
   async function save(){
-    if(!ref||!canManage||savingRef.current)return;
+    if(!ref||!canManage||savingRef.current) { return; }
     savingRef.current=true;setSaving(true);setError('');
     const before=metaRef.current||{},serial=changeSerial.current,reference=ref;
     try{
@@ -89,38 +89,38 @@ export default function OnlyOfficeSourcePane({file,source,canManage,user,rows=[]
       updateMeta(result.document);
       if(!result.pending&&!dirtyRef.current){updateMeta(result.document);return;}
       for(let i=0;i<35;i++){
-        await new Promise(resolve=>setTimeout(resolve,1000));if(!active.current)return;
+        await new Promise(resolve=>setTimeout(resolve,1000));if(!active.current) { return; }
         const after=await officeRequest(`/documents/${reference.id}`,reference);
-        if(after.lastError)throw new Error(after.lastError);
+        if(after.lastError) { throw new Error(after.lastError); }
         updateMeta(after);
-        if(saveReached(before,after)){if(serial===changeSerial.current)markDirty(false);return;}
-        if(!dirtyRef.current)return;
-        if(!result.pending&&i%3===2)result=await officeRequest(`/documents/${reference.id}/save`,reference,{method:'POST'});
+        if(saveReached(before,after)){if(serial===changeSerial.current) { markDirty(false); } return;}
+        if(!dirtyRef.current) { return; }
+        if(!result.pending&&i%3===2) { result=await officeRequest(`/documents/${reference.id}/save`,reference,{method:'POST'}); }
       }
       throw new Error('尚未收到保存完成确认，请保留编辑器并重试。也可从编辑器下载文件备份。');
-    }catch(cause){if(active.current)setError(cause.message);}finally{savingRef.current=false;if(active.current)setSaving(false);}
+    }catch(cause){ console.error('保存 Office 文档失败', cause); if(active.current) { setError(cause.message); }}finally{savingRef.current=false;if(active.current) { setSaving(false); }}
   }
-  async function download(kind){try{setError('');await downloadOfficeFile({...ref,name:meta?.name||ref.name},kind);}catch(cause){setError(cause.message);}}
+  async function download(kind){try{setError('');await downloadOfficeFile({...ref,name:meta?.name||ref.name},kind);}catch(cause){ console.error('下载 Office 文档失败', cause); setError(cause.message);}}
   async function replaceDemo(){
-    if(dirtyRef.current||savingRef.current||!officeCanLeave())return;
+    if(dirtyRef.current||savingRef.current||!officeCanLeave()) { return; }
     uploadAbort.current?.abort();const abort=new AbortController();uploadAbort.current=abort;
     const serial=changeSerial.current;
     setInitializingDemo(true);setError('');
     try{
       const value=await loadDemoOffice(source,abort.signal);
-      if(abort.signal.aborted||!active.current)return;
+      if(abort.signal.aborted||!active.current) { return; }
       if(dirtyRef.current||savingRef.current||serial!==changeSerial.current){setError('原文件有新的修改，已保留当前文档。请保存后再载入示例。');return;}
       if(ref){localStorage.setItem(bindingKey+':previous',JSON.stringify(ref));setPrevious(ref);}
       localStorage.setItem(bindingKey,JSON.stringify(value));setLinked(value);setExcerpt(false);
-    }catch(cause){if(!abort.signal.aborted&&active.current)setError(cause.message);}finally{if(!abort.signal.aborted&&active.current)setInitializingDemo(false);}
+    }catch(cause){ console.error('替换 Office 示例原件失败', cause); if(!abort.signal.aborted&&active.current) { setError(cause.message); }}finally{if(!abort.signal.aborted&&active.current) { setInitializingDemo(false); }}
   }
-  function restorePrevious(){if(dirtyRef.current||savingRef.current||!previous)return;uploadAbort.current?.abort();setInitializingDemo(false);const old=ref;localStorage.setItem(bindingKey,JSON.stringify(previous));localStorage.setItem(bindingKey+':previous',JSON.stringify(old));setLinked(previous);setPrevious(old);}
+  function restorePrevious(){if(dirtyRef.current||savingRef.current||!previous) { return; } uploadAbort.current?.abort();setInitializingDemo(false);const old=ref;localStorage.setItem(bindingKey,JSON.stringify(previous));localStorage.setItem(bindingKey+':previous',JSON.stringify(old));setLinked(previous);setPrevious(old);}
   const currentRow=rows.find(row=>row.id===selectedAnchor?.requirementId),currentNo=currentRow?.clause||currentRow?.no||'';
   const clauseMessage=ref?.fileType==='pdf'?'PDF 定位请使用“条款摘录”':({waiting:'正在连接条款定位…',locating:`正在定位 ${currentNo}…`,matched:`已定位 ${currentNo} · 点击原文可切换卡片`,missing:'未找到当前条款原文，请核对文件或查看条款摘录',ambiguous:'原文存在多处匹配，请使用条款摘录核对',unsupported:'当前文档暂不支持定位，请查看条款摘录'})[clauseStatus.status];
   const savedAt=meta?.savedAt?new Date(meta.savedAt).toLocaleTimeString('zh-CN',{hour12:false}):null;
   return <section className={`office-source detail-source ${expanded?'office-source-expanded':''}`} aria-label="ONLYOFFICE 原文件批阅">
     <div className="office-toolbar"><div className="office-title"><FileText size={17}/><div><strong>{ref?.name||file?.name||'客户原文件'}</strong><small>{ref?'批阅副本 · '+(canManage?'可编辑与批注':'只读'):'原文件尚未关联'}</small></div></div><div className="office-actions">
-      <Button size="small" onClick={()=>{if(officeCanLeave())setExcerpt(value=>!value);}}>{excerpt?'原文件':'条款摘录'}</Button>
+      <Button size="small" onClick={()=>{if(officeCanLeave()) { setExcerpt(value=>!value); }}}>{excerpt?'原文件':'条款摘录'}</Button>
       <Button size="small" aria-label={expanded?'还原原文件区':'放大原文件区'} onClick={()=>setExpanded(value=>!value)}>{expanded?<Minimize size={14}/>:<Maximize size={14}/>}</Button>
     </div></div>
     {error&&<Alert type="error" showIcon message={error} action={(ref||demoAsset)&&<Button size="small" onClick={()=>{if(dirtyRef.current){save();return;}setRetry(value=>value+1);}}>重试连接</Button>}/>}

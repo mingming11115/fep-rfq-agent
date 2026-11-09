@@ -17,21 +17,21 @@ const projectMaps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByPr
 
 // A one-time edit of the synthetic BU's presentation data, not a limit on future work.
 export function tidyDemoState(previous) {
-  if (previous.demoCleanupVersion >= cleanupVersion || !previous.projects.some(p => p.buId === 'BU-DEMO')) return previous;
+  if (previous.demoCleanupVersion >= cleanupVersion || !previous.projects.some(p => p.buId === 'BU-DEMO')) { return previous; }
   const state = structuredClone(previous);
   if (previous.demoCleanupVersion >= 3) {
     // This revision changes presentation wording only; later user work stays intact.
     const labels = {'未处理': '待处理', '待确认': '评审中', '已审核': '已确认'};
     for (const project of state.projects.filter(p => p.buId === 'BU-DEMO')) {
       for (const row of state.requirementsByProject[project.id] || []) {
-        if (!row.demoMatrixExample) continue;
+        if (!row.demoMatrixExample) { continue; }
         for (const [before, after] of Object.entries(labels)) {
-          if (row.title?.endsWith(`（${before}示例）`)) row.title = row.title.slice(0, -`（${before}示例）`.length) + `（${after}示例）`;
-          if (row.sectionPath?.length === 1 && row.sectionPath[0] === before) row.sectionPath = [after];
+          if (row.title?.endsWith(`（${before}示例）`)) { row.title = row.title.slice(0, -`（${before}示例）`.length) + `（${after}示例）`; }
+          if (row.sectionPath?.length === 1 && row.sectionPath[0] === before) { row.sectionPath = [after]; }
         }
       }
       for (const review of state.reviewsByProject[project.id] || [])
-        if (review.sample && review.description === '模拟评审事项，用于演示待确认状态下的本种应答结论。') review.description = '模拟评审事项，用于演示评审中状态下的本种应答结论。';
+        if (review.sample && review.description === '模拟评审事项，用于演示待确认状态下的本种应答结论。') { review.description = '模拟评审事项，用于演示评审中状态下的本种应答结论。'; }
     }
     state.demoCleanupVersion = cleanupVersion;
     return state;
@@ -41,16 +41,17 @@ export function tidyDemoState(previous) {
   for (const [stage, preferredId] of Object.entries(preferredProjects)) {
     const group = examples.filter(p => getProjectSummary(state, p.id, 'demo-sales').stage === stage);
     const keep = group.find(p => p.id === preferredId) || group[0];
-    for (const project of group) if (project !== keep) removedProjects.add(project.id);
+    for (const project of group) if (project !== keep) { removedProjects.add(project.id); }
   }
   state.projects = state.projects.filter(p => !removedProjects.has(p.id));
-  for (const key of projectMaps) if (state[key])
+  for (const key of projectMaps) if (state[key]) {
     state[key] = Object.fromEntries(Object.entries(state[key]).filter(([id]) => !removedProjects.has(id)));
+  }
   state.analysisRuns = (state.analysisRuns || []).filter(run => !removedProjects.has(run.projectId));
 
   const seed = createDemoState(), fallback = upgradePrototypeState(seed, seed);
   for (const [stage, preferredId] of Object.entries(preferredProjects)) {
-    if (state.projects.some(p => p.buId === 'BU-DEMO' && getProjectSummary(state, p.id, 'demo-sales').stage === stage)) continue;
+    if (state.projects.some(p => p.buId === 'BU-DEMO' && getProjectSummary(state, p.id, 'demo-sales').stage === stage)) { continue; }
     let id = preferredId;
     while (state.projects.some(p => p.id === id)) id += '-DEMO';
     // Only fresh synthetic examples are renamed; existing approvals are never rewritten.
@@ -95,9 +96,9 @@ export function tidyDemoState(previous) {
       if (processingStatus === 'confirmed') {
         row.confirmedAt = at; row.confirmedBy = '模拟审核'; row.confirmedById = project.ownerId;
         // This display-only cell keeps the normal final-conclusion/export gate.
-        if (conclusion === '待确认') row.confirmationReason = '矩阵展示样例：内容已审核，结论仍待确认，不能作为最终处置。';
+        if (conclusion === '待确认') { row.confirmationReason = '矩阵展示样例：内容已审核，结论仍待确认，不能作为最终处置。'; }
       }
-      if (processingStatus === 'waiting') reviews.push({
+      if (processingStatus === 'waiting') { reviews.push({
         id: `${id}-REVIEW`, requirementId: id, kind: 'review', title: `${base.title} · ${conclusion}评审示例`,
         type: '应答评审', source: '状态与结论矩阵演示', status: '待处理', version: 1, round: 1, requirementVersion: 1,
         ownerId: reviewerId || null, owner: reviewerId ? personName(state, reviewerId) : '待分派', reviewerIds: reviewerId ? [reviewerId] : [],
@@ -105,11 +106,12 @@ export function tidyDemoState(previous) {
         plan: '核对客户要求、结论和应答内容，再完成本人评审。', proposedDraft: row.draft, proposedConclusion: conclusion,
         conditions: row.conditions, evidence: row.evidence, reason: row.reason, sample: true,
         history: [{time: at, actor: '系统演示', action: '创建状态与结论矩阵示例'}],
-      });
+      }); }
       selected.push(row);
     }
-    if (selected.some(row => row.sourceFileId === matrixFileId) && !files.some(file => file.id === matrixFileId))
+    if (selected.some(row => row.sourceFileId === matrixFileId) && !files.some(file => file.id === matrixFileId)) {
       files.push({id: matrixFileId, name: '应答状态与结论矩阵示例.docx', purpose: '要求来源', version: 'V1.0', status: '完成', createdAt: at, sample: true, size: 1482000, visibility: '项目成员可见'});
+    }
     const rowIds = new Set(selected.map(r => r.id));
     state.requirementsByProject[project.id] = selected;
     state.reviewsByProject[project.id] = reviews.filter(r => rowIds.has(r.requirementId));
@@ -122,26 +124,28 @@ export function tidyDemoState(previous) {
       .map(file => ({...file, parsedCount: selected.filter(r => r.sourceFileId === file.id).length}));
     state.commentsByProject[project.id] = (state.commentsByProject[project.id] || [])
       .filter(comment => rowIds.has(comment.anchor?.requirementId));
-    if (state.implicitConfirmationIdsByProject?.[project.id])
+    if (state.implicitConfirmationIdsByProject?.[project.id]) {
       state.implicitConfirmationIdsByProject[project.id] = state.implicitConfirmationIdsByProject[project.id].filter(id => rowIds.has(id));
+    }
   }
   state.tasksById = Object.fromEntries(Object.entries(state.tasksById || {}).filter(([, task]) => {
-    if (removedProjects.has(task.projectId)) return false;
-    if (!retainedRows.has(task.projectId)) return true;
-    if (task.objectType === 'review') return retainedReviews.get(task.projectId).has(task.objectId);
-    if (task.objectType === 'requirement') return retainedRows.get(task.projectId).has(task.objectId);
+    if (removedProjects.has(task.projectId)) { return false; }
+    if (!retainedRows.has(task.projectId)) { return true; }
+    if (task.objectType === 'review') { return retainedReviews.get(task.projectId).has(task.objectId); }
+    if (task.objectType === 'requirement') { return retainedRows.get(task.projectId).has(task.objectId); }
     return !task.requirementId || retainedRows.get(task.projectId).has(task.requirementId);
   }));
-  if (!state.projects.some(p => p.id === state.activeProjectId))
+  if (!state.projects.some(p => p.id === state.activeProjectId)) {
     state.activeProjectId = state.projects.find(p => p.id === 'RFQ-001')?.id || state.projects[0]?.id || null;
+  }
   state.demoCleanupVersion = cleanupVersion;
   return state;
 }
 
 export function tidyStoredDemo(storage, previous) {
-  if (previous.demoCleanupVersion >= cleanupVersion) return previous;
+  if (previous.demoCleanupVersion >= cleanupVersion) { return previous; }
   const next = tidyDemoState(previous), related = {};
-  if (next === previous) return previous;
+  if (next === previous) { return previous; }
   for (const project of previous.projects) {
     const key = `fep-rfq-documents:${project.id}`;
     related[key] = storage.getItem(key);
@@ -149,7 +153,7 @@ export function tidyStoredDemo(storage, previous) {
   storage.setItem(`fep-rfq-demo-before-cleanup-v${cleanupVersion}`, JSON.stringify({savedAt: new Date().toISOString(), state: previous, related}));
   for (const project of next.projects) {
     const reviewDemo = project.buId === 'BU-DEMO' && getProjectSummary(next, project.id, 'demo-sales').stage === '评审中';
-    if (!reviewDemo && JSON.stringify(previous.requirementsByProject[project.id]) === JSON.stringify(next.requirementsByProject[project.id])) continue;
+    if (!reviewDemo && JSON.stringify(previous.requirementsByProject[project.id]) === JSON.stringify(next.requirementsByProject[project.id])) { continue; }
     storage.setItem(`fep-rfq-documents:${project.id}`, JSON.stringify({
       files: next.documentsByProject[project.id], parsed: next.requirementsByProject[project.id],
     }));

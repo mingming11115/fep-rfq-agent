@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-async function transport(){const module=await import('./uploadTransport.js').catch(()=>null);assert.ok(module?.uploadWithProgress,'upload progress transport is implemented');return module.uploadWithProgress;}
+async function transport(){const module=await import('./uploadTransport.js').catch((error)=>{ console.error('导入上传传输测试模块失败', error); return null; });assert.ok(module?.uploadWithProgress,'upload progress transport is implemented');return module.uploadWithProgress;}
 class UploadRequest {
  headers={};upload={};status=200;responseText='{"code":0,"data":{"id":"D"}}';
  open(method,url){this.method=method;this.url=url;}

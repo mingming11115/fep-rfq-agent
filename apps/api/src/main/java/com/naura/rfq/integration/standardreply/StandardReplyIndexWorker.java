@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
 @Component
 @EnableScheduling
 @RequiredArgsConstructor
+@Slf4j
 public class StandardReplyIndexWorker {
     private static final int POLL_DELAY_SECONDS = 5;
     private static final String DUE = """
@@ -33,20 +35,28 @@ public class StandardReplyIndexWorker {
 
     @Scheduled(fixedDelayString = "${rfq.standard-reply-index.poll-interval-ms:5000}")
     void sync() {
-        if (!settings.enabled()) return;
+        if (!settings.enabled()) {
+            return;
+        }
         sync(Library.STANDARD_REPLY, settings.datasets());
         sync(Library.HISTORY_RFQ, settings.historyDatasets());
     }
 
     private void sync(Library library, Map<String, String> datasets) {
-        if (datasets.isEmpty()) return;
+        if (datasets.isEmpty()) {
+            return;
+        }
         for (Key key : dueEntries(library, datasets)) {
             String dataset = datasets.get(key.buId());
-            if (dataset == null) continue;
+            if (dataset == null) {
+                continue;
+            }
             String token = UUID.randomUUID().toString();
             if (claim(library, key, token)) {
                 Work work = read(library, key, token);
-                if (work != null) finish(library, key, token, work, deliver(key, dataset, work));
+                if (work != null) {
+                    finish(library, key, token, work, deliver(key, dataset, work));
+                }
             }
         }
     }
@@ -86,14 +96,18 @@ public class StandardReplyIndexWorker {
                 ? new Outcome(true, result.jobId(), 0, null, 0)
                 : new Outcome(false, result.jobId(), work.attempts(), null, POLL_DELAY_SECONDS);
         } catch (StandardReplyIndexClient.Failure e) {
+            log.error("同步标准回复索引失败", e);
             return retry(work, e.getMessage(), e.resubmit() ? null : work.jobId());
         } catch (JsonProcessingException e) {
+            log.error("解析标准回复索引数据失败 errorType={}", e.getClass().getSimpleName());
             return retry(work, "INVALID_PROJECTION", null);
         }
     }
 
     private JsonNode projection(Key key, Work work) throws JsonProcessingException {
-        if (work.payload() == null) return null;
+        if (work.payload() == null) {
+            return null;
+        }
         JsonNode data = json.readTree(work.payload());
         if (data == null || !key.buId().equals(data.path("bu_id").asText())
                 || data.path("record_version").asInt(-1) != work.version()) {

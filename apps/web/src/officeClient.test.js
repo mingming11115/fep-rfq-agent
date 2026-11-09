@@ -73,7 +73,7 @@ test('a fresh browser uploads only the bundled public demo and receives a normal
   try{
     globalThis.fetch=async(url,options={})=>{
       calls.push(url);
-      if(calls.length===1)return new Response(new Blob(['public-demo-binary']));
+      if(calls.length===1) { return new Response(new Blob(['public-demo-binary'])); }
       assert.equal(options.body.get('file').name,'RFQ批阅示例.docx');
       assert.equal(await options.body.get('file').text(),'public-demo-binary');
       assert.equal(options.body.get('fileId'),demoSource.fileId);

@@ -11,12 +11,12 @@ export default function LibraryEvidenceDialog({rows,projects,library,rights,acto
   const field=(label,key,type)=><label className="field"><span>{label}</span><Input aria-label={label}
     type={type} value={form[key]||''} onChange={e=>setForm({...form,[key]:e.target.value})}/></label>;
   function save(){
-    if(!['name','source','location'].every(key=>form[key]?.trim()))return setError('请填写证据名称、来源和原文位置');
+    if(!['name','source','location'].every(key=>form[key]?.trim())) { return setError('请填写证据名称、来源和原文位置'); }
     setError('');
     run(()=>library.saveEvidence(form,Boolean(form.id)),()=>{setForm(null);toast?.('证据版本已登记');},cause=>setError(cause.message));
   }
   function review(){
-    if(action.kind==='revoke'&&!reason.trim())return setError('请填写撤销原因');
+    if(action.kind==='revoke'&&!reason.trim()) { return setError('请填写撤销原因'); }
     setError('');
     run(()=>library.transition('evidence',action.row,action.kind,reason),()=>{setAction(null);toast?.('证据状态已更新');},cause=>setError(cause.message));
   }

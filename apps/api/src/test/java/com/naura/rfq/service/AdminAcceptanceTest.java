@@ -47,7 +47,7 @@ class AdminAcceptanceTest extends AcceptanceSupport {
         String priorToken=login(user.path("username").asText(),"TestOnly@2026");
         ok(auth(body(patch("/api/rfq/admin/users/"+id+"/status"),Map.of("status","DISABLED")),admin));
         var members=ok(auth(get("/api/rfq/business-units/BU-FEP/members"),token("sr01")));
-        for(var member:members)if(id.equals(member.path("userId").asText()))assertThat(member.path("enabled").asBoolean()).isFalse();
+        for(var member:members)if(id.equals(member.path("userId").asText())) { assertThat(member.path("enabled").asBoolean()).isFalse(); }
         mvc.perform(auth(get("/api/rfq/auth/me"),priorToken)).andExpect(status().isUnauthorized());
     }
     @Test void sharedUserGlobalChangesAreDeniedButLocalMembershipChangesWork() throws Exception {

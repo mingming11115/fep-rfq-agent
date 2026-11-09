@@ -31,7 +31,7 @@ function render(){
   if(state.saved){link.href=state.saved.url;link.download=state.saved.name}else{link.removeAttribute('href');link.removeAttribute('download')}
 }
 function activate(key){
-  if(!options[key])key='word';active=key;
+  if(!options[key]) { key='word'; } active=key;
   const state=states[key], option=options[key];
   if(!state.loading){state.loading=true;state.frame.src='/'+option.engine+'/?host=parent&author='+encodeURIComponent('RFQ Demo')+'&comments=classic'}
   history.replaceState(null,'',location.pathname+'?app='+key);render();
@@ -41,43 +41,43 @@ async function sendFile(key,name,bytes){
   state.frame.contentWindow.postMessage({type:options[key].project+':open',name,bytes},location.origin,[bytes]);render();
 }
 window.addEventListener('message',async event=>{
-  if(event.origin!==location.origin)return;
+  if(event.origin!==location.origin) { return; }
   const key=Object.keys(states).find(k=>states[k].frame.contentWindow===event.source);
-  if(!key)return;
+  if(!key) { return; }
   const state=states[key], option=options[key], data=event.data;
-  if(!data||typeof data.type!=='string'||!data.type.startsWith(option.project+':'))return;
+  if(!data||typeof data.type!=='string'||!data.type.startsWith(option.project+':')) { return; }
   const kind=data.type.slice(option.project.length+1);
   if(kind==='ready'){
-    if(state.ready)return;state.ready=true;render();
-    try{const response=await fetch('/samples/RFQ-review-example.'+option.ext);if(!response.ok)throw new Error('示例文件读取失败');await sendFile(key,state.filename,await response.arrayBuffer())}catch(error){state.message=error.message;render()}
+    if(state.ready) { return; } state.ready=true;render();
+    try{const response=await fetch('/samples/RFQ-review-example.'+option.ext);if(!response.ok) { throw new Error('示例文件读取失败'); } await sendFile(key,state.filename,await response.arrayBuffer())}catch(error){ console.error('加载编辑器示例文件失败', error); state.message=error.message;render()}
   }else if(kind==='failed'){state.ready=true;state.message='启动失败：'+data.error;render()}
   else if(kind==='dirty'){state.dirty=!!data.dirty;render()}
   else if(kind==='reviewState'||kind==='reviewResult'){
-    try{comments[key].receive(kind,JSON.parse(data.payload))}catch(error){state.notice='批注同步失败：'+error.message;render()}
+    try{comments[key].receive(kind,JSON.parse(data.payload))}catch(error){ console.error('同步示例文件批注失败'); state.notice='批注同步失败：'+error.message;render()}
   }
   else if(kind==='save'){
-    if(!(data.bytes instanceof ArrayBuffer)&&!ArrayBuffer.isView(data.bytes))return;
+    if(!(data.bytes instanceof ArrayBuffer)&&!ArrayBuffer.isView(data.bytes)) { return; }
     state.pending++;render();
     try{
       const name=typeof data.name==='string'?data.name:state.filename;
       const response=await fetch('/api/save?app='+key,{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Demo-Filename':encodeURIComponent(name)},body:data.bytes});
-      if(!response.ok)throw new Error(await response.text());
+      if(!response.ok) { throw new Error(await response.text()); }
       state.saved=await response.json();state.notice='';state.message='已保存，可下载或重开';
-    }catch(error){state.message='保存失败：'+error.message;state.dirty=true;alert(state.message)}
+    }catch(error){ console.error('保存编辑器示例文件失败', error); state.message='保存失败：'+error.message;state.dirty=true;alert(state.message)}
     finally{state.pending--;render()}
   }
 });
 document.querySelectorAll('[data-app]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();activate(link.dataset.app)}));
 el('open-file').addEventListener('click',()=>{el('file-picker').accept=active==='word'?'.docx,.doc,.odt,.rtf':'.pdf';el('file-picker').click()});
 el('file-picker').addEventListener('change',async event=>{
-  const file=event.target.files[0],key=active;if(!file)return;
+  const file=event.target.files[0],key=active;if(!file) { return; }
   if(states[key].dirty&&!confirm('当前文件有未保存修改，仍要打开另一个文件吗？')){event.target.value='';return}
   await sendFile(key,file.name,await file.arrayBuffer());event.target.value='';
 });
 el('reopen').addEventListener('click',async()=>{
-  const key=active,state=states[key];if(!state.saved)return;
-  if(state.dirty&&!confirm('当前还有未保存修改，要重开上次保存的版本吗？'))return;
-  const response=await fetch(state.saved.url);if(response.ok)await sendFile(key,state.saved.name,await response.arrayBuffer());
+  const key=active,state=states[key];if(!state.saved) { return; }
+  if(state.dirty&&!confirm('当前还有未保存修改，要重开上次保存的版本吗？')) { return; }
+  const response=await fetch(state.saved.url);if(response.ok) { await sendFile(key,state.saved.name,await response.arrayBuffer()); }
 });
 window.addEventListener('beforeunload',event=>{if(Object.values(states).some(state=>state.dirty||state.pending)){event.preventDefault();event.returnValue=''}});
 window.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();comments[active].save();}});

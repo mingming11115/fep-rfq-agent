@@ -48,12 +48,12 @@ test('workspace reads every project page and each server document and requiremen
  const archivedProject={...project,id:'ARCHIVED',stage:'CANCELLED',version:1,archived:true,archivedFromStage:'APPROVED'};
  const requests=[];const api={get:async path=>{
   requests.push(path);
-  if(path.includes('archived=true'))return {list:[archivedProject],total:1};
-  if(path.startsWith('/projects?'))return {list:[project],total:1};
-  if(path.endsWith('/members'))return [member];
-  if(path.includes('/documents?'))return {list:[document],total:1};
-  if(path.includes('/requirements?'))return {list:[requirement],total:1};
-  if(path.endsWith('/workflow-records')||path.endsWith('/resources'))return {};
+  if(path.includes('archived=true')) { return {list:[archivedProject],total:1}; }
+  if(path.startsWith('/projects?')) { return {list:[project],total:1}; }
+  if(path.endsWith('/members')) { return [member]; }
+  if(path.includes('/documents?')) { return {list:[document],total:1}; }
+  if(path.includes('/requirements?')) { return {list:[requirement],total:1}; }
+  if(path.endsWith('/workflow-records')||path.endsWith('/resources')) { return {}; }
   throw new Error('Unexpected '+path);
  }};
  const state=await loadDatabaseWorkspace(user,api);

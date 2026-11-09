@@ -7,6 +7,7 @@ import com.naura.rfq.storage.DocumentStorage;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.Test;
@@ -23,9 +24,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Slf4j
 class UploadParseIntegrationTest {
     static final Path ROOT;
-    static { try { ROOT = Files.createTempDirectory("rfq-upload-parse-"); } catch (Exception e) { throw new RuntimeException(e); } }
+    static {
+        try {
+            ROOT = Files.createTempDirectory("rfq-upload-parse-");
+        } catch (Exception e) {
+            log.error("创建上传解析测试临时目录失败", e);
+            throw new RuntimeException(e);
+        }
+    }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) {
         registry.add("rfq.storage-dir", () -> ROOT.toString());
     }

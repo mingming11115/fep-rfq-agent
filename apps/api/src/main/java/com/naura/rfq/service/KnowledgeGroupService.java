@@ -13,6 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class KnowledgeGroupService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -36,14 +38,20 @@ public class KnowledgeGroupService {
         access.lockBu(bu);
         var existing = catalog(bu);
         long revision = existing.path("writeRevision").asLong();
-        if (proposed.path("writeRevision").asLong(0) != revision) throw new BusinessException(409, "分组目录已变化，请刷新");
+        if (proposed.path("writeRevision").asLong(0) != revision) {
+            throw new BusinessException(409, "分组目录已变化，请刷新");
+        }
         if (!bu.equals(proposed.path("buId").asText()) || !proposed.path("nodes").isArray()
-                || proposed.path("nodes").size() > 2000 || !proposed.path("schema").path("levels").isArray()) invalid();
+                || proposed.path("nodes").size() > 2000 || !proposed.path("schema").path("levels").isArray()) {
+            invalid();
+        }
         var result = proposed.deepCopy().put("writeRevision", revision + 1);
         if (!existing.isEmpty()) {
             result.set("schema", existing.path("schema"));
             result.set("attachments", existing.path("attachments"));
-        } else result.putArray("attachments");
+        } else {
+            result.putArray("attachments");
+        }
         validate(result, existing);
         jdbc.update("""
                 insert into knowledge_group_catalog(bu_id,payload) values (?,?) as desired
@@ -68,8 +76,12 @@ public class KnowledgeGroupService {
         access.requireScope(user, bu, record.projectId(), record.scope());
         var data = record.payload();
         String origin = KnowledgePublicationAccess.recordProjectId(data);
-        if (!origin.isBlank()) access.requireScope(user, bu, origin, "仅当前项目");
-        if (request.revision() != data.path("groupRevision").asLong()) throw new BusinessException(409, "分组关联已变化，请刷新");
+        if (!origin.isBlank()) {
+            access.requireScope(user, bu, origin, "仅当前项目");
+        }
+        if (request.revision() != data.path("groupRevision").asLong()) {
+            throw new BusinessException(409, "分组关联已变化，请刷新");
+        }
         data.set("groupIds", groupIds(bu, request.groupIds(), data.path("groupIds")));
         data.remove("groupId");
         data.put("groupRevision", request.revision() + 1);
@@ -79,7 +91,9 @@ public class KnowledgeGroupService {
     }
 
     ProjectBinding bindProject(String bu, String id) {
-        if (id == null || id.isBlank()) throw new BusinessException(400, "请选择当前 BU 的分组");
+        if (id == null || id.isBlank()) {
+            throw new BusinessException(400, "请选择当前 BU 的分组");
+        }
         // Serialize binding with directory edits so a disabled group cannot be bound concurrently.
         access.lockBu(bu);
         var catalog = catalog(bu);
@@ -93,7 +107,9 @@ public class KnowledgeGroupService {
     private Set<String> disabledLevels(JsonNode catalog) {
         var disabledLevels = new HashSet<String>();
         catalog.path("schema").path("levels").forEach(level -> {
-            if (!level.path("enabled").asBoolean(true)) disabledLevels.add(level.path("id").asText());
+            if (!level.path("enabled").asBoolean(true)) {
+                disabledLevels.add(level.path("id").asText());
+            }
         });
         return disabledLevels;
     }
@@ -105,14 +121,20 @@ public class KnowledgeGroupService {
                 throw new BusinessException(409, "不能关联停用的分组");
             }
             path.add(0, node.path("name").asText().strip());
-            if (path.size() > 4) invalid();
+            if (path.size() > 4) {
+                invalid();
+            }
         }
-        if (path.isEmpty()) throw new BusinessException(400, "分组不存在或不属于当前 BU");
+        if (path.isEmpty()) {
+            throw new BusinessException(400, "分组不存在或不属于当前 BU");
+        }
         return path;
     }
 
     JsonNode groupIds(String bu, List<String> requested, JsonNode previous) {
-        if (requested == null || requested.size() > 100) throw new BusinessException(400, "分组关联格式无效");
+        if (requested == null || requested.size() > 100) {
+            throw new BusinessException(400, "分组关联格式无效");
+        }
         var catalog = catalog(bu);
         var nodes = nodes(catalog);
         var disabledLevels = disabledLevels(catalog);
@@ -121,9 +143,15 @@ public class KnowledgeGroupService {
         var retained = new HashSet<String>();
         previous.forEach(item -> retained.add(item.asText()));
         for (String id : requested) {
-            if (id == null || !nodes.containsKey(id)) throw new BusinessException(400, "分组不存在或不属于当前 BU");
-            if (!retained.contains(id)) enabledPath(nodes, disabledLevels, id);
-            if (seen.add(id)) result.add(id);
+            if (id == null || !nodes.containsKey(id)) {
+                throw new BusinessException(400, "分组不存在或不属于当前 BU");
+            }
+            if (!retained.contains(id)) {
+                enabledPath(nodes, disabledLevels, id);
+            }
+            if (seen.add(id)) {
+                result.add(id);
+            }
         }
         return result;
     }
@@ -140,11 +168,17 @@ public class KnowledgeGroupService {
         int index = 0;
         for (var level : value.path("schema").path("levels")) {
             String id = level.path("id").asText();
-            if (!validId(id) || level.path("name").asText().isBlank() || levels.putIfAbsent(id, index++) != null) invalid();
+            if (!validId(id) || level.path("name").asText().isBlank() || levels.putIfAbsent(id, index++) != null) {
+                invalid();
+            }
         }
-        if (levels.isEmpty() || levels.size() > 4) invalid();
+        if (levels.isEmpty() || levels.size() > 4) {
+            invalid();
+        }
         var nodes = nodes(value);
-        if (nodes.size() != value.path("nodes").size()) invalid();
+        if (nodes.size() != value.path("nodes").size()) {
+            invalid();
+        }
         var oldNodes = nodes(previous);
         var names = new HashMap<String, Boolean>();
         for (var entry : nodes.entrySet()) {
@@ -154,18 +188,24 @@ public class KnowledgeGroupService {
             Integer level = levels.get(node.path("levelId").asText());
             var parentNode = nodes.get(parent);
             if (!validId(entry.getKey()) || name.isBlank() || name.length() > 200 || level == null
-                    || !parent.isEmpty() && (parentNode == null || levels.getOrDefault(parentNode.path("levelId").asText(), 99) >= level)) invalid();
+                    || !parent.isEmpty() && (parentNode == null || levels.getOrDefault(parentNode.path("levelId").asText(), 99) >= level)) {
+                invalid();
+            }
             // Existing model revisions can share a name in imported catalogs.
             String key = groupNameKey(node);
             JsonNode old = oldNodes.get(entry.getKey());
             boolean unchanged = old != null && key.equals(groupNameKey(old));
             Boolean earlierUnchanged = names.putIfAbsent(key, unchanged);
-            if (earlierUnchanged != null && (!earlierUnchanged || !unchanged)) invalid();
+            if (earlierUnchanged != null && (!earlierUnchanged || !unchanged)) {
+                invalid();
+            }
         }
         for (var old : previous.path("nodes")) {
             var node = nodes.get(old.path("id").asText());
             if (node == null || !node.path("parentId").asText("").equals(old.path("parentId").asText(""))
-                    || !node.path("levelId").equals(old.path("levelId"))) invalid();
+                    || !node.path("levelId").equals(old.path("levelId"))) {
+                invalid();
+            }
         }
     }
 
@@ -188,7 +228,10 @@ public class KnowledgeGroupService {
 
     private ObjectNode parse(String payload) {
         try { return (ObjectNode) json.readTree(payload); }
-        catch (Exception e) { throw new IllegalStateException("知识分组格式异常", e); }
+        catch (Exception e) {
+            log.error("解析知识分组记录失败 errorType={}", e.getClass().getSimpleName());
+            throw new IllegalStateException("知识分组格式异常", e);
+        }
     }
 
     private void invalid() { throw new BusinessException(400, "分组名称、层级或归属无效"); }

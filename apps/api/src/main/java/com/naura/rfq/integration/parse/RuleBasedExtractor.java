@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class RuleBasedExtractor implements RequirementExtractor {
 
     private static final int MAX_REQUIREMENT_CHARS = 4000;
@@ -213,7 +215,9 @@ public class RuleBasedExtractor implements RequirementExtractor {
         boolean hasContext = false;
         for (String sentence : body.split("[。！？!?；;]+")) {
             sentence = sentence.trim();
-            if (sentence.isEmpty()) continue;
+            if (sentence.isEmpty()) {
+                continue;
+            }
             if (DOCUMENT_PURPOSE.matcher(sentence).matches() || DEMO_CONTEXT.matcher(sentence).matches()) {
                 hasContext = true;
             } else if (!DEMO_RESPONSE_GUIDANCE.matcher(sentence).matches()) {
@@ -327,6 +331,7 @@ public class RuleBasedExtractor implements RequirementExtractor {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
+            log.error("序列化规则抽取结果失败", exception);
             return null;
         }
     }

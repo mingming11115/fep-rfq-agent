@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -30,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 /** Native DOCX/PDF storage; it does not require a running ONLYOFFICE server. */
 @RestController
 @RequestMapping("/api/craft")
+@Slf4j
 public class CraftDocumentController {
     private final OfficeDocumentService service;
     private final OfficeFileStore store;
@@ -62,8 +64,9 @@ public class CraftDocumentController {
                                       @RequestHeader(value = "X-Craft-Access", required = false) String access,
                                       @RequestParam(defaultValue = "review") String kind) {
         var doc = store.authorize(id, access);
-        if (!kind.equals("original") && !kind.equals("review"))
+        if (!kind.equals("original") && !kind.equals("review")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "下载版本无效");
+        }
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(doc.name(), StandardCharsets.UTF_8).build().toString())
@@ -81,8 +84,13 @@ public class CraftDocumentController {
         long revision = revision(ifMatch);
         MediaType type;
         try { type = MediaType.parseMediaType(request.getContentType() == null ? "" : request.getContentType()); }
-        catch (IllegalArgumentException e) { throw binaryRequired(); }
-        if (!type.getType().equals("application") || !type.getSubtype().equals("octet-stream")) throw binaryRequired();
+        catch (IllegalArgumentException e) {
+            log.error("工艺文档的媒体类型无效 errorType={}", e.getClass().getSimpleName());
+            throw binaryRequired();
+        }
+        if (!type.getType().equals("application") || !type.getSubtype().equals("octet-stream")) {
+            throw binaryRequired();
+        }
         byte[] bytes;
         try (var input = request.getInputStream()) { bytes = read(input, request.getContentLengthLong()); }
         return metadata(service.saveCraftReview(id, access, revision, bytes));
@@ -94,9 +102,13 @@ public class CraftDocumentController {
 
     private byte[] read(InputStream input, long declaredSize) throws IOException {
         long limit = Math.min(properties.maxFileBytes(), Integer.MAX_VALUE - 1L);
-        if (declaredSize > limit) throw tooLarge();
+        if (declaredSize > limit) {
+            throw tooLarge();
+        }
         byte[] bytes = input.readNBytes((int) limit + 1);
-        if (bytes.length > limit) throw tooLarge();
+        if (bytes.length > limit) {
+            throw tooLarge();
+        }
         return bytes;
     }
 
@@ -104,9 +116,14 @@ public class CraftDocumentController {
         if (value != null) {
             String normalized = value.trim();
             if (normalized.matches("[0-9]+|\"[0-9]+\"")) {
-                if (normalized.startsWith("\"")) normalized = normalized.substring(1, normalized.length() - 1);
+                if (normalized.startsWith("\"")) {
+                    normalized = normalized.substring(1, normalized.length() - 1);
+                }
                 try { return Long.parseLong(normalized); }
-                catch (NumberFormatException ignored) { /* Reject overflow as an invalid precondition. */ }
+                catch (NumberFormatException ignored) {
+                    log.error("工艺文档版本号超出有效范围", ignored);
+                    /* Reject overflow as an invalid precondition. */
+                }
             }
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "保存必须提供当前文件版本 If-Match");

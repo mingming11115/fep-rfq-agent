@@ -29,7 +29,9 @@ public class AccessGuard {
         boolean business = user.roles().stream().anyMatch(grant -> project.getBuId().equals(grant.buId())
                 && java.util.Set.of("SR", "TECH", "APPROVER").contains(grant.role()));
         if (manager || business && (user.id().equals(project.getOwnerId())
-                || members.find(project.getId(), user.id()).map(member -> member.isEnabled()).orElse(false))) return;
+                || members.find(project.getId(), user.id()).map(member -> member.isEnabled()).orElse(false))) {
+            return;
+        }
         throw new BusinessException(403, "无权访问该项目，请联系 BU 管理员授权");
     }
 
@@ -44,18 +46,26 @@ public class AccessGuard {
         requireProject(user, project);
         boolean manager=user.roles().stream().anyMatch(grant->project.getBuId().equals(grant.buId())
                 && (BU_ADMIN.equals(grant.role()) || "SR".equals(grant.role()) && user.id().equals(project.getOwnerId())));
-        if(!manager)throw new BusinessException(403,"仅项目负责人或本 BU 管理员可以维护项目");
+        if(!manager) {
+            throw new BusinessException(403,"仅项目负责人或本 BU 管理员可以维护项目");
+        }
     }
 
     public void requireActiveProject(Project project) {
-        if(project.isArchived())throw new BusinessException(409,"项目已删除，请恢复后再修改");
+        if(project.isArchived()) {
+            throw new BusinessException(409,"项目已删除，请恢复后再修改");
+        }
     }
 
     /** null denotes platform scope; an ordinary user can never produce an empty unrestricted scope. */
     public java.util.Collection<String> managedBuScope(CurrentUser user,String requested) {
-        if(user.systemAdmin())return requested==null?null:java.util.List.of(requested);
+        if(user.systemAdmin()) {
+            return requested==null?null:java.util.List.of(requested);
+        }
         var managed=user.roles().stream().filter(grant->BU_ADMIN.equals(grant.role())).map(CurrentUser.RoleGrant::buId).distinct().toList();
-        if(managed.isEmpty() || requested!=null && !managed.contains(requested))throw new BusinessException(403,"只能查询本人管理事业部的审计记录");
+        if(managed.isEmpty() || requested!=null && !managed.contains(requested)) {
+            throw new BusinessException(403,"只能查询本人管理事业部的审计记录");
+        }
         return requested==null?managed:java.util.List.of(requested);
     }
 

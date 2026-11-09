@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,10 +31,18 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Slf4j
 class CraftDocumentIntegrationTest {
     static final int LIMIT = 4096;
     static final Path ROOT;
-    static { try { ROOT = Files.createTempDirectory("rfq-craft-test-"); } catch (Exception e) { throw new RuntimeException(e); } }
+    static {
+        try {
+            ROOT = Files.createTempDirectory("rfq-craft-test-");
+        } catch (Exception e) {
+            log.error("创建工艺文档测试临时目录失败", e);
+            throw new RuntimeException(e);
+        }
+    }
     static final byte[] ORIGINAL = docx("Original source");
     static final byte[] REVIEW = docx("Native comments and replies");
     static final byte[] OTHER_REVIEW = docx("Concurrent review");
@@ -59,7 +68,10 @@ class CraftDocumentIntegrationTest {
                 }
             }
             return out.toByteArray();
-        } catch (Exception e) { throw new RuntimeException(e); }
+        } catch (Exception e) {
+            log.error("构建工艺文档 DOCX 测试样本失败", e);
+            throw new RuntimeException(e);
+        }
     }
     HttpRequest.Builder request(String path) {
         return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/craft" + path)).timeout(Duration.ofSeconds(15));
@@ -92,7 +104,9 @@ class CraftDocumentIntegrationTest {
     }
     HttpResponse<byte[]> save(JsonNode ref, String revision, byte[] bytes) throws Exception {
         var req = authorized(ref, "/review").header("Content-Type", "application/octet-stream");
-        if (revision != null) req.header("If-Match", revision);
+        if (revision != null) {
+            req.header("If-Match", revision);
+        }
         return send(req.PUT(HttpRequest.BodyPublishers.ofByteArray(bytes)));
     }
     void unchanged(JsonNode ref) throws Exception {

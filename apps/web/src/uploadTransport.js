@@ -15,11 +15,11 @@ export function uploadWithProgress(url, {method='POST',body,headers,signal}={}, 
         finish(resolve,new Response([204,205,304].includes(xhr.status)?null:xhr.responseText,{status:xhr.status,headers:new Headers(
           xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).filter(Boolean).map(line=>{const i=line.indexOf(':');return [line.slice(0,i),line.slice(i+1).trim()];})
         )}));
-      }catch(error){finish(reject,error);}
+      }catch(error){ console.error('读取文件上传响应失败'); finish(reject,error);}
     };
     xhr.onerror=()=>finish(reject,new TypeError('网络请求未完成'));
     xhr.onabort=()=>finish(reject,new DOMException('请求已取消','AbortError'));
     signal?.addEventListener('abort',abort,{once:true});
-    try{xhr.send(body);}catch(error){finish(reject,error);}
+    try{xhr.send(body);}catch(error){ console.error('发送文件上传请求失败', error); finish(reject,error);}
   });
 }

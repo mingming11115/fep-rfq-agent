@@ -127,7 +127,7 @@ test('native refusal remains visible after the document becomes dirty',async()=>
   const document=window.document;document.write(await readFile(new URL('../site/classic.html',import.meta.url),'utf8'));
   Object.assign(globalThis,{window,document,location:window.location,history:window.history,ResizeObserver:class{observe(){}},requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}});
   const frame=document.getElementById('word-frame');
-  const native={postMessage(message){if(message.type!=='wordcraft:review')return;const p=JSON.parse(message.payload);queueMicrotask(()=>send('reviewResult',p.action==='draft'?{request:p.request,ok:false,error:'Native edit refused'}:{request:p.request,ok:true,result:{}}));}};
+  const native={postMessage(message){if(message.type!=='wordcraft:review') { return; } const p=JSON.parse(message.payload);queueMicrotask(()=>send('reviewResult',p.action==='draft'?{request:p.request,ok:false,error:'Native edit refused'}:{request:p.request,ok:true,result:{}}));}};
   Object.defineProperty(frame,'contentWindow',{value:native});
   function send(kind,payload){window.dispatchEvent(new window.MessageEvent('message',{origin:window.location.origin,source:native,data:{type:'wordcraft:'+kind,payload:JSON.stringify(payload)}}));}
   await import('../site/classic-demo.js?status-regression');

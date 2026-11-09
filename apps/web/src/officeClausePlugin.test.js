@@ -8,7 +8,7 @@ function harness({controls=[],ranges=1,paragraph='甲',defer=false,deferInspecti
   const top={postMessage:data=>sent.push(data)},origin='http://localhost:5173',channel='b221c509-e18c-4d97-a387-22f57e505a68';
   const api={GetDocument:()=>({GetCurrentParagraph:()=>({GetText:()=>paragraph}),Search:()=>Array.from({length:ranges},()=>({Select:()=>selected++}))})};
   const context={URLSearchParams,location:{origin,hash:'#channel='+channel+'?lang=zh-CN'},setTimeout:fn=>{timers.push(fn);},clearTimeout:()=>{},window:{top,addEventListener:(name,fn)=>receive=fn},Api:api,Asc:{scope:{},plugin:{
-    executeMethod:(name,args,cb)=>{calls.push(name);if(name==='GetAllContentControls'){if(defer)callbacks.push(()=>cb(controls));else cb(controls);}else if(name==='GetCurrentContentControlPr'){const captured=currentControl;if(deferInspection)callbacks.push(()=>cb(captured));else cb(captured);}else if(name==='GetSelectedText')cb(paragraph);else if(name==='SearchNext'){selected++;cb(true);}else cb(null);},
+    executeMethod:(name,args,cb)=>{calls.push(name);if(name==='GetAllContentControls'){if(defer) { callbacks.push(()=>cb(controls)); } else { cb(controls); }}else if(name==='GetCurrentContentControlPr'){const captured=currentControl;if(deferInspection) { callbacks.push(()=>cb(captured)); } else { cb(captured); }}else if(name==='GetSelectedText') { cb(paragraph); } else if(name==='SearchNext'){selected++;cb(true);}else { cb(null); }},
     callCommand:(fn,close,calc,cb)=>{assert.equal(close,false);assert.equal(calc,false);cb(vm.runInContext('('+fn.toString()+')()',ctx));},
     attachEditorEvent:(name,fn)=>events[name]=fn,
   }}};

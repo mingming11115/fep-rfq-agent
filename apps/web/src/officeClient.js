@@ -8,21 +8,21 @@ export const demoOfficeAsset = source => source?.projectId === 'RFQ-001'
 
 export async function loadDemoOffice(source, signal) {
   const asset = demoOfficeAsset(source);
-  if (!asset) throw new Error('该来源没有内置示例，请上传对应原件');
+  if (!asset) { throw new Error('该来源没有内置示例，请上传对应原件'); }
   const response = await fetch(asset,{signal});
-  if (!response.ok) throw new Error('内置示例文件未能读取，请重试');
+  if (!response.ok) { throw new Error('内置示例文件未能读取，请重试'); }
   const file = new File([await response.blob()],'RFQ批阅示例.docx',{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
   return {...await uploadOfficeFile(file,source,signal),demoVersion:'clauses-v2'};
 }
 
 export async function officeRequest(path, ref, options = {}) {
   const headers = new Headers(options.headers);
-  if (ref?.access) headers.set('X-Office-Access',ref.access);
+  if (ref?.access) { headers.set('X-Office-Access',ref.access); }
   let response;
   try { response = await fetch('/api/office'+path,{...options,headers}); }
-  catch (error) { if (error.name === 'AbortError') throw error; throw new Error('无法连接文档服务，请检查 RFQ 后端是否启动'); }
-  if (options.binary && response.ok) return response.blob();
-  const body = await response.json().catch(()=>null);
+  catch (error) { console.error('连接 Office 文档服务失败', error); if (error.name === 'AbortError') { throw error; } throw new Error('无法连接文档服务，请检查 RFQ 后端是否启动'); }
+  if (options.binary && response.ok) { return response.blob(); }
+  const body = await response.json().catch(()=>{ console.error('解析 Office 文档服务响应失败'); return null; });
   if (!response.ok || body?.code !== 0) { const error=new Error(body?.msg || '文档服务暂不可用，请检查后端和 ONLYOFFICE 配置'); error.status=response.status; throw error; }
   return body.data;
 }
@@ -33,14 +33,14 @@ export async function uploadOfficeFile(file, source, signal) {
 }
 const scripts = new Map();
 export function loadOfficeApi(url) {
-  if (window.DocsAPI) return Promise.resolve(window.DocsAPI);
+  if (window.DocsAPI) { return Promise.resolve(window.DocsAPI); }
   if (!scripts.has(url)) {
     const script = document.createElement('script'); script.src = url; script.async = true;
     const promise = new Promise((resolve,reject)=>{
       const failed = () => { clearTimeout(timer); script.remove(); scripts.delete(url); reject(new Error('ONLYOFFICE 未能加载，请确认文档服务已启动后重试')); };
       const timer = setTimeout(failed,25000);
       script.onerror = failed;
-      script.onload = () => { clearTimeout(timer); if(window.DocsAPI)resolve(window.DocsAPI);else failed(); };
+      script.onload = () => { clearTimeout(timer); if(window.DocsAPI) { resolve(window.DocsAPI); } else { failed(); } };
       document.head.appendChild(script);
     });
     scripts.set(url,promise);

@@ -5,7 +5,7 @@ const BASE = 'http://127.0.0.1:5173';
 const OUT = fileURLToPath(new URL('../../.local/artifacts/browser/', import.meta.url));
 mkdirSync(OUT,{recursive:true});
 const PROFILE = process.env.RFQ_CHROME_PROFILE;
-if (!PROFILE) throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.');
+if (!PROFILE) { throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.'); }
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   channel: 'chrome', headless: false,
@@ -44,7 +44,7 @@ if (selCount > 0) {
   await page.waitForTimeout(500);
   const r1 = await page.evaluate(() => {
     const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-    if (!dd) return { dom: false };
+    if (!dd) { return { dom: false }; }
     const r = dd.getBoundingClientRect();
     const cs = getComputedStyle(dd);
     return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && r.height > 0, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } };
@@ -55,7 +55,7 @@ if (selCount > 0) {
   await page.waitForTimeout(900);
   const r2 = await page.evaluate(() => {
     const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-    if (!dd) return { dom: false };
+    if (!dd) { return { dom: false }; }
     const r = dd.getBoundingClientRect();
     const cs = getComputedStyle(dd);
     return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && r.height > 0 };

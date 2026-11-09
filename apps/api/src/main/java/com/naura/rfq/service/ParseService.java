@@ -113,13 +113,17 @@ public class ParseService {
         String phase = "read";
         try {
             rawBlocks = readBlocks(document);
-            if (rawBlocks.isEmpty()) throw new DocumentReadException("文档没有可读取内容");
+            if (rawBlocks.isEmpty()) {
+                throw new DocumentReadException("文档没有可读取内容");
+            }
             if (rawBlocks.size() > properties.maxBlocks()) {
                 issues.add("文档内容块超过上限 " + properties.maxBlocks() + "，仅处理前部分内容");
                 rawBlocks = new ArrayList<>(rawBlocks.subList(0, properties.maxBlocks()));
             }
             for (RawBlock block : rawBlocks) {
-                if (block.issue() != null) issues.add(block.anchor() + "：" + block.issue());
+                if (block.issue() != null) {
+                    issues.add(block.anchor() + "：" + block.issue());
+                }
             }
             phase = "extract";
             ExtractionResult result = extractor.extractWithReport(rawBlocks, run.getId());
@@ -131,7 +135,7 @@ public class ParseService {
                 throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
             }
         } catch (Exception exception) {
-            log.warn("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
+            log.error("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
                     run.getId(), documentId, project.getId(), phase, exception.getClass().getSimpleName(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             run.setStatus(ParseRun.FAILED);
@@ -191,7 +195,9 @@ public class ParseService {
         List<ExtractedRequirement> reviewed = new ArrayList<>();
         for (var r : candidates) {
             RawBlock block = byIndex.get(r.blockIndex());
-            if (block == null) throw new IllegalArgumentException("来源块不存在");
+            if (block == null) {
+                throw new IllegalArgumentException("来源块不存在");
+            }
             if (block.issue() == null) { reviewed.add(r); continue; }
             reviewed.add(new ExtractedRequirement(r.order(), r.blockIndex(), r.sectionPath(), r.customerClauseNo(),
                 r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(), r.metricsJson(),

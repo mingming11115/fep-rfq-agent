@@ -24,7 +24,9 @@ public class OfficeController {
     @PostMapping("/documents") public ApiResponse<?> upload(@RequestParam MultipartFile file,
             @RequestParam(defaultValue = "") String projectId, @RequestParam(defaultValue = "") String fileId,
             @RequestParam(defaultValue = "") String sourceVersion) throws Exception {
-        if (file.getSize() > properties.maxFileBytes()) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文件超过允许的上传大小");
+        if (file.getSize() > properties.maxFileBytes()) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文件超过允许的上传大小");
+        }
         return ApiResponse.success(service.upload(file.getOriginalFilename(), file.getBytes(), projectId, fileId, sourceVersion));
     }
     @GetMapping("/documents/{id}") public ApiResponse<?> document(@PathVariable String id, @RequestHeader(value = "X-Office-Access", required = false) String access) {
@@ -38,7 +40,9 @@ public class OfficeController {
     @CrossOrigin(origins = "*")
     // Docs 9.3 derives baseUrl by looking for the literal filename "config.json".
     @GetMapping("/plugin/config.json") public Map<String, Object> clausePlugin(@RequestParam(defaultValue = "") String origin, @RequestParam(defaultValue = "") String channel) {
-        if (!origin.isEmpty() || !channel.isEmpty()) service.validatePlugin(origin, channel);
+        if (!origin.isEmpty() || !channel.isEmpty()) {
+            service.validatePlugin(origin, channel);
+        }
         return Map.of("name", "RFQ 条款联动", "guid", OfficeDocumentService.CLAUSE_PLUGIN, "baseUrl", "", "version", "1.0.0",
                 "variations", java.util.List.of(Map.of("description", "RFQ 条款联动", "url", "index.html" + (channel.isEmpty() ? "" : "#channel=" + channel),
                         "isViewer", true, "EditorsSupport", java.util.List.of("word"), "isVisual", false, "isModal", false, "isInsideMode", false,
@@ -54,7 +58,9 @@ public class OfficeController {
     }
     @GetMapping("/documents/{id}/download") public ResponseEntity<?> download(@PathVariable String id,
             @RequestHeader(value = "X-Office-Access", required = false) String access, @RequestParam(defaultValue = "review") String kind) {
-        if (!kind.equals("review") && !kind.equals("original")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "下载版本无效");
+        if (!kind.equals("review") && !kind.equals("original")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "下载版本无效");
+        }
         return file(store.authorize(id, access), kind.equals("original"));
     }
     @GetMapping("/content/{id}") public ResponseEntity<?> content(@PathVariable String id, @RequestParam String ticket) { return file(service.content(id, ticket), false); }

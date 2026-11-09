@@ -57,10 +57,17 @@ public class ProjectAccessService {
     @Transactional
     public AccessView update(CurrentUser actor,String projectId,String userId,boolean enabled,long version,String reason) {
         Project project=project(projectId,true); access.requireProjectAccessManager(actor,project);
-        if(project.getVersion()!=version) throw new BusinessException(409,"项目授权已被他人修改，请刷新后重试");
-        if(!enabled && project.getOwnerId().equals(userId)) throw new BusinessException(409,"不能撤销当前项目负责人授权，请先变更负责人");
-        if(enabled) requireEligible(userId,project.getBuId(),false);
-        else if(members.find(projectId,userId).isEmpty()) throw new BusinessException(404,"项目授权不存在");
+        if(project.getVersion()!=version) {
+            throw new BusinessException(409,"项目授权已被他人修改，请刷新后重试");
+        }
+        if(!enabled && project.getOwnerId().equals(userId)) {
+            throw new BusinessException(409,"不能撤销当前项目负责人授权，请先变更负责人");
+        }
+        if(enabled) {
+            requireEligible(userId,project.getBuId(),false);
+        } else if(members.find(projectId,userId).isEmpty()) {
+            throw new BusinessException(404,"项目授权不存在");
+        }
         saveMember(projectId,userId,enabled,actor.id());
         project.setUpdatedAt(Instant.now()); projects.update(project); project.setVersion(version+1);
         audit.successInBu(actor.id(),project.getBuId(),enabled?"授予项目访问":"撤销项目访问","project",projectId,userId+"："+reason.trim());
@@ -79,7 +86,9 @@ public class ProjectAccessService {
         boolean eligible=target.isActive() && !target.isSystemAdmin() && (profile==null || profile.isEnabled())
                 && roles.findByUserIdAndStatus(id,"ACTIVE").stream().anyMatch(role->buId.equals(role.getBuId())
                     && (owner?"SR".equals(role.getRole()):Set.of("SR","TECH","APPROVER").contains(role.getRole())));
-        if(!eligible)throw new BusinessException(400,owner?"项目负责人必须是本 BU 有效 SR":"人员不在本 BU 有效业务范围");
+        if(!eligible) {
+            throw new BusinessException(400,owner?"项目负责人必须是本 BU 有效 SR":"人员不在本 BU 有效业务范围");
+        }
     }
     private Project project(String id,boolean locked) {
         return (locked?projects.findByIdForUpdate(id):projects.findById(id)).orElseThrow(()->new BusinessException(404,"项目不存在"));

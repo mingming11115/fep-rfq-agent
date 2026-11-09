@@ -6,7 +6,7 @@ const stages = { extracting: 1, comparing: 2, generating: 3 };
 
 export default function SourceParseProgress({ files = [] }) {
   const sources = files.filter(file => file.purpose === '要求来源');
-  if (!sources.length) return null;
+  if (!sources.length) { return null; }
   // A parse run persists clauses; it does not run response matching/generation.
   const backend = sources.some(file => file.backendDocumentId);
   const steps = backend ? ['文件已上传', '后端条款解析', '后端条款读取'] : demoSteps;

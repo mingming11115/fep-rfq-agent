@@ -13,6 +13,7 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipInputStream;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Service
 @EnableConfigurationProperties(OfficeProperties.class)
+@Slf4j
 public class OfficeDocumentService {
     public static final String CLAUSE_PLUGIN = "asc.{B221C509-E18C-4D97-A387-22F57E505A68}";
     private final OfficeProperties properties;
@@ -54,9 +56,12 @@ public class OfficeDocumentService {
     public Map<String, Object> saveCraftReview(String id, String access, long expectedRevision, byte[] bytes) throws IOException {
         synchronized (locks.computeIfAbsent(id, unused -> new Object())) {
             var before = store.authorize(id, access);
-            if (expectedRevision < 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前文件版本无效，请重新打开原文件");
-            if (before.revision() != expectedRevision)
+            if (expectedRevision < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前文件版本无效，请重新打开原文件");
+            }
+            if (before.revision() != expectedRevision) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "原文件已有更新，请保留本地批阅稿并重新打开最新版本");
+            }
             validate(before.name(), bytes);
             String digest = OfficeFileStore.hash(bytes);
             long revision = before.revision() + (digest.equals(before.digest()) ? 0 : 1);
@@ -78,11 +83,14 @@ public class OfficeDocumentService {
         return session(doc, readOnly, userId, userName, "", "");
     }
     public void validatePlugin(String origin, String channel) {
-        if (!properties.allowsFrontend(origin) || channel == null || !channel.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"))
+        if (!properties.allowsFrontend(origin) || channel == null || !channel.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "条款联动来源或通道无效");
+        }
     }
     public Map<String, Object> session(OfficeFileStore.Document doc, boolean readOnly, String userId, String userName, String pluginOrigin, String pluginChannel) {
-        if (!properties.configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "文档服务尚未配置，请先启动 ONLYOFFICE 并设置 JWT 密钥");
+        if (!properties.configured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "文档服务尚未配置，请先启动 ONLYOFFICE 并设置 JWT 密钥");
+        }
         var config = new LinkedHashMap<String, Object>();
         config.put("documentType", doc.fileType().equals("pdf") ? "pdf" : "word");
         config.put("width", "100%"); config.put("height", "100%"); config.put("type", "desktop");
@@ -95,7 +103,9 @@ public class OfficeDocumentService {
                 "customization", Map.of("forcesave", true, "autosave", true, "compactToolbar", true, "help", false, "features", Map.of("featuresTips", false))));
         if (!pluginOrigin.isEmpty() || !pluginChannel.isEmpty()) {
             validatePlugin(pluginOrigin, pluginChannel);
-            if (doc.fileType().equals("docx")) editorConfig.put("plugins", Map.of("autostart", List.of(CLAUSE_PLUGIN), "pluginsData", List.of(pluginOrigin + "/api/office/plugin/config.json?origin=" + java.net.URLEncoder.encode(pluginOrigin, UTF_8) + "&channel=" + pluginChannel)));
+            if (doc.fileType().equals("docx")) {
+                editorConfig.put("plugins", Map.of("autostart", List.of(CLAUSE_PLUGIN), "pluginsData", List.of(pluginOrigin + "/api/office/plugin/config.json?origin=" + java.net.URLEncoder.encode(pluginOrigin, UTF_8) + "&channel=" + pluginChannel)));
+            }
         }
         config.put("editorConfig", editorConfig);
         config.put("token", jwt.sign(config));
@@ -107,9 +117,14 @@ public class OfficeDocumentService {
     public OfficeFileStore.Document content(String id, String token) {
         try {
             JsonNode claims = jwt.verify(token);
-            if (!id.equals(claims.path("id").asText()) || !claims.has("exp") || !"review".equals(claims.path("kind").asText())) throw new IllegalArgumentException();
+            if (!id.equals(claims.path("id").asText()) || !claims.has("exp") || !"review".equals(claims.path("kind").asText())) {
+                throw new IllegalArgumentException();
+            }
             return store.read(id);
-        } catch (IllegalArgumentException e) { throw new ResponseStatusException(HttpStatus.FORBIDDEN, "文档下载链接已失效"); }
+        } catch (IllegalArgumentException e) {
+            log.error("验证文档下载签名失败 errorType={}", e.getClass().getSimpleName());
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "文档下载链接已失效");
+        }
     }
     public boolean callback(String id, String token) {
         OfficeFileStore.Document before = null;
@@ -120,21 +135,35 @@ public class OfficeDocumentService {
                 String key = payload.path("key").asText();
                 int status = payload.path("status").asInt();
                 String receipt = OfficeFileStore.hash(payload.toString().getBytes(UTF_8));
-                if (before.processedCallbacks().contains(receipt)) return true;
-                if (!key.equals(before.key())) return false;
-                if (status == 3 || status == 7) throw new IOException("文档服务报告保存失败，请保留编辑器并重试");
-                if (status != 2 && status != 6) return true;
+                if (before.processedCallbacks().contains(receipt)) {
+                    return true;
+                }
+                if (!key.equals(before.key())) {
+                    return false;
+                }
+                if (status == 3 || status == 7) {
+                    throw new IOException("文档服务报告保存失败，请保留编辑器并重试");
+                }
+                if (status != 2 && status != 6) {
+                    return true;
+                }
                 URI url = URI.create(payload.path("url").asText());
                 URI base = URI.create(properties.internalUrl());
                 URI publicBase = URI.create(properties.publicUrl());
                 URI trusted = sameOrigin(url, base) ? base : sameOrigin(url, publicBase) ? publicBase : null;
-                if (trusted == null || url.getUserInfo() != null || !url.getPath().startsWith(trusted.getPath() + "/cache/files/") || url.getPath().contains("..")) throw new IOException("保存下载地址不在受信任的文档服务范围内");
-                if (!sameOrigin(url, base)) url = URI.create(properties.internalUrl() + url.getRawPath().substring(publicBase.getRawPath().length()) + (url.getRawQuery() == null ? "" : "?" + url.getRawQuery()));
+                if (trusted == null || url.getUserInfo() != null || !url.getPath().startsWith(trusted.getPath() + "/cache/files/") || url.getPath().contains("..")) {
+                    throw new IOException("保存下载地址不在受信任的文档服务范围内");
+                }
+                if (!sameOrigin(url, base)) {
+                    url = URI.create(properties.internalUrl() + url.getRawPath().substring(publicBase.getRawPath().length()) + (url.getRawQuery() == null ? "" : "?" + url.getRawQuery()));
+                }
                 var request = HttpRequest.newBuilder(url).timeout(Duration.ofSeconds(30)).GET().build();
                 byte[] bytes;
                 var result = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
                 try (var input = result.body()) {
-                    if (result.statusCode() != 200) throw new IOException("文档服务未返回可保存的文件");
+                    if (result.statusCode() != 200) {
+                        throw new IOException("文档服务未返回可保存的文件");
+                    }
                     bytes = input.readNBytes((int) properties.maxFileBytes() + 1);
                 }
                 validate(before.name(), bytes);
@@ -144,10 +173,16 @@ public class OfficeDocumentService {
                 var after = new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), status == 2 ? newKey() : key, revision, Instant.now().toString(), "", digest, receipt, receipts);
                 store.save(after, bytes); return true;
             } catch (Exception e) {
+                log.error("处理文档服务保存回调失败 errorType={}", e.getClass().getSimpleName());
                 // An unauthenticated request cannot change metadata or poison the displayed save status.
-                if (before != null) try {
-                    store.write(new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), before.key(), before.revision(), before.savedAt(), "保存未完成，请重试或下载编辑器中的文件", before.digest(), before.lastCallback(), before.processedCallbacks()));
-                } catch (IOException ignored) { /* Existing revision is preserved. */ }
+                if (before != null) {
+                    try {
+                        store.write(new OfficeFileStore.Document(before.id(), before.name(), before.fileType(), before.projectId(), before.fileId(), before.sourceVersion(), before.accessHash(), before.key(), before.revision(), before.savedAt(), "保存未完成，请重试或下载编辑器中的文件", before.digest(), before.lastCallback(), before.processedCallbacks()));
+                    } catch (IOException writeFailure) {
+                        log.error("记录文档保存失败状态时写入元数据失败", writeFailure);
+                        /* Existing revision is preserved. */
+                    }
+                }
                 return false;
             }
         }
@@ -157,27 +192,44 @@ public class OfficeDocumentService {
         body.put("token", jwt.sign(body));
         var response = http.send(HttpRequest.newBuilder(URI.create(properties.internalUrl() + "/coauthoring/CommandService.ashx"))
                 .timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body))).build(), HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "文档保存请求失败");
+        if (response.statusCode() != 200) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "文档保存请求失败");
+        }
         int error = json.readTree(response.body()).path("error").asInt(-1);
-        if (error != 0 && error != 4) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "文档服务暂时无法保存，请稍后重试");
+        if (error != 0 && error != 4) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "文档服务暂时无法保存，请稍后重试");
+        }
         return Map.of("pending", error == 0, "document", metadata(store.read(doc.id())));
     }
     public void validate(String name, byte[] bytes) {
-        if (bytes.length > properties.maxFileBytes()) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文件超过允许的上传大小");
-        if (bytes.length == 0 || name == null || name.length() > 240 || name.contains("/") || name.contains("\\")) badFormat();
+        if (bytes.length > properties.maxFileBytes()) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文件超过允许的上传大小");
+        }
+        if (bytes.length == 0 || name == null || name.length() > 240 || name.contains("/") || name.contains("\\")) {
+            badFormat();
+        }
         if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-            if (bytes.length < 8 || !new String(bytes, 0, 5, UTF_8).equals("%PDF-")) badFormat();
+            if (bytes.length < 8 || !new String(bytes, 0, 5, UTF_8).equals("%PDF-")) {
+                badFormat();
+            }
         } else if (name.toLowerCase(Locale.ROOT).endsWith(".docx")) {
             boolean types = false, document = false; long expanded = 0;
             try (var zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {
                 java.util.zip.ZipEntry entry; byte[] buffer = new byte[8192];
                 while ((entry = zip.getNextEntry()) != null) {
                     types |= entry.getName().equals("[Content_Types].xml"); document |= entry.getName().equals("word/document.xml");
-                    int count; while ((count = zip.read(buffer)) != -1) { expanded += count; if (expanded > 100L * 1024 * 1024) badFormat(); }
+                    int count; while ((count = zip.read(buffer)) != -1) { expanded += count; if (expanded > 100L * 1024 * 1024) { badFormat(); } }
                 }
-            } catch (IOException e) { badFormat(); }
-            if (!types || !document) badFormat();
-        } else badFormat();
+            } catch (IOException e) {
+                log.error("读取 Office 文档压缩包失败 errorType={}", e.getClass().getSimpleName());
+                badFormat();
+            }
+            if (!types || !document) {
+                badFormat();
+            }
+        } else {
+            badFormat();
+        }
     }
     private static void badFormat() { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择有效的 DOCX 或 PDF 原文件；旧 DOC 请先转换为 DOCX"); }
     private static boolean sameOrigin(URI a, URI b) { return Objects.equals(a.getScheme(), b.getScheme()) && Objects.equals(a.getHost(), b.getHost()) && a.getPort() == b.getPort(); }

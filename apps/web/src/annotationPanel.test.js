@@ -13,7 +13,7 @@ test('right discussion owns editing, cancellation, replies and permission-aware 
   // HappyDOM leaves Ant's reset border widths as "initial"; browsers compute pixels.
   const nativeStyle=window.getComputedStyle.bind(window);
   window.getComputedStyle=(...args)=>{const style=nativeStyle(...args);return new Proxy(style,{get(target,key){
-    if(key==='getPropertyValue')return name=>{const value=target.getPropertyValue(name);return /^border-(top|bottom)-width$/.test(name)&&value==='initial'?'0px':value;};
+    if(key==='getPropertyValue') { return name=>{const value=target.getPropertyValue(name);return /^border-(top|bottom)-width$/.test(name)&&value==='initial'?'0px':value;}; }
     const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
   }});};
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});

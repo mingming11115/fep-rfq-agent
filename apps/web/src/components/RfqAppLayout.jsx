@@ -29,7 +29,7 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
       collapsed={mobile ? mobileCollapsed : collapsed} onCollapse={mobile ? setMobileCollapsed : onCollapse} location={{ pathname: '/' + activeNav }}
       menuDataRender={() => menu} onMenuHeaderClick={onHome} menu={{ autoClose: false }}
       menuItemRender={(item, dom) => <button type="button" className="rfq-layout-menu-button" data-testid={'nav-' + item.key}
-        onClick={event => { event.preventDefault(); onNavigate(item.targetPage); if (mobile) setMobileCollapsed(true); }}>{dom}</button>}
+        onClick={event => { event.preventDefault(); onNavigate(item.targetPage); if (mobile) { setMobileCollapsed(true); } }}>{dom}</button>}
       menuFooterRender={() => <span className="rfq-layout-menu-footer">{collapsed ? 'RFQ' : 'FEP · RFQ 工作空间'}</span>}
       actionsRender={() => [
         onRefresh ? <Tooltip key="refresh" title="刷新数据库数据"><Button type="text" aria-label="刷新数据库数据" icon={<ReloadOutlined/>} onClick={onRefresh}/></Tooltip> : null,

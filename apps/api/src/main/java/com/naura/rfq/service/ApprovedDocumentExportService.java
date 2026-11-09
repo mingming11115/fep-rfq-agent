@@ -37,12 +37,14 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ApprovedDocumentExportService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -104,7 +106,9 @@ public class ApprovedDocumentExportService {
 
     Map<String, List<Note>> validateContents(Project project, JsonNode snapshot, boolean pinSources) {
         String projectId = project.getId();
-        if (snapshot.has("workVersion") && snapshot.path("workVersion").asLong() != work.version(projectId)) throw changed();
+        if (snapshot.has("workVersion") && snapshot.path("workVersion").asLong() != work.version(projectId)) {
+            throw changed();
+        }
         var excluded = work.inactiveDocuments(projectId);
         var sourceFiles = documents.findByProjectIdOrderByCreatedAtDesc(projectId).stream()
                 .filter(file -> !excluded.contains(file.getId()))
@@ -114,12 +118,16 @@ public class ApprovedDocumentExportService {
                 .collect(Collectors.toMap(Requirement::getId, Function.identity()));
         if (payloads("select payload from response_review where project_id=?", projectId).stream()
                 .anyMatch(review -> (review.path("requirementId").asText().isBlank() || sourceRows.containsKey(review.path("requirementId").asText()))
-                        && !Set.of("已关闭", "已取消").contains(review.path("status").asText()))) throw changed();
+                        && !Set.of("已关闭", "已取消").contains(review.path("status").asText()))) {
+            throw changed();
+        }
         var responses = payloads("select payload from requirement_response where project_id=?", projectId).stream()
                 .collect(Collectors.toMap(row -> row.path("id").asText(), Function.identity()));
         JsonNode scope = snapshot.path("approvalScope");
         validateScope(projectId, scope, sourceFiles);
-        if (sourceRows.isEmpty() || snapshot.path("rows").size() != sourceRows.size()) throw changed();
+        if (sourceRows.isEmpty() || snapshot.path("rows").size() != sourceRows.size()) {
+            throw changed();
+        }
 
         Map<String, List<Note>> notes = new LinkedHashMap<>();
         Map<String, Map<String, DocumentBlock>> anchors = new LinkedHashMap<>();
@@ -130,12 +138,18 @@ public class ApprovedDocumentExportService {
             var response = responses.get(id);
             if (!seenRows.add(id) || requirement == null || response == null
                     || requirement.getExtractionStatus() != null && !"VALID".equals(requirement.getExtractionStatus()) || !"已确认".equals(response.path("status").asText())
-                    || response.has("sourceRequirementVersion") && response.path("sourceRequirementVersion").asLong(-1) != requirement.getVersion()) throw changed();
-            if (response.hasNonNull("matchReference") && !matches.referenceAvailable(project, requirement, response.path("matchReference"))) throw changed();
+                    || response.has("sourceRequirementVersion") && response.path("sourceRequirementVersion").asLong(-1) != requirement.getVersion()) {
+                throw changed();
+            }
+            if (response.hasNonNull("matchReference") && !matches.referenceAvailable(project, requirement, response.path("matchReference"))) {
+                throw changed();
+            }
             var source = sourceFiles.get(requirement.getDocumentId());
             if (source == null || !source.getId().equals(row.path("sourceFileId").asText())
                     || !version(source).equals(row.path("sourceVersion").asText())
-                    || !sameAnswer(row, requirement, response)) throw changed();
+                    || !sameAnswer(row, requirement, response)) {
+                throw changed();
+            }
             var documentAnchors = anchors.computeIfAbsent(source.getId(), fileId -> blocks.findByDocumentIdOrderByBlockIndex(fileId)
                     .stream().collect(Collectors.toMap(DocumentBlock::getId, Function.identity())));
             var block = documentAnchors.get(requirement.getBlockId());
@@ -147,8 +161,11 @@ public class ApprovedDocumentExportService {
                 frozen.put("sourceAnchor", block.getSourceAnchor());
                 frozen.put("sourceRequirementVersion", requirement.getVersion());
                 frozen.put("section", requirement.getSectionPath());
-                if (response.hasNonNull("matchReference")) frozen.set("matchReference", response.get("matchReference"));
-                else frozen.remove("matchReference");
+                if (response.hasNonNull("matchReference")) {
+                    frozen.set("matchReference", response.get("matchReference"));
+                } else {
+                    frozen.remove("matchReference");
+                }
             }
             notes.computeIfAbsent(source.getId(), ignored -> new ArrayList<>())
                     .add(new Note(block.getSourceAnchor(), requirement.getOriginalText(), commentText(row)));
@@ -176,21 +193,30 @@ public class ApprovedDocumentExportService {
 
     private static Instant createdAt(JsonNode snapshot) {
         try { return Instant.parse(snapshot.path("createdAt").asText()); }
-        catch (java.time.format.DateTimeParseException e) { return Instant.EPOCH; }
+        catch (java.time.format.DateTimeParseException e) {
+            log.error("解析导出记录的创建时间失败 errorType={}", e.getClass().getSimpleName());
+            return Instant.EPOCH;
+        }
     }
 
     static boolean approved(JsonNode snapshot) {
         if (!"已批准".equals(snapshot.path("status").asText()) || snapshot.path("stale").asBoolean()
-                || snapshot.path("approvalFingerprint").asText().isBlank()) return false;
+                || snapshot.path("approvalFingerprint").asText().isBlank()) {
+            return false;
+        }
         var review = snapshot.path("finalReview");
         var reviewers = review.path("reviewers");
         var decisions = review.path("decisions");
         String sr = reviewers.path("srId").asText();
-        if (!"sr-and-technical".equals(review.path("policy").asText()) || !vote(decisions.path("sr"), sr)) return false;
+        if (!"sr-and-technical".equals(review.path("policy").asText()) || !vote(decisions.path("sr"), sr)) {
+            return false;
+        }
         Set<String> technical = new HashSet<>();
         for (var reviewer : reviewers.path("technicalIds")) {
             String id = reviewer.asText();
-            if (id.isBlank() || id.equals(sr) || !technical.add(id)) return false;
+            if (id.isBlank() || id.equals(sr) || !technical.add(id)) {
+                return false;
+            }
         }
         var technicalVotes = decisions.path("technicalByActorId");
         return switch (review.path("technicalMode").asText()) {
@@ -222,23 +248,36 @@ public class ApprovedDocumentExportService {
                 .filter(grant -> project.getBuId().equals(grant.getBuId()) && expectedRoles.contains(grant.getRole()))
                 .map(grant -> new CurrentUser.RoleGrant(grant.getBuId(), grant.getRole())).toList();
         if (account.isSystemAdmin() || profile == null || !profile.isEnabled()
-                || !profile.isCanConfirm() || !profile.isCanFinalReview() || grants.isEmpty()) throw changed();
+                || !profile.isCanConfirm() || !profile.isCanFinalReview() || grants.isEmpty()) {
+            throw changed();
+        }
         try { access.requireProject(new CurrentUser(id, account.getDisplayName(), false, grants), project); }
-        catch (BusinessException e) { throw changed(); }
+        catch (BusinessException e) {
+            log.error("验证审批导出复核权限失败", e);
+            throw changed();
+        }
     }
 
     private void validateScope(String projectId, JsonNode scope, Map<String, CustomerDocument> sourceFiles) {
         var versions = new ArrayList<String>();
         for (var version : scope.path("sourceVersions")) versions.add(version.asText());
         if (versions.size() != sourceFiles.size() || !new HashSet<>(versions).equals(sourceFiles.values().stream()
-                .map(file -> file.getId() + ":" + version(file)).collect(Collectors.toSet()))) throw changed();
-        if (sourceFiles.values().stream().anyMatch(file -> Set.of("PARSING", "FAILED").contains(file.getStatus()))) throw changed();
+                .map(file -> file.getId() + ":" + version(file)).collect(Collectors.toSet()))) {
+            throw changed();
+        }
+        if (sourceFiles.values().stream().anyMatch(file -> Set.of("PARSING", "FAILED").contains(file.getStatus()))) {
+            throw changed();
+        }
         var config = payloads("select payload from project_response_config where project_id=?", projectId);
         var frozen = scope.path("configuration");
         if (config.size() != 1 || !config.get(0).path("approvalConfig").equals(frozen.path("approvalConfig"))
-                || !config.get(0).path("equipment").asText("").equals(frozen.path("equipment").asText(""))) throw changed();
+                || !config.get(0).path("equipment").asText("").equals(frozen.path("equipment").asText(""))) {
+            throw changed();
+        }
         if (config.get(0).has("technicalReviewSettings")
-                && !config.get(0).path("technicalReviewSettings").equals(frozen.path("personnel").path("settings"))) throw changed();
+                && !config.get(0).path("technicalReviewSettings").equals(frozen.path("personnel").path("settings"))) {
+            throw changed();
+        }
     }
 
     private static boolean sameAnswer(JsonNode row, Requirement requirement, JsonNode response) {
@@ -246,9 +285,13 @@ public class ApprovedDocumentExportService {
                 || !row.path("clause").asText("").equals(Objects.toString(requirement.getCustomerClauseNo(), ""))
                 || !row.path("title").asText("").equals(Objects.toString(requirement.getTitle(), ""))
                 || row.path("version").asLong(-1) != response.path("version").asLong(-2)
-                || response.hasNonNull("pendingReviewProposal")) return false;
+                || response.hasNonNull("pendingReviewProposal")) {
+            return false;
+        }
         String assignee = Objects.toString(requirement.getConfirmationAssigneeId(), response.path("confirmationAssigneeId").asText(""));
-        if (!assignee.equals(row.path("confirmationAssigneeId").asText(""))) return false;
+        if (!assignee.equals(row.path("confirmationAssigneeId").asText(""))) {
+            return false;
+        }
         return List.of("conclusion", "draft", "conditions", "evidence", "reason", "status", "confirmedAt", "confirmedBy")
                 .stream().allMatch(field -> fieldValue(row.path(field)).equals(fieldValue(response.path(field))));
     }
@@ -270,16 +313,23 @@ public class ApprovedDocumentExportService {
         var original = originalFiles.download(user, sourceId);
         String name = safeName(original.name());
         byte[] bytes;
-        if (name.toLowerCase(Locale.ROOT).endsWith(".docx")) bytes = AnnotatedOriginal.word(original.content(), notes);
-        else if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) bytes = AnnotatedOriginal.pdf(original.content(), notes);
-        else throw new BusinessException(409, "原件格式不支持批注导出：" + name);
+        if (name.toLowerCase(Locale.ROOT).endsWith(".docx")) {
+            bytes = AnnotatedOriginal.word(original.content(), notes);
+        } else if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            bytes = AnnotatedOriginal.pdf(original.content(), notes);
+        } else {
+            throw new BusinessException(409, "原件格式不支持批注导出：" + name);
+        }
         return new ExportFile(insertSuffix(name, "-正式应答"), original.contentType(), bytes);
     }
 
     private List<JsonNode> payloads(String sql, String projectId) {
         return jdbc.queryForList(sql, String.class, projectId).stream().map(payload -> {
             try { return json.readTree(payload); }
-            catch (IOException e) { throw new IllegalStateException("数据库业务记录格式异常", e); }
+            catch (IOException e) {
+                log.error("解析导出的业务记录失败 errorType={}", e.getClass().getSimpleName());
+                throw new IllegalStateException("数据库业务记录格式异常", e);
+            }
         }).toList();
     }
 

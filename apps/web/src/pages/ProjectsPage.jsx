@@ -13,7 +13,7 @@ import RfqProjectTable from '../components/RfqProjectTable';
 import CreateRfqDialog from '../components/CreateRfqDialog';
 import {selectProjects,getProjectSummary} from '../projectSelectors';
 import './workspace-pages.css';
-function saved(){try{return JSON.parse(sessionStorage.getItem('rfq.projects.filters'))||{};}catch{return {};}}
+function saved(){try{return JSON.parse(sessionStorage.getItem('rfq.projects.filters'))||{};}catch{ console.error('读取项目筛选条件失败'); return {};}}
 export default function ProjectsPage({appState,route,navigate,sourceReparse,onCreateProject,onOpenProject,onAppUpdate,onTransferProject,onDeleteProject,onRestoreProject,toast,logEvent}){
  const canManage=canPerform(appState.actorRole,'project:manage'),isBuAdmin=appState.actorRole==='BU管理员';
  const [f,setF]=useState(()=>({tab:'all',query:'',view:'list',...saved()})),[modal,setModal]=useState(canManage&&new URLSearchParams(location.hash.split('?')[1]).get('action')==='create'),[transfer,setTransfer]=useState(null),[to,setTo]=useState(''),[reason,setReason]=useState('');
@@ -22,11 +22,11 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
  const lastDeleted=Object.values(appState.deletedProjectsById||{}).at(-1);
  const hasDeletedList=appState.dataSource==='mysql';
  const tabs=isBuAdmin?[['all','全部']]:[['all','全部'],['initiated','我发起的'],['participated','我参与的']];
- if(hasDeletedList)tabs.push(['archived','已删除']);
+ if(hasDeletedList) { tabs.push(['archived','已删除']); }
  const tab=tabs.some(([key])=>key===f.tab)?f.tab:'all';
  const rows=selectProjects(appState,{actorId:appState.actorId,tab,query:f.query}),change=(key,value)=>setF(old=>({...old,[key]:value}));
  const canMaintainProject=project=>{
-  if(!hasDeletedList)return canManage&&project.ownerId===appState.actorId;
+  if(!hasDeletedList) { return canManage&&project.ownerId===appState.actorId; }
   const {enabled,member,managed}=getPersonnelContext(appState,appState.actorId,project.buId);
   return isBuAdmin?managed:canManage&&enabled&&member.roles.includes('SR')&&project.ownerId===appState.actorId;
  };
@@ -34,13 +34,13 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
  const restoring=projectAction?.archived===true;
  const actionLabel=restoring?'恢复':'删除';
  function openProjectAction(project){setActionReason('');setProjectAction(project);}
- function closeProjectAction(){if(!submitting)setProjectAction(null);}
+ function closeProjectAction(){if(!submitting) { setProjectAction(null); }}
  async function submitProjectAction(){
-  if(submitting||restoring&&!actionReason.trim())return;
+  if(submitting||restoring&&!actionReason.trim()) { return; }
   setSubmitting(true);
   try{
    const result=await (restoring?onRestoreProject(projectAction,actionReason):onDeleteProject(projectAction));
-   if(result!==false)setProjectAction(null);
+   if(result!==false) { setProjectAction(null); }
   }finally{setSubmitting(false);}
  }
  const openModel=p=>{
@@ -50,7 +50,7 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
  };
  const resultsRef=useRef(null),queryFormRef=useRef(null),initialQuery=useRef({query:f.query}),viewFocusRef=useRef(false);
  useLayoutEffect(()=>{
-  if(!viewFocusRef.current)return;
+  if(!viewFocusRef.current) { return; }
   resultsRef.current?.closest('.workspace-page')?.querySelector('input[name="project-view"]:checked')?.focus({preventScroll:true});
   viewFocusRef.current=false;
  },[f.view]);
@@ -78,6 +78,6 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
   <p className="muted">{restoring?'项目将恢复至删除前的阶段，并重新出现在活动列表。':hasDeletedList?'项目及相关待办将从工作列表移出。项目资料和工作记录会保留，可在「已删除」中恢复。':'项目及相关待办将从工作列表移出；删除后可撤销，恢复应答、审批及协作记录。'}</p>
   {restoring&&<label className="field"><span>恢复原因</span><UiTextArea aria-label="恢复原因" maxLength={500} value={actionReason} disabled={submitting} onChange={e=>setActionReason(e.target.value)}/></label>}
  </Modal>}</OverlayPresence>
- <OverlayPresence>{modal&&canManage&&<CreateRfqDialog appState={appState} onClose={()=>setModal(false)} onCreateProject={onCreateProject} onCatalogChange={logEvent}/>}</OverlayPresence><OverlayPresence>{transfer&&canManage&&<Modal title="移交项目负责人" onClose={()=>setTransfer(null)} footer={<><UiButton className="btn" onClick={()=>setTransfer(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={()=>{if(!to||!reason.trim()){toast('请选择负责人并填写原因','error');return;}if(onTransferProject(transfer.id,to,reason)===false)return;setTransfer(null);toast('负责人已移交；专业职责与待办处理人继续保留');}}>确认移交</UiButton></>}><p>{transfer.name} · 当前负责人 {transfer.owner}</p><div className="field"><span>新负责人</span><PersonPicker label="新负责人" people={Object.values(appState.accountsById||{}).filter(a=>a.id!==transfer.ownerId&&canAccessProject(appState,a.id,transfer.id)&&getPersonnelContext(appState,a.id,transfer.buId).member?.roles.includes('SR'))} value={to} onChange={setTo} emptyLabel="暂无可接收此项目的已授权SR"/></div><label className="field"><span>移交原因</span><UiTextArea className="input" value={reason} onChange={e=>setReason(e.target.value)}/></label><p className="muted">移交只更改项目负责人。待办改派需在任务中心逐项转办。</p></Modal>}</OverlayPresence></div>;
+ <OverlayPresence>{modal&&canManage&&<CreateRfqDialog appState={appState} onClose={()=>setModal(false)} onCreateProject={onCreateProject} onCatalogChange={logEvent}/>}</OverlayPresence><OverlayPresence>{transfer&&canManage&&<Modal title="移交项目负责人" onClose={()=>setTransfer(null)} footer={<><UiButton className="btn" onClick={()=>setTransfer(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={()=>{if(!to||!reason.trim()){toast('请选择负责人并填写原因','error');return;}if(onTransferProject(transfer.id,to,reason)===false) { return; } setTransfer(null);toast('负责人已移交；专业职责与待办处理人继续保留');}}>确认移交</UiButton></>}><p>{transfer.name} · 当前负责人 {transfer.owner}</p><div className="field"><span>新负责人</span><PersonPicker label="新负责人" people={Object.values(appState.accountsById||{}).filter(a=>a.id!==transfer.ownerId&&canAccessProject(appState,a.id,transfer.id)&&getPersonnelContext(appState,a.id,transfer.buId).member?.roles.includes('SR'))} value={to} onChange={setTo} emptyLabel="暂无可接收此项目的已授权SR"/></div><label className="field"><span>移交原因</span><UiTextArea className="input" value={reason} onChange={e=>setReason(e.target.value)}/></label><p className="muted">移交只更改项目负责人。待办改派需在任务中心逐项转办。</p></Modal>}</OverlayPresence></div>;
 }
 

@@ -23,17 +23,17 @@ const clauses=[
 
 // Append new synthetic projects once. Never reset an existing project or a user's work.
 export function addReviewScenarioDemos(state,{at=new Date().toISOString()}={}) {
-  if(state.demoReviewScenariosVersion>=version)return state;
+  if(state.demoReviewScenariosVersion>=version) { return state; }
   const buId='BU-DEMO';
   const owner=getEligiblePersonnel(state,{buId,duty:'final-review',side:'sr'}).find(person=>person.userId==='demo-sales');
   const candidates=getEligiblePersonnel(state,{buId,duty:'final-review',side:'technical'});
   const technicalIds=['demo-technical','demo-technical-2','demo-technical-3'].filter(id=>candidates.some(person=>person.userId===id));
-  if(!owner||!technicalIds.length)return state;
+  if(!owner||!technicalIds.length) { return state; }
   const next=structuredClone(state),deadline=new Date(Date.parse(at)+14*86400000).toISOString().slice(0,10);
   for(const key of projectMaps)next[key]||={};
   const occupied=new Set([...next.projects.map(project=>project.id),...Object.keys(next.deletedProjectsById||{}),...Object.keys(next.requirementsByProject)]);
   for(const scenario of scenarios){
-    if([...next.projects,...Object.values(next.deletedProjectsById||{}).map(record=>record.project)].some(project=>project?.demoReviewScenario===scenario.kind))continue;
+    if([...next.projects,...Object.values(next.deletedProjectsById||{}).map(record=>record.project)].some(project=>project?.demoReviewScenario===scenario.kind)) { continue; }
     let id=scenario.id,suffix=2;
     while(occupied.has(id))id=`${scenario.id}-${suffix++}`;
     occupied.add(id);
@@ -80,17 +80,18 @@ export function addReviewScenarioDemos(state,{at=new Date().toISOString()}={}) {
 
 export function addStoredReviewScenarioDemos(storage,state,options={}) {
   const next=addReviewScenarioDemos(state,options);
-  if(next===state)return state;
+  if(next===state) { return state; }
   const beforeIds=new Set(state.projects.map(project=>project.id)),backupKey='fep-rfq-demo-before-review-scenarios-v1';
   const changes=[];
-  if(storage.getItem(backupKey)===null)changes.push([backupKey,JSON.stringify({savedAt:options.at||new Date().toISOString(),state})]);
+  if(storage.getItem(backupKey)===null) { changes.push([backupKey,JSON.stringify({savedAt:options.at||new Date().toISOString(),state})]); }
   for(const project of next.projects.filter(project=>!beforeIds.has(project.id)))changes.push([`fep-rfq-documents:${project.id}`,JSON.stringify({files:next.documentsByProject[project.id],parsed:next.requirementsByProject[project.id]})]);
   changes.push(['fep-rfq-app-v1',JSON.stringify(next)]);
   const written=[];
   try{
     for(const [key,value]of changes){const previous=storage.getItem(key);storage.setItem(key,value);written.push([key,previous]);}
   }catch(error){
-    for(const [key,previous]of written.reverse())if(previous===null)storage.removeItem(key);else storage.setItem(key,previous);
+    console.error('写入演示评审场景失败', error);
+    for(const [key,previous]of written.reverse())if(previous===null) { storage.removeItem(key); } else { storage.setItem(key,previous); }
     throw error;
   }
   return next;

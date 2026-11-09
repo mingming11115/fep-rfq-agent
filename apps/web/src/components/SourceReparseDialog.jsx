@@ -10,10 +10,10 @@ export default function SourceReparseDialog({project, files, currentFileId, onCl
   const [error, setError] = useState('');
   const submitting = useRef(false);
   const file = files.find(item => item.id === fileId);
-  const close = () => { if (!submitting.current) onClose(); };
+  const close = () => { if (!submitting.current) { onClose(); } };
 
   async function submit() {
-    if (submitting.current || !file || isSourceParsing(file)) return;
+    if (submitting.current || !file || isSourceParsing(file)) { return; }
     submitting.current = true;
     setBusy(true);
     setError('');
@@ -21,6 +21,7 @@ export default function SourceReparseDialog({project, files, currentFileId, onCl
       await onReparse(project.id, file.id);
       onClose();
     } catch (failure) {
+      console.error('重新解析原件失败', failure);
       setError(failure.message);
     } finally {
       submitting.current = false;

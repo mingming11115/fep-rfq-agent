@@ -18,7 +18,7 @@ export default function ResponseReviewPanel({review,row,project,state,actorId,on
  const voted=hasReviewConfirmation(review,row,actorId),count=ids.filter(id=>hasReviewConfirmation(review,row,id)).length,conflict=dirty&&(baseline.current.version!==(review.version||1)||baseline.current.round!==(review.round||1));
  function mark(value){responseDirtyRef.current=value;dirtyRef.current=value||communicationDirtyRef.current;setDirty(value);}
  function changeCommunication(key,value){setCommunication(c=>({...c,[key]:value}));communicationDirtyRef.current=true;dirtyRef.current=true;setCommunicationDirty(true);}
- function saveCommunication(){const next=onUpdateReview(review.id,communication,baseline.current.version,baseline.current.round);if(next===false)return false;communicationDirtyRef.current=false;dirtyRef.current=responseDirtyRef.current;setCommunicationDirty(false);return true;}
+ function saveCommunication(){const next=onUpdateReview(review.id,communication,baseline.current.version,baseline.current.round);if(next===false) { return false; } communicationDirtyRef.current=false;dirtyRef.current=responseDirtyRef.current;setCommunicationDirty(false);return true;}
  function change(key,value){setForm(f=>({...f,[key]:value}));mark(true);}
  function guard(next){if(dirtyRef.current){setLeave(()=>next);return false;}return true;}
  useEffect(()=>{if(!dirtyRef.current){setForm(fieldsFor(review,row));baseline.current={version:review.version||1,round:review.round||1};}},[review.version,review.round,review.status,row.version]);
@@ -26,14 +26,14 @@ export default function ResponseReviewPanel({review,row,project,state,actorId,on
  useEffect(()=>{const listener=e=>{if(dirtyRef.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',listener);return()=>window.removeEventListener('beforeunload',listener);},[]);
  function save(action){
   if(conflict){setError('其他评审人已更新内容，请先载入最新版本，当前输入已保留。');return false;}
-  if(!action&&!dirty)return communicationDirtyRef.current?saveCommunication():true;
+  if(!action&&!dirty) { return communicationDirtyRef.current?saveCommunication():true; }
   const next=onUpdateReview(review.id,{...(dirty?form:{}),...(action?{action}:{}),note},baseline.current.version,baseline.current.round);
-  if(next===false)return false;
-  baseline.current={version:next.version||1,round:next.round||1};mark(false);setError('');setNote('');if(communicationDirtyRef.current&&!saveCommunication())return false;return true;
+  if(next===false) { return false; }
+  baseline.current={version:next.version||1,round:next.round||1};mark(false);setError('');setNote('');if(communicationDirtyRef.current&&!saveCommunication()) { return false; } return true;
  }
  saveRef.current=save;
  function assign(){const next=onUpdateReview(review.id,{action:editPeople,reviewerIds:selected,deadline,reason},review.version||1,review.round||1);if(next!==false){setEditPeople(null);setReason('');mark(false);setError('');}}
- return <Surface title="应答评审" width={760} onClose={()=>{if(guard(onClose))onClose();}} footer={<>{closed?(manager||qualified)&&<UiButton className="btn" onClick={()=>{setSelected(ids);setEditPeople('reopen');}}>重新评审</UiButton>:<>{(manager||qualified)&&<UiButton className="btn" disabled={dirty} onClick={()=>{setSelected(ids);setEditPeople('assign');}}>调整评审人</UiButton>}<UiButton className="btn" disabled={!editable||!dirty||conflict} onClick={()=>save()}>保存应答</UiButton><UiButton className="btn btn-primary" disabled={!editable||!!row.pendingReviewProposal||conflict||voted&&!dirty} onClick={()=>save('confirm')}>{voted&&!dirty?'本人已确认':'确认本人评审'}</UiButton></>}</>}>
+ return <Surface title="应答评审" width={760} onClose={()=>{if(guard(onClose)) { onClose(); }}} footer={<>{closed?(manager||qualified)&&<UiButton className="btn" onClick={()=>{setSelected(ids);setEditPeople('reopen');}}>重新评审</UiButton>:<>{(manager||qualified)&&<UiButton className="btn" disabled={dirty} onClick={()=>{setSelected(ids);setEditPeople('assign');}}>调整评审人</UiButton>}<UiButton className="btn" disabled={!editable||!dirty||conflict} onClick={()=>save()}>保存应答</UiButton><UiButton className="btn btn-primary" disabled={!editable||!!row.pendingReviewProposal||conflict||voted&&!dirty} onClick={()=>save('confirm')}>{voted&&!dirty?'本人已确认':'确认本人评审'}</UiButton></>}</>}>
   <div className="review-response-summary"><div><small>应答 V{row.version||1} · 第 {review.round||1} 轮评审</small><h3>{review.title}</h3></div><UiTag className="badge">{closed?(review.status==='已取消'?'评审已取消':'评审已完成'):`${count} / ${ids.length} 人已确认`}</UiTag></div>
   <dl className="flow-description"><dt>评审类别</dt><dd>{review.type||'未分类'}</dd><dt>问题说明</dt><dd>{review.description||'—'}</dd><dt>截止时间</dt><dd>{review.deadline||'未设置'}</dd><dt>客户要求</dt><dd>{row.original}</dd></dl>
   {reviewEvidenceHref(review.requestEvidenceLink||review.evidence)&&<p><a className="text-link" href={reviewEvidenceHref(review.requestEvidenceLink||review.evidence)} target="_blank" rel="noopener noreferrer">打开关联证据 ↗</a></p>}

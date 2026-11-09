@@ -7,17 +7,17 @@ export default function UnlinkedCommentPanel({value}){
   const {note}=value,panel=useRef(null);
   const [editing,setEditing]=useState(Boolean(value.edit&&note.canEdit)),[text,setText]=useState(note.text||''),[reply,setReply]=useState(''),[target,setTarget]=useState(),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const empty=!note.text?.trim()&&!note.replies?.some(item=>item.text?.trim());
-  useEffect(()=>{if(!note.canEdit)setEditing(false);},[note.canEdit]);
-  useEffect(()=>{if(editing)panel.current?.querySelector('[aria-label="修改未关联文件批注"]')?.focus();},[editing]);
+  useEffect(()=>{if(!note.canEdit) { setEditing(false); }},[note.canEdit]);
+  useEffect(()=>{if(editing) { panel.current?.querySelector('[aria-label="修改未关联文件批注"]')?.focus(); }},[editing]);
   async function run(action,content){
-    if(busy)return;setBusy(true);setError('');
-    try{await value.onAction(action,content);if(action==='save')setEditing(false);if(action==='reply')setReply('');}
-    catch(cause){setError(cause.message);}finally{setBusy(false);}
+    if(busy) { return; } setBusy(true);setError('');
+    try{await value.onAction(action,content);if(action==='save') { setEditing(false); } if(action==='reply') { setReply(''); }}
+    catch(cause){ console.error('执行独立批注操作失败', cause); setError(cause.message);}finally{setBusy(false);}
   }
   async function associate(){
-    if(!target||busy)return;setBusy(true);setError('');
-    try{if(!await value.onAssociate(target))throw new Error('当前身份不能关联到该条款，请重新选择。');}
-    catch(cause){setError(cause.message);}finally{setBusy(false);}
+    if(!target||busy) { return; } setBusy(true);setError('');
+    try{if(!await value.onAssociate(target)) { throw new Error('当前身份不能关联到该条款，请重新选择。'); }}
+    catch(cause){ console.error('关联批注条款失败', cause); setError(cause.message);}finally{setBusy(false);}
   }
   return <section className="annotation-panel" aria-label="待关联文件批注" ref={panel}>
     <div className="detail-section-intro"><div><strong>文件批注 · 待关联条款</strong><span>选择对应条款后，同步到协作记录</span></div><UiButton className="text-link" onClick={value.onClose}>收起</UiButton></div>

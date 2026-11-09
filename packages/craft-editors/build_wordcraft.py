@@ -136,11 +136,13 @@ try {
   const {default:init}=await import('./wordcraft-classic.js');
   await init({module_or_path:'./wordcraft-classic_bg.wasm'});
 } catch(cause) {
+  console.error('启动 Word 编辑器失败', cause);
   const error=cause instanceof Error?cause.message:String(cause);
   const loading=document.getElementById('wordcraft_loading');
-  if(loading)loading.textContent='Word 编辑器启动失败：'+error;
-  if(window.parent!==window&&new URLSearchParams(window.location.search).get('host')==='parent')
+  if(loading) { loading.textContent='Word 编辑器启动失败：'+error; }
+  if(window.parent!==window&&new URLSearchParams(window.location.search).get('host')==='parent') {
     window.parent.postMessage({type:'wordcraft:failed',error},window.location.origin);
+  }
 }
 </script>
 </head>''')

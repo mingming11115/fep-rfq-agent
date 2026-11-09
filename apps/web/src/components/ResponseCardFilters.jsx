@@ -13,7 +13,7 @@ export function ResponseCardQuery({ filters, draft, sources = [], disabled, onDr
   const activeFilters = ['status', 'source', 'type'].filter(key => filters[key] && filters[key] !== 'all').length;
   const change = (key, value) => setConditions(current => ({ ...current, [key]: value }));
   const apply = values => { setOpen(false); onApply(values); };
-  const toggleFilters=value=>{if(disabled)return;if(value)setConditions({...EMPTY_CARD_FILTERS,...filters});setOpen(value);};
+  const toggleFilters=value=>{if(disabled) { return; } if(value) { setConditions({...EMPTY_CARD_FILTERS,...filters}); } setOpen(value);};
   const content = <div className="response-filter-popover">
     <label><span>处理状态</span><Select aria-label="处理状态筛选" value={conditions.status} onChange={value => change('status', value)} options={groups.map(([value, label]) => ({ value, label }))}/></label>
     <label><span>事项类型</span><Select aria-label="事项类型筛选" value={conditions.type || 'all'} onChange={value => change('type', value)} options={[{ value: 'all', label: '全部类型' }, { value: 'ordinary', label: '普通应答' }, { value: 'review', label: '专项评审' }, { value: 'clarification', label: '客户澄清' }]}/></label>
@@ -26,9 +26,9 @@ export function ResponseCardQuery({ filters, draft, sources = [], disabled, onDr
     {compact?filterButton:<Popover title="筛选应答" content={content} trigger="click" placement="bottomRight" open={open && !disabled} onOpenChange={toggleFilters}>{filterButton}</Popover>}
     {compact&&open&&!disabled&&content}
   </div>;
-  if(!compact)return query;
+  if(!compact) { return query; }
   const active=Boolean(filters.query?.trim()||activeFilters);
-  return <Popover title="搜索与筛选应答" content={query} trigger="click" placement="bottomRight" open={searchOpen&&!disabled} onOpenChange={value=>{if(!disabled)setSearchOpen(value);if(!value)setOpen(false);}} afterOpenChange={value=>{if(value)searchInput.current?.focus();}}>
+  return <Popover title="搜索与筛选应答" content={query} trigger="click" placement="bottomRight" open={searchOpen&&!disabled} onOpenChange={value=>{if(!disabled) { setSearchOpen(value); } if(!value) { setOpen(false); }}} afterOpenChange={value=>{if(value) { searchInput.current?.focus(); }}}>
     <Button size="small" className={active?'response-query-trigger is-active':'response-query-trigger'} aria-label="搜索与筛选应答" title={active?'搜索与筛选应答（已启用条件）':'搜索与筛选应答'} aria-expanded={searchOpen&&!disabled} disabled={disabled} icon={<Search size={14}/>}/>
   </Popover>;
 }

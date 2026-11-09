@@ -14,6 +14,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.xssf.usermodel.XSSFRow;
@@ -23,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 class CapabilityExcelParser {
     private static final int MAX_BYTES = 5 * 1024 * 1024;
     private static final int MAX_ROWS = 1000;
@@ -41,12 +43,17 @@ class CapabilityExcelParser {
                 || !filename.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
             throw new BusinessException(400, "请选择非空的能力边界 .xlsx 文件");
         }
-        if (file.getSize() > MAX_BYTES) throw new BusinessException(413, "能力文件最多 5 MiB");
+        if (file.getSize() > MAX_BYTES) {
+            throw new BusinessException(413, "能力文件最多 5 MiB");
+        }
         try (var stream = file.getInputStream()) {
             byte[] bytes = stream.readNBytes(MAX_BYTES + 1);
-            if (bytes.length > MAX_BYTES) throw new BusinessException(413, "能力文件最多 5 MiB");
+            if (bytes.length > MAX_BYTES) {
+                throw new BusinessException(413, "能力文件最多 5 MiB");
+            }
             return workbook(filename, bytes);
         } catch (IOException failure) {
+            log.error("读取能力边界 Excel 文件失败", failure);
             throw new BusinessException(400, "无法读取能力边界 Excel 文件");
         }
     }
@@ -54,7 +61,9 @@ class CapabilityExcelParser {
     private Parsed workbook(String filename, byte[] bytes) {
         var formatter = new DataFormatter(Locale.ROOT);
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
-            if (workbook.getNumberOfSheets() != 1) throw new BusinessException(400, "能力文件需要一个工作表");
+            if (workbook.getNumberOfSheets() != 1) {
+                throw new BusinessException(400, "能力文件需要一个工作表");
+            }
             var sheet = workbook.getSheetAt(0);
             var header = sheet.getRow(0);
             if (header == null || !HEADERS.equals(cells(header, formatter))) {
@@ -63,26 +72,40 @@ class CapabilityExcelParser {
             var rows = new ArrayList<Row>();
             var errors = new ArrayList<Error>();
             for (var source : sheet) {
-                if (source.getRowNum() == 0) continue;
+                if (source.getRowNum() == 0) {
+                    continue;
+                }
                 int number = source.getRowNum() + 1;
                 try {
                     var values = cells((XSSFRow) source, formatter);
-                    if (values.stream().allMatch(String::isBlank)) continue;
+                    if (values.stream().allMatch(String::isBlank)) {
+                        continue;
+                    }
                     var draft = draft(values);
-                    if (!validator.validate(draft).isEmpty()) throw new IllegalArgumentException("字段缺失、超长或版本无效");
+                    if (!validator.validate(draft).isEmpty()) {
+                        throw new IllegalArgumentException("字段缺失、超长或版本无效");
+                    }
                     rows.add(new Row(number, draft));
                 } catch (NumberFormatException failure) {
+                    log.error("解析能力边界 Excel 行的数值失败 errorType={}", failure.getClass().getSimpleName());
                     errors.add(new Error(number, "版本或数值格式错误"));
                 } catch (IllegalArgumentException failure) {
+                    log.error("校验能力边界 Excel 行失败 errorType={}", failure.getClass().getSimpleName());
                     errors.add(new Error(number, failure.getMessage()));
                 }
-                if (rows.size() + errors.size() > MAX_ROWS) throw new BusinessException(413, "能力文件最多 1,000 条数据");
+                if (rows.size() + errors.size() > MAX_ROWS) {
+                    throw new BusinessException(413, "能力文件最多 1,000 条数据");
+                }
             }
-            if (rows.isEmpty() && errors.isEmpty()) throw new BusinessException(400, "能力文件没有数据行");
+            if (rows.isEmpty() && errors.isEmpty()) {
+                throw new BusinessException(400, "能力文件没有数据行");
+            }
             return new Parsed(filename, sheet.getSheetName(), digest(bytes), List.copyOf(rows), List.copyOf(errors));
         } catch (BusinessException failure) {
+            log.error("校验能力边界 Excel 文件失败 errorType={}", failure.getClass().getSimpleName());
             throw failure;
         } catch (IOException | RuntimeException failure) {
+            log.error("解析能力边界 Excel 文件失败 errorType={}", failure.getClass().getSimpleName());
             throw new BusinessException(400, "能力边界 Excel 文件格式无效");
         }
     }
@@ -97,8 +120,12 @@ class CapabilityExcelParser {
             int index = cell.getColumnIndex();
             String value = (index == 8 || index == 9) && cell.getCellType() == CellType.NUMERIC
                     ? ((org.apache.poi.xssf.usermodel.XSSFCell) cell).getRawValue() : formatter.formatCellValue(cell).strip();
-            if (value.isBlank()) continue;
-            if (index >= HEADERS.size()) throw new IllegalArgumentException("数据列超出模板范围");
+            if (value.isBlank()) {
+                continue;
+            }
+            if (index >= HEADERS.size()) {
+                throw new IllegalArgumentException("数据列超出模板范围");
+            }
             result.set(index, value);
         }
         return result;
@@ -124,6 +151,9 @@ class CapabilityExcelParser {
 
     private String digest(byte[] bytes) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
-        catch (NoSuchAlgorithmException failure) { throw new IllegalStateException(failure); }
+        catch (NoSuchAlgorithmException failure) {
+            log.error("计算能力边界 Excel 文件的 SHA-256 摘要失败", failure);
+            throw new IllegalStateException(failure);
+        }
     }
 }

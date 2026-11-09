@@ -27,7 +27,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
   const previousFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{
     if(options?.method==='PUT'){
       saves.push({url,options});
-      if(saveFailure)return new Response(JSON.stringify({code:503,msg:'存储暂不可用'}),{status:503});
+      if(saveFailure) { return new Response(JSON.stringify({code:503,msg:'存储暂不可用'}),{status:503}); }
       responseMeta={...responseMeta,revision:responseMeta.revision+1,savedAt:new Date().toISOString()};
       return new Response(JSON.stringify({code:0,data:responseMeta}));
     }
@@ -36,8 +36,8 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
   const settle=async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));};
   const originalTimeout=window.setTimeout.bind(window),originalClear=window.clearTimeout.bind(window),noticeTimers=new Map();
   let clock=0,timerId=1000000;
-  window.setTimeout=(callback,delay,...args)=>{if(delay!==2000)return originalTimeout(callback,delay,...args);const id=timerId++;noticeTimers.set(id,{at:clock+delay,callback:()=>callback(...args)});return id;};
-  window.clearTimeout=id=>{if(!noticeTimers.delete(id))originalClear(id);};
+  window.setTimeout=(callback,delay,...args)=>{if(delay!==2000) { return originalTimeout(callback,delay,...args); } const id=timerId++;noticeTimers.set(id,{at:clock+delay,callback:()=>callback(...args)});return id;};
+  window.clearTimeout=id=>{if(!noticeTimers.delete(id)) { originalClear(id); }};
   const advance=async milliseconds=>act(async()=>{clock+=milliseconds;for(const [id,timer] of [...noticeTimers])if(timer.at<=clock){noticeTimers.delete(id);timer.callback();}await settle();});
   const connectNative=async(frame,meta)=>{
     // HappyDOM deliberately does not navigate frames in this test. Supply only
@@ -49,16 +49,16 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     const snapshot=()=>({document:meta.id+'-session',fileName:meta.name,applied,complete:true,author:'Alex',editable:true,outlineVisible,editorToolsControlled:engine==='wordcraft',editorToolsVisible,headingOutline:{revision:2,items:[{index:0,level:0,text:'Native document heading'}]},notes:nativeNotes,pages:[],active:null,source:{status:locationStatus,selectedId:locationId}});
     native.postMessage=message=>{
       calls.push(message);
-      if(message.type===engine+':open')queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())}));
+      if(message.type===engine+':open') { queueMicrotask(()=>emit('reviewState',{payload:JSON.stringify(snapshot())})); }
       if(message.type===engine+':review'){
         const request=JSON.parse(message.payload);applied=request.request;let result={};
-        if(request.action==='configure')locationId=request.params.selectedId;
+        if(request.action==='configure') { locationId=request.params.selectedId; }
         if(request.action==='locate'){locationId=request.params.id;result={id:locationId,status:locationStatus};}
-        if(request.action==='outline')outlineVisible=request.params.visible;
-        if(request.action==='tools')editorToolsVisible=request.params.visible;
-        if(request.action==='save')queueMicrotask(()=>emit('save',{name:meta.name,bytes:new TextEncoder().encode('retried DOCX').buffer,review:snapshot()}));
+        if(request.action==='outline') { outlineVisible=request.params.visible; }
+        if(request.action==='tools') { editorToolsVisible=request.params.visible; }
+        if(request.action==='save') { queueMicrotask(()=>emit('save',{name:meta.name,bytes:new TextEncoder().encode('retried DOCX').buffer,review:snapshot()})); }
         const respond=()=>queueMicrotask(()=>{emit('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result})});emit('reviewState',{payload:JSON.stringify(snapshot())});});
-        if(request.action==='locate'&&holdNextLocate){holdNextLocate=false;pendingLocate=respond;}else respond();
+        if(request.action==='locate'&&holdNextLocate){holdNextLocate=false;pendingLocate=respond;}else { respond(); }
       }
     };
     await act(async()=>{emit('ready',{});await settle();});

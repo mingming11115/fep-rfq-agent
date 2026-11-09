@@ -9,12 +9,14 @@ import com.naura.rfq.security.*;
 import java.time.Instant;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ResponseService {
     private static final String CONFIRMATION = "confirmation";
     private static final String CHECKPOINT = "checkpoint";
@@ -38,7 +40,14 @@ public class ResponseService {
     private final RequirementMatchService matches;
     private final ProjectWorkScope work;
     private final MatchDeviationService deviations;
-    private JsonNode decode(String value){try{return json.readTree(value);}catch(Exception e){throw new IllegalStateException("业务记录格式异常",e);}}
+    private JsonNode decode(String value) {
+        try {
+            return json.readTree(value);
+        } catch (Exception e) {
+            log.error("解析应标业务记录失败 errorType={}", e.getClass().getSimpleName());
+            throw new IllegalStateException("业务记录格式异常", e);
+        }
+    }
     private List<JsonNode> rows(String sql,Object... args){return jdbc.queryForList(sql,String.class,args).stream().map(this::decode).toList();}
 
     @Transactional(readOnly = true)
@@ -82,26 +91,42 @@ public class ResponseService {
         work.requireEditable(project.getId(), requirement.getDocumentId());
         documents.findByIdForUpdate(requirement.getDocumentId()).orElseThrow(()->new BusinessException(404,"文档不存在"));
         requirement=requirements.findByDocumentIdForUpdate(requirement.getDocumentId()).stream().filter(r->id.equals(r.getId())).findFirst().orElseThrow(()->new BusinessException(409,"条款已重新解析，请刷新"));
-        if(sourceVersion==null||!sourceVersion.equals(requirement.getVersion()))throw new BusinessException(409,"来源版本已变化，请刷新后重试");
+        if(sourceVersion==null||!sourceVersion.equals(requirement.getVersion())) {
+            throw new BusinessException(409,"来源版本已变化，请刷新后重试");
+        }
         var records=rows("select payload from requirement_response where requirement_id=? and project_id=? for update",id,project.getId());
         ObjectNode row=records.isEmpty()?json.createObjectNode().put("id",id).put("version",Math.max(1,requirement.getVersion())):(ObjectNode)records.get(0).deepCopy();
-        if(version==null||version!=row.path("version").asLong(1))throw new BusinessException(409,"应答版本已变化，请刷新后重试");
+        if(version==null||version!=row.path("version").asLong(1)) {
+            throw new BusinessException(409,"应答版本已变化，请刷新后重试");
+        }
         boolean sr=user.roles().stream().anyMatch(r->r.buId().equals(project.getBuId())&&r.role().equals("SR"));
         boolean tech=user.roles().stream().anyMatch(r->r.buId().equals(project.getBuId())&&Set.of("TECH","APPROVER").contains(r.role()));
         var profile=profiles.findByBuIdAndUserId(project.getBuId(),user.id());
-        if(user.systemAdmin()||(!sr&&!tech)||profile!=null&&!profile.isEnabled()||!sr&&(profile==null||!profile.isCanConfirm()))throw new BusinessException(403,"当前业务角色无应答操作资格");
+        if(user.systemAdmin()||(!sr&&!tech)||profile!=null&&!profile.isEnabled()||!sr&&(profile==null||!profile.isCanConfirm())) {
+            throw new BusinessException(403,"当前业务角色无应答操作资格");
+        }
         String assignedConfirmer=requirement.getConfirmationAssigneeId();
         String assignee=assignedConfirmer==null?row.path("confirmationAssigneeId").asText(""):assignedConfirmer;
-        if(assignee.isBlank())assignee=confirmationAssignments.defaultAssigneeId(project);
-        if((confirm||!sr)&&!user.id().equals(assignee))throw new BusinessException(403,"当前账号不是本条确认人");
+        if(assignee.isBlank()) {
+            assignee=confirmationAssignments.defaultAssigneeId(project);
+        }
+        if((confirm||!sr)&&!user.id().equals(assignee)) {
+            throw new BusinessException(403,"当前账号不是本条确认人");
+        }
         var projectReviews=rows("select payload from response_review where project_id=? for update",project.getId());
         boolean explicitlyAssigned=assignedConfirmer!=null||row.path("confirmationAssignmentSource").asText().equals("explicit");
-        if(!explicitlyAssigned&&projectReviews.stream().anyMatch(r->id.equals(r.path("requirementId").asText())&&!Set.of("clarification","deviation").contains(r.path("kind").asText())&&!r.path("status").asText().equals("已取消")&&r.path("reviewerIds").isArray()))throw new BusinessException(409,"本条由评审人共同确认，评审确认流程尚未接通");
+        if(!explicitlyAssigned&&projectReviews.stream().anyMatch(r->id.equals(r.path("requirementId").asText())&&!Set.of("clarification","deviation").contains(r.path("kind").asText())&&!r.path("status").asText().equals("已取消")&&r.path("reviewerIds").isArray())) {
+            throw new BusinessException(409,"本条由评审人共同确认，评审确认流程尚未接通");
+        }
         var reviews=projectReviews.stream()
             .filter(r->id.equals(r.path("requirementId").asText())&&!Set.of("已关闭","已取消").contains(r.path("status").asText()))
             .filter(r->confirm||!"deviation".equals(r.path("kind").asText())).toList();
-        if(!reviews.isEmpty())throw new BusinessException(409,"本条存在未关闭评审或澄清，请先完成处理");
-        if(!row.path("pendingReviewProposal").isMissingNode()&&!row.path("pendingReviewProposal").isNull())throw new BusinessException(409,"请先核对评审建议");
+        if(!reviews.isEmpty()) {
+            throw new BusinessException(409,"本条存在未关闭评审或澄清，请先完成处理");
+        }
+        if(!row.path("pendingReviewProposal").isMissingNode()&&!row.path("pendingReviewProposal").isNull()) {
+            throw new BusinessException(409,"请先核对评审建议");
+        }
 
         String projectId = project.getId();
         var previous = latestConfirmation(row, requirement, projectId);
@@ -129,19 +154,31 @@ public class ResponseService {
                 copyFields(saved, row, RESTORE_FIELDS);
             }
         } else if(patch!=null&&!patch.isNull()){
-            if(!patch.isObject())throw new BusinessException(400,"应答字段格式不正确");
+            if(!patch.isObject()) {
+                throw new BusinessException(400,"应答字段格式不正确");
+            }
             var fields=patch.fields();
             while(fields.hasNext()){
                 var field=fields.next();
-                if((!"original".equals(field.getKey())&&!ANSWER_FIELDS.contains(field.getKey()))||!field.getValue().isTextual())throw new BusinessException(400,"不允许修改该应答字段");
+                if((!"original".equals(field.getKey())&&!ANSWER_FIELDS.contains(field.getKey()))||!field.getValue().isTextual()) {
+                    throw new BusinessException(400,"不允许修改该应答字段");
+                }
                 if(field.getKey().equals("original")){
-                    if(!field.getValue().asText().equals(requirement.getOriginalText()))throw new BusinessException(400,"客户原文请通过来源修正功能修改");
-                }else row.set(field.getKey(),field.getValue());
+                    if(!field.getValue().asText().equals(requirement.getOriginalText())) {
+                        throw new BusinessException(400,"客户原文请通过来源修正功能修改");
+                    }
+                }else {
+                    row.set(field.getKey(),field.getValue());
+                }
             }
-            if (isConfirmed(row) && !sameFields(records.get(0), row, ANSWER_FIELDS)) row.remove(RESTORE_FIELDS);
+            if (isConfirmed(row) && !sameFields(records.get(0), row, ANSWER_FIELDS)) {
+                row.remove(RESTORE_FIELDS);
+            }
         }
         if (choice != null && (choice.matchRunId() != null || choice.candidateId() != null)) {
-            if (choice.detachMatchReason() != null) throw new BusinessException(400, "采纳与解除依据须分别操作");
+            if (choice.detachMatchReason() != null) {
+                throw new BusinessException(400, "采纳与解除依据须分别操作");
+            }
             row.set("matchReference", matches.adopt(project, requirement, choice.matchRunId(), choice.candidateId()));
             row.remove("matchReferenceInvalidatedAt");
         }
@@ -154,13 +191,21 @@ public class ResponseService {
             audit.successInBu(user.id(), project.getBuId(), "解除应答比对依据", "requirement", id, reason);
         }
         if(confirm){
-            if (row.hasNonNull("matchReference")) matches.requireReference(project, requirement, row.path("matchReference"));
+            if (row.hasNonNull("matchReference")) {
+                matches.requireReference(project, requirement, row.path("matchReference"));
+            }
             if ("不满足".equals(row.path("conclusion").asText()) && !deviations.reviewedContradiction(project, requirement, row)) {
                 throw new BusinessException(409, "不满足结论须先保存草稿并完成本条技术评审");
             }
-            if(requirement.getOriginalText()==null||requirement.getOriginalText().isBlank())throw new BusinessException(400,"客户要求原文不能为空");
-            if(!Set.of("Comply","有条件 Comply","不满足","不适用").contains(row.path("conclusion").asText()))throw new BusinessException(400,"请选择明确的最终结论");
-            if(row.path("removedFromSource").asBoolean()&&!row.path("conclusion").asText().equals("不适用"))throw new BusinessException(400,"已删除条款须确认不适用");
+            if(requirement.getOriginalText()==null||requirement.getOriginalText().isBlank()) {
+                throw new BusinessException(400,"客户要求原文不能为空");
+            }
+            if(!Set.of("Comply","有条件 Comply","不满足","不适用").contains(row.path("conclusion").asText())) {
+                throw new BusinessException(400,"请选择明确的最终结论");
+            }
+            if(row.path("removedFromSource").asBoolean()&&!row.path("conclusion").asText().equals("不适用")) {
+                throw new BusinessException(400,"已删除条款须确认不适用");
+            }
             row.put("status","已确认").put("confirmedBy",user.displayName()).put("confirmedById",user.id()).put("confirmedAt",Instant.now().toString()).put("needsReview",false).put("sourceRevision",false).put("sourceCorrected",false);
             var snapshot = row.deepCopy();
             bindSource(snapshot, requirement);
@@ -197,17 +242,23 @@ public class ResponseService {
         String id = requirement.getId();
         var versions = rows("select payload from response_confirmation_history where requirement_id=? and project_id=? and kind=? order by entry_version desc limit 1",
                 id, projectId, CONFIRMATION);
-        if (!versions.isEmpty()) return Optional.of(versions.get(0));
+        if (!versions.isEmpty()) {
+            return Optional.of(versions.get(0));
+        }
         var legacy = legacyConfirmation(row, requirement);
         legacy.ifPresent(saved -> insertHistory(id, projectId, CONFIRMATION, saved.path("confirmationVersion").asLong(), saved));
         return legacy;
     }
 
     private Optional<JsonNode> legacyConfirmation(JsonNode row, Requirement requirement) {
-        if (!isConfirmed(row) || row.path("confirmedAt").asText().isBlank()) return Optional.empty();
+        if (!isConfirmed(row) || row.path("confirmedAt").asText().isBlank()) {
+            return Optional.empty();
+        }
         ObjectNode saved = row.deepCopy();
         saved.put("confirmationVersion", Math.max(1, row.path("confirmationVersion").asLong(row.path("version").asLong(1))));
-        if (row.path("sourceRequirementVersion").asLong(-1) == requirement.getVersion()) bindSource(saved, requirement);
+        if (row.path("sourceRequirementVersion").asLong(-1) == requirement.getVersion()) {
+            bindSource(saved, requirement);
+        }
         return Optional.of(saved);
     }
 
@@ -231,8 +282,11 @@ public class ResponseService {
 
     private static void copyFields(JsonNode from, ObjectNode to, List<String> fields) {
         for (String field : fields) {
-            if (from.hasNonNull(field)) to.set(field, from.get(field));
-            else to.remove(field);
+            if (from.hasNonNull(field)) {
+                to.set(field, from.get(field));
+            } else {
+                to.remove(field);
+            }
         }
     }
 }

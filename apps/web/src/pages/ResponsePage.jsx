@@ -50,7 +50,7 @@ import './rfq-enhancements.css';
 
 const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5)}`;
 const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
-const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; } };
+const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { console.error('读取应答页本地数据失败'); return fallback; } };
 const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: row?.draft || '', conditions: row?.conditions || '', reason: row?.reason || '', evidence: row?.evidence || '' });
 const formFields = ['original', 'conclusion', 'draft', 'conditions', 'reason', 'evidence'];
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
@@ -89,7 +89,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [paneShare, setPaneShare] = usePanePreference(actorId,project.id,narrowWorkbench?'vertical':'horizontal',narrowWorkbench?55:60);
   useEffect(() => { const frame=requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));return()=>cancelAnimationFrame(frame); }, [paneShare, narrowWorkbench]);
   function resizeWithKeyboard(event) {
-    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Enter'].includes(event.key))return;
+    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Enter'].includes(event.key)) { return; }
     event.preventDefault();
     const box=detailLayoutRef.current?.getBoundingClientRect();
     setPaneShare(current=>resizePanelShare(current,event.key,{span:narrowWorkbench?1100:box?.width||1000,minStart:narrowWorkbench?280:320,minEnd:narrowWorkbench?360:380,vertical:narrowWorkbench,defaultShare:narrowWorkbench?55:60}));
@@ -105,7 +105,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   useEffect(() => { setDetailTab(detailSection(route?.page)); }, [route?.page]);
   const [processTab,setProcessTab]=useState('差距与应答'),[showResponses,setShowResponses]=useState(true);
-  useEffect(() => { if (!(detailTab === 'activity' && activeCommentId)) detailSideRef.current?.scrollTo({ top: 0 }); }, [detailTab]);
+  useEffect(() => { if (!(detailTab === 'activity' && activeCommentId)) { detailSideRef.current?.scrollTo({ top: 0 }); } }, [detailTab]);
   const [rightTab, setRightTab] = useState(initialRow?.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(initialRow?.matchLevel) ? 'capability' : 'standard');
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [showMore, setShowMore] = useState(false);
@@ -137,7 +137,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   useContentTransition(cardRef, active?.id, { kind: 'card-in', enabled: !cardBusy });
   useEffect(() => { cardRef.current?.querySelector('.response-editor-body')?.scrollTo({ top: 0 }); }, [active?.id]);
   const issueGuardRef = useRef(null);
-  const registerIssueGuard = useCallback(guard => { issueGuardRef.current = guard; return () => { if (issueGuardRef.current === guard) issueGuardRef.current = null; }; }, []);
+  const registerIssueGuard = useCallback(guard => { issueGuardRef.current = guard; return () => { if (issueGuardRef.current === guard) { issueGuardRef.current = null; } }; }, []);
   const requirementsRef = useRef(requirements), reviewFormRef = useRef(null);
   requirementsRef.current = requirements;
   reviewFormRef.current = reviewForm;
@@ -159,7 +159,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const closedReview = linkedReviews.find(review => review.status === '已关闭');
   const reassessing = !openReview && (active?.status === '已确认' || !!closedReview);
   useEffect(() => {
-    if (!inlineReviewFocusRequest) return;
+    if (!inlineReviewFocusRequest) { return; }
     inlineReviewRef.current?.focus({ preventScroll: true });
     inlineReviewRef.current?.scrollIntoView({ block: 'start', inline: 'nearest' });
   }, [inlineReviewFocusRequest]);
@@ -171,13 +171,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       return;
     }
     guardedDetail(() => {
-      if (row && row.id !== active?.id) hydrate(row);
+      if (row && row.id !== active?.id) { hydrate(row); }
       revealCard(row); setDetailTab('response'); setReviewForm(null); reviewFormRef.current = null;
       setInlineReviewId(id); setInlineReviewAction(action);
       setInlineReviewFocusRequest(value => value + 1);
     }, row);
   }
-  function startAssessment() { if(reassessing&&closedReview)openInlineReview(closedReview.id,'reopen');else startReview(reassessing?'rereview':'review'); }
+  function startAssessment() { if(reassessing&&closedReview) { openInlineReview(closedReview.id,'reopen'); } else { startReview(reassessing?'rereview':'review'); } }
   const [capabilityForm, setCapabilityForm] = useState(null);
   const [savedCandidate, setSavedCandidate] = useState(null);
   const [historyDetail, setHistoryDetail] = useState(null);
@@ -197,8 +197,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const recommendedWording = generateRecommendedWording({ ...active, ...form });
   const retrieval = retrievalById[active?.id] || 'normal';
   const states = active ? { standard: active.matchLevel === 'standard' && active.score > 80 ? '命中' : '未命中', history: active.matchLevel === 'standard' && active.score > 80 ? '未执行' : active.matchLevel === 'history' ? '命中' : '未命中', capability: (active.matchLevel === 'standard' && active.score > 80) || active.matchLevel === 'history' ? '未执行' : active.matchLevel === 'capability' ? '命中' : '未命中' } : {};
-  if (retrieval === 'failed') Object.assign(states, { standard: '失败', history: '未执行', capability: '未执行' });
-  if (retrieval === 'denied') Object.assign(states, { standard: '无权限', history: '未执行', capability: '未执行' });
+  if (retrieval === 'failed') { Object.assign(states, { standard: '失败', history: '未执行', capability: '未执行' }); }
+  if (retrieval === 'denied') { Object.assign(states, { standard: '无权限', history: '未执行', capability: '未执行' }); }
   const conflicted = active && baseline.current.id === active.id && dirty && (baseline.current.version !== active.version || baseline.current.status !== active.status);
   const filtered = responseRows.filter((r) => `${r.clause} ${r.title} ${r.original}`.toLowerCase().includes(query.toLowerCase()) && (status === '全部状态' || responseStatusLabel(r, reviews) === status) && (section === '全部章节' || JSON.stringify([r.sourceFileId || r.source, sectionLabel(r)]) === section) && (owner === '全部责任人' || r.owner === owner) && (special === '全部要求' || special === '无历史命中' && ['capability', 'none'].includes(r.matchLevel) || special === '条件差异' && r.conclusion === '有条件 Comply' || special === '关键要求' && (r.keyRequirement || /安全|精度|交货|验收/.test(r.title))));
   const directoryRows = filtered.filter(row => (row.sourceFileId || row.source) === (active?.sourceFileId || active?.source));
@@ -216,19 +216,19 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const ids = new Set(directoryRows.map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
-  function hydrate(row) { if (!row) return; setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(reviews.find(r => r.requirementId === row.id && !['已关闭', '已取消'].includes(r.status))?.id || null); setInlineReviewAction(null); }
-  function edit(field, value) { if (!canEdit) return; setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
-  function requestTransition(next) { if (cardBusyRef.current) return false; return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
+  function hydrate(row) { if (!row) { return; } setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(reviews.find(r => r.requirementId === row.id && !['已关闭', '已取消'].includes(r.status))?.id || null); setInlineReviewAction(null); }
+  function edit(field, value) { if (!canEdit) { return; } setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
+  function requestTransition(next) { if (cardBusyRef.current) { return false; } return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
     const officeSource = sourceRow ? makeSourceAnchor({ ...sourceRow, projectId: project.id }) : undefined;
     const proceed = () => sourceRow && sourceRow.id !== active?.id && detailTab === 'response' && cardRef.current ? fadeToResponse(next) : next();
     const allowed = !window.__rfqRequestNavigation || window.__rfqRequestNavigation(proceed, { officeSource });
-    if (allowed) proceed();
+    if (allowed) { proceed(); }
     return allowed;
   }
   function revealCard(row) {
-    if (!row) return;
-    if (!responseRows.some(item => item.id === row.id)) setOnlyMine(false);
+    if (!row) { return; }
+    if (!responseRows.some(item => item.id === row.id)) { setOnlyMine(false); }
     if (!selectResponseCards([row], reviews, cardFilters).length) {
       setCardFilters(EMPTY_CARD_FILTERS);
       setCardFilterDraft(EMPTY_CARD_FILTERS);
@@ -236,13 +236,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   const entryScopeRef=useRef(null);
   useEffect(()=>{
-    if(!requirements.length)return;
+    if(!requirements.length) { return; }
     const scope=JSON.stringify([project.id,actorId,actorRole]);
-    if(entryScopeRef.current===scope)return;
+    if(entryScopeRef.current===scope) { return; }
     entryScopeRef.current=scope;
     if(initialRow){hydrate(initialRow);revealCard(initialRow);}
   },[project.id,actorId,actorRole,requirements,initialRow?.id]);
-  function chooseRow(row) { if (!row) return; return guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); },row); }
+  function chooseRow(row) { if (!row) { return; } return guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); },row); }
   function applyCardFilters(next, mine = onlyMine) {
     const rows = selectResponseCards(mine ? myRequirements : requirements, reviews, next);
     const changingScope = mine !== onlyMine;
@@ -258,36 +258,36 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       setCardFilterDraft(next);
       setDeferredCards([]);
       setQueueDone(false);
-      if (keepCurrent) return;
+      if (keepCurrent) { return; }
       if (first) {
         hydrate(first);
         navigate('response', first.id, { fileId: first.sourceFileId, sourceVersion: first.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined });
-      } else setInlineReviewId(null);
+      } else { setInlineReviewId(null); }
     };
-    if (keepCurrent) apply();
-    else guardedDetail(apply, first || active);
+    if (keepCurrent) { apply(); }
+    else { guardedDetail(apply, first || active); }
   }
   function browseCard(direction) {
     const index = cardRows.findIndex(row => row.id === active?.id);
     const row = cardRows[(index + direction + cardRows.length) % cardRows.length];
-    if (row && row.id !== active?.id) chooseRow(row);
+    if (row && row.id !== active?.id) { chooseRow(row); }
   }
   async function animateCardMotion(direction = 1, entering = false) {
-    if (!aliveRef.current || !cardRef.current) return;
+    if (!aliveRef.current || !cardRef.current) { return; }
     const animation = playContentMotion(cardRef.current, {kind:entering?'card-in':'card-out',direction});
-    if (!animation) return;
+    if (!animation) { return; }
     cardAnimation.current = animation;
-    try { await animation.finished; } catch {}
+    try { await animation.finished; } catch (error) { console.error('等待应答卡片动画结束失败', error); }
     animation.cancel();
     cardAnimation.current = null;
   }
   async function fadeToResponse(next) {
-    if (cardBusyRef.current || !aliveRef.current) return;
+    if (cardBusyRef.current || !aliveRef.current) { return; }
     cardBusyRef.current = true;
     setCardBusy(true);
     try {
       await animateCardMotion();
-      if (!aliveRef.current) return;
+      if (!aliveRef.current) { return; }
       // The navigation callback has already passed the unsaved-change guard.
       // Allow its synchronous route update, then lock input during the fade in.
       cardBusyRef.current = false;
@@ -295,42 +295,44 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       cardBusyRef.current = true;
       await animateCardMotion(1, true);
     } catch (error) {
-      if (aliveRef.current) setError(error.message || '切换失败，请重试。');
+      console.error('切换应答界面失败', error);
+      if (aliveRef.current) { setError(error.message || '切换失败，请重试。'); }
     } finally {
       cardBusyRef.current = false;
-      if (aliveRef.current) setCardBusy(false);
+      if (aliveRef.current) { setCardBusy(false); }
     }
   }
   async function advanceCard(nextId, direction = 1) {
-    if (!aliveRef.current) return;
+    if (!aliveRef.current) { return; }
     const next = requirementsRef.current.find(item => item.id === nextId);
     if (!next) { setQueueDone(true); return; }
     flushSync(() => { hydrate(next); setQuoteDraft(null); setActiveCommentId(null); });
     await animateCardMotion(direction, true);
-    if (!aliveRef.current) return;
+    if (!aliveRef.current) { return; }
     cardBusyRef.current = false;
     navigate('response', next.id, { fileId: next.sourceFileId, sourceVersion: next.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined });
   }
   async function slideToCard(nextId, direction = -1, deferred) {
-    if (cardBusyRef.current || !active) return;
+    if (cardBusyRef.current || !active) { return; }
     cardBusyRef.current = true;
     setCardBusy(true);
     setError('');
     try {
       await animateCardMotion(direction);
-      if (!aliveRef.current) return;
-      if (deferred) setDeferredCards(deferred);
+      if (!aliveRef.current) { return; }
+      if (deferred) { setDeferredCards(deferred); }
       await advanceCard(nextId, direction);
     } catch (error) {
-      if (aliveRef.current) setError(error.message || '切换失败，请重试。');
+      console.error('切换应答卡片失败', error);
+      if (aliveRef.current) { setError(error.message || '切换失败，请重试。'); }
     } finally {
       cardBusyRef.current = false;
-      if (aliveRef.current) setCardBusy(false);
+      if (aliveRef.current) { setCardBusy(false); }
     }
   }
   function deferCard() {
     guardedDetail(() => {
-      if (cardBusyRef.current || !active) return;
+      if (cardBusyRef.current || !active) { return; }
       const deferred = [...new Set([...deferredCards, active.id])];
       const next = nextResponseCard(cardRows, active.id, deferred);
       return slideToCard(next?.id, -1, deferred);
@@ -339,13 +341,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   async function finishConfirmation(row, nextId, patch) {
     try {
       const success = await transitionConfirmedCard({
-        confirm: async () => { const success = await (patch ? onConfirm(row.id, row.version || 1, patch, matchChoice) : onConfirm(row.id, row.version || 1)); if (success !== false) { clearDirty(); if (!databaseBacked) addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); setModal(null); } return success; },
+        confirm: async () => { const success = await (patch ? onConfirm(row.id, row.version || 1, patch, matchChoice) : onConfirm(row.id, row.version || 1)); if (success !== false) { clearDirty(); if (!databaseBacked) { addActivity('确认应答', `绑定条目版本 V${row.version || 1}`, row.id); } setModal(null); } return success; },
         animate: () => animateCardMotion(),
         advance: () => advanceCard(nextId),
       });
-      if (success === false && aliveRef.current) setError('本条未确认成功，请核对提示后重试。当前卡片和输入已保留。');
-    } catch (error) { if (aliveRef.current) setError(error.message || '确认失败，请重试。'); }
-    finally { cardBusyRef.current = false; if (aliveRef.current) setCardBusy(false); }
+      if (success === false && aliveRef.current) { setError('本条未确认成功，请核对提示后重试。当前卡片和输入已保留。'); }
+    } catch (error) { console.error('完成条款确认失败', error); if (aliveRef.current) { setError(error.message || '确认失败，请重试。'); } }
+    finally { cardBusyRef.current = false; if (aliveRef.current) { setCardBusy(false); } }
   }
   function openUnlinkedComment(value){
     if(!value.note){setNativeDiscussion(previous=>previous?.scope===value.scope?null:previous);return;}
@@ -354,29 +356,29 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   function focusSource(anchor, { quote, commentId, editComment=false } = {}) {
     const row = requirements.find(r => r.id === anchor.requirementId);
-    if (!row) return;
+    if (!row) { return; }
     const next = () => {
       revealCard(row);
       setNativeDiscussion(null);
-      if (row.id !== active?.id) hydrate(row);
+      if (row.id !== active?.id) { hydrate(row); }
       setDetailTab(quote || commentId ? 'activity' : 'response'); setOutlineOpen(false); setActiveCommentId(commentId || null);
       setQuoteDraft(quote ? { quote, anchor } : null);
-      if(editComment&&commentId)setCommentEditRequest(previous=>({id:commentId,actorId,sequence:(previous?.sequence||0)+1}));
+      if(editComment&&commentId) { setCommentEditRequest(previous=>({id:commentId,actorId,sequence:(previous?.sequence||0)+1})); }
       setProcessTab(quote || commentId ? '批注与记录' : '差距与应答');
-      if (quote) detailSideRef.current?.scrollTo({ top: 0 });
+      if (quote) { detailSideRef.current?.scrollTo({ top: 0 }); }
       navigate('response', row.id, { fileId: anchor.fileId, sourceVersion: anchor.sourceVersion });
     };
     return guardedDetail(next,row);
   }
-  useEffect(() => { if (route?.page !== 'reviews' || !route.reviewId) return; const review = reviews.find(item => item.id === route.reviewId); if (!review) return; const row = requirements.find(item => item.id === review.requirementId); revealCard(row); if (row && row.id !== activeId) hydrate(row); setDetailTab('response'); setInlineReviewId(review.id); setInlineReviewAction(route.action === 'reopen' ? 'reopen' : null); }, [route?.page, route?.reviewId]);
+  useEffect(() => { if (route?.page !== 'reviews' || !route.reviewId) { return; } const review = reviews.find(item => item.id === route.reviewId); if (!review) { return; } const row = requirements.find(item => item.id === review.requirementId); revealCard(row); if (row && row.id !== activeId) { hydrate(row); } setDetailTab('response'); setInlineReviewId(review.id); setInlineReviewAction(route.action === 'reopen' ? 'reopen' : null); }, [route?.page, route?.reviewId]);
   function changeDetailTab(key) {
-    if(key===detailTab)return;
+    if(key===detailTab) { return; }
     const next = () => setDetailTab(key);
-    if (!window.__rfqRequestNavigation || window.__rfqRequestNavigation(next)) next();
+    if (!window.__rfqRequestNavigation || window.__rfqRequestNavigation(next)) { next(); }
   }
   function goPage(key) { navigate(key); }
   function applyMatch(run, candidate) {
-    if (!canEdit) return;
+    if (!canEdit) { return; }
     setForm(current=>({...current,...(candidate.answer ? {draft:candidate.answer} : {}),
       ...(candidate.conclusion ? {conclusion:candidate.conclusion} : {}),
       conditions:candidate.conditions ?? current.conditions,
@@ -390,7 +392,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const candidate=run.result?.stages?.standard_reply?.candidates?.[0];
     if (!candidate || !canEdit || dirtyRef.current || prefilledRuns.current.has(run.runId) ||
       active.status==='已确认' || active.sourceRequirementVersion != null || active.matchReference || active.draft ||
-      active.conclusion && active.conclusion!=='待确认') return;
+      active.conclusion && active.conclusion!=='待确认') { return; }
     prefilledRuns.current.add(run.runId);
     applyMatch(run,candidate);
   }
@@ -398,10 +400,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (!active || !canEdit) { toast('当前身份不能修改应答草稿'); return false; }
     if (conflicted) { setError('条目版本已变化，请保留当前输入并返回核对最新版本，不能覆盖保存。'); setModal('conflict'); return false; }
     const patch = { ...form, ...(reasonOverride ? { reason: reasonOverride } : {}) };
-    if(cardBusyRef.current)return false;
+    if(cardBusyRef.current) { return false; }
     cardBusyRef.current=true;setCardBusy(true);
-    try { if (await onUpdateRequirement(active.id, patch,baseline.current.version||1,choiceOverride ?? matchChoice) === false) return false; }
-    finally {cardBusyRef.current=false;if(aliveRef.current)setCardBusy(false);}
+    try { if (await onUpdateRequirement(active.id, patch,baseline.current.version||1,choiceOverride ?? matchChoice) === false) { return false; } }
+    finally {cardBusyRef.current=false;if(aliveRef.current) { setCardBusy(false); }}
     clearDirty(); addActivity('保存应答草稿', '草稿已保存，未自动确认'); toast('草稿已保存；最终确认状态仍需单独操作'); return true;
   }
   useEffect(() => { localStorage.setItem(`rfq.response.events.${project.id}`, JSON.stringify(activities)); }, [activities, project.id]);
@@ -409,19 +411,19 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   useEffect(() => { setPage(1); }, [query, status, section, owner, special]);
   useEffect(() => { const index = requirements.findIndex((row) => row.id === focusedRequirementId); if (index >= 0) {setPage(Math.floor(index / 6) + 1);if(focusedRequirementId!==activeId){revealCard(requirements[index]);hydrate(requirements[index]);}} }, [focusedRequirementId]);
   useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
-  useEffect(() => { const previous = window.__rfqRequestNavigation; const hook = (next,options) => officeCanLeave(options?.officeSource) && requestTransition(next) && (!previous || previous(next,options)); window.__rfqRequestNavigation = hook; const beforeUnload = (e) => { if (dirtyRef.current || candidateDirty.current || reviewFormRef.current) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', beforeUnload); return () => { if (window.__rfqRequestNavigation === hook) { if (previous) window.__rfqRequestNavigation = previous; else delete window.__rfqRequestNavigation; } window.removeEventListener('beforeunload', beforeUnload); clearTimeout(timer.current); }; }, []);
+  useEffect(() => { const previous = window.__rfqRequestNavigation; const hook = (next,options) => officeCanLeave(options?.officeSource) && requestTransition(next) && (!previous || previous(next,options)); window.__rfqRequestNavigation = hook; const beforeUnload = (e) => { if (dirtyRef.current || candidateDirty.current || reviewFormRef.current) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', beforeUnload); return () => { if (window.__rfqRequestNavigation === hook) { if (previous) { window.__rfqRequestNavigation = previous; } else { delete window.__rfqRequestNavigation; } } window.removeEventListener('beforeunload', beforeUnload); clearTimeout(timer.current); }; }, []);
   useEffect(() => {
-    if (!pendingConfirmation) return;
+    if (!pendingConfirmation) { return; }
     const current = requirements.find((r) => r.id === pendingConfirmation.id);
-    if (!current || !formFields.every((field) => current[field] === pendingConfirmation.expected[field])) return;
+    if (!current || !formFields.every((field) => current[field] === pendingConfirmation.expected[field])) { return; }
     setPendingConfirmation(null);
     finishConfirmation(current, pendingConfirmation.nextId);
   }, [requirements, pendingConfirmation]);
 
-  function beginConfirm() { if (cardBusyRef.current) return; if (reviewForm) { setError('请先提交或取消当前新增事项。'); return; } confirmOne(); }
+  function beginConfirm() { if (cardBusyRef.current) { return; } if (reviewForm) { setError('请先提交或取消当前新增事项。'); return; } confirmOne(); }
   function closeConfirmationValidation() { setModal(null); setError(''); }
   async function confirmOne() {
-    if (cardBusyRef.current) return;
+    if (cardBusyRef.current) { return; }
     if (!active || !canConfirm) { setError(`本条确认责任人：${getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')}`); return; }
     if(openReview){openInlineReview(openReview.id);return;}
     if (openReview || active.pendingReviewProposal) { setError('请先核对本条评审建议。'); return; }
@@ -431,30 +433,30 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     cardBusyRef.current = true; setCardBusy(true); setError('');
     const nextId = databaseBacked && active.restoredFromVersion && active.status !== '已确认'
       ? active.id : nextResponseCard(cardRows, active.id, deferredCards)?.id;
-    if (dirty && databaseBacked) return finishConfirmation(active, nextId, form);
+    if (dirty && databaseBacked) { return finishConfirmation(active, nextId, form); }
     if (dirty) {
       const expected = { ...form };
       if (await onUpdateRequirement(active.id, expected,baseline.current.version||1) === false) { cardBusyRef.current = false; setCardBusy(false); setError('草稿保存失败，当前输入已保留。'); return; }
       addActivity('修改后确认', '保存当前应答修改并确认条目');
       setForm(expected); clearDirty(); setPendingConfirmation({ id: active.id, expected, nextId });
-    } else finishConfirmation(active, nextId);
+    } else { finishConfirmation(active, nextId); }
   }
   async function batchConfirm() {
-    if (cardBusyRef.current || !selectedRows.length) return;
+    if (cardBusyRef.current || !selectedRows.length) { return; }
     if (dirtyRef.current) { setError('当前条目存在未提交修改，请先确认当前条目再执行批量确认'); return; }
     setError('');
-    const results = []; for (const row of selectedRows) { const result = await (async () => { const exclusions = batchReasons(row); if (exclusions.length) return { ...row, result: '已排除', message: exclusions.join('；') }; const ok = await onConfirm(row.id,row.version||1) !== false; return { ...row, result: ok ? '确认成功' : '确认失败', message: ok ? `已绑定 V${row.version || 1}` : '重新校验未通过，请查看当前条目或未关闭评审' }; })(); results.push(result); }
+    const results = []; for (const row of selectedRows) { const result = await (async () => { const exclusions = batchReasons(row); if (exclusions.length) { return { ...row, result: '已排除', message: exclusions.join('；') }; } const ok = await onConfirm(row.id,row.version||1) !== false; return { ...row, result: ok ? '确认成功' : '确认失败', message: ok ? `已绑定 V${row.version || 1}` : '重新校验未通过，请查看当前条目或未关闭评审' }; })(); results.push(result); }
     setBatchSummary({ total: selectedRows.length, eligible: eligibleBatch.length, excluded: selectedRows.length - eligibleBatch.length }); setBatchResults(results); setSelected((old) => old.filter((id) => !results.some((r) => r.id === id && r.result === '确认成功'))); addActivity('批量确认结果', `明确选择 ${selectedRows.length} 条，成功 ${results.filter((r) => r.result === '确认成功').length} 条`); setModal('batch-result');
   }
   function adoptSuggestion(next, label) {
-    if (!canEdit) return toast('当前身份只读，不能采用或修改应答');
+    if (!canEdit) { return toast('当前身份只读，不能采用或修改应答'); }
     const proposal = { ...form, conclusion: next.conclusion || suggestion.conclusion, draft: next.answer || next.draft, conditions: next.conditions || '', evidence: next.evidence || '', reason: form.reason };
     if (form.draft.trim() || dirty) { setAdoption({ proposal, label }); return; }
     applyAdoption(proposal, label);
   }
   function applyAdoption(proposal, label) { setForm(proposal); dirtyRef.current = true; setDirty(true); setAdoption(null); addActivity('采用匹配建议', `${label}；保留条件和来源版本；尚未确认`); toast('建议已带入编辑区，请核对条件并保存 / 确认'); }
   function startReview(kind = 'review', candidate = null) {
-    if (!active) return;
+    if (!active) { return; }
     guardedDetail(() => { setInlineReviewId(null); setReviewForm({ kind, title: kind === 'rereview' ? `${active.title} · 重新专项评审` : kind === 'reject' ? `${active.title} · 匹配结果未接受` : `${active.title} · 评审`, type:active.category||'技术', source: kind === 'rereview' ? '重新评审' : kind === 'reject' ? '用户未接受' : active.matchLevel === 'none' ? '知识库中没有' : active.score < 80 ? '置信度低' : '人工发起专项评审', owner:'技术', reviewerIds: [], deadline: project.deadline || '2026-10-28', description: candidate ? `参考 ${candidate.project} ${candidate.version}；${candidate.difference}` : '', evidence:reviewEvidenceHref(form.evidence) }); setError(''); });
   }
   async function submitReview() {
@@ -464,22 +466,22 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       : active.version || 1;
     let request;
     try { request = buildReviewRequest({ requirement: active, form: reviewForm, requirementVersion }); }
-    catch (error) { setError(error.message); return false; }
+    catch (error) { console.error('构建应答评审请求失败', error); setError(error.message); return false; }
     setError('');
-    if (dirty && !await saveDraft()) return false;
+    if (dirty && !await saveDraft()) { return false; }
     const created = await onCreateReview({...request,id:reviewForm.id,commentId:reviewForm.commentId,reviewerIds:reviewForm.reviewerIds});
-    if (created === false) return false;
-    if(!databaseBacked)setInlineReviewId(created); addActivity(reviewForm.kind === 'reject' ? '明确拒绝本条匹配并建立偏离' : '发起评审', reviewForm.description); setReviewForm(null); reviewFormRef.current = null; toast('关联事项已创建，可直接在当前条目处理'); return true;
+    if (created === false) { return false; }
+    if(!databaseBacked) { setInlineReviewId(created); } addActivity(reviewForm.kind === 'reject' ? '明确拒绝本条匹配并建立偏离' : '发起评审', reviewForm.description); setReviewForm(null); reviewFormRef.current = null; toast('关联事项已创建，可直接在当前条目处理'); return true;
   }
-  function rematch() { if(!canPerform(actorRole,'analysis:run')||!canEdit)return; setModal(null); setMatching(true); const id = active.id; timer.current = setTimeout(() => { setRetrievalById((old) => ({ ...old, [id]: retrievalMode })); setMatching(false);onAnalysisRun?.({id:uid('RUN'),fileId:active.sourceFileId||active.source,sourceVersion:active.sourceVersion,type:'match',status:retrievalMode==='normal'?'完成':'失败',startedAt:new Date().toISOString(),endedAt:new Date().toISOString(),successCount:retrievalMode==='normal'?1:0,failedCount:retrievalMode==='normal'?0:1,needsHumanCount:active.matchLevel==='none'?1:0}); addActivity('重新分级匹配', retrievalMode === 'normal' ? '标准回复 → 历史 RFQ → 能力边界；保留人工答复' : retrievalMode === 'failed' ? '检索服务模拟失败；未修改人工答复' : '当前检索来源模拟无权限；不展示名称与摘要', id); toast(retrievalMode === 'normal' ? '匹配结果已刷新，人工答复与确认状态保持当前值' : '检索未完成，请查看状态与重试入口'); }, 900); }
+  function rematch() { if(!canPerform(actorRole,'analysis:run')||!canEdit) { return; } setModal(null); setMatching(true); const id = active.id; timer.current = setTimeout(() => { setRetrievalById((old) => ({ ...old, [id]: retrievalMode })); setMatching(false);onAnalysisRun?.({id:uid('RUN'),fileId:active.sourceFileId||active.source,sourceVersion:active.sourceVersion,type:'match',status:retrievalMode==='normal'?'完成':'失败',startedAt:new Date().toISOString(),endedAt:new Date().toISOString(),successCount:retrievalMode==='normal'?1:0,failedCount:retrievalMode==='normal'?0:1,needsHumanCount:active.matchLevel==='none'?1:0}); addActivity('重新分级匹配', retrievalMode === 'normal' ? '标准回复 → 历史 RFQ → 能力边界；保留人工答复' : retrievalMode === 'failed' ? '检索服务模拟失败；未修改人工答复' : '当前检索来源模拟无权限；不展示名称与摘要', id); toast(retrievalMode === 'normal' ? '匹配结果已刷新，人工答复与确认状态保持当前值' : '检索未完成，请查看状态与重试入口'); }, 900); }
   function openCapability() {
-    if(!canPerform(actorRole,'resource:edit',capabilityContext))return;
-    if(!capabilityModels.length)return toast('本BU尚无可用机型，请先由BU管理员配置机型与工艺。','error');
+    if(!canPerform(actorRole,'resource:edit',capabilityContext)) { return; }
+    if(!capabilityModels.length) { return toast('本BU尚无可用机型，请先由BU管理员配置机型与工艺。','error'); }
     setCapabilityForm({buId:project.buId,projectId:project.id,modelId:'',processId:'',modelContext:project.equipment,config:'',metric:active.title,value:'',valueType:'保证值',conditions:form.conditions,limits:'',evidence:'',sourceLocation:`${project.id} / ${active.id} / ${active.source} 第 ${active.sourcePage} 页`,approver:'BU管理员'}); candidateDirty.current = true; setError('');
   }
   function saveCapability() {
-    if(!canPerform(actorRole,'resource:edit',capabilityContext))return false;
-    try{assertCapabilityProcess(capabilityForm,{models:capabilityModels,processes:capabilityProcesses,buId:project.buId});}catch(e){setError(e.message);return false;}
+    if(!canPerform(actorRole,'resource:edit',capabilityContext)) { return false; }
+    try{assertCapabilityProcess(capabilityForm,{models:capabilityModels,processes:capabilityProcesses,buId:project.buId});}catch(e){ console.error('校验应答关联工艺失败', e); setError(e.message);return false;}
     if (!capabilityForm.metric.trim() || !capabilityForm.value.trim() || !capabilityForm.config.trim() || !capabilityForm.conditions.trim()) { setError('请填写能力指标、实际能力值、配置与适用条件；证据可在维护页继续补齐。'); return false; }
     const item = { ...capabilityForm, id: uid('CAP'), version: 1, source: '手动补充', status: '草稿', validity: '未发布', submitterRole: actorRole, submitterId:actorId, refs: [{ id: active.id, title: `${project.id} · ${active.title}` }], history: [{ date: new Date().toISOString().slice(0, 10), text: `${actorRole} 在 RFQ 比对中补充候选；不改变当前应答` }] };
     const key=resourceStorageKey('rfq.reference.capabilities.v1',project.buId);
@@ -509,7 +511,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const projectActivity = <ProjectActivityPanel key={project.id} project={project} requirements={requirements}
     reviews={reviews} snapshots={appState.snapshotsByProject?.[project.id] || []} audit={appState.audit || []}
     databaseBacked={appState.dataSource === 'mysql'} accountsById={appState.accountsById}/>;
-  if (!requirements.length) return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':'当前文件正在解析，完成后可在这里处理应答项。'}/>}</div></div></div></div>;
+  if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':'当前文件正在解析，完成后可在这里处理应答项。'}/>}</div></div></div></div>; }
   const activeSourceAnchor={ ...makeSourceAnchor({ ...active, projectId: project.id }), ...(route?.requirementId === active.id ? { sourceVersion: route.sourceVersion || String(active.sourceVersion || '1'), fileId: route.fileId || active.sourceFileId || active.source || 'manual' } : {}) };
   const reparseFileId=active.sourceFileId;
   const canReparseCurrent=!staleSource&&reparseFileId&&sourceReparse?.hasSources(project.id,reparseFileId);
@@ -517,12 +519,12 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const reparseAction=canReparseCurrent&&<UiButton className="btn btn-sm" aria-label="重新解析当前文件"
     title={reparseBlocked?'请先处理未保存的修改':'重新解析当前文件'} disabled={!!reparseBlocked}
     onClick={()=>sourceReparse.open(project.id,reparseFileId)}><RefreshCw size={14}/><span className="rfq-editor-tools-label">重新解析</span></UiButton>;
-  const sourceToolbar={fileAction:reparseAction,fileSelector:<UiSelect className="select rfq-document-file-selector" aria-label="应答来源文件" value={active.sourceFileId || active.source || 'manual'} onChange={e => { const row = requirements.find(r => (r.sourceFileId || r.source || 'manual') === e.target.value); if (row) chooseRow(row); }}>{[...new Map(requirements.map(r => [r.sourceFileId || r.source || 'manual', r.source || '人工补录'])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</UiSelect>,actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
+  const sourceToolbar={fileAction:reparseAction,fileSelector:<UiSelect className="select rfq-document-file-selector" aria-label="应答来源文件" value={active.sourceFileId || active.source || 'manual'} onChange={e => { const row = requirements.find(r => (r.sourceFileId || r.source || 'manual') === e.target.value); if (row) { chooseRow(row); } }}>{[...new Map(requirements.map(r => [r.sourceFileId || r.source || 'manual', r.source || '人工补录'])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</UiSelect>,actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
   const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id))}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!selectedRows.length || dirty || cardBusy} title={dirty ? '请先保存当前应答修改' : undefined} onClick={batchConfirm}>批量确认 {selectedRows.length || ''}</UiButton></div></RfqDirectory>;
   return <div className="response-page rfq-detail">
     {sourceSummary.status==='failed'&&<Notice warning>资料解析失败：{sourceSummary.files.filter(file=>file.status==='失败').map(file=>[file.name,file.error].filter(Boolean).join('：')).join('；')}{canManageSource&&<UiButton className="text-link" onClick={retrySources}>重新解析</UiButton>}</Notice>}
     {staleSource && <Notice warning>当前链接指向旧来源版本，本页只读。<UiButton className="text-link" onClick={() => chooseRow(active)}>打开当前有效来源版本</UiButton></Notice>}
-    <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total)setPaneShare(sizes[0]/total*100);}}>
+    <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total) { setPaneShare(sizes[0]/total*100); }}}>
       <Splitter.Panel size={paneShare+'%'} min={narrowWorkbench?280:320}><div className="detail-document-column">
 
         <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={row=>actorRole!=='最终审批人'&&!staleSource&&canBusinessAction('requirement',row.id)} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={(appState?.documentsByProject?.[project.id] ?? read(`fep-rfq-documents:${project.id}`, null)?.files ?? makeDocumentDemo(project.id, requirements).files).find(f => f.id === active.sourceFileId)} rows={requirements.filter(r => (r.sourceFileId || r.source) === (active.sourceFileId || active.source)).map(r => ({ ...r, projectId: project.id }))} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={!conflicted && !staleSource ? { ...active, ...form } : undefined} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
@@ -566,9 +568,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           <Field label="适用条件" wide><UiTextArea className="input" aria-label="适用条件" value={form.conditions} readOnly={!canEdit} onChange={event=>edit('conditions',event.target.value)}/></Field>
           <Field label="应答依据" wide><UiInput className="input" aria-label="应答依据" value={form.evidence} readOnly={!canEdit} onChange={event=>edit('evidence',event.target.value)}/></Field>
         </div>}
-        {form.conclusion !== 'Comply' && recommendedWording && <RecommendedWording key={`${active.id}:${recommendedWording}`} recommendation={recommendedWording} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => { if (!canEdit) return; edit('draft', wording); addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`); toast('推荐话术已带入应答草稿，提交或确认后保存'); }}/>}
+        {form.conclusion !== 'Comply' && recommendedWording && <RecommendedWording key={`${active.id}:${recommendedWording}`} recommendation={recommendedWording} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => { if (!canEdit) { return; } edit('draft', wording); addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`); toast('推荐话术已带入应答草稿，提交或确认后保存'); }}/>}
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
-        <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) guardedDetail(() => setInlineReviewId(null)); else openInlineReview(issue.id); } else startAssessment(); }}>评审<ChevronDown size={13}/></UiButton></div></div>
+        <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openInlineReview(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>
         {!!linkedReviews.length && <div className="rfq-linked-reviews"><div className="rfq-section-title"><strong>问题处理记录</strong><span>{linkedReviews.length} 项</span></div>{linkedReviews.map((review) => <button key={review.id} className="rfq-review-link" onClick={() => openInlineReview(review.id)}><span><b>{review.title}</b><small>{review.owner} · 截止 {review.deadline || '未设置'}</small></span><StatusBadge status={review.status}/><ChevronRight size={14}/></button>)}</div>}
     {inlineReviewId && <div ref={inlineReviewRef} role="region" aria-label="当前评审事项" tabIndex={-1}><ReviewsPage appState={appState} project={project} requirements={requirements} reviews={reviews} actorRole={actorRole} actorId={actorId} canBusinessAction={canBusinessAction} toast={toast} navigate={navigate} logEvent={logEvent} onUpdateReview={onUpdateReview} onAdoptReview={onAdoptReview} onConfirmReviewed={onConfirmReviewed} embedded inline registerNavigationGuard={registerIssueGuard} key={inlineReviewId} initialAction={inlineReviewAction} initialReviewId={inlineReviewId} onCloseEmbedded={() => {setInlineReviewId(null);setInlineReviewAction(null);}}/></div>}
     {reviewForm && <InlineReviewSurface
@@ -616,7 +618,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     </div>
 
     {modal === 'confirmation-validation' && <Modal title="暂无法确认本条" centered width={480} onClose={closeConfirmationValidation} footer={<UiButton type="button" className="btn btn-primary" onClick={closeConfirmationValidation}>返回修改</UiButton>}><p role="alert">{error}</p></Modal>}
-    {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason))setModal(null);}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal))setModal(null);}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><small>{active.conditions}</small><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{active.pendingReviewProposal.proposal.draft}</p><small>{active.pendingReviewProposal.proposal.conditions}</small><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
+    {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason)) { setModal(null); }}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal)) { setModal(null); }}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><small>{active.conditions}</small><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{active.pendingReviewProposal.proposal.draft}</p><small>{active.pendingReviewProposal.proposal.conditions}</small><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
     {modal === 'confirm' && <Modal title={dirty ? '修改后确认当前条目' : '确认当前条目应答'} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={!canConfirm || !!pendingConfirmation} onClick={confirmOne}>{pendingConfirmation ? '保存后确认中…' : '确认本条'}</UiButton></>}>
       <div className="response-modal-title"><span>条款 {active.clause}{!databaseBacked && ` · V${active.version || 1}`}</span><h3>{active.title}</h3></div>
       <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.reason]] : []), ...(form.conclusion !== 'Comply' ? [['推荐话术', form.draft]] : [])]}/>
@@ -644,7 +646,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 
     {capabilityForm && <Drawer title="补充机型能力边界 · 候选草稿" width={650} onClose={() => { setTransition({ next: () => { setCapabilityForm(null); candidateDirty.current = false; } }); }} footer={<><UiButton className="btn" onClick={() => { setTransition({ next: () => { setCapabilityForm(null); candidateDirty.current = false; } }); }}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveCapability}>保存能力候选</UiButton></>}><Notice>保存为未发布候选，不覆盖当前应答，不自动改变 Comply 结论。请在能力维护页核对条件、证据并独立批准。</Notice><div className="form-grid response-spaced"><Field label="关联机型" required><UiSelect className="select" aria-label="补充能力关联机型" value={capabilityForm.modelId} onChange={e=>{const chosen=[...capabilityModels].sort((a,b)=>b.version-a.version).find(m=>m.id===e.target.value);setCapabilityForm({...capabilityForm,modelId:e.target.value,processId:'',config:chosen?.config||''});}}><option value="">请选择本BU的机型及硬件版本</option>{[...new Set(capabilityModels.map(m=>m.id))].map(id=>{const m=[...capabilityModels].filter(m=>m.id===id).sort((a,b)=>b.version-a.version)[0];return <option key={id} value={id}>{m.name} {m.revision} · {m.code}</option>;})}</UiSelect></Field><Field label="关联工艺" required><UiSelect className="select" aria-label="补充能力关联工艺" value={capabilityForm.processId} onChange={e=>setCapabilityForm({...capabilityForm,processId:e.target.value})}><option value="">请选择机型下的工艺</option>{capabilityProcesses.filter(p=>p.modelId===capabilityForm.modelId&&p.enabled!==false).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</UiSelect></Field><Field label="配置 / 项目基线" required><UiInput className="input" value={capabilityForm.config} onChange={(e) => setCapabilityForm({ ...capabilityForm, config: e.target.value })} /></Field><Field label="能力指标" required><UiInput className="input" value={capabilityForm.metric} onChange={(e) => setCapabilityForm({ ...capabilityForm, metric: e.target.value })} /></Field><Field label="实际能力值 / 范围" required><UiInput className="input" value={capabilityForm.value} onChange={(e) => setCapabilityForm({ ...capabilityForm, value: e.target.value })} /></Field><Field label="值类型"><UiSelect className="select" value={capabilityForm.valueType} onChange={(e) => setCapabilityForm({ ...capabilityForm, valueType: e.target.value })}>{['保证值', '典型值', '范围值', '描述值'].map((v) => <option key={v}>{v}</option>)}</UiSelect></Field><Field label="来源"><UiInput className="input" readOnly value="手动补充" /></Field><Field label="适用条件" required wide><UiTextArea className="input response-conditions" value={capabilityForm.conditions} onChange={(e) => setCapabilityForm({ ...capabilityForm, conditions: e.target.value })} placeholder="材料、厚度、工艺、测试方法与工况" /></Field><Field label="限制" wide><UiTextArea className="input" value={capabilityForm.limits} onChange={(e) => setCapabilityForm({ ...capabilityForm, limits: e.target.value })} /></Field><Field label="证据与版本" wide><UiInput className="input" value={capabilityForm.evidence} onChange={(e) => setCapabilityForm({ ...capabilityForm, evidence: e.target.value })} list="response-evidence-options" placeholder="可在能力维护页补齐有效证据" /><datalist id="response-evidence-options">{capabilityEvidence.filter((r) => r.status === '有效').map((r) => <option key={r.id} value={`${r.id} v${r.version}，${r.location || '请补充页码'}`}>{r.name}</option>)}</datalist></Field><Field label="来源定位" wide><UiTextArea className="input" readOnly value={capabilityForm.sourceLocation} /></Field></div>{error && <p className="response-error">{error}</p>}</Drawer>}
     <OverlayPresence>{historyDetail && <Drawer title="历史候选详情 · 模拟参考" width={720} onClose={() => setHistoryDetail(null)} footer={<><UiButton className="btn" onClick={() => { startReview('review', historyDetail); setHistoryDetail(null); }}>发起专家评审</UiButton><UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => { adoptSuggestion({ ...historyDetail, conclusion: suggestion.conclusion }, `${historyDetail.project} ${historyDetail.version}`); setHistoryDetail(null); }}>修改后复用</UiButton></>}><h3>{historyDetail.project}</h3><Description rows={[["时间 / 配置", `${historyDetail.date} · ${historyDetail.model} · ${historyDetail.config}`], ['来源版本', `${historyDetail.id} · ${historyDetail.version}`], ['历史要求', historyDetail.original], ['已审核答复', historyDetail.answer], ['审核状态', '已批准（模拟记录）'], ['与本次条件差异', historyDetail.difference], ['历史方案 / 适用条件', historyDetail.conditions], ['候选证据', historyDetail.evidence], ['客户沟通结果', historyDetail.feedback], ['实际验收结果', historyDetail.acceptance], ['建议动作', '核对配置、材料与验收条件后修改复用；不明确时发起评审']]} /><Notice warning>历史客户接受与实际验收分开记录。未知结果显示未记录，不推断为验收通过。</Notice></Drawer>}</OverlayPresence>
-    {modal === 'original' && <Drawer title="客户原文与来源修订" width={650} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>关闭</UiButton><UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => { setModal(null); toast('原文修订保留在当前草稿中，请保存并重新核对匹配结果'); }}>带入当前草稿</UiButton></>}><Description rows={[["来源文件", active.source], ['页码 / 条款', `第 ${active.sourcePage || 1} 页 / ${active.clause}`], ['当前版本', `V${active.version || 1}`]]} /><Field label="客户要求原文" required wide><UiTextArea className="input response-reply" value={form.original} readOnly={!canEdit||!canPerform(actorRole,'source:manage')} onChange={(e) => {if(canPerform(actorRole,'source:manage'))edit('original', e.target.value);}} /></Field><Notice warning>原文修订会影响当前建议及确认有效性。保存后须重新核对，不自动沿用旧版批准。</Notice></Drawer>}
+    {modal === 'original' && <Drawer title="客户原文与来源修订" width={650} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>关闭</UiButton><UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => { setModal(null); toast('原文修订保留在当前草稿中，请保存并重新核对匹配结果'); }}>带入当前草稿</UiButton></>}><Description rows={[["来源文件", active.source], ['页码 / 条款', `第 ${active.sourcePage || 1} 页 / ${active.clause}`], ['当前版本', `V${active.version || 1}`]]} /><Field label="客户要求原文" required wide><UiTextArea className="input response-reply" value={form.original} readOnly={!canEdit||!canPerform(actorRole,'source:manage')} onChange={(e) => {if(canPerform(actorRole,'source:manage')) { edit('original', e.target.value); }}} /></Field><Notice warning>原文修订会影响当前建议及确认有效性。保存后须重新核对，不自动沿用旧版批准。</Notice></Drawer>}
     {modal === 'rematch' && <Modal title="重新执行三级匹配" onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={rematch}>开始重新匹配</UiButton></>}><Notice>按“标准回复库 → 历史 RFQ → 能力边界”依次执行；只刷新模拟检索结果与建议，保留当前人工答复和编辑内容。</Notice><Field label="原型场景"><UiSelect className="select" value={retrievalMode} onChange={(e) => setRetrievalMode(e.target.value)}><option value="normal">正常分级匹配</option><option value="failed">模拟标准检索失败</option><option value="denied">模拟检索来源无权限</option></UiSelect></Field></Modal>}
     {modal === 'conflict' && <Modal title="条目版本已变化，无法覆盖保存" width={750} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>保留我的输入</UiButton><UiButton className="btn btn-primary" onClick={() => { hydrate(active); setModal(null); }}>放弃本次编辑并载入最新版本</UiButton></>}><Notice warning>当前输入与最新版本并排展示，请核对后基于最新版本重新提交；不能强制覆盖确认。</Notice><div className="response-diff-grid"><div><h4>我的输入 · V{baseline.current.version}</h4><p>{form.draft}</p><small>{form.conditions}</small></div><div><h4>最新版本 · V{active.version}</h4><p>{active.draft}</p><small>{active.conditions}</small></div></div></Modal>}
   </div>;

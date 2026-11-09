@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class FinalSnapshotService {
     public record Reviewers(long version, String technicalMode, String srId, List<String> technicalIds,
             String technicalRepresentativeId, String reason) {}
@@ -42,12 +44,16 @@ public class FinalSnapshotService {
         String reason = reason(input.reason(), true);
         var config = config(projectId);
         long version = config.path("technicalReviewSettings").path("version").asLong(1);
-        if (version != input.version()) throw new BusinessException(409, "评审配置已变化，请刷新");
+        if (version != input.version()) {
+            throw new BusinessException(409, "评审配置已变化，请刷新");
+        }
         var reviewers = json.createObjectNode().put("srId", input.srId()).put("technicalRepresentativeId", input.technicalRepresentativeId());
         reviewers.set("technicalIds", json.valueToTree(input.technicalIds()));
         validateRule(project, input.technicalMode(), reviewers);
         var settings = json.createObjectNode().put("technicalMode", input.technicalMode()).put("version", version + 1);
-        if (!(config.get("approvalConfig") instanceof ObjectNode)) config.putObject("approvalConfig");
+        if (!(config.get("approvalConfig") instanceof ObjectNode)) {
+            config.putObject("approvalConfig");
+        }
         ((ObjectNode) config.get("approvalConfig")).set("finalReviewers", reviewers);
         config.set("technicalReviewSettings", settings);
         jdbc.update("""
@@ -65,10 +71,14 @@ public class FinalSnapshotService {
             throw new BusinessException(403, "仅项目 SR 可提交最终评审");
         }
         String id = incoming.path("id").asText();
-        if (!id.matches("SNAP-[A-Za-z0-9-]{1,80}")) throw new BusinessException(400, "快照操作编号无效");
+        if (!id.matches("SNAP-[A-Za-z0-9-]{1,80}")) {
+            throw new BusinessException(400, "快照操作编号无效");
+        }
         var existing = snapshot(projectId, id);
         if (existing != null) {
-            if (!user.id().equals(existing.path("createdById").asText())) throw new BusinessException(409, "快照编号已使用");
+            if (!user.id().equals(existing.path("createdById").asText())) {
+                throw new BusinessException(409, "快照编号已使用");
+            }
             return existing;
         }
         var scope = incoming.path("approvalScope");
@@ -84,7 +94,9 @@ public class FinalSnapshotService {
                 .put("approvalFingerprint", incoming.path("approvalFingerprint").asText())
                 .put("submissionReason", reason(incoming.path("submissionReason").asText(), false));
         for (String key : List.of("rows", "approvalScope", "template", "mapping", "attachments")) {
-            if (incoming.has(key)) snapshot.set(key, incoming.get(key));
+            if (incoming.has(key)) {
+                snapshot.set(key, incoming.get(key));
+            }
         }
         snapshot.putArray("unconfirmedComplyIds");
         snapshot.set("finalReview", finalReview);
@@ -112,7 +124,9 @@ public class FinalSnapshotService {
                 || input.version() != snapshot.path("version").asLong(1)) {
             throw new BusinessException(409, "本轮审批已变化，请刷新");
         }
-        if (input.result() == null || !Set.of("approved", "rejected").contains(input.result())) throw new BusinessException(400, "审批结果无效");
+        if (input.result() == null || !Set.of("approved", "rejected").contains(input.result())) {
+            throw new BusinessException(400, "审批结果无效");
+        }
         String reason = reason(input.reason(), "rejected".equals(input.result()));
         var frozen = (ObjectNode) snapshot.get("finalReview");
         var configured = review(project, config(projectId));
@@ -120,7 +134,9 @@ public class FinalSnapshotService {
             throw new BusinessException(409, "评审规则已变化，请重新提交");
         }
         for (String field : List.of("policy", "technicalMode", "reviewers")) {
-            if (!configured.path(field).equals(frozen.path(field))) throw new BusinessException(409, "评审规则已变化，请重新提交");
+            if (!configured.path(field).equals(frozen.path(field))) {
+                throw new BusinessException(409, "评审规则已变化，请重新提交");
+            }
         }
         var reviewers = frozen.path("reviewers");
         String idOfActor = user.id();
@@ -128,24 +144,33 @@ public class FinalSnapshotService {
         boolean technical = "representative".equals(frozen.path("technicalMode").asText())
                 ? idOfActor.equals(reviewers.path("technicalRepresentativeId").asText())
                 : ids(reviewers.path("technicalIds")).contains(idOfActor);
-        if (user.systemAdmin() || !sr && !technical) throw new BusinessException(403, "当前人员没有本轮审批任务");
+        if (user.systemAdmin() || !sr && !technical) {
+            throw new BusinessException(403, "当前人员没有本轮审批任务");
+        }
         var decisions = (ObjectNode) frozen.get("decisions");
         var technicalVotes = (ObjectNode) decisions.get("technicalByActorId");
-        if (sr ? decisions.hasNonNull("sr") : technicalVotes.hasNonNull(idOfActor)) throw new BusinessException(409, "本轮已投票");
+        if (sr ? decisions.hasNonNull("sr") : technicalVotes.hasNonNull(idOfActor)) {
+            throw new BusinessException(409, "本轮已投票");
+        }
         if ("approved".equals(input.result())) {
             publication.lockBu(project.getBuId());
             export.validateContents(project, snapshot);
         }
         String time = Instant.now().toString();
         var vote = json.createObjectNode().put("actorId", idOfActor).put("result", input.result()).put("reason", reason).put("at", time);
-        if (sr) decisions.set("sr", vote);
-        else technicalVotes.set(idOfActor, vote);
+        if (sr) {
+            decisions.set("sr", vote);
+        } else {
+            technicalVotes.set(idOfActor, vote);
+        }
         snapshot.put("reviewedAt", time).put("reviewedById", idOfActor).put("reviewReason", reason)
                 .put("version", input.version() + 1);
         snapshot.withArray("history").addObject().put("action", "approved".equals(input.result()) ? "最终评审通过" : "退回快照")
                 .put("actor", user.displayName()).put("actorId", idOfActor).put("side", sr ? "sr" : "technical").put("time", time).put("reason", reason);
         snapshot.put("status", "rejected".equals(input.result()) ? "已退回" : "已批准");
-        if ("已批准".equals(snapshot.path("status").asText()) && !ApprovedDocumentExportService.approved(snapshot)) snapshot.put("status", "审批中");
+        if ("已批准".equals(snapshot.path("status").asText()) && !ApprovedDocumentExportService.approved(snapshot)) {
+            snapshot.put("status", "审批中");
+        }
         jdbc.update("update response_snapshot set payload=? where project_id=? and id=?", snapshot.toString(), projectId, id);
         if ("已批准".equals(snapshot.path("status").asText())) {
             var candidate = history.fromSnapshot(user, projectId, id, false);
@@ -195,7 +220,9 @@ public class FinalSnapshotService {
 
     private String reason(String value, boolean required) {
         String reason = value == null ? "" : value.trim();
-        if (reason.length() > 900 || required && reason.isBlank()) throw new BusinessException(400, "请填写有效原因（最多 900 字）");
+        if (reason.length() > 900 || required && reason.isBlank()) {
+            throw new BusinessException(400, "请填写有效原因（最多 900 字）");
+        }
         return reason;
     }
 
@@ -211,6 +238,9 @@ public class FinalSnapshotService {
 
     private ObjectNode decode(String payload) {
         try { return (ObjectNode) json.readTree(payload); }
-        catch (Exception failure) { throw new IllegalStateException("审批数据格式异常", failure); }
+        catch (Exception failure) {
+            log.error("解析审批快照失败 errorType={}", failure.getClass().getSimpleName());
+            throw new IllegalStateException("审批数据格式异常", failure);
+        }
     }
 }

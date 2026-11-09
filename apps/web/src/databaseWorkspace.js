@@ -9,14 +9,14 @@ async function pages(path,api,filters={}){
   const query=new URLSearchParams({page,size:100,...filters});
   const result=await api.get(`${path}?${query}`),items=result.list||[];
   rows.push(...items);
-  if(rows.length>=result.total)return rows;
-  if(!items.length)throw new Error('数据库分页数据不完整，请刷新重试');
+  if(rows.length>=result.total) { return rows; }
+  if(!items.length) { throw new Error('数据库分页数据不完整，请刷新重试'); }
  }
 }
 function sectionPath(value){
- if(Array.isArray(value))return value;
- if(!value)return [];
- try{const parsed=JSON.parse(value);if(Array.isArray(parsed))return parsed;}catch{}
+ if(Array.isArray(value)) { return value; }
+ if(!value) { return []; }
+ try{const parsed=JSON.parse(value);if(Array.isArray(parsed)) { return parsed; }}catch (error){ console.error('解析数据库工作区章节路径失败', error); }
  return [value];
 }
 export function mapDatabaseRequirement(row,files,owner){
@@ -36,7 +36,7 @@ export function mapDatabaseWorkspace({user,projects,archivedProjects=[],director
   tasksById:{},analysisRuns:[],audit:[],deletedProjectsById:{},navigationContext:{},responseReviewSchemaVersion:1,resourcesByBuId:resources,
  };
  for(const [buId,members]of Object.entries(directories)){
-  if(!state.businessUnits.some(unit=>unit.id===buId))state.businessUnits.push({id:buId,name:buId});
+  if(!state.businessUnits.some(unit=>unit.id===buId)) { state.businessUnits.push({id:buId,name:buId}); }
   state.buReviewSettingsByBuId[buId]={technicalMode:'all',version:1};
   state.buPersonnelByBuId[buId]=members.map(member=>{
    const previous=state.accountsById[member.userId];
@@ -80,7 +80,7 @@ export function mapDatabaseWorkspace({user,projects,archivedProjects=[],director
  return reconcileTasks(hydrateSessionPersonnel(state,user,{activate:true}));
 }
 export async function loadDatabaseWorkspace(user,api=defaultApi){
- if(!user?.id)throw new Error('登录会话不存在，请重新登录');
+ if(!user?.id) { throw new Error('登录会话不存在，请重新登录'); }
  const [projects,archivedProjects]=await Promise.all([pages('/projects',api),pages('/projects',api,{archived:true})]);
  const buIds=[...new Set([...(user.roles||[]).map(grant=>grant.buId),...projects.map(project=>project.buId)])];
  const [directories,details,resources]=await Promise.all([

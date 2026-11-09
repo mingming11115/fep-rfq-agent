@@ -1,10 +1,10 @@
 import { makeSourceAnchor } from './documentAnchors.js';
 
 export function officeRouteSource(state,route) {
-  if(!['response','reviews'].includes(route.page))return;
+  if(!['response','reviews'].includes(route.page)) { return; }
   const projectId=route.projectId||state.activeProjectId;
   const row=state.requirementsByProject?.[projectId]?.find(item=>item.id===route.requirementId);
-  if(!row)return;
+  if(!row) { return; }
   const anchor=makeSourceAnchor({...row,projectId});
   return {projectId,fileId:route.fileId||anchor.fileId,sourceVersion:route.sourceVersion||anchor.sourceVersion};
 }
@@ -21,18 +21,18 @@ export function createOfficeClauseLink({origin,channel,source,onSelect=()=>{},on
   return {
     update(rows,id){
       const next=officeClauseTargets(source,rows),nextSignature=JSON.stringify([id,next]);
-      if(nextSignature===signature)return;
+      if(nextSignature===signature) { return; }
       signature=nextSignature;targets=next;targetId=id;requestId++;send();
     },
     receive(event){
       const message=event.data;
-      if(!alive||event.origin!==origin||!event.source||!message||message.channel!==channel)return;
+      if(!alive||event.origin!==origin||!event.source||!message||message.channel!==channel) { return; }
       if(message.type==='rfq:ready'&&!plugin){plugin=event.source;send();return;}
-      if(event.source!==plugin)return;
-      if(message.type==='rfq:located'&&message.requestId===requestId&&['matched','missing','ambiguous','unsupported'].includes(message.status))onStatus({status:message.status});
+      if(event.source!==plugin) { return; }
+      if(message.type==='rfq:located'&&message.requestId===requestId&&['matched','missing','ambiguous','unsupported'].includes(message.status)) { onStatus({status:message.status}); }
       if(message.type==='rfq:selected'&&message.requestId===requestId){
         const target=targets.find(item=>item.id===message.id);
-        if(target&&target.id!==targetId&&onSelect(target.anchor)===false)send();
+        if(target&&target.id!==targetId&&onSelect(target.anchor)===false) { send(); }
       }
     },
     locate:send,

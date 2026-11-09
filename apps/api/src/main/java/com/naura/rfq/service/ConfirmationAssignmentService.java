@@ -48,14 +48,22 @@ public class ConfirmationAssignmentService {
         // Same lock order as parsing: project, document, then current requirements.
         row=requirements.findByDocumentIdForUpdate(row.getDocumentId()).stream().filter(r->id.equals(r.getId()))
                 .findFirst().orElseThrow(()->new BusinessException(409,"条款已重新解析，请刷新后重试"));
-        if(!request.version().equals(row.getVersion()))throw new BusinessException(409,"确认分工或条款已变化，请刷新后重试");
-        if(!eligible(project,request.userId()))throw new BusinessException(400,"确认人须具有本 BU 确认资格及项目授权");
-        if(request.userId().equals(row.getConfirmationAssigneeId()))throw new BusinessException(400,"请选择其他确认人");
+        if(!request.version().equals(row.getVersion())) {
+            throw new BusinessException(409,"确认分工或条款已变化，请刷新后重试");
+        }
+        if(!eligible(project,request.userId())) {
+            throw new BusinessException(400,"确认人须具有本 BU 确认资格及项目授权");
+        }
+        if(request.userId().equals(row.getConfirmationAssigneeId())) {
+            throw new BusinessException(400,"请选择其他确认人");
+        }
         String before=row.getConfirmationAssigneeId();
         row.setConfirmationAssigneeId(request.userId());
         row.setConfirmationAssignedBy(actor.id());row.setConfirmationAssignedAt(Instant.now());
         row.setConfirmationAssignmentReason(request.reason().trim());
-        if(requirements.assignConfirmation(row)!=1)throw new BusinessException(409,"确认分工已变化，请刷新后重试");
+        if(requirements.assignConfirmation(row)!=1) {
+            throw new BusinessException(409,"确认分工已变化，请刷新后重试");
+        }
         row.setVersion(row.getVersion()+1);
         audit.successInBu(actor.id(),project.getBuId(),"分派条款确认人","requirement",id,
                 String.valueOf(before)+" -> "+request.userId()+"："+request.reason().trim());
@@ -78,9 +86,13 @@ public class ConfirmationAssignmentService {
 
     boolean qualified(String buId,String id) {
         var target=users.findById(id);
-        if(target.isEmpty()||!target.get().isActive()||target.get().isSystemAdmin())return false;
+        if(target.isEmpty()||!target.get().isActive()||target.get().isSystemAdmin()) {
+            return false;
+        }
         var profile=profiles.findByBuIdAndUserId(buId,id);
-        if(profile!=null&&!profile.isEnabled())return false;
+        if(profile!=null&&!profile.isEnabled()) {
+            return false;
+        }
         return roles.findByUserIdAndStatus(id,"ACTIVE").stream().filter(r->buId.equals(r.getBuId())).anyMatch(r->"SR".equals(r.getRole())
                 ||Set.of("TECH","APPROVER").contains(r.getRole())&&profile!=null&&profile.isCanConfirm());
     }

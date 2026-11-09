@@ -30,7 +30,7 @@ test('presentation demo has one RFQ per stage and all fifteen processing-status 
     assert.ok(next.requirementsByProject['RFQ-001'].some(r => r.id === review.requirementId));
   for (const task of Object.values(next.tasksById)) {
     assert.ok(next.projects.some(p => p.id === task.projectId));
-    if (task.projectId === 'RFQ-001') assert.ok(next.requirementsByProject['RFQ-001'].some(r => r.id === task.requirementId));
+    if (task.projectId === 'RFQ-001') { assert.ok(next.requirementsByProject['RFQ-001'].some(r => r.id === task.requirementId)); }
   }
   assert.deepEqual(next.snapshotsByProject['RFQ-003'], before.snapshotsByProject['RFQ-003']);
   assert.equal(before.projects.length, 6);

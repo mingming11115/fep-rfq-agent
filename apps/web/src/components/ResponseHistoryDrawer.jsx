@@ -16,7 +16,7 @@ function versionEntry(item, kind) {
 }
 
 function formatTime(value) {
-  if (!value) return '';
+  if (!value) { return ''; }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false });
 }
@@ -31,9 +31,9 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
   useEffect(() => {
     let cancelled = false;
     loadResponseHistory(requirement.id).then(data => {
-      if (!cancelled) setHistory(data);
+      if (!cancelled) { setHistory(data); }
     }, failure => {
-      if (!cancelled) setError(failure.message);
+      if (!cancelled) { setError(failure.message); }
     });
     return () => { cancelled = true; };
   }, [requirement.id]);
@@ -60,12 +60,13 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
   );
 
   async function restore() {
-    if (!readyToRestore) return;
+    if (!readyToRestore) { return; }
     setBusy(true);
     setError('');
     try {
-      if (await onRestore(selected) !== false) onClose();
+      if (await onRestore(selected) !== false) { onClose(); }
     } catch (failure) {
+      console.error('恢复历史应答失败', failure);
       setError(failure.message);
     } finally {
       setBusy(false);
@@ -74,7 +75,7 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
 
   return <>
     <Drawer title="确认历史" width="min(780px, 100vw)" open={open} afterOpenChange={afterOpenChange}
-      onClose={() => { if (!busy) onClose(); }}
+      onClose={() => { if (!busy) { onClose(); } }}
       footer={<div className="rfq-confirm-history-footer">
         {dirty && canRestore && <small>请先保存当前编辑，再恢复旧版。</small>}
         <UiButton disabled={busy} onClick={onClose}>关闭</UiButton>
@@ -113,7 +114,7 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
           </div>}
       </div>
     </Drawer>
-    {confirmationOpen && open !== false && <Modal title={`恢复 ${selected.label} 为草稿`} onClose={() => { if (!busy) setConfirmationOpen(false); }}
+    {confirmationOpen && open !== false && <Modal title={`恢复 ${selected.label} 为草稿`} onClose={() => { if (!busy) { setConfirmationOpen(false); } }}
       footer={<><UiButton disabled={busy} onClick={() => setConfirmationOpen(false)}>取消</UiButton>
         <UiButton className="btn btn-primary" loading={busy} disabled={!readyToRestore} onClick={restore}>恢复为草稿</UiButton></>}>
       <p>把所选版本的应答带回当前条款，由当前确认人核对后确认。</p>

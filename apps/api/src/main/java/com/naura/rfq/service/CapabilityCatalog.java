@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CapabilityCatalog {
     static final String SHARED = "BU共享";
     static final String PROJECT = "仅当前项目";
@@ -62,7 +64,9 @@ public class CapabilityCatalog {
         access.requireCapabilityWriter(user, buId, true, false);
         lockBu(buId);
         var model = row(Table.MODEL, buId, input.modelId(), input.modelVersion());
-        if (!isSharedBaseline(model)) throw new BusinessException(422, "工艺需要关联本 BU 的有效机型版本");
+        if (!isSharedBaseline(model)) {
+            throw new BusinessException(422, "工艺需要关联本 BU 的有效机型版本");
+        }
         String key = id == null ? Ids.next("PROC") : id;
         int version = nextVersion(user, buId, Table.PROCESS, id, baseVersion);
         if (id != null && !input.modelId().equals(row(Table.PROCESS, buId, id, baseVersion).payload().path("modelId").asText())) {
@@ -86,7 +90,9 @@ public class CapabilityCatalog {
         }
         ObjectNode payload = json.valueToTree(input);
         payload.remove("expiry");
-        if (input.expiry() != null) payload.put("expiry", input.expiry().toString());
+        if (input.expiry() != null) {
+            payload.put("expiry", input.expiry().toString());
+        }
         payload.put("status", "待核对").put("revision", 0).put("registeredById", user.id());
         return insert(user, buId, Table.EVIDENCE, key, version, projectId, payload, "登记能力证据");
     }
@@ -105,18 +111,30 @@ public class CapabilityCatalog {
         lockBu(buId);
         var row = required(Table.EVIDENCE, buId, id, version);
         requireReadable(user, buId, row);
-        if (row.revision() != input.revision()) throw new BusinessException(409, "证据已变更，请刷新");
+        if (row.revision() != input.revision()) {
+            throw new BusinessException(409, "证据已变更，请刷新");
+        }
         var payload = row.payload();
         String reason = clean(input.reason());
         if ("verify".equals(action)) {
-            if (!"待核对".equals(row.status())) throw new BusinessException(409, "只有待核对的证据可以确认");
+            if (!"待核对".equals(row.status())) {
+                throw new BusinessException(409, "只有待核对的证据可以确认");
+            }
             String registrant = payload.path("registeredById").asText();
-            if (registrant.isBlank() || registrant.equals(user.id())) throw new BusinessException(403, "由登记人以外的批准人核对证据");
-            if (!unexpired(payload)) throw new BusinessException(422, "证据有效期已过或日期无效");
+            if (registrant.isBlank() || registrant.equals(user.id())) {
+                throw new BusinessException(403, "由登记人以外的批准人核对证据");
+            }
+            if (!unexpired(payload)) {
+                throw new BusinessException(422, "证据有效期已过或日期无效");
+            }
             payload.put("status", "有效").put("verifiedById", user.id()).put("verifiedAt", Instant.now().toString());
         } else {
-            if (!"有效".equals(row.status())) throw new BusinessException(409, "只有有效的证据可以撤销");
-            if (reason.isBlank()) throw new BusinessException(422, "请填写撤销原因");
+            if (!"有效".equals(row.status())) {
+                throw new BusinessException(409, "只有有效的证据可以撤销");
+            }
+            if (reason.isBlank()) {
+                throw new BusinessException(422, "请填写撤销原因");
+            }
             payload.put("status", "已撤销");
         }
         return update(user, buId, Table.EVIDENCE, row, "verify".equals(action) ? "确认能力证据" : "撤销能力证据", reason);
@@ -133,8 +151,11 @@ public class CapabilityCatalog {
 
     void identity(ObjectNode payload, String buId, String id, int version, String projectId) {
         payload.put("buId", buId).put("id", id).put("version", version).put("scope", scope(projectId));
-        if (projectId == null) payload.remove("projectId");
-        else payload.put("projectId", projectId);
+        if (projectId == null) {
+            payload.remove("projectId");
+        } else {
+            payload.put("projectId", projectId);
+        }
     }
 
     ObjectNode update(CurrentUser user, String buId, Table table, Row row, String action, String reason) {
@@ -144,7 +165,9 @@ public class CapabilityCatalog {
                 .put("text", user.displayName() + " " + action + (reason.isBlank() ? "" : "：" + reason));
         int count = jdbc.update("update " + table.name + " set payload=?,revision=? where bu_id=? and id=? and version=? and revision=?",
                 payload.toString(), row.revision() + 1, buId, row.id(), row.version(), row.revision());
-        if (count != 1) throw new BusinessException(409, "记录已变更，请刷新");
+        if (count != 1) {
+            throw new BusinessException(409, "记录已变更，请刷新");
+        }
         log(user, buId, table, row.id(), row.version(), action, reason);
         return payload;
     }
@@ -160,7 +183,9 @@ public class CapabilityCatalog {
 
     Row required(Table table, String buId, String id, int version) {
         var row = row(table, buId, id, version);
-        if (row == null) throw new BusinessException(404, "记录版本不存在");
+        if (row == null) {
+            throw new BusinessException(404, "记录版本不存在");
+        }
         return row;
     }
 
@@ -177,7 +202,9 @@ public class CapabilityCatalog {
 
     String scopeProject(CurrentUser user, String buId, String projectId) {
         String project = clean(projectId);
-        if (!project.isEmpty()) return access.requireProject(user, buId, project).getId();
+        if (!project.isEmpty()) {
+            return access.requireProject(user, buId, project).getId();
+        }
         access.requireScope(user, buId, null, null);
         return null;
     }
@@ -192,19 +219,28 @@ public class CapabilityCatalog {
     }
 
     private int nextVersion(CurrentUser user, String buId, Table table, String id, int expected) {
-        if (id == null) return 1;
+        if (id == null) {
+            return 1;
+        }
         var latest = rows(table, "where bu_id=? and id=? order by version desc limit 1", buId, id).stream().findFirst()
                 .orElseThrow(() -> new BusinessException(404, "记录不存在"));
         requireReadable(user, buId, latest);
-        if (expected != latest.version()) throw new BusinessException(409, "已有新版本，请刷新");
+        if (expected != latest.version()) {
+            throw new BusinessException(409, "已有新版本，请刷新");
+        }
         return Math.addExact(expected, 1);
     }
 
     static boolean unexpired(ObjectNode payload) {
         String date = payload.path("expiry").asText("");
-        if (date.isBlank()) return true;
+        if (date.isBlank()) {
+            return true;
+        }
         try { return !LocalDate.parse(date).isBefore(LocalDate.now(ZoneOffset.UTC)); }
-        catch (java.time.format.DateTimeParseException failure) { return false; }
+        catch (java.time.format.DateTimeParseException failure) {
+            log.error("解析能力有效期失败 errorType={}", failure.getClass().getSimpleName());
+            return false;
+        }
     }
 
     static String clean(String value) { return value == null ? "" : value.strip(); }
@@ -212,6 +248,9 @@ public class CapabilityCatalog {
 
     private ObjectNode decode(String payload) {
         try { return (ObjectNode) json.readTree(payload); }
-        catch (JsonProcessingException failure) { throw new IllegalStateException("能力资料格式异常", failure); }
+        catch (JsonProcessingException failure) {
+            log.error("解析能力资料失败 errorType={}", failure.getClass().getSimpleName());
+            throw new IllegalStateException("能力资料格式异常", failure);
+        }
     }
 }

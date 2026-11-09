@@ -50,13 +50,13 @@ for(const role of ['SR','最终审批人'])test(`${role} uses two sections and p
     const evidence=refs().querySelector('[aria-label="本条关联证据"]');assert.equal(evidence.textContent,'Candidate report REF-1');assert.equal(refs().querySelector('textarea'),null);
     const frame=node.querySelector('iframe');await click(button('项目信息'));assert.ok(drawer().classList.contains('ant-drawer-open'));
     const projectName=inputByLabel('项目名称',drawer());assert.equal(projectName.disabled,role!=='SR');
-    if(role==='SR')await type(projectName,'Changed project');
+    if(role==='SR') { await type(projectName,'Changed project'); }
     await click(drawer().querySelector('.ant-drawer-close'));await click(button('项目信息'));
     assert.equal(inputByLabel('项目名称',drawer()).value,role==='SR'?'Changed project':'Project','closing retains the unsaved settings form');
     assert.equal(projectWrites.length,0);assert.equal(responseWrites.length,0,'view actions do not save drafts');
     if(role==='SR'){
       await type(inputByLabel('变更原因',drawer()),'Correct project name');await click(button('保存项目设置',drawer()));assert.equal(projectWrites[0].name,'Changed project');
-    }else assert.equal(button('保存项目设置',drawer()),undefined);
+    }else { assert.equal(button('保存项目设置',drawer()),undefined); }
     await click(drawer().querySelector('.ant-drawer-close'));
     await click(button('操作记录'));assert.ok(node.querySelector('.detail-activity'));assert.equal(node.querySelector('.annotation-panel'),null);await click(button('应答'));assert.equal(node.querySelector('.detail-clause-content').style.display,'flex','response can reopen on the same route');
     await click(button('下一条')||node.querySelector('button[aria-label="下一条"]'));assert.equal(refs().open,false,'a different clause starts with references collapsed');
@@ -73,7 +73,7 @@ test('batch confirmation runs from the directory and retains excluded and failed
   let props={project:{id:'P',name:'Project',buId:'BU'},requirements:[row,{...row,id:'R2',clause:'1.2',title:'Low confidence',score:60},{...row,id:'R3',clause:'1.3',title:'Rejected save'},{...row,id:'R4',sourceFileId:'OTHER',source:'Other.docx',title:'Other file'}],reviews:[],route:{page:'response',projectId:'P',requirementId:'R1',fileId:'F',sourceVersion:'1'},appState:{accountsById:{},commentsByProject:{},membersByProject:{},audit:[]},actorRole:'SR',actorId:'actor',canBusinessAction:()=>true,onAppUpdate:()=>{},navigate:()=>{},toast:()=>{},logEvent:()=>{}};
   function paint(){root.render(React.createElement(ResponsePage,{...props,onConfirm:(id,version)=>{
     confirmations.push([id,version]);
-    if(id==='R3')return false;
+    if(id==='R3') { return false; }
     props={...props,requirements:props.requirements.map(item=>item.id===id?{...item,status:'已确认'}:item)};paint();return true;
   }}));}
   try{

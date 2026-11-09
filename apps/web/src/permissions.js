@@ -11,44 +11,44 @@ const modernPermissions={
  'resource:approve':['BU管理员'],'model:configure':['BU管理员'],'catalog:create':['SR','BU管理员'],'audit:view':['BU管理员','后台管理'],'system:manage':['后台管理'],'bu:manage':['BU管理员'],
 };
 function modernCan(role,action,context){
- if(!modernPermissions[action]?.includes(role))return false;
- if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','source:reparse','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action))return false;
+ if(!modernPermissions[action]?.includes(role)) { return false; }
+ if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','source:reparse','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action)) { return false; }
  // Without context this is a UI capability query. Mutation boundaries always pass state.
- if(!context)return true;
+ if(!context) { return true; }
  const {state,actorId=state?.actorId,projectId,requirementId,buId=state?.projects?.find(p=>p.id===projectId)?.buId}=context;
- if(!state||!state.accountsById?.[actorId]?.enabled)return false;
- if(action==='knowledge:edit'&&!state.businessUnits?.some(b=>b.id===buId))return false;
- if(role==='后台管理')return !!state.accountsById[actorId].systemAdmin;
+ if(!state||!state.accountsById?.[actorId]?.enabled) { return false; }
+ if(action==='knowledge:edit'&&!state.businessUnits?.some(b=>b.id===buId)) { return false; }
+ if(role==='后台管理') { return !!state.accountsById[actorId].systemAdmin; }
  if(role==='BU管理员'){
-  if(!canManageBu(state,actorId,buId))return false;
-  if(action==='source:reparse')return canAccessProject(state,actorId,projectId);
-  if(action==='resource:approve')return !!getPersonnelContext(state,actorId,buId).member?.enabled&&!!getPersonnelContext(state,actorId,buId).member?.resourceQualifications?.includes(context.resourceKind==='capability'?'capability-publish':'knowledge-publish');
+  if(!canManageBu(state,actorId,buId)) { return false; }
+  if(action==='source:reparse') { return canAccessProject(state,actorId,projectId); }
+  if(action==='resource:approve') { return !!getPersonnelContext(state,actorId,buId).member?.enabled&&!!getPersonnelContext(state,actorId,buId).member?.resourceQualifications?.includes(context.resourceKind==='capability'?'capability-publish':'knowledge-publish'); }
   return true;
  }
- const c=getPersonnelContext(state,actorId,buId);if(!c.enabled||!c.member.roles.includes(role))return false;
- if(projectId&&!canAccessProject(state,actorId,projectId))return false;
- if(['project:manage','project:handover'].includes(action)&&state.projects.find(p=>p.id===projectId)?.ownerId!==actorId)return false;
+ const c=getPersonnelContext(state,actorId,buId);if(!c.enabled||!c.member.roles.includes(role)) { return false; }
+ if(projectId&&!canAccessProject(state,actorId,projectId)) { return false; }
+ if(['project:manage','project:handover'].includes(action)&&state.projects.find(p=>p.id===projectId)?.ownerId!==actorId) { return false; }
  const row=state.requirementsByProject?.[projectId]?.find(r=>r.id===requirementId);
  const responseReview=getResponseReview(state,projectId,requirementId);
  if(state.dataSource==='mysql'&&['response:edit','response:confirm'].includes(action)){
   const project=state.projects.find(p=>p.id===projectId);
-  if(project?.archived||row?.pendingReviewProposal)return false;
-  if(responseReview&&!hasAssignedConfirmer(row))return false;
-  if((state.reviewsByProject?.[projectId]||[]).some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status)))return false;
-  if(action==='response:confirm'||role==='技术')return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
+  if(project?.archived||row?.pendingReviewProposal) { return false; }
+  if(responseReview&&!hasAssignedConfirmer(row)) { return false; }
+  if((state.reviewsByProject?.[projectId]||[]).some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status))) { return false; }
+  if(action==='response:confirm'||role==='技术') { return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm); }
  }
 
  if(action==='response:edit'&&requirementId){
-  if(responseReview?.status==='已关闭'&&hasAssignedConfirmer(row))return getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
-  if(responseReview)return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm);
-  if(role==='技术')return getConfirmationActorIds(state,projectId,row).includes(actorId);
+  if(responseReview?.status==='已关闭'&&hasAssignedConfirmer(row)) { return getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm); }
+  if(responseReview) { return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm); }
+  if(role==='技术') { return getConfirmationActorIds(state,projectId,row).includes(actorId); }
  }
- if(action==='review:process'&&responseReview)return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm);
+ if(action==='review:process'&&responseReview) { return getReviewActorIds(responseReview).includes(actorId)&&(role==='SR'||c.member.canConfirm); }
  if(action==='response:confirm'){
-  if(hasAssignedConfirmer(row)&&responseReview&&responseReview.status!=='已关闭')return false;
+  if(hasAssignedConfirmer(row)&&responseReview&&responseReview.status!=='已关闭') { return false; }
   return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm);
  }
- if(['snapshot:approve','review:approve'].includes(action))return getEligiblePersonnel(state,{buId,projectId,duty:'final-review',side:role==='SR'?'sr':'technical'}).some(m=>m.userId===actorId);
+ if(['snapshot:approve','review:approve'].includes(action)) { return getEligiblePersonnel(state,{buId,projectId,duty:'final-review',side:role==='SR'?'sr':'technical'}).some(m=>m.userId===actorId); }
  return true;
 }
 // Legacy labels remain readable to old standalone helpers. Live application
@@ -69,21 +69,21 @@ const permissions = {
 };
 const sharedPages = ['dashboard','tasks','projects','documents','response','reviews','export','versions','settings','knowledge','history','capabilities'];
 export function canPerform(role, action,context) { return modernRoles.includes(role)?modernCan(role,action,context):!context&&roles.includes(role) && (permissions[action]?.includes(role) ?? false); }
-export function assertPermission(role, action,context) { if (!canPerform(role, action,context)) throw new Error('当前身份无此操作权限，请由具备对应职责的人员处理'); return true; }
+export function assertPermission(role, action,context) { if (!canPerform(role, action,context)) { throw new Error('当前身份无此操作权限，请由具备对应职责的人员处理'); } return true; }
 export function assertRequirementPatch(role, current, patch,context) {
   assertPermission(role,'response:edit',context);
   const sourceFields=['original','clause','title','category','source','sourceFileId','sourceVersion','sourcePage','sectionPath'];
-  if(sourceFields.some(key=>Object.hasOwn(patch,key)&&JSON.stringify(patch[key])!==JSON.stringify(current[key])))assertPermission(role,'source:manage',context);
+  if(sourceFields.some(key=>Object.hasOwn(patch,key)&&JSON.stringify(patch[key])!==JSON.stringify(current[key]))) { assertPermission(role,'source:manage',context); }
   return true;
 }
 export function canAccessPage(role, page,context) {
   if(modernRoles.includes(role)){
-   if(['knowledge','history'].includes(page))return context?.state?.dataSource==='mysql'?!!context.state.accountsById?.[context.actorId||context.state.actorId]?.enabled:modernCan(role,'knowledge:edit',context);
-   if(role==='后台管理')return ['admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context));
+   if(['knowledge','history'].includes(page)) { return context?.state?.dataSource==='mysql'?!!context.state.accountsById?.[context.actorId||context.state.actorId]?.enabled:modernCan(role,'knowledge:edit',context); }
+   if(role==='后台管理') { return ['admin','audit'].includes(page)&&(!context||modernCan(role,'system:manage',context)); }
    if(role==='BU管理员'){
     const rfqPages=['documents','response','reviews','versions','settings','export'];
     if(rfqPages.includes(page)){
-     if(!context)return true;
+     if(!context) { return true; }
      const project=context.state?.projects?.find(p=>p.id===context.projectId);
      return !!project&&modernCan(role,'bu:manage',{...context,buId:project.buId});
     }
@@ -91,8 +91,8 @@ export function canAccessPage(role, page,context) {
    }
    return [...sharedPages,'analysis'].includes(page)&&(!context||modernCan(role,'analysis:view',context));
   }
-  if (!roles.includes(role)) return false;
-  if (sharedPages.includes(page)) return true;
+  if (!roles.includes(role)) { return false; }
+  if (sharedPages.includes(page)) { return true; }
   return page === 'analysis' ? canPerform(role,'analysis:view') : page === 'audit' ? canPerform(role,'audit:view') : false;
 }
 export function getRoleNavigation(role,context) {
@@ -101,7 +101,7 @@ export function getRoleNavigation(role,context) {
    const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'knowledge',page:'knowledge',label:'知识库'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'projects',page:'projects',label:'BU RFQ'},{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:'知识库'}];
    return [...base,...items].filter(n=>canAccessPage(role,n.page,context));
   }
-  if (!roles.includes(role)) return [];
+  if (!roles.includes(role)) { return []; }
   const items = [
     {key:'dashboard',page:'dashboard',label:'工作台'},
     {key:'projects',page:'projects',label:'我的 RFQ'},

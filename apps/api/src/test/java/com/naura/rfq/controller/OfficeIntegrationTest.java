@@ -15,6 +15,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Slf4j
 class OfficeIntegrationTest {
     static final String SECRET = "test-onlyoffice-secret-at-least-32-chars";
     static final ObjectMapper JSON = new ObjectMapper();
@@ -51,7 +53,10 @@ class OfficeIntegrationTest {
                 try(var output=exchange.getResponseBody()){output.write(bytes);}
             });
             DOCS.start();
-        } catch (Exception e) { throw new RuntimeException(e); }
+        } catch (Exception e) {
+            log.error("创建 Office 测试临时目录失败", e);
+            throw new RuntimeException(e);
+        }
     }
     @DynamicPropertySource static void settings(DynamicPropertyRegistry registry) {
         registry.add("office.storage-dir", () -> ROOT.toString());
@@ -76,7 +81,10 @@ class OfficeIntegrationTest {
                 }
             }
             return bytes.toByteArray();
-        } catch (Exception e) { throw new RuntimeException(e); }
+        } catch (Exception e) {
+            log.error("构建 Office DOCX 测试样本失败", e);
+            throw new RuntimeException(e);
+        }
     }
     static String sign(Object body) throws Exception {
         var enc = Base64.getUrlEncoder().withoutPadding();

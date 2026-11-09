@@ -1,6 +1,6 @@
 // Originals are blobs, kept out of localStorage and its small synchronous quota.
 const database=()=>new Promise((resolve,reject)=>{
- if(!globalThis.indexedDB)return reject(new Error('浏览器未提供原件存储，请使用支持 IndexedDB 的浏览器'));
+ if(!globalThis.indexedDB) { return reject(new Error('浏览器未提供原件存储，请使用支持 IndexedDB 的浏览器')); }
  const request=indexedDB.open('rfq-history-originals',1);
  request.onupgradeneeded=()=>request.result.createObjectStore('files');
  request.onsuccess=()=>resolve(request.result);

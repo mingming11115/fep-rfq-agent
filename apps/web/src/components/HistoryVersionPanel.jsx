@@ -4,7 +4,7 @@ import {clausesForDocument} from '../historyKnowledge';
 import {compareHistoryVersions,versionFamily} from '../historyVersions';
 
 function ChangedText({value='',other=''}){
- if(value===other)return value||'—';
+ if(value===other) { return value||'—'; }
  let start=0,end=0;
  while(start<value.length&&start<other.length&&value[start]===other[start])start++;
  while(end<value.length-start&&end<other.length-start&&value[value.length-1-end]===other[other.length-1-end])end++;

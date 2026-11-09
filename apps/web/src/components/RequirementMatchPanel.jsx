@@ -65,23 +65,24 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
     async function load() {
       try {
         const result = await matches.current(row.id);
-        if (generation.current !== current) return;
+        if (generation.current !== current) { return; }
         failures = 0;
         setRun(result);
         setError('');
         timer = setTimeout(load, matchNeedsPolling(result) ? 2000 : 15000);
       } catch (error) {
-        if (generation.current !== current) return;
+        console.error('查询条款比对结果失败', error);
+        if (generation.current !== current) { return; }
         setRun(null);
         setError(error.message);
-        if (++failures < 3 && ![401, 403, 404].includes(error.status)) timer = setTimeout(load, 5000);
+        if (++failures < 3 && ![401, 403, 404].includes(error.status)) { timer = setTimeout(load, 5000); }
       }
     }
     void load();
     return () => { generation.current++; clearTimeout(timer); };
   }, [row.id, row.backendVersion, refresh]);
   useEffect(() => {
-    if (run) { onResult(run); if (run.deviation) onDeviation(run.deviation); }
+    if (run) { onResult(run); if (run.deviation) { onDeviation(run.deviation); } }
   }, [run]);
 
   async function retry() {
@@ -90,16 +91,17 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
     try {
       retryId.current ??= crypto.randomUUID();
       await matches.retry(row.id, row.backendVersion, retryId.current);
-      if (generation.current !== current) return;
+      if (generation.current !== current) { return; }
       retryId.current = null;
       setRun(null);
       setRefresh(value => value + 1);
     } catch (error) {
-      if (generation.current !== current) return;
-      if (error.status && error.status < 500) retryId.current = null;
+      console.error('重试条款比对失败', error);
+      if (generation.current !== current) { return; }
+      if (error.status && error.status < 500) { retryId.current = null; }
       toast(error.message, 'error');
     } finally {
-      if (generation.current === current) setBusy(false);
+      if (generation.current === current) { setBusy(false); }
     }
   }
 
@@ -114,7 +116,7 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
     setBusy(true);
     try {
       if (action.kind === 'detach') {
-        if (!await onDetach(text)) return;
+        if (!await onDetach(text)) { return; }
       } else {
         const item = action.kind === 'reject' ? await matches.reject(row.id, action.runId, text)
           : await matches.closeDeviation(row.id, action.version, text);
@@ -122,7 +124,7 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
       }
       setAction(null);
       setRefresh(value => value + 1);
-    } catch (error) { setActionError(error.message); }
+    } catch (error) { console.error('提交条款比对操作失败', error); setActionError(error.message); }
     finally { setBusy(false); }
   }
 
@@ -168,7 +170,7 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
     {inputOpen && <MatchInputDialog row={row} resources={resources} client={matches} onClose={() => setInputOpen(false)}
       onSaved={() => { setInputOpen(false); setRun(null); setRefresh(value => value + 1); toast('比对条件已保存，已提交比对'); }}/>}
     {action && <Modal title={{reject:'拒绝本轮比对结果', close:'关闭偏离事项', detach:'解除采纳依据'}[action.kind]}
-      onClose={() => { if (!busy) setAction(null); }}
+      onClose={() => { if (!busy) { setAction(null); } }}
       footer={<Space><Button disabled={busy} onClick={() => setAction(null)}>取消</Button><Button type="primary" loading={busy} onClick={submitAction}>提交</Button></Space>}>
       <Input.TextArea aria-label="处理原因" value={reason} onChange={event => setReason(event.target.value)} maxLength={900}/>
       {actionError && <Alert type="error" message={actionError} showIcon/>}

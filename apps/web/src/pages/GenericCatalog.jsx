@@ -10,7 +10,7 @@ const uid=()=>crypto.randomUUID();
 const typeNames={text:'文本',number:'数字',select:'单选',multiselect:'多选',date:'日期'};
 export default function GenericCatalog({context,legacyCatalog,capabilities,projects=[],initialGroupId,buName,businessUnits=[],onBuChange,onBack,onCapability,onViewCapability,onReview,canEditCapability,canApproveCapability,onAssignCapabilities}){
  const groupScope=useKnowledgeGroup();
- const [localCatalog,setLocalCatalog]=useState(()=>{if(context.state.dataSource==='mysql')return context.state.resourcesByBuId?.[context.buId]?.catalog||migrateCatalog(context.buId);try{return readGenericCatalog(localStorage,context.buId,legacyCatalog,capabilities);}catch(e){return {buId:context.buId,loadError:e.message,schema:{title:'分组与能力配置',levels:[]},nodes:[],attachments:[]};}});
+ const [localCatalog,setLocalCatalog]=useState(()=>{if(context.state.dataSource==='mysql') { return context.state.resourcesByBuId?.[context.buId]?.catalog||migrateCatalog(context.buId); } try{return readGenericCatalog(localStorage,context.buId,legacyCatalog,capabilities);}catch(e){ console.error('加载分组与能力配置失败', e); return {buId:context.buId,loadError:e.message,schema:{title:'分组与能力配置',levels:[]},nodes:[],attachments:[]};}});
  const [schema,setSchema]=useState(null),[draft,setDraft]=useState(null),[localSelected,setLocalSelected]=useState(initialGroupId||''),[error,setError]=useState(''),[attachment,setAttachment]=useState(null);
  const catalog=groupScope?.catalog||localCatalog,selected=groupScope?.groupId||localSelected;
  const setSelected=id=>groupScope?groupScope.selectGroup(id):setLocalSelected(id);
@@ -18,12 +18,12 @@ export default function GenericCatalog({context,legacyCatalog,capabilities,proje
  const virtual=groupScope&&[UNGROUPED,ALL_GROUPS].includes(selected);
  const node=catalog.nodes.find(n=>n.id===selected)||(virtual?{id:selected,name:selected===ALL_GROUPS?'全部能力':'未分组能力',values:{}}:null),level=catalog.schema.levels.find(l=>l.id===draft?.levelId);
  const persist=c=>{const next=writeGenericCatalog(localStorage,context,c);setLocalCatalog(next);groupScope?.updateCatalog(next);setError('');return next;};
- const act=fn=>{try{fn();}catch(e){setError(e.message);}};
+ const act=fn=>{try{fn();}catch(e){ console.error('执行目录操作失败', e); setError(e.message);}};
  const tree=parent=>catalog.nodes.filter(n=>(n.parentId||'')===parent).map(n=>({key:n.id,title:`${n.name}${n.enabled===false?'（停用）':''}`,children:tree(n.id)}));
  const linked=groupScope?capabilities.filter(c=>groupScope.matches('capability',c)).map(c=>({nodeId:selected,capabilityId:c.id,version:c.version||1})):node?[...catalog.attachments.filter(a=>a.nodeId===node.id),...capabilities.filter(c=>c.groupId===node.id).map(c=>({nodeId:node.id,capabilityId:c.id,version:c.version||1}))].filter((a,i,all)=>all.findIndex(b=>b.capabilityId===a.capabilityId&&b.version===a.version)===i):[];
  const setLevel=(id,patch)=>setSchema(s=>({...s,levels:s.levels.map(l=>l.id===id?{...l,...patch}:l)}));
  const setField=(lid,fid,patch)=>setSchema(s=>({...s,levels:s.levels.map(l=>l.id===lid?{...l,fields:l.fields.map(f=>f.id===fid?{...f,...patch}:f)}:l)}));
- if(catalog.loadError)return <Alert type="error" showIcon message={catalog.loadError} description="目录读取失败，请联系管理员修复数据。"/>;
+ if(catalog.loadError) { return <Alert type="error" showIcon message={catalog.loadError} description="目录读取失败，请联系管理员修复数据。"/>; }
  return <div className="ref-page admin-management-page generic-catalog-page">{groupScope?<div className="generic-embedded-toolbar"><Button disabled={!canEdit} onClick={()=>{setError('');setSchema(structuredClone(catalog.schema));}}>配置分组名称与字段</Button></div>:<AdminPageHeader title={catalog.schema.title} description="按本BU的业务分组维护资料、能力与适用范围。" actions={<>{businessUnits.length>1?<Select aria-label="所属BU" value={context.buId} options={businessUnits.map(b=>({value:b.id,label:b.name}))} onChange={onBuChange}/>:<Tag>{buName||context.buId}</Tag>}{onBack&&<Button onClick={onBack}>返回 RFQ 列表</Button>}<Button disabled={!canEdit} onClick={()=>{setError('');setSchema(structuredClone(catalog.schema));}}>配置名称与字段</Button></>}/>}
  {error&&<Alert type="error" showIcon message={error} style={{marginBottom:12}}/>}
  <div className="generic-catalog-layout"><Card className="admin-management-card generic-directory-card" title="分组目录" extra={<Button type="primary" disabled={!canEdit} onClick={()=>setDraft({id:uid(),name:'',levelId:catalog.schema.levels.find(l=>l.enabled!==false)?.id,parentId:'',enabled:true,values:{}})}>新建分组</Button>}><Tree blockNode treeData={tree('')} selectedKeys={selected?[selected]:[]} onSelect={keys=>setSelected(keys[0]||'')} defaultExpandAll/>{!catalog.nodes.length&&<p>暂无分组，请先配置层级并添加分组。</p>}</Card>

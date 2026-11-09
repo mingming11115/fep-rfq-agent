@@ -8,7 +8,7 @@ const date=value=>new Date(value).toLocaleDateString('sv-SE',{timeZone:'Asia/Sha
 
 // An in-memory demonstration only. Never merge these records into saved app state.
 export function selectBuDashboardMock(state,{now=new Date(),referenceTime=now,buId=state.activeBuId||state.businessUnits?.find(b=>canManageBu(state,state.actorId,b.id))?.id,approvalPeriodDays=30}={}){
- if(state.actorRole!=='BU管理员'||!canManageBu(state,state.actorId,buId))return null;
+ if(state.actorRole!=='BU管理员'||!canManageBu(state,state.actorId,buId)) { return null; }
  const demo=createDemoState(),base=referenceTime.getTime(),bu=state.businessUnits.find(b=>b.id===buId);
  demo.actorId=state.actorId;demo.actorRole='BU管理员';demo.activeBuId=buId;
  demo.businessUnits=[{...bu}];
@@ -28,14 +28,14 @@ export function selectBuDashboardMock(state,{now=new Date(),referenceTime=now,bu
   const snapshot={id,projectId:project.id,sample:true,status,createdAt:new Date(start).toISOString(),finalReview};
   const required=getRequiredFinalReviewers(finalReview);
   for(const reviewer of required){
-   if(status==='审批中'&&reviewer.side==='technical')continue;
-   if(status==='已退回'&&reviewer.side!=='sr')continue;
+   if(status==='审批中'&&reviewer.side==='technical') { continue; }
+   if(status==='已退回'&&reviewer.side!=='sr') { continue; }
    const vote={actorId:reviewer.actorId,result:status==='已退回'?'rejected':'approved',at:new Date(reviewer.side==='sr'&&status!=='已退回'?start+hours*.35*hour:end).toISOString()};
-   if(reviewer.side==='sr')finalReview.decisions.sr=vote;else finalReview.decisions.technicalByActorId[reviewer.actorId]=vote;
+   if(reviewer.side==='sr') { finalReview.decisions.sr=vote; } else { finalReview.decisions.technicalByActorId[reviewer.actorId]=vote; }
   }
   snapshot.approvalScope=currentProjectScope(demo,project.id,snapshot);
   snapshot.approvalFingerprint=snapshotFingerprint(snapshot.approvalScope);
-  if(exported)snapshot.exportedAt=new Date(end+.25*hour).toISOString();
+  if(exported) { snapshot.exportedAt=new Date(end+.25*hour).toISOString(); }
   return snapshot;
  }
  const completed=demo.projects.filter(p=>['RFQ-002','RFQ-003'].includes(p.id));

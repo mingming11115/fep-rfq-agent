@@ -24,10 +24,10 @@ test('upload UI advances, shows measured progress and retries only the failed tr
  const settle=async()=>{for(let i=0;i<12;i++)await new Promise(resolve=>setTimeout(resolve,0));};
  const click=async text=>act(async()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent.replace(/\s/g,'').includes(text));assert.ok(button,text);button.click();await settle();});
  try{
-  await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},onClose:()=>{},onSubmit:rows=>{if(!accept)return false;result=rows;}}));await settle();});
+  await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},onClose:()=>{},onSubmit:rows=>{if(!accept) { return false; } result=rows;}}));await settle();});
   assert.equal(document.querySelector('input[aria-label="文件版本"]').value,'V1.0');
   assert.equal(document.querySelector('input[aria-label="文件版本"]').disabled,true,'automatically assigned versions cannot be edited');
-  await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},files:[{id:'old',name:'old.pdf',version:'V2.0'},{id:'older',name:'older.pdf',version:'V1.0'}],onClose:()=>{},onSubmit:rows=>{if(!accept)return false;result=rows;}}));await settle();});
+  await act(async()=>{root.render(React.createElement(Dialog,{project:{id:'P'},files:[{id:'old',name:'old.pdf',version:'V2.0'},{id:'older',name:'older.pdf',version:'V1.0'}],onClose:()=>{},onSubmit:rows=>{if(!accept) { return false; } result=rows;}}));await settle();});
   assert.equal(document.querySelector('input[aria-label="文件版本"]').value,'V3.0','next version follows the highest existing version, regardless of order');
   const input=document.querySelector('input[type="file"]');Object.defineProperty(input,'files',{configurable:true,value:[new File(['data'],'source.pdf',{type:'application/pdf'})]});
   await act(async()=>{input.dispatchEvent(new window.Event('change',{bubbles:true}));await settle();});

@@ -41,7 +41,7 @@ export async function fetchBuMembers(buId) {
  */
 export async function syncBuMember(buId, userId, patch, currentCodes = []) {
   const desired = new Set();
-  if (patch.roles?.includes('SR')) desired.add('SR');
+  if (patch.roles?.includes('SR')) { desired.add('SR'); }
   if (patch.roles?.includes('技术')) {
     // 原本是最终审批人的账号保留 APPROVER，避免被改写成普通 TECH 而失去审批语义。
     desired.add(currentCodes.includes('APPROVER') ? 'APPROVER' : 'TECH');

@@ -35,22 +35,29 @@ class KnowledgePublicationAccess {
         if (projectId.isBlank() && !Set.of("upload", "history-upload", "approved-snapshot").contains(row.path("sourceType").asText())
                 && Set.of("草稿", "待审核", "退回", "候选").contains(row.path("status").asText())) {
             var matcher = LEGACY_PROJECT.matcher(row.path("source").asText() + " " + row.path("sourceLocation").asText());
-            if (matcher.find()) return matcher.group();
+            if (matcher.find()) {
+                return matcher.group();
+            }
         }
         return projectId;
     }
 
     Project requireProject(CurrentUser user, String buId, String id) {
         var project = projects.findById(id).orElseThrow(() -> new BusinessException(404, "项目不存在"));
-        if (buId != null && !buId.equals(project.getBuId())) throw new BusinessException(403, "项目不属于当前 BU");
+        if (buId != null && !buId.equals(project.getBuId())) {
+            throw new BusinessException(403, "项目不属于当前 BU");
+        }
         guard.requireProject(user, project);
         return project;
     }
 
     void requireScope(CurrentUser user, String buId, String projectId, String scope) {
         guard.requireBu(user, buId);
-        if (projectId != null && !projectId.isBlank()) requireProject(user, buId, projectId);
-        else if ("仅当前项目".equals(scope)) throw new BusinessException(403, "记录缺少可核实的项目范围");
+        if (projectId != null && !projectId.isBlank()) {
+            requireProject(user, buId, projectId);
+        } else if ("仅当前项目".equals(scope)) {
+            throw new BusinessException(403, "记录缺少可核实的项目范围");
+        }
     }
 
     void requireWriter(CurrentUser user, String buId, boolean review) {

@@ -5,32 +5,32 @@ export const supportsCraft=name=>/\.(docx|pdf)$/i.test(name||'');
 export const craftSourceKey=officeSourceKey;
 
 export function assertCraftSource(meta,source){
-  if(!meta||['projectId','fileId','sourceVersion'].some(key=>String(meta[key]??'')!==String(source[key]??'')))throw new Error('文件来源与当前项目、条款文件或版本不一致，请重新关联原件');
+  if(!meta||['projectId','fileId','sourceVersion'].some(key=>String(meta[key]??'')!==String(source[key]??''))) { throw new Error('文件来源与当前项目、条款文件或版本不一致，请重新关联原件'); }
   return meta;
 }
 
 export async function craftRequest(path,reference,options={}){
   const {binary,onUploadProgress,...request}=options;
   const headers=new Headers(request.headers);
-  if(reference?.access)headers.set('X-Craft-Access',reference.access);
+  if(reference?.access) { headers.set('X-Craft-Access',reference.access); }
   let response;
   try{response=onUploadProgress?await uploadWithProgress('/api/craft'+path,{...request,headers},onUploadProgress):await fetch('/api/craft'+path,{...request,headers});}
-  catch(error){if(error.name==='AbortError')throw error;throw new Error('无法连接文档服务，请检查 RFQ 后端是否启动');}
-  if(binary&&response.ok)return response.blob();
-  const body=await response.json().catch(()=>null);
+  catch(error){ console.error('连接 Craft 文档服务失败', error); if(error.name==='AbortError') { throw error; } throw new Error('无法连接文档服务，请检查 RFQ 后端是否启动');}
+  if(binary&&response.ok) { return response.blob(); }
+  const body=await response.json().catch(()=>{ console.error('解析 Craft 文档服务响应失败'); return null; });
   if(!response.ok||body?.code!==0){const error=new Error(body?.msg||'文件操作未完成，请保留当前修改后重试');error.status=response.status;throw error;}
   return body.data;
 }
 
 export async function uploadCraftFile(file,source,{review,signal,onUploadProgress}={}){
   const body=new FormData();body.append('file',file);
-  if(review)body.append('review',review,file.name);
+  if(review) { body.append('review',review,file.name); }
   for(const key of ['projectId','fileId','sourceVersion'])body.append(key,String(source[key]??''));
   return craftRequest('/documents',null,{method:'POST',body,signal,onUploadProgress});
 }
 
 export function saveCraftReview(reference,bytes,revision,signal){
-  if(!Number.isSafeInteger(revision)||revision<0)return Promise.reject(new Error('当前文件版本无效，请重新打开文件'));
+  if(!Number.isSafeInteger(revision)||revision<0) { return Promise.reject(new Error('当前文件版本无效，请重新打开文件')); }
   return craftRequest(`/documents/${encodeURIComponent(reference.id)}/review`,reference,{method:'PUT',
     headers:{'Content-Type':'application/octet-stream','If-Match':`"${revision}"`},body:bytes,signal});
 }
@@ -51,8 +51,8 @@ const demoAssets={
 export const craftDemoAsset=source=>source?.projectId==='RFQ-001'?demoAssets[`${source.fileId}:${source.sourceVersion}`]||null:null;
 
 export async function loadCraftDemo(source,signal){
-  const url=craftDemoAsset(source);if(!url)throw new Error('此来源没有内置原件，请上传对应文件');
-  const response=await fetch(url,{signal});if(!response.ok)throw new Error('示例原件读取失败，请重试');
+  const url=craftDemoAsset(source);if(!url) { throw new Error('此来源没有内置原件，请上传对应文件'); }
+  const response=await fetch(url,{signal});if(!response.ok) { throw new Error('示例原件读取失败，请重试'); }
   return uploadCraftFile(new File([await response.blob()],'RFQ批阅示例.docx'),source,{signal});
 }
 
@@ -73,7 +73,7 @@ export function createCraftSaveQueue({reference,revision=0,persist=saveCraftRevi
   return {
     enqueue(bytes,generation,details={}){
       const run=async()=>{
-        if(!alive)throw new DOMException('编辑器已关闭','AbortError');
+        if(!alive) { throw new DOMException('编辑器已关闭','AbortError'); }
         const meta=await persist(reference,bytes,currentRevision);
         if(alive){currentRevision=meta.revision;await onSaved(meta,{...details,generation,clean:generation===getGeneration()});}
         return meta;

@@ -17,11 +17,11 @@ export default function CapabilityLibraryFields({form,onChange,models,processes,
   const references=form.evidenceRefs||[];
   const [suggestions,setSuggestions]=useState(null),[extractionError,setExtractionError]=useState('');
   useEffect(()=>{
-    if(!history)return;
+    if(!history) { return; }
     let active=true;
     setSuggestions(null);setExtractionError('');
-    library.extractHistoryMetrics(history).then(items=>{if(active)setSuggestions(items);})
-      .catch(error=>{if(active)setExtractionError(error.message);});
+    library.extractHistoryMetrics(history).then(items=>{if(active) { setSuggestions(items); }})
+      .catch(error=>{ console.error('提取历史 RFQ 指标失败', error); if(active) { setExtractionError(error.message); }});
     return ()=>{active=false;};
   },[history?.id,history?.version]);
   function applySuggestion(index){

@@ -5,11 +5,11 @@ export default function LibraryImportDialog({title,accept,hint,projects,onImport
   const [file,setFile]=useState(null),[projectId,setProjectId]=useState(''),[busy,setBusy]=useState(false);
   const [error,setError]=useState(''),[result,setResult]=useState(null);
   async function submit(){
-    if (!file || busy) return;
+    if (!file || busy) { return; }
     setBusy(true);
     setError('');
     try {setResult(await onImport(file,projectId));}
-    catch (cause) {setError(cause.message);}
+    catch (cause) { console.error('导入知识库资料失败', cause); setError(cause.message);}
     finally {setBusy(false);}
   }
   return <Modal open title={title} onCancel={busy?undefined:onClose} closable={!busy} maskClosable={!busy}

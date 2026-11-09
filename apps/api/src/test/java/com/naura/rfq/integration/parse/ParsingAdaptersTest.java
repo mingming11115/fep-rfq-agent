@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.poi.util.Units;
@@ -22,6 +23,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import static org.assertj.core.api.Assertions.*;
 
 @ExtendWith(OutputCaptureExtension.class)
+@Slf4j
 class ParsingAdaptersTest {
     final ObjectMapper json = new ObjectMapper();
     final String source = "1.1 泵的设计压力应不低于 2 MPa。";
@@ -49,10 +51,15 @@ class ParsingAdaptersTest {
             try {
                 byte[] request = exchange.getRequestBody().readAllBytes();
                 assertThat(request.length).isPositive();
-                if (delay > 0) Thread.sleep(delay);
+                if (delay > 0) {
+                    Thread.sleep(delay);
+                }
                 byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes);
-            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            } catch (InterruptedException e) {
+                log.error("测试解析服务等待响应时被中断", e);
+                Thread.currentThread().interrupt();
+            }
             finally { exchange.close(); }
         }); s.start(); return s;
     }
@@ -169,7 +176,10 @@ class ParsingAdaptersTest {
                 for (int i = 0; i < 10; i++) {
                     exchange.getResponseBody().write(' '); exchange.getResponseBody().flush(); Thread.sleep(70);
                 }
-            } catch (Exception e) { /* Client cancels on deadline. */ }
+            } catch (Exception e) {
+                log.error("测试解析服务发送分段响应时失败", e);
+                /* Client cancels on deadline. */
+            }
             finally { exchange.close(); }
         }); s.start();
         try {

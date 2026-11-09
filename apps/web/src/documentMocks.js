@@ -3,7 +3,7 @@ import { makeRequirements } from './data.js';
 
 // Synthetic metadata only: no original customer files are stored or read.
 export function makeDocumentDemo(projectId, requirements = makeRequirements(projectId)) {
-  if (projectId === BHEL_ID) return makeBhelDocument(requirements);
+  if (projectId === BHEL_ID) { return makeBhelDocument(requirements); }
   const id = (key) => `${projectId}-DEMO-FILE-${key}`;
   const file = (key, name, purpose, version, status, createdAt, extra = {}) => ({
     id: id(key), name, purpose, version, status, createdAt,

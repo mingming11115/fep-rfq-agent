@@ -12,10 +12,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service @RequiredArgsConstructor
+@Slf4j
 public class BusinessRecordService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -24,8 +26,13 @@ public class BusinessRecordService {
     private final ConfirmationAssignmentService confirmationAssignments;
     private final ProjectWorkScope work;
     private final RequirementMatchService matches;
-    private JsonNode decode(String payload){
-        try{return json.readTree(payload);}catch(Exception e){throw new IllegalStateException("数据库业务记录格式异常",e);}
+    private JsonNode decode(String payload) {
+        try {
+            return json.readTree(payload);
+        } catch (Exception e) {
+            log.error("解析数据库业务记录失败 errorType={}", e.getClass().getSimpleName());
+            throw new IllegalStateException("数据库业务记录格式异常", e);
+        }
     }
     private List<JsonNode> rows(String sql,Object... args){return jdbc.query(sql,(rs,n)->decode(rs.getString("payload")),args);}
     public Map<String,Object> workflow(CurrentUser user,String id){
@@ -44,7 +51,9 @@ public class BusinessRecordService {
     }
 
     private JsonNode readableSnapshot(Project project, JsonNode record) {
-        if (!(record instanceof ObjectNode snapshot) || !snapshot.path("rows").isArray()) return record;
+        if (!(record instanceof ObjectNode snapshot) || !snapshot.path("rows").isArray()) {
+            return record;
+        }
         var safe = json.createArrayNode();
         boolean restricted = false;
         for (var row : snapshot.path("rows")) {
@@ -52,7 +61,9 @@ public class BusinessRecordService {
             restricted |= readable.path("restrictedMatchReference").asBoolean();
             safe.add(readable);
         }
-        if (!restricted) return record;
+        if (!restricted) {
+            return record;
+        }
         var copy = snapshot.deepCopy().put("stale", true);
         copy.set("rows", safe);
         copy.remove(List.of("approvalScope", "approvalFingerprint"));
@@ -60,9 +71,16 @@ public class BusinessRecordService {
     }
     private boolean readable(CurrentUser user,JsonNode row){
         String projectId=KnowledgePublicationAccess.recordProjectId(row);
-        if(projectId.isBlank())return !row.path("scope").asText().equals("仅当前项目");
-        try{guard.requireProject(user,projects.findById(projectId).orElse(null));return true;}
-        catch(BusinessException denied){return false;}
+        if(projectId.isBlank()) {
+            return !row.path("scope").asText().equals("仅当前项目");
+        }
+        try {
+            guard.requireProject(user, projects.findById(projectId).orElse(null));
+            return true;
+        } catch (BusinessException denied) {
+            log.error("检查业务记录读取权限失败", denied);
+            return false;
+        }
     }
     public Map<String,Object> resources(CurrentUser user,String buId){
         guard.requireBu(user,buId);

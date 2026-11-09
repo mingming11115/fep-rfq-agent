@@ -36,15 +36,21 @@ public class HistoryExtractor {
                     answer.answerAnchor(), clause.issues());
             }
             List<String> reasons = new ArrayList<>(clause.issues());
-            if (clause.requirement().isBlank()) reasons.add("缺少客户要求");
-            if (clause.answer().isBlank()) reasons.add("缺少历史答复");
+            if (clause.requirement().isBlank()) {
+                reasons.add("缺少客户要求");
+            }
+            if (clause.answer().isBlank()) {
+                reasons.add("缺少历史答复");
+            }
             matched.add(new HistoryClause(clause.key(), clause.clauseNo(), clause.section(), clause.requirement(), clause.answer(),
                 clause.conditions(), clause.evidence(), clause.feedback(), clause.requirementAnchor(), clause.answerAnchor(), reasons));
         }
         for (HistoryClause answer : answers) {
             var same = requirementsByNumber.getOrDefault(answer.clauseNo(), List.of());
             if (answer.clauseNo().isBlank() || same.size() != 1 || answersByNumber.get(answer.clauseNo()).size() != 1
-                    || !same.get(0).answer().isBlank()) issues.add("配套答复条款 " + (answer.clauseNo().isBlank() ? "（无编号）" : answer.clauseNo()) + " 未关联，请在原文中核对：" + answer.answerAnchor());
+                    || !same.get(0).answer().isBlank()) {
+                issues.add("配套答复条款 " + (answer.clauseNo().isBlank() ? "（无编号）" : answer.clauseNo()) + " 未关联，请在原文中核对：" + answer.answerAnchor());
+            }
         }
         return new Result(metadata, matched, issues);
     }
@@ -63,13 +69,17 @@ public class HistoryExtractor {
             }
             if (block.isTable()) { readTable(block, prefix, companion, clauses, issues); continue; }
             String text = value(block.text());
-            if (text.isBlank()) continue;
+            if (text.isBlank()) {
+                continue;
+            }
             boolean meta = false;
             for (var entry : META.entrySet()) {
                 var matcher = Pattern.compile("^" + entry.getKey() + "\\s*[:：]\\s*(.+)$").matcher(text);
                 if (matcher.matches()) { metadata.putIfAbsent(entry.getValue(), matcher.group(1).trim()); meta = true; break; }
             }
-            if (meta || (!section.isBlank() && section.endsWith(text))) continue;
+            if (meta || (!section.isBlank() && section.endsWith(text))) {
+                continue;
+            }
             var response = RESPONSE.matcher(text);
             if (response.matches() && !clauses.isEmpty()) {
                 int index = clauses.size() - 1; var last = clauses.get(index);
@@ -81,12 +91,16 @@ public class HistoryExtractor {
             var number = NUMBER.matcher(text);
             if (number.matches()) {
                 String body = number.group(2).trim(); var labeled = RESPONSE.matcher(body);
-                if (labeled.matches()) body = labeled.group(1);
+                if (labeled.matches()) {
+                    body = labeled.group(1);
+                }
                 clauses.add(new HistoryClause(anchor, number.group(1), section, companion ? "" : body,
                     companion ? body : "", "", "", "", companion ? "" : anchor, companion ? anchor : "", List.of()));
             } else if (!companion && text.matches(".*(应|必须|需|不得|shall|must).*")) {
                 clauses.add(new HistoryClause(anchor, "", section, text, "", "", "", "", anchor, "", List.of("未识别条款编号，需核对边界")));
-            } else issues.add(anchor + "：未归入条款的原文，需核对");
+            } else {
+                issues.add(anchor + "：未归入条款的原文，需核对");
+            }
         }
         return clauses;
     }
@@ -98,7 +112,9 @@ public class HistoryExtractor {
             Map<String, List<Integer>> detected = new LinkedHashMap<>();
             for (int c = 0; c < row.size(); c++) {
                 String kind = headerKind(row.get(c));
-                if (kind != null) detected.computeIfAbsent(kind, key -> new ArrayList<>()).add(c);
+                if (kind != null) {
+                    detected.computeIfAbsent(kind, key -> new ArrayList<>()).add(c);
+                }
             }
             boolean headerRow = !header
                 ? detected.containsKey("requirement") || detected.containsKey("number") && detected.containsKey("answer")
@@ -106,7 +122,9 @@ public class HistoryExtractor {
             if (headerRow) { columns = detected; header = true; continue; }
             String anchor = prefix + block.anchor() + "/r" + r;
             if (!header) { issues.add(anchor + "：表头未识别，请核对表格列并补录条款"); continue; }
-            if (row.stream().allMatch(String::isBlank)) continue;
+            if (row.stream().allMatch(String::isBlank)) {
+                continue;
+            }
             String requirement = cells(row, columns.get("requirement")), answer = cells(row, columns.get("answer"));
             if (companion && answer.isBlank() && !columns.containsKey("answer")) {
                 issues.add(anchor + "：配套文件未识别答复列"); continue;
@@ -118,16 +136,30 @@ public class HistoryExtractor {
     }
     private String headerKind(String input) {
         String text = value(input).toLowerCase().replaceAll("[\\s:：/（）()_-]", "");
-        if (List.of("编号", "序号", "条款编号", "条款号", "no", "no.", "id", "clause", "clauseno").contains(text)) return "number";
-        if (List.of("客户要求", "历史要求", "要求", "要求说明", "技术要求", "要求内容", "requirement", "requirements", "description").contains(text)) return "requirement";
-        if (List.of("历史答复", "最终答复", "答复", "回复", "应答", "供应商答复", "供应商回复", "应答结论", "响应情况", "满足情况", "结论", "备注", "response", "answer", "compliance", "comply", "comments", "remarks", "vendorresponse").contains(text)) return "answer";
-        if (List.of("适用条件", "条件", "适用条件与限制", "限制", "配置", "conditions").contains(text)) return "conditions";
-        if (List.of("证据", "证据引用", "依据", "evidence").contains(text)) return "evidence";
-        if (List.of("客户反馈", "验收结果", "反馈", "feedback").contains(text)) return "feedback";
+        if (List.of("编号", "序号", "条款编号", "条款号", "no", "no.", "id", "clause", "clauseno").contains(text)) {
+            return "number";
+        }
+        if (List.of("客户要求", "历史要求", "要求", "要求说明", "技术要求", "要求内容", "requirement", "requirements", "description").contains(text)) {
+            return "requirement";
+        }
+        if (List.of("历史答复", "最终答复", "答复", "回复", "应答", "供应商答复", "供应商回复", "应答结论", "响应情况", "满足情况", "结论", "备注", "response", "answer", "compliance", "comply", "comments", "remarks", "vendorresponse").contains(text)) {
+            return "answer";
+        }
+        if (List.of("适用条件", "条件", "适用条件与限制", "限制", "配置", "conditions").contains(text)) {
+            return "conditions";
+        }
+        if (List.of("证据", "证据引用", "依据", "evidence").contains(text)) {
+            return "evidence";
+        }
+        if (List.of("客户反馈", "验收结果", "反馈", "feedback").contains(text)) {
+            return "feedback";
+        }
         return null;
     }
     private String cells(List<String> row, List<Integer> indexes) {
-        if (indexes == null) return "";
+        if (indexes == null) {
+            return "";
+        }
         return join(indexes.stream().filter(index -> index < row.size()).map(row::get).toList());
     }
     private String join(List<String> parts) { return String.join("\n", parts.stream().map(this::value).filter(part -> !part.isBlank()).toList()); }

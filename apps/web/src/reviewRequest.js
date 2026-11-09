@@ -2,7 +2,7 @@ export function reviewEvidenceHref(value) {
   try {
     const url = new URL(String(value || '').trim());
     return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
-  } catch { return ''; }
+  } catch { console.error('解析评审证据链接失败'); return ''; }
 }
 
 export function buildReviewRequest({ requirement, form, requirementVersion }) {
@@ -12,7 +12,7 @@ export function buildReviewRequest({ requirement, form, requirementVersion }) {
   }
   const evidence = String(form.evidence || '').trim();
   const evidenceLink = reviewEvidenceHref(evidence);
-  if (evidence && !evidenceLink) throw new Error('关联证据请填写完整的 http:// 或 https:// 链接。');
+  if (evidence && !evidenceLink) { throw new Error('关联证据请填写完整的 http:// 或 https:// 链接。'); }
   return {
     kind: 'review', requirementId: requirement.id,
     requirementVersion: requirementVersion || requirement.version || 1,

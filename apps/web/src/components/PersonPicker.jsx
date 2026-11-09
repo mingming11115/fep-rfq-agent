@@ -11,6 +11,6 @@ export default function PersonPicker({ people = [], value = '', onChange, multip
     placeholder={placeholder} notFoundContent={people.length ? '未找到匹配人员' : emptyLabel}
     filterOption={(input, option) => option.searchText.toLocaleLowerCase().includes(input.trim().replace(/^[@＠]/u, '').toLocaleLowerCase())}
     onChange={next => onChange(next || (multiple ? [] : ''))}
-    onInputKeyDown={event => { if (event.key === 'Escape') event.stopPropagation(); }}
+    onInputKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); } }}
   />;
 }

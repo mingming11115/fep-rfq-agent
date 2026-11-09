@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -26,6 +27,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest @AutoConfigureMockMvc
+@Slf4j
 class ProviderPipelineIntegrationTest {
     static final ObjectMapper JSON = new ObjectMapper();
     static final String SOURCE = "1.1 The pump shall support 2 MPa design pressure.";
@@ -55,7 +57,10 @@ class ProviderPipelineIntegrationTest {
                     exchange.getResponseBody().write(bytes);
                 } finally { exchange.close(); }
             }); SERVER.start();
-        } catch (Exception e) { throw new RuntimeException(e); }
+        } catch (Exception e) {
+            log.error("启动模型与 OCR 测试服务失败", e);
+            throw new RuntimeException(e);
+        }
     }
     @AfterAll static void stop() { SERVER.stop(0); }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r) {
@@ -66,7 +71,10 @@ class ProviderPipelineIntegrationTest {
         r.add("rfq.parse.integrations.ocr.url", () -> "http://127.0.0.1:" + SERVER.getAddress().getPort() + "/ocr");
         r.add("rfq.storage-dir", () -> {
             try { return Files.createTempDirectory("rfq-provider-pipeline-").toString(); }
-            catch (Exception e) { throw new RuntimeException(e); }
+            catch (Exception e) {
+                log.error("创建模型与 OCR 流水线测试存储目录失败", e);
+                throw new RuntimeException(e);
+            }
         });
     }
     @Autowired MockMvc mvc;

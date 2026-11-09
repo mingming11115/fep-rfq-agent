@@ -16,5 +16,5 @@ test('API launcher runs a Maven executable whose path contains spaces from the A
   const child=spawnSync(process.execPath,[path.join(root,'scripts/api.mjs'),'test'],{cwd:root,env:{...process.env,MVN_CMD:executable,RFQ_LAUNCH_RESULT:result},encoding:'utf8'});
   assert.equal(child.status,0,child.stderr||child.stdout);
   const recorded=JSON.parse(await readFile(result,'utf8'));assert.equal(recorded.cwd,path.join(root,'apps/api'));assert.deepEqual(recorded.args,['test']);
- }finally{if(!path.resolve(temporary).startsWith(path.resolve(prefix)))throw Error('Unexpected temporary path');await rm(temporary,{recursive:true,force:true});}
+ }finally{if(!path.resolve(temporary).startsWith(path.resolve(prefix))) { throw Error('Unexpected temporary path'); } await rm(temporary,{recursive:true,force:true});}
 });

@@ -4,10 +4,10 @@ import './capability-tree.css';
 
 const icons = { bu: Building2, model: Box, process: Workflow, unassigned: FolderClock, capability: FileText };
 function findPath(node, key) {
-  if (node.key === key) return [node.key];
+  if (node.key === key) { return [node.key]; }
   for (const child of node.children) {
     const path = findPath(child, key);
-    if (path) return [node.key, ...path];
+    if (path) { return [node.key, ...path]; }
   }
   return null;
 }
@@ -23,18 +23,18 @@ export default function CapabilityTree({ root, selectedKey, onSelect, renderActi
   }, [root, selectedKey]);
   useEffect(() => {
     if (!selectedKey) { revealedKey.current = ''; return; }
-    if (!revealSelection || revealedKey.current === selectedKey) return;
+    if (!revealSelection || revealedKey.current === selectedKey) { return; }
     const ancestors = (findPath(root, selectedKey) || []).slice(0, -1);
-    if (ancestors.some(key => !expanded.has(key))) return;
+    if (ancestors.some(key => !expanded.has(key))) { return; }
     const frame = requestAnimationFrame(() => {
       const selected = ref.current?.querySelector('.cap-tree-node[aria-current="true"]');
-      if (!selected) return;
+      if (!selected) { return; }
       selected.scrollIntoView({ block: 'nearest' });
       revealedKey.current = selectedKey;
     });
     return () => cancelAnimationFrame(frame);
   }, [root, selectedKey, expanded, revealSelection]);
-  const toggle = key => setExpanded(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const toggle = key => setExpanded(previous => { const next = new Set(previous); if (next.has(key)) { next.delete(key); } else { next.add(key); } return next; });
   function renderNode(node) {
     const Icon = icons[node.kind];
     const canExpand = !terminalKinds.includes(node.kind);

@@ -5,9 +5,9 @@ import {assertCapabilityProcess,saveModelMetadata,saveModelProcess,removeCatalog
 const belongsTo=(record,buId)=>(record.buId||'BU-DEMO')===buId;
 function readRows(storage,base,seed,buId){
  const saved=storage.getItem(resourceStorageKey(base,buId));
- if(saved===null)return buId==='BU-DEMO'?structuredClone(seed):[];
+ if(saved===null) { return buId==='BU-DEMO'?structuredClone(seed):[]; }
  const rows=JSON.parse(saved);
- if(!Array.isArray(rows))throw new Error('机型或工艺目录格式异常，请先修复目录');
+ if(!Array.isArray(rows)) { throw new Error('机型或工艺目录格式异常，请先修复目录'); }
  return rows;
 }
 export function readRfqCatalog(storage,context){
@@ -20,7 +20,7 @@ export function readRfqCatalog(storage,context){
 export function saveRfqCatalogRecord(storage,context,kind,record){
  const models=readRows(storage,'rfq.reference.models.v1',MODELS,context.buId);
  const processes=readRows(storage,'rfq.reference.processes.v1',PROCESSES,context.buId);
- if(kind!=='model'&&kind!=='process')throw new Error('不支持的目录类型');
+ if(kind!=='model'&&kind!=='process') { throw new Error('不支持的目录类型'); }
  const next=kind==='model'?saveModelMetadata(models,{context,record}):saveModelProcess(processes,{context,models,record});
  const key=resourceStorageKey(kind==='model'?'rfq.reference.models.v1':'rfq.reference.processes.v1',context.buId);
  storage.setItem(key,JSON.stringify(next));
@@ -35,9 +35,10 @@ export function deleteRfqCatalogRecord(storage,context,kind,record){
  try{
   fields.forEach(([field],index)=>{storage.setItem(before[index][0],JSON.stringify(next[field]));written.push(index);});
  }catch(error){
+  console.error('写入能力目录删除结果失败', error);
   for(const index of written.reverse()){
    const [key,value]=before[index];
-   if(value===null)storage.removeItem(key);else storage.setItem(key,value);
+   if(value===null) { storage.removeItem(key); } else { storage.setItem(key,value); }
   }
   throw error;
  }

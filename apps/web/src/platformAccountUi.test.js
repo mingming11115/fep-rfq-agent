@@ -49,12 +49,12 @@ async function mountDirectory(t, { rejectUpdate = false } = {}) {
         data = { id: 'new-user', ...body, status: 'ACTIVE', systemAdmin: false,
           roles: [{ buId: body.buId, role: body.role }] };
         accounts = [...accounts, data];
-      } else throw new Error(`Unexpected write: ${options.method} ${url}`);
+      } else { throw new Error(`Unexpected write: ${options.method} ${url}`); }
     } else if (url.startsWith('/api/rfq/admin/business-units?')) {
       data = { list: [{ id: 'BU-FEP', code: 'FEP', name: 'FEP事业部' }], total: 1, page: 1, size: 100 };
     } else if (url.startsWith('/api/rfq/admin/users?')) {
       data = { list: accounts, total: accounts.length, page: 1, size: 200 };
-    } else throw new Error(`Unexpected request: ${url}`);
+    } else { throw new Error(`Unexpected request: ${url}`); }
     return { ok: true, status: 200, json: async () => ({ code: 0, data }) };
   };
   const host = document.createElement('div');

@@ -16,11 +16,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 class MatchEvaluator {
     static final String STANDARD = "standard_reply";
     static final String HISTORY = "history_rfq";
@@ -56,6 +58,7 @@ class MatchEvaluator {
                 try {
                     stage = textStage(input, library, scope);
                 } catch (SearchFailure failure) {
+                    log.error("查询比对资料失败", failure);
                     stages.putObject(library).put("status", "failed").put("reason", failure.getMessage());
                     return new Evaluation(failure.retryable() ? "retry_wait" : "failed", result, stamp, failure.retryable() ? 5 : 0);
                 }
@@ -64,14 +67,21 @@ class MatchEvaluator {
             switch (stage.path("status").asText()) {
                 case "hit" -> {
                     result.put("matchedLibrary", library);
-                    if (stage.has("conclusion")) result.set("conclusion", stage.get("conclusion"));
-                    if (stage.has("draft")) result.set("draft", stage.get("draft"));
+                    if (stage.has("conclusion")) {
+                        result.set("conclusion", stage.get("conclusion"));
+                    }
+                    if (stage.has("draft")) {
+                        result.set("draft", stage.get("draft"));
+                    }
                     return new Evaluation("completed", result, stamp, 0);
                 }
                 case "blocked" -> {
                     String reason = stage.path("reason").asText();
-                    if (CAPABILITY.equals(library) && "MISSING_CAPABILITY_INPUT".equals(reason)) missingCapability = true;
-                    else return new Evaluation("blocked", result, stamp, "INDEX_NOT_READY".equals(reason) ? 15 : 0);
+                    if (CAPABILITY.equals(library) && "MISSING_CAPABILITY_INPUT".equals(reason)) {
+                        missingCapability = true;
+                    } else {
+                        return new Evaluation("blocked", result, stamp, "INDEX_NOT_READY".equals(reason) ? 15 : 0);
+                    }
                 }
                 default -> { }
             }
@@ -88,7 +98,9 @@ class MatchEvaluator {
             String actual = CAPABILITY.equals(entry.getKey())
                     ? digest(capability.evaluate(input.bu(), input.project(), input.snapshot().path("context")).toString())
                     : scopeStamp(scope(input, entry.getKey()));
-            if (!entry.getValue().asText().equals(actual)) return false;
+            if (!entry.getValue().asText().equals(actual)) {
+                return false;
+            }
         }
         return true;
     }
@@ -99,7 +111,9 @@ class MatchEvaluator {
             var current = capability.evaluate(input.bu(), input.project(), input.snapshot().path("context"));
             return reference.path("capabilityFingerprint").asText().equals(digest(current.toString()));
         }
-        if (!STANDARD.equals(library) && !HISTORY.equals(library)) return false;
+        if (!STANDARD.equals(library) && !HISTORY.equals(library)) {
+            return false;
+        }
         var sources = scope(input, library);
         var source = sources.sources().get(reference.path("candidateId").asText());
         return !sources.unknown() && source != null && source.version() == reference.path("version").asInt();
@@ -107,16 +121,22 @@ class MatchEvaluator {
 
     private ObjectNode textStage(Input input, String library, Scope scope) {
         var stage = json.createObjectNode();
-        if (scope.unknown()) return stage.put("status", "blocked").put("reason", "SOURCE_SCOPE_UNVERIFIED");
+        if (scope.unknown()) {
+            return stage.put("status", "blocked").put("reason", "SOURCE_SCOPE_UNVERIFIED");
+        }
         var shared = scope.sources().values().stream().filter(Source::shared).toList();
         if (shared.stream().anyMatch(source -> !source.synced())) {
             return stage.put("status", "blocked").put("reason", "INDEX_NOT_READY");
         }
-        if (scope.sources().size() > MAX_SEARCH_IDS) return stage.put("status", "blocked").put("reason", "SEARCH_SCOPE_TOO_LARGE");
+        if (scope.sources().size() > MAX_SEARCH_IDS) {
+            return stage.put("status", "blocked").put("reason", "SEARCH_SCOPE_TOO_LARGE");
+        }
         var ids = new ArrayList<String>();
         if (!shared.isEmpty()) {
             String query = query(input.snapshot());
-            if (query.length() > 6000) return stage.put("status", "blocked").put("reason", "QUERY_TOO_LONG");
+            if (query.length() > 6000) {
+                return stage.put("status", "blocked").put("reason", "QUERY_TOO_LONG");
+            }
             var response = search.search(input.bu(), HISTORY.equals(library), query, shared.stream().map(Source::id).toList());
             stage.put("platformRequestId", response.requestId()).put("indexVersion", response.indexVersion());
             for (var hit : response.hits()) {
@@ -139,7 +159,9 @@ class MatchEvaluator {
                 .filter(candidate -> !text(candidate.source().payload(), "answer").isBlank())
                 .toList();
         stage.put("scoreVersion", MatchTextScorer.VERSION);
-        if (candidates.isEmpty()) return stage.put("status", "miss");
+        if (candidates.isEmpty()) {
+            return stage.put("status", "miss");
+        }
         // Standard replies are eligible only when the highest scoring candidate is reusable.
         if (STANDARD.equals(library) && incompatible(verified, text(candidates.get(0).source().payload(), "conditions"))) {
             return stage.put("status", "miss").put("reason", "CONDITIONS_DIFFER");
@@ -152,7 +174,9 @@ class MatchEvaluator {
                     .put("businessSimilarity", candidate.similarity());
             for (String field : List.of("title", "requirement", "answer", "conditions", "source", "documentId",
                     "requirementAnchor", "answerAnchor", "clauseNo")) {
-                if (source.payload().hasNonNull(field)) row.put(field, text(source.payload(), field));
+                if (source.payload().hasNonNull(field)) {
+                    row.put(field, text(source.payload(), field));
+                }
             }
             String conditions = text(source.payload(), "conditions");
             row.put("conditionStatus", conditions.isBlank() ? "not_specified" : verified.isBlank() ? "unverified"
@@ -162,7 +186,9 @@ class MatchEvaluator {
                 row.put("acceptance", source.payload().path("acceptance").asText("未记录"));
             }
         });
-        if (STANDARD.equals(library)) stage.put("draft", text(candidates.get(0).source().payload(), "answer"));
+        if (STANDARD.equals(library)) {
+            stage.put("draft", text(candidates.get(0).source().payload(), "answer"));
+        }
         return stage;
     }
 
@@ -184,9 +210,13 @@ class MatchEvaluator {
                 rs.getLong("revision"), rs.getString("project_id"), rs.getString("scope"), rs.getBoolean("synced"),
                 rs.getString("sync_stamp"), parse(rs.getString("payload"))), input.bu(), input.project())) {
             String validity = text(row.payload(), "validity");
-            if (List.of("已撤销", "被替代", "已过期", "已失效").contains(validity)) continue;
+            if (List.of("已撤销", "被替代", "已过期", "已失效").contains(validity)) {
+                continue;
+            }
             String sourceProject = KnowledgePublicationAccess.recordProjectId(row.payload());
-            if (!sourceProject.isBlank() && !input.project().equals(sourceProject)) continue;
+            if (!sourceProject.isBlank() && !input.project().equals(sourceProject)) {
+                continue;
+            }
             boolean shared = row.project() == null && sourceProject.isBlank() && "BU共享".equals(row.scope());
             boolean project = history && input.project().equals(row.project()) && "仅当前项目".equals(row.scope());
             if (!"有效".equals(validity) || !shared && !project
@@ -219,7 +249,10 @@ class MatchEvaluator {
 
     private JsonNode parse(String value) {
         try { return json.readTree(value); }
-        catch (JsonProcessingException failure) { throw new IllegalStateException("比对资料格式异常", failure); }
+        catch (JsonProcessingException failure) {
+            log.error("解析比对资料失败 errorType={}", failure.getClass().getSimpleName());
+            throw new IllegalStateException("比对资料格式异常", failure);
+        }
     }
 
     static String text(JsonNode node, String field) { return node.path(field).asText(""); }
@@ -228,6 +261,7 @@ class MatchEvaluator {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException failure) {
+            log.error("计算比对资料的 SHA-256 摘要失败", failure);
             throw new IllegalStateException(failure);
         }
     }

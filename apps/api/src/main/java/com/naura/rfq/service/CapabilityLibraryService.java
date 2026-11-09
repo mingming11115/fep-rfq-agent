@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -33,6 +34,7 @@ import static com.naura.rfq.service.CapabilityCatalog.scope;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CapabilityLibraryService {
     private static final Set<String> EDITABLE = Set.of("草稿", "退回");
     private static final Set<String> VALUE_TYPES = Set.of("保证值", "典型值", "单次测试值");
@@ -60,7 +62,9 @@ public class CapabilityLibraryService {
         access.requireCapabilityWriter(user, buId, false, false);
         var row = catalog.required(Table.HISTORY, buId, id, version);
         catalog.requireReadable(user, buId, row);
-        if (!active(row)) throw new BusinessException(422, "仅可从有效的已发布历史 RFQ 条款提取指标");
+        if (!active(row)) {
+            throw new BusinessException(422, "仅可从有效的已发布历史 RFQ 条款提取指标");
+        }
         return json.valueToTree(HistoryCapabilityExtraction.fromAnswer(row.payload().path("answer").asText(),
                 row.payload().path("conditions").asText()));
     }
@@ -70,10 +74,14 @@ public class CapabilityLibraryService {
         begin(user, buId, false);
         var history = catalog.required(Table.HISTORY, buId, historyId, historyVersion);
         catalog.requireReadable(user, buId, history);
-        if (!active(history)) throw new BusinessException(422, "仅有效的已发布历史 RFQ 条款可以作为能力来源");
+        if (!active(history)) {
+            throw new BusinessException(422, "仅有效的已发布历史 RFQ 条款可以作为能力来源");
+        }
         String project = catalog.scopeProject(user, buId, input.projectId());
         if (!clean(history.project()).isBlank()) {
-            if (project != null && !project.equals(history.project())) throw new BusinessException(422, "候选须保留历史条款的项目范围");
+            if (project != null && !project.equals(history.project())) {
+                throw new BusinessException(422, "候选须保留历史条款的项目范围");
+            }
             project = history.project();
         } else if (!CapabilityCatalog.SHARED.equals(history.scope())) {
             throw new BusinessException(422, "来源历史条款缺少明确的共享范围");
@@ -101,10 +109,16 @@ public class CapabilityLibraryService {
                     .put("sheet", parsed.sheet()).put("row", row.number());
             try {
                 var result = storeDraft(user, buId, project, payload, fingerprint, true);
-                if (result.path("duplicate").asBoolean()) skipped.add(row.number());
-                else items.add(result);
+                if (result.path("duplicate").asBoolean()) {
+                    skipped.add(row.number());
+                } else {
+                    items.add(result);
+                }
             } catch (BusinessException failure) {
-                if (failure.getCode() != 422) throw failure;
+                log.error("导入能力边界 Excel 行失败 errorType={}", failure.getClass().getSimpleName());
+                if (failure.getCode() != 422) {
+                    throw failure;
+                }
                 errors.add(new ImportError(row.number(), failure.getMessage()));
             }
         }
@@ -188,7 +202,9 @@ public class CapabilityLibraryService {
         requireState(hasExplicitScope(row), "能力版本缺少明确的共享范围");
         requireComplete(buId, row.projectId(), row.payload());
         for (var previous : chain) {
-            if (!active(previous)) continue;
+            if (!active(previous)) {
+                continue;
+            }
             catalog.requireReadable(user, buId, previous);
             requireReason(reason);
             requireState(Objects.equals(previous.projectId(), row.projectId())
@@ -242,8 +258,11 @@ public class CapabilityLibraryService {
             catalog.requireReadable(user, buId, existing.get(0));
             return existing.get(0).payload().put("duplicate", true);
         }
-        if (validate) requireComplete(buId, project, payload);
-        else requireEvidenceScope(buId, project, payload.path("evidenceRefs"));
+        if (validate) {
+            requireComplete(buId, project, payload);
+        } else {
+            requireEvidenceScope(buId, project, payload.path("evidenceRefs"));
+        }
         String id = Ids.next("CAP");
         resetDraft(payload, user);
         catalog.identity(payload, buId, id, 1, project);
@@ -262,8 +281,12 @@ public class CapabilityLibraryService {
     private ObjectNode draft(CapabilityLibraryRequest.Draft input) {
         ObjectNode data = json.valueToTree(input);
         data.remove(List.of("projectId", "revision", "evidence"));
-        if (input.lower() != null) data.put("lower", input.lower().stripTrailingZeros().toPlainString());
-        if (input.upper() != null) data.put("upper", input.upper().stripTrailingZeros().toPlainString());
+        if (input.lower() != null) {
+            data.put("lower", input.lower().stripTrailingZeros().toPlainString());
+        }
+        if (input.upper() != null) {
+            data.put("upper", input.upper().stripTrailingZeros().toPlainString());
+        }
         for (String field : List.of("modelId", "processId", "config", "metricCode", "metric", "operator", "unit", "valueType", "conditions", "limits")) {
             data.put(field, clean(data.path(field).asText("")));
         }
@@ -288,7 +311,9 @@ public class CapabilityLibraryService {
             default -> "";
         };
         BigDecimal limit = Set.of("LT", "LE").contains(clean(input.operator())) ? input.upper() : input.lower();
-        if (limit == null) return "";
+        if (limit == null) {
+            return "";
+        }
         String value = limit.stripTrailingZeros().toPlainString();
         if ("RANGE".equals(clean(input.operator())) && input.upper() != null) {
             value = (Boolean.TRUE.equals(input.lowerInclusive()) ? "[" : "(") + value + ", "
@@ -298,7 +323,9 @@ public class CapabilityLibraryService {
     }
 
     private void requireComplete(String buId, String project, ObjectNode data) {
-        if (!baselineValid(buId, data)) throw new BusinessException(422, "请选择本 BU 有效的机型、配置和启用工艺版本");
+        if (!baselineValid(buId, data)) {
+            throw new BusinessException(422, "请选择本 BU 有效的机型、配置和启用工艺版本");
+        }
         if (data.path("metricCode").asText().isBlank() || data.path("metric").asText().isBlank()
                 || data.path("unit").asText().isBlank() || data.path("conditions").asText().isBlank()
                 || !VALUE_TYPES.contains(data.path("valueType").asText()) || !numericBound(data)) {
@@ -313,7 +340,9 @@ public class CapabilityLibraryService {
         String modelId = data.path("modelId").asText();
         int modelVersion = data.path("modelVersion").asInt();
         var model = catalog.row(Table.MODEL, buId, modelId, modelVersion);
-        if (!catalog.isSharedBaseline(model) || !data.path("config").asText().equals(model.payload().path("config").asText())) return false;
+        if (!catalog.isSharedBaseline(model) || !data.path("config").asText().equals(model.payload().path("config").asText())) {
+            return false;
+        }
         var process = catalog.row(Table.PROCESS, buId, data.path("processId").asText(), data.path("processVersion").asInt());
         return process != null && clean(process.project()).isBlank() && !CapabilityCatalog.PROJECT.equals(process.scope())
                 && process.payload().path("enabled").asBoolean()
@@ -337,20 +366,28 @@ public class CapabilityLibraryService {
 
     private BigDecimal decimal(JsonNode node) {
         String value = node.asText();
-        if (!value.matches("-?[0-9]{1,18}(\\.[0-9]{1,12})?")) return null;
+        if (!value.matches("-?[0-9]{1,18}(\\.[0-9]{1,12})?")) {
+            return null;
+        }
         return new BigDecimal(value);
     }
 
     private boolean validEvidence(String buId, String project, JsonNode refs) {
-        if (!refs.isArray() || refs.isEmpty() || refs.size() > 20) return false;
+        if (!refs.isArray() || refs.isEmpty() || refs.size() > 20) {
+            return false;
+        }
         var seen = new HashSet<List<String>>();
         for (var ref : refs) {
             String id = ref.path("id").asText();
             String location = ref.path("location").asText();
             int version = ref.path("version").asInt();
-            if (id.isBlank() || location.isBlank() || version < 1 || !seen.add(List.of(id, String.valueOf(version), location))) return false;
+            if (id.isBlank() || location.isBlank() || version < 1 || !seen.add(List.of(id, String.valueOf(version), location))) {
+                return false;
+            }
             var evidence = evidenceInScope(buId, project, ref);
-            if (evidence == null || !"有效".equals(evidence.status()) || !CapabilityCatalog.unexpired(evidence.payload())) return false;
+            if (evidence == null || !"有效".equals(evidence.status()) || !CapabilityCatalog.unexpired(evidence.payload())) {
+                return false;
+            }
         }
         return true;
     }
@@ -365,7 +402,9 @@ public class CapabilityLibraryService {
 
     private Row evidenceInScope(String buId, String project, JsonNode reference) {
         var evidence = catalog.row(Table.EVIDENCE, buId, reference.path("id").asText(), reference.path("version").asInt());
-        if (evidence == null) return null;
+        if (evidence == null) {
+            return null;
+        }
         String evidenceProject = clean(evidence.project());
         boolean allowed = evidenceProject.isEmpty() ? CapabilityCatalog.SHARED.equals(evidence.scope())
                 : evidenceProject.equals(project);
@@ -409,7 +448,9 @@ public class CapabilityLibraryService {
     private Row checked(CurrentUser user, String buId, String id, int version, Long revision) {
         var row = catalog.required(Table.CAPABILITY, buId, id, version);
         catalog.requireReadable(user, buId, row);
-        if (revision == null) throw new BusinessException(400, "请提供草稿修改序号");
+        if (revision == null) {
+            throw new BusinessException(400, "请提供草稿修改序号");
+        }
         requireState(revision == row.revision(), "能力版本已变更，请刷新");
         return row;
     }
@@ -417,22 +458,31 @@ public class CapabilityLibraryService {
     private void requireIndependent(CurrentUser user, Row row) {
         requireState("待审核".equals(row.status()), "只有待审核的能力版本可以审核");
         String submitter = row.payload().path("submitterId").asText();
-        if (submitter.isBlank()) throw new BusinessException(409, "该版本缺少有效提交记录");
-        if (submitter.equals(user.id())) throw new BusinessException(403, "同一能力版本不得自审");
+        if (submitter.isBlank()) {
+            throw new BusinessException(409, "该版本缺少有效提交记录");
+        }
+        if (submitter.equals(user.id())) {
+            throw new BusinessException(403, "同一能力版本不得自审");
+        }
     }
 
     private void requireReason(String reason) {
-        if (reason.isBlank()) throw new BusinessException(422, "请填写操作原因");
+        if (reason.isBlank()) {
+            throw new BusinessException(422, "请填写操作原因");
+        }
     }
 
     private void requireState(boolean allowed, String message) {
-        if (!allowed) throw new BusinessException(409, message);
+        if (!allowed) {
+            throw new BusinessException(409, message);
+        }
     }
 
     private static String digest(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException failure) {
+            log.error("计算能力记录的 SHA-256 摘要失败", failure);
             throw new IllegalStateException(failure);
         }
     }

@@ -21,7 +21,7 @@ for(const engine of ['wordcraft','pdfcraft'])test(`${engine} margin opens a sing
     if(message.type===engine+':open'){queueMicrotask(()=>send('reviewState',snapshot()));return;}
     const request=JSON.parse(message.payload);commands.push(request);applied=request.request;let result={};
     if(request.action==='new'){notes.push(note(3,''));result={id:3};}
-    if(request.action==='delete')notes=notes.filter(note=>note.id!==request.params.id);
+    if(request.action==='delete') { notes=notes.filter(note=>note.id!==request.params.id); }
     if(request.action==='upsert'){const n=notes.find(n=>n.id===request.params.id);Object.assign(n,request.params);result={id:n.id,nativeKey:n.nativeKey,replies:[]};}
     queueMicrotask(()=>{send('reviewResult',{request:request.request,ok:true,result});send('reviewState',snapshot());});
   }};

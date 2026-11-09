@@ -39,7 +39,7 @@ async function scenario(base, mode, headless, reducedMotion) {
   const consoleEvents=[];
   const onScreen = async (locator,label,settle=800) => {
     await locator.waitFor({state:'visible'});
-    if(settle)await page.waitForTimeout(settle);
+    if(settle) { await page.waitForTimeout(settle); }
     const popup = await locator.boundingBox();
     const viewport = page.viewportSize();
     assert.ok(popup && popup.x >= -1 && popup.y >= -1 &&
@@ -85,7 +85,7 @@ async function scenario(base, mode, headless, reducedMotion) {
     for(const label of ['基础选择框','通用选择框','选择确认人员']) {
       for(let pass=0;pass<3;pass++) {
         await open(label);
-        if(pass===0) await page.screenshot({path:path.join(directory,`control-${['基础选择框','通用选择框','选择确认人员'].indexOf(label)}.png`)});
+        if(pass===0) { await page.screenshot({path:path.join(directory,`control-${['基础选择框','通用选择框','选择确认人员'].indexOf(label)}.png`)}); }
         // PersonPicker intentionally intercepts Escape before rc-select's parent
         // handler. Use an outside click to close every control consistently.
         await page.getByRole('heading',{name:'公共下拉控件',exact:true}).click();
@@ -187,13 +187,14 @@ async function scenario(base, mode, headless, reducedMotion) {
     assert.equal(fullAppSaved?.sourceStandardText,'Windows 完整应用口径');
     result.passed = true;
   } catch(error) {
+    console.error('下拉框浏览器场景执行失败', error);
     result.error = error.stack;
-    await page?.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});
+    await page?.screenshot({path:path.join(directory,'failure.png')}).catch((error)=>{ console.error('保存场景失败截图失败', error); });
   } finally {
-    const events = page ? await page.evaluate(()=>window.__rfqDropdownEvents).catch(()=>[]) : [];
+    const events = page ? await page.evaluate(()=>window.__rfqDropdownEvents).catch((error)=>{ console.error('读取下拉框事件失败', error); return []; }) : [];
     await writeFile(path.join(directory,'events.json'),JSON.stringify(events,null,2));
     await writeFile(path.join(directory,'console.json'),JSON.stringify(consoleEvents,null,2));
-    await context?.tracing.stop({path:path.join(directory,'trace.zip')}).catch(()=>{});
+    await context?.tracing.stop({path:path.join(directory,'trace.zip')}).catch((error)=>{ console.error('保存浏览器追踪失败', error); });
     await context?.close();await browser?.close();
     console.log(JSON.stringify(result));
   }
@@ -209,9 +210,10 @@ try {
     }
   }
 } catch(error) {
+  console.error('启动下拉框诊断失败', error);
   report.error = error.stack;
 } finally {
   await dev.close();await production?.close();
   await writeFile(path.join(results,'report.json'),JSON.stringify(report,null,2));
 }
-if(report.error || report.scenarios.length!==8 || report.scenarios.some(result=>!result.passed)) process.exitCode=1;
+if(report.error || report.scenarios.length!==8 || report.scenarios.some(result=>!result.passed)) { process.exitCode=1; }

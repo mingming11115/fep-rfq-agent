@@ -10,7 +10,7 @@ import OverlayPresence from '../components/OverlayPresence';
 import { selectMyTasks, taskLabels, isTaskPending, isTaskOverdue, isQualifiedTaskActor } from '../taskDomain';
 import './workspace-pages.css';
 
-function load() { try { return JSON.parse(sessionStorage.getItem('rfq.tasks.filters')) || {}; } catch { return {}; } }
+function load() { try { return JSON.parse(sessionStorage.getItem('rfq.tasks.filters')) || {}; } catch { console.error('读取待办筛选条件失败'); return {}; } }
 export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
   const [filters, setFilters] = useState(() => ({ tab: 'pending', query: '', projectId: '', kind: '', overdue: false, ...load() }));
   const [transfer, setTransfer] = useState(null);
@@ -71,7 +71,7 @@ export default function TasksPage({ appState, onOpenTask, onTaskAction }) {
         pagination={{ defaultPageSize: 10, showSizeChanger: true }} locale={{ emptyText: '暂无符合条件的任务，可调整筛选条件' }}/>
       </div>
     </section>
-    <OverlayPresence kind="drawer-form">{transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) setTransfer(null); }}
+    <OverlayPresence kind="drawer-form">{transfer && <DrawerForm title="任务转办" open width={520} onOpenChange={open => { if (!open) { setTransfer(null); } }}
       initialValues={{ to: undefined, reason: '' }} submitter={{ searchConfig: { submitText: '确认转办', resetText: '取消' } }}
       onFinish={values => !!onTaskAction(transfer.id, { type: 'transfer', to: values.to, reason: values.reason.trim() })}>
       <p style={{ marginBottom: 20 }}>{transfer.title} · 截止 {transfer.dueAt || '未设置'}</p>

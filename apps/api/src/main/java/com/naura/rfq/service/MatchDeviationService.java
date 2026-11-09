@@ -11,11 +11,13 @@ import com.naura.rfq.mapper.UserBuRoleMapper;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 class MatchDeviationService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -47,12 +49,18 @@ class MatchDeviationService {
             item.putArray("triggers");
         }
         for (var trigger : item.path("triggers")) {
-            if (type.equals(trigger.path("type").asText()) && runId.equals(trigger.path("runId").asText())) return item;
+            if (type.equals(trigger.path("type").asText()) && runId.equals(trigger.path("runId").asText())) {
+                return item;
+            }
         }
         item.withArray("triggers").addObject().put("type", type).put("runId", runId).put("reason", reason)
                 .put("createdAt", Instant.now().toString());
-        if ("capability_contradiction".equals(type)) item.put("technicalReviewRequired", true);
-        if (!"待处理".equals(item.path("status").asText())) item.put("status", "待处理");
+        if ("capability_contradiction".equals(type)) {
+            item.put("technicalReviewRequired", true);
+        }
+        if (!"待处理".equals(item.path("status").asText())) {
+            item.put("status", "待处理");
+        }
         item.put("description", reason);
         save(project, item);
         return item;
@@ -60,7 +68,9 @@ class MatchDeviationService {
 
     ObjectNode close(CurrentUser user, Project project, Requirement requirement, long version, String reason) {
         var item = find(project, requirement);
-        if (item == null) throw new BusinessException(404, "条款没有当前偏离事项");
+        if (item == null) {
+            throw new BusinessException(404, "条款没有当前偏离事项");
+        }
         if (version != item.path("version").asLong() || !"待处理".equals(item.path("status").asText())) {
             throw new BusinessException(409, "偏离事项已变化，请刷新后处理");
         }
@@ -179,6 +189,7 @@ class MatchDeviationService {
         try {
             return (ObjectNode) json.readTree(payload);
         } catch (Exception e) {
+            log.error("解析偏离事项失败 errorType={}", e.getClass().getSimpleName());
             throw new IllegalStateException("偏离事项数据格式异常", e);
         }
     }

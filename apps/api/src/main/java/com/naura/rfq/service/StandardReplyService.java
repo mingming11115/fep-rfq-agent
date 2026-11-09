@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class StandardReplyService {
     private static final Set<String> EDITABLE = Set.of("草稿", "退回");
     private static final String SELECT = "select id, version, revision, project_id, scope, payload from `standard-reply-record`";
@@ -62,6 +64,7 @@ public class StandardReplyService {
                 insert(buId, id, 1, null, "BU共享", payload);
                 items.add(payload);
             } catch (DuplicateKeyException duplicate) {
+                log.error("导入标准回复时发现重复记录 errorType={}", duplicate.getClass().getSimpleName());
                 skipped.add(row.rowNumber());
             }
         }
@@ -94,7 +97,9 @@ public class StandardReplyService {
             String action, String suppliedReason) {
         boolean review = Set.of("publish", "return", "revoke").contains(action);
         publicationAccess.requireWriter(user, buId, review);
-        if (Set.of("publish", "revoke").contains(action)) publicationAccess.lockBu(buId);
+        if (Set.of("publish", "revoke").contains(action)) {
+            publicationAccess.lockBu(buId);
+        }
         var chain = lockChain(buId, id);
         var record = checkedVersion(user, buId, chain, version, revision);
         String reason = suppliedReason == null ? "" : suppliedReason.strip();
@@ -126,7 +131,9 @@ public class StandardReplyService {
                 && record.payload().path("sourceProjectId").asText("").isBlank(),
                 "当前发布入口仅支持 BU 共享的标准回复");
         for (Reply previous : chain) {
-            if (!previous.isActivePublication()) continue;
+            if (!previous.isActivePublication()) {
+                continue;
+            }
             requireReadable(user, buId, previous);
             previous.payload().put("validity", "被替代").put("supersededByVersion", record.version());
             saveAction(user, buId, previous, "替代标准回复旧版本", "新版本 V" + record.version());
@@ -173,21 +180,31 @@ public class StandardReplyService {
 
     private void requireReadable(CurrentUser user, String buId, Reply record) {
         String boundProject = record.projectId();
-        if (boundProject == null) boundProject = record.payload().path("projectId").asText("");
-        if (boundProject.isBlank()) boundProject = record.payload().path("sourceProjectId").asText("");
+        if (boundProject == null) {
+            boundProject = record.payload().path("projectId").asText("");
+        }
         if (boundProject.isBlank()) {
-            if ("仅当前项目".equals(record.scope())) throw new BusinessException(403, "标准回复缺少可核实的项目范围");
+            boundProject = record.payload().path("sourceProjectId").asText("");
+        }
+        if (boundProject.isBlank()) {
+            if ("仅当前项目".equals(record.scope())) {
+                throw new BusinessException(403, "标准回复缺少可核实的项目范围");
+            }
             return;
         }
         var project = projects.findById(boundProject).orElse(null);
-        if (project == null || !buId.equals(project.getBuId())) throw new BusinessException(403, "无权访问该标准回复");
+        if (project == null || !buId.equals(project.getBuId())) {
+            throw new BusinessException(403, "无权访问该标准回复");
+        }
         guard.requireProject(user, project);
     }
 
     private void requireIndependentReview(CurrentUser user, Reply record) {
         requireState("待审核".equals(record.status()), "仅待审核版本可以审核");
         String submitterId = record.payload().path("submitterId").asText();
-        if (user.id().equals(submitterId)) throw new BusinessException(403, "同一版本不得自审");
+        if (user.id().equals(submitterId)) {
+            throw new BusinessException(403, "同一版本不得自审");
+        }
     }
 
     private void validateContent(Reply record) {
@@ -199,11 +216,15 @@ public class StandardReplyService {
     }
 
     private void requireReason(String reason) {
-        if (reason.isBlank()) throw new BusinessException(422, "请填写操作原因");
+        if (reason.isBlank()) {
+            throw new BusinessException(422, "请填写操作原因");
+        }
     }
 
     private void requireState(boolean allowed, String message) {
-        if (!allowed) throw new BusinessException(409, message);
+        if (!allowed) {
+            throw new BusinessException(409, message);
+        }
     }
 
     private List<Reply> lockChain(String buId, String id) {
@@ -228,6 +249,7 @@ public class StandardReplyService {
             return new Reply(result.getString("id"), result.getInt("version"), result.getLong("revision"),
                     result.getString("project_id"), result.getString("scope"), payload);
         } catch (JsonProcessingException ex) {
+            log.error("解析标准回复记录失败 errorType={}", ex.getClass().getSimpleName());
             throw new IllegalStateException("标准回复记录格式异常", ex);
         }
     }
@@ -263,7 +285,9 @@ public class StandardReplyService {
     private ObjectNode withIndexStatus(String buId, Reply record) {
         var status = index.status(Library.STANDARD_REPLY, buId, record.id(), record.version());
         var result = record.payload().deepCopy().put("revision", record.revision()).put("indexStatus", status.state());
-        if (status.operation() != null) result.put("indexOperation", status.operation());
+        if (status.operation() != null) {
+            result.put("indexOperation", status.operation());
+        }
         return result;
     }
 

@@ -12,7 +12,7 @@ test('dashboard tabs preserve metric filtering and keep mock projects separate f
  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},IS_REACT_ACT_ENVIRONMENT:true});
  const nativeStyle=window.getComputedStyle.bind(window);
  window.getComputedStyle=(...args)=>new Proxy(nativeStyle(...args),{get(target,key){
-  if(key==='getPropertyValue')return name=>{const value=target.getPropertyValue(name);return /^border-(top|bottom)-width$/.test(name)&&value==='initial'?'0px':value;};
+  if(key==='getPropertyValue') { return name=>{const value=target.getPropertyValue(name);return /^border-(top|bottom)-width$/.test(name)&&value==='initial'?'0px':value;}; }
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
  const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});

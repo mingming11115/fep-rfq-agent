@@ -20,25 +20,25 @@ export default function CraftResponseAdvice({rows,responsePreview,activeId,onSel
   useLayoutEffect(()=>{setRevealTarget({kind:'response',key:activeId});},[activeId]);
   useLayoutEffect(()=>{
     const note=nativeNotes.find(note=>note.id===nativeActiveId);
-    if(note)setRevealTarget({kind:'native',key:note.nativeKey});
+    if(note) { setRevealTarget({kind:'native',key:note.nativeKey}); }
   },[nativeActiveId]);
   useLayoutEffect(()=>{
     const owner=panel.current;
     const native=revealTarget.kind==='native'&&[...(owner?.querySelectorAll('[data-native-note]')||[])].find(node=>node.dataset.nativeNote===revealTarget.key);
     const node=native||[...(owner?.querySelectorAll('[data-response-note]')||[])].find(node=>node.dataset.responseNote===(revealTarget.kind==='response'?revealTarget.key:activeId));
-    if(!owner||!node)return;
+    if(!owner||!node) { return; }
     if(!native&&!showAll&&!nativeNotes.length){owner.scrollTop=0;return;}
     const box=node.getBoundingClientRect(),area=owner.getBoundingClientRect();
     const controls=(owner.querySelector('.craft-advice-scope')?.offsetHeight||0)+(owner.querySelector('.craft-advice-filters')?.offsetHeight||0)||70;
-    if(box.top<area.top+controls||box.bottom>area.bottom)owner.scrollTop=Math.max(0,owner.scrollTop+box.top-area.top-controls);
+    if(box.top<area.top+controls||box.bottom>area.bottom) { owner.scrollTop=Math.max(0,owner.scrollTop+box.top-area.top-controls); }
   },[revealTarget,showAll,nativeNotes.length,activeId]);
   useLayoutEffect(()=>{
     const owner=panel.current,stage=owner?.parentElement,card=[...(owner?.querySelectorAll('[data-response-note]')||[])].find(node=>node.dataset.responseNote===activeId);
-    if(!stage||!owner)return;
+    if(!stage||!owner) { return; }
     let request;
     const update=()=>{
       const area=owner.getBoundingClientRect(),stageBox=stage.getBoundingClientRect(),frameBox=frame?.current?.getBoundingClientRect();
-      const visibleBox=node=>{if(!node)return null;const box=node.getBoundingClientRect();return box.bottom>area.top&&box.top<area.bottom?box:null;};
+      const visibleBox=node=>{if(!node) { return null; } const box=node.getBoundingClientRect();return box.bottom>area.top&&box.top<area.bottom?box:null;};
       const native=nativeNotes.map(note=>{
         const node=[...owner.querySelectorAll('[data-native-note]')].find(node=>node.dataset.nativeNote===note.nativeKey);
         const {path}=adviceGeometry({geometry:{clip:geometry?.clip,status:'matched',selectedId:note.nativeKey,ranges:note.ranges},activeId:note.nativeKey,frame:frameBox,stage:stageBox,card:visibleBox(node)});
@@ -48,13 +48,13 @@ export default function CraftResponseAdvice({rows,responsePreview,activeId,onSel
       setLink({...response,native});
     };
     const schedule=()=>{cancelAnimationFrame(request);request=requestAnimationFrame(update);};
-    const observer=new ResizeObserver(schedule);observer.observe(stage);observer.observe(owner);if(card)observer.observe(card);
+    const observer=new ResizeObserver(schedule);observer.observe(stage);observer.observe(owner);if(card) { observer.observe(card); }
     owner.querySelectorAll('[data-native-note]').forEach(node=>observer.observe(node));
     stage.addEventListener('scroll',schedule,true);window.addEventListener('resize',schedule);schedule();
     return()=>{cancelAnimationFrame(request);observer.disconnect();stage.removeEventListener('scroll',schedule,true);window.removeEventListener('resize',schedule);};
   },[activeId,geometry,conclusions,responsePreview,frame,showAll,rows,nativeNotes,nativeActiveId,showResponses,revealTarget]);
   const color=palette[Math.max(0,rows.findIndex(row=>row.id===activeId))%3];
-  if(!showResponses&&!nativeNotes.length)return null;
+  if(!showResponses&&!nativeNotes.length) { return null; }
   return <><aside ref={panel} className={`craft-annotation-sidebar word-classic-document${showResponses?' craft-response-advice':''}`} aria-label={showResponses?'原文件旁的应答标注':'原文件旁的批注'}>
     {showResponses&&<>
     <header className="craft-advice-scope"><strong>批注与应答 <span>批注 {nativeNotes.length} · {showAll?'全部':'当前'}应答 {notes.length}</span></strong><button type="button" className="wc-button" aria-pressed={showAll} onClick={()=>{setRevealTarget({kind:'response',key:activeId});setShowAll(!showAll);}}>{showAll?'仅看当前条款':'查看全部标注'}</button></header>

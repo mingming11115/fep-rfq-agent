@@ -20,7 +20,7 @@ export default function AnnotationConnector({ containerRef, commentId }) {
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(draw); };
     const resize = new ResizeObserver(schedule); resize.observe(root);
     const card = root.querySelector(`[data-comment-card-id="${CSS.escape(commentId)}"]`);
-    if (card) resize.observe(card);
+    if (card) { resize.observe(card); }
     root.addEventListener('scroll', schedule, true); window.addEventListener('resize', schedule); schedule();
     return () => { resize.disconnect(); cancelAnimationFrame(frame); root.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule); };
   }, [containerRef, commentId]);

@@ -462,7 +462,9 @@ public class AdminService {
     }
 
     private void requireGlobalUserScope(CurrentUser actor, String userId) {
-        if (actor.systemAdmin()) return;
+        if (actor.systemAdmin()) {
+            return;
+        }
         var managed = managedBuScope(actor);
         if (bindings.findByUserId(userId).stream().anyMatch(grant -> !managed.contains(grant.getBuId()))) {
             throw new BusinessException(403, "该账号关联其他事业部，全局资料、密码和账号状态请联系平台管理员维护");
@@ -471,8 +473,11 @@ public class AdminService {
 
     private void auditUserChange(CurrentUser actor, AppUser target, String action, String detail) {
         var bus = bindings.findByUserId(target.getId()).stream().map(UserBuRole::getBuId).distinct().toList();
-        if(bus.isEmpty())audit.success(actor.id(),action,"app_user",target.getId(),detail);
-        else for(String buId:bus)audit.successInBu(actor.id(),buId,action,"app_user",target.getId(),detail);
+        if(bus.isEmpty()) {
+            audit.success(actor.id(),action,"app_user",target.getId(),detail);
+        } else {
+            for(String buId:bus)audit.successInBu(actor.id(),buId,action,"app_user",target.getId(),detail);
+        }
     }
 
     private void requireRoleCode(String role) {

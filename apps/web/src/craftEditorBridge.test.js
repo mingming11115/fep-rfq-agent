@@ -33,9 +33,9 @@ test('project editor coordinates native and collaboration comments within one so
   const send=(type,data={},overrides={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+type,...data},...overrides}));
   const native={postMessage(message){
     calls.push(message);if(message.type==='wordcraft:open'){queueMicrotask(()=>send('reviewState',{payload:JSON.stringify(snapshot())}));return;}
-    if(message.type!=='wordcraft:review')return;const request=JSON.parse(message.payload);applied=request.request;let result={};
-    if(request.action==='outline')outlineVisible=request.params.visible;
-    if(request.action==='tools')editorToolsVisible=request.params.visible;
+    if(message.type!=='wordcraft:review') { return; } const request=JSON.parse(message.payload);applied=request.request;let result={};
+    if(request.action==='outline') { outlineVisible=request.params.visible; }
+    if(request.action==='tools') { editorToolsVisible=request.params.visible; }
     if(request.action==='configure'&&configureFailures>0){
       configureFailures--;
       queueMicrotask(()=>{send('reviewResult',{payload:JSON.stringify({request:request.request,ok:false,error:'Configuration rejected'})});send('reviewState',{payload:JSON.stringify(snapshot())});});
@@ -48,7 +48,7 @@ test('project editor coordinates native and collaboration comments within one so
       note.replies=p.replies.map(r=>{const id=r.id||nextId++;return {...r,id,nativeKey:'word:'+id};});
       result={id:note.id,nativeKey:note.nativeKey,replies:note.replies};
     }
-    if(request.action==='draft')notes.find(note=>note.id===request.params.id).text=request.params.text;
+    if(request.action==='draft') { notes.find(note=>note.id===request.params.id).text=request.params.text; }
     queueMicrotask(()=>{send('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result})});send('reviewState',{payload:JSON.stringify(snapshot())});});
   }};
   Object.defineProperty(frame,'contentWindow',{value:native});

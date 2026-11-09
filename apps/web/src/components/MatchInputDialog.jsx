@@ -62,10 +62,10 @@ export default function MatchInputDialog({row, resources, client, onClose, onSav
   useEffect(() => {
     let active = true;
     client.input(row.id).then(value => {
-      if (!active) return;
+      if (!active) { return; }
       setInput(value);
       setContext({capabilityApplicable:null, verifiedConditions:'', ...value.context, devices:value.context?.devices ?? []});
-    }).catch(error => { if (active) setError(error.message); });
+    }).catch(error => { console.error('加载条款比对输入失败', error); if (active) { setError(error.message); } });
     return () => { active = false; };
   }, [client, row.id]);
   async function save() {
@@ -74,13 +74,13 @@ export default function MatchInputDialog({row, resources, client, onClose, onSav
     try {
       await client.saveInput(row.id, {version:input.version, sourceRequirementVersion:input.sourceRequirementVersion, context});
       onSaved();
-    } catch (error) { setError(error.message); }
+    } catch (error) { console.error('保存条款比对输入失败', error); setError(error.message); }
     finally { setSaving(false); }
   }
   const set = (key, value) => setContext(current => ({...current, [key]:value}));
   const models = (resources?.models || []).filter(row => row.lifecycle !== '停用');
   const processes = (resources?.processes || []).filter(row => row.enabled !== false);
-  return <Modal title="设置条款比对条件" width={760} onClose={() => { if (!saving) onClose(); }}
+  return <Modal title="设置条款比对条件" width={760} onClose={() => { if (!saving) { onClose(); } }}
     footer={<Space><Button disabled={saving} onClick={onClose}>取消</Button>
       <Button type="primary" loading={saving} disabled={!context} onClick={save}>保存并比对</Button></Space>}>
     {error && <Alert type="error" message={error} showIcon/>}

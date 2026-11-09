@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @lombok.RequiredArgsConstructor
+@Slf4j
 public class PdfBlockReader implements DocumentBlockReader {
 
     private final OcrClient ocr;
@@ -60,13 +62,16 @@ public class PdfBlockReader implements DocumentBlockReader {
                         try {
                             var box = document.getPage(page - 1).getCropBox();
                             double pixels = (double) box.getWidth() * box.getHeight();
-                            if (!Double.isFinite(pixels) || pixels <= 0) throw new IllegalArgumentException("页面尺寸非法");
+                            if (!Double.isFinite(pixels) || pixels <= 0) {
+                                throw new IllegalArgumentException("页面尺寸非法");
+                            }
                             float scale = (float) Math.min(2.0, Math.sqrt(ocr.maxPixels() / pixels));
                             var renderer = new org.apache.pdfbox.rendering.PDFRenderer(document);
                             renderer.setSubsamplingAllowed(true);
                             var image = renderer.renderImage(page - 1, scale, org.apache.pdfbox.rendering.ImageType.RGB);
                             blocks.add(recogniseImage(image, blocks.size(), anchor));
                         } catch (Exception e) {
+                            log.error("渲染 PDF 扫描页失败 errorType={}", e.getClass().getSimpleName());
                             blocks.add(ocr.pending(blocks.size(), "", anchor, "扫描页渲染失败，待人工核对"));
                         }
                     }
@@ -78,6 +83,7 @@ public class PdfBlockReader implements DocumentBlockReader {
             }
             return blocks;
         } catch (Exception exception) {
+            log.error("读取 PDF 文档失败 errorType={}", exception.getClass().getSimpleName());
             throw new DocumentReadException("PDF 读取失败，请确认文件完整且未加密", exception);
         }
     }
@@ -102,7 +108,10 @@ public class PdfBlockReader implements DocumentBlockReader {
                     blocks.add(ocr.pending(blocks.size(), "", location, "图片像素超过 OCR 上限，待人工核对"));
                 } else {
                     try { blocks.add(recogniseImage(image.getImage(), blocks.size(), location)); }
-                    catch (Exception e) { blocks.add(ocr.pending(blocks.size(), "", location, "图片读取失败，待人工核对")); }
+                    catch (Exception e) {
+                        log.error("读取 PDF 图片失败 errorType={}", e.getClass().getSimpleName());
+                        blocks.add(ocr.pending(blocks.size(), "", location, "图片读取失败，待人工核对"));
+                    }
                 }
             }
             @Override public void appendRectangle(java.awt.geom.Point2D a, java.awt.geom.Point2D b, java.awt.geom.Point2D c, java.awt.geom.Point2D d) { point = a; }

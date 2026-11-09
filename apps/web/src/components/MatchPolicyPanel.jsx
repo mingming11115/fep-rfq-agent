@@ -17,7 +17,7 @@ export default function MatchPolicyPanel({buId}) {
     setError('');
     matches.policy(buId).then(value => {
       if (active) { setPolicy(value); setOrder(value.matchOrder); }
-    }).catch(error => { if (active) setError(error.message); });
+    }).catch(error => { console.error('加载条款比对策略失败', error); if (active) { setError(error.message); } });
     return () => { active = false; };
   }, [buId, refresh]);
   function move(index, step) {
@@ -34,7 +34,7 @@ export default function MatchPolicyPanel({buId}) {
       setPolicy(value);
       setOrder(value.matchOrder);
       setSaved(true);
-    } catch (error) { setError(error.message); }
+    } catch (error) { console.error('保存条款比对策略失败', error); setError(error.message); }
     finally { setSaving(false); }
   }
   return <Card className="admin-management-card" title="RFQ 三库比对顺序">

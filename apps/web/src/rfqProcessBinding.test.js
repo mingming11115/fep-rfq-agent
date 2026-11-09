@@ -63,7 +63,7 @@ test('catalog deletion reads latest child records and persists empty catalogs wi
 test('catalog deletion rolls back earlier writes if an affected storage write fails',()=>{
  const {storage,context,records}=deletionStorage(),before=new Map(records);
  let writes=0;
- const failing={...storage,setItem:(key,value)=>{if(++writes===2)throw new Error('存储空间不足');storage.setItem(key,value);}};
+ const failing={...storage,setItem:(key,value)=>{if(++writes===2) { throw new Error('存储空间不足'); } storage.setItem(key,value);}};
  assert.throws(()=>binding.deleteRfqCatalogRecord(failing,context,'model',{id:'M'}),/存储空间/);
  assert.deepEqual(records,before);
 });

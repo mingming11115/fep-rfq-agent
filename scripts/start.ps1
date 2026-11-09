@@ -6,7 +6,15 @@ $taskRuntime=Join-Path $taskRoot '.local\dual-data-demo'
 New-Item -ItemType Directory -Path $taskRuntime -Force | Out-Null
 function Test-DemoPort([int]$Port){
  $taskTcp=New-Object System.Net.Sockets.TcpClient
- try{$taskTcp.Connect('127.0.0.1',$Port);return $true}catch{return $false}finally{$taskTcp.Dispose()}
+ try{
+  $taskTcp.Connect('127.0.0.1',$Port)
+  return $true
+ }catch{
+  Write-Error -Message "Failed to connect to local port $($Port): $($_.Exception.Message)" -ErrorAction Continue
+  return $false
+ }finally{
+  $taskTcp.Dispose()
+ }
 }
 function Wait-DemoPort([int]$Port){
  for($taskAttempt=0;$taskAttempt -lt 60;$taskAttempt++){

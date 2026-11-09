@@ -27,7 +27,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
   const byId = new Map(notes.map(note => [note.row.id, note]));
   const current = rows.find(row => row.id === activeId) || (!focusCurrentAnnotation ? rows[0] : undefined);
   const currentIndex = notes.findIndex(note => note.row.id === current?.id);
-  const select = row => { if (row && row.id !== activeId) onSelectRow?.(row); };
+  const select = row => { if (row && row.id !== activeId) { onSelectRow?.(row); } };
   const anchorProps = row => ({
     'data-response-anchor': row.id,
     className: showAnnotations && byId.has(row.id) ? `wc-anchor${row.id === current?.id ? ' wc-anchor-active' : ''}` : undefined,
@@ -36,12 +36,12 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
 
   useLayoutEffect(() => {
     const element = root.current;
-    if (!element) return;
+    if (!element) { return; }
     if (!annotationsVisible) { setPaths([]); return; }
     let frame, disposed = false;
     const layout = () => {
       const canvas = element.querySelector('.wc-canvas'), page = element.querySelector('.wc-page'), margin = element.querySelector('.wc-margin');
-      if (!canvas || !page || !margin) return;
+      if (!canvas || !page || !margin) { return; }
       const base = canvas.getBoundingClientRect(), pageRect = page.getBoundingClientRect(), marginRect = margin.getBoundingClientRect();
       const narrow = marginRect.left < pageRect.right - 1;
       if (narrow) {
@@ -53,7 +53,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
       const entries = notes.map(note => {
         const anchor = element.querySelector(`[data-response-anchor="${CSS.escape(note.row.id)}"]`);
         const box = element.querySelector(`[data-response-note="${CSS.escape(note.row.id)}"]`);
-        if (!anchor || !box) return null;
+        if (!anchor || !box) { return null; }
         const range = document.createRange(); range.selectNodeContents(anchor);
         const rects = [...range.getClientRects()];
         return rects.length ? { ...note, box, rect: rects.at(-1) } : null;
@@ -77,7 +77,7 @@ export default function WordAnnotationCanvas({ rows, responseRows = noResponses,
       });
       setPaths(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
     };
-    const schedule = () => { if (disposed) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(layout); };
+    const schedule = () => { if (disposed) { return; } cancelAnimationFrame(frame); frame = requestAnimationFrame(layout); };
     const observer = new ResizeObserver(schedule);
     observer.observe(element);
     observer.observe(element.querySelector('[data-word-page-content]'));

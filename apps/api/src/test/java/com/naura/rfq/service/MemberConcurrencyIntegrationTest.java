@@ -45,13 +45,20 @@ class MemberConcurrencyIntegrationTest extends AcceptanceSupport {
         pause.arm();
         try {
             Future<?> stale=worker.submit(()->{
-                if(scenario==0)admin.updateMemberProfile(bu,"BU-FEP",userId,true,true,List.of("knowledge-publish"));
-                else if(scenario==1)admin.updateMemberEnabled(bu,"BU-FEP",userId,false);
-                else admin.updateMemberProfile(bu,"BU-FEP",userId,null,null,List.of("knowledge-publish"));
+                if(scenario==0) {
+                    admin.updateMemberProfile(bu,"BU-FEP",userId,true,true,List.of("knowledge-publish"));
+                } else if(scenario==1) {
+                    admin.updateMemberEnabled(bu,"BU-FEP",userId,false);
+                } else {
+                    admin.updateMemberProfile(bu,"BU-FEP",userId,null,null,List.of("knowledge-publish"));
+                }
             });
             assertThat(pause.waiting.await(10,TimeUnit.SECONDS)).isTrue();
-            if(scenario==0)tx.execute(status->admin.updateMemberEnabled(bu,"BU-FEP",userId,false));
-            else tx.execute(status->admin.updateMemberProfile(bu,"BU-FEP",userId,true,true,scenario==2?null:List.of("knowledge-publish")));
+            if(scenario==0) {
+                tx.execute(status->admin.updateMemberEnabled(bu,"BU-FEP",userId,false));
+            } else {
+                tx.execute(status->admin.updateMemberProfile(bu,"BU-FEP",userId,true,true,scenario==2?null:List.of("knowledge-publish")));
+            }
             pause.release.countDown(); stale.get(10,TimeUnit.SECONDS);
             var stored=tx.execute(status->profiles.findByBuIdAndUserId("BU-FEP",userId));
             assertThat(stored.isEnabled()).isEqualTo(scenario==2);
@@ -83,7 +90,7 @@ class MemberConcurrencyIntegrationTest extends AcceptanceSupport {
         @Override public Object intercept(Invocation invocation) throws Throwable {
             String id=((MappedStatement)invocation.getArgs()[0]).getId();
             if(Thread.currentThread().getName().equals("member-concurrency-worker") && id.contains("BuMemberProfileMapper.") && used.compareAndSet(false,true)) {
-                waiting.countDown(); if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("write scheduler timed out");
+                waiting.countDown(); if(!release.await(10,TimeUnit.SECONDS)) { throw new IllegalStateException("write scheduler timed out"); }
             }
             return invocation.proceed();
         }

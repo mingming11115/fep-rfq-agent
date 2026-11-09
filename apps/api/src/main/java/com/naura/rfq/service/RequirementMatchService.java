@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ import static com.naura.rfq.service.MatchEvaluator.digest;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RequirementMatchService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -74,8 +76,12 @@ public class RequirementMatchService {
         }
         publicationAccess.lockBu(bu);
         Policy before = policy(bu);
-        if (before.version() != request.version()) throw new BusinessException(409, "比对顺序已变更，请刷新");
-        if (before.matchOrder().equals(request.matchOrder())) return before;
+        if (before.version() != request.version()) {
+            throw new BusinessException(409, "比对顺序已变更，请刷新");
+        }
+        if (before.matchOrder().equals(request.matchOrder())) {
+            return before;
+        }
         long version = before.version() + 1;
         jdbc.update("""
                 insert into bu_match_policy(bu_id,match_order,version,changed_by,changed_at)
@@ -94,7 +100,9 @@ public class RequirementMatchService {
                 """, project.getId(), document.getId());
         Policy policy = policy(project.getBuId());
         for (var requirement : rows) {
-            if (ready(requirement)) enqueue(new Scope(project, document, requirement), policy, "parse", null);
+            if (ready(requirement)) {
+                enqueue(new Scope(project, document, requirement), policy, "parse", null);
+            }
         }
     }
 
@@ -112,9 +120,13 @@ public class RequirementMatchService {
         requireMatchEditor(user, scope.project());
         String key = "manual:" + request.requestId();
         var prior = runWhere("where requirement_id=? and request_key=?", id, key);
-        if (prior != null) return new Accepted(prior.id(), prior.status());
+        if (prior != null) {
+            return new Accepted(prior.id(), prior.status());
+        }
         requireVersion(scope.requirement(), request.sourceRequirementVersion());
-        if (!ready(scope.requirement())) throw new BusinessException(409, "请先核对条款原文");
+        if (!ready(scope.requirement())) {
+            throw new BusinessException(409, "请先核对条款原文");
+        }
         return enqueue(scope, policy(scope.project().getBuId()), "manual", key);
     }
 
@@ -163,9 +175,13 @@ public class RequirementMatchService {
         }
         var requirement = scope.requirement();
         requireVersion(requirement, request.sourceRequirementVersion());
-        if (!ready(requirement)) throw new BusinessException(409, "请先核对条款原文");
+        if (!ready(requirement)) {
+            throw new BusinessException(409, "请先核对条款原文");
+        }
         var before = context(id);
-        if (before.version() != request.version()) throw new BusinessException(409, "比对输入已变更，请刷新");
+        if (before.version() != request.version()) {
+            throw new BusinessException(409, "比对输入已变更，请刷新");
+        }
         capability.validate(bu, request.context());
         ObjectNode payload = json.valueToTree(request.context());
         // MySQL JSON uses doubles for decimal literals. Keep reviewed bounds as decimal strings.
@@ -175,8 +191,12 @@ public class RequirementMatchService {
                 for (int metric = 0; metric < metrics.size(); metric++) {
                     var bounds = metrics.get(metric);
                     var stored = (ObjectNode) payload.path("devices").path(device).path("metrics").path(metric);
-                    if (bounds.lower() != null) stored.put("lower", bounds.lower().toPlainString());
-                    if (bounds.upper() != null) stored.put("upper", bounds.upper().toPlainString());
+                    if (bounds.lower() != null) {
+                        stored.put("lower", bounds.lower().toPlainString());
+                    }
+                    if (bounds.upper() != null) {
+                        stored.put("upper", bounds.upper().toPlainString());
+                    }
                 }
             }
         }
@@ -214,16 +234,22 @@ public class RequirementMatchService {
         var project = project(user, requirement.getProjectId());
         var view = currentView(project, requirement, true);
         var deviation = deviations.find(project, requirement);
-        if (deviation != null) view.set("deviation", deviation);
+        if (deviation != null) {
+            view.set("deviation", deviation);
+        }
         var reference = jdbc.query("select json_extract(payload,'$.matchReference') from requirement_response where requirement_id=? and json_contains_path(payload,'one','$.matchReference')",
                 (row, n) -> parse(row.getString(1)), id).stream().findFirst().orElse(json.nullNode());
-        if (reference.isObject()) view.put("referenceInvalid", !referenceAvailable(project, requirement, reference));
+        if (reference.isObject()) {
+            view.put("referenceInvalid", !referenceAvailable(project, requirement, reference));
+        }
         return view;
     }
 
     private ObjectNode currentView(Project project, Requirement requirement, boolean detail) {
         var run = runWhere("where requirement_id=? and current_run=1", requirement.getId());
-        if (run != null) return view(project, requirement, run, detail);
+        if (run != null) {
+            return view(project, requirement, run, detail);
+        }
         return json.createObjectNode().put("requirementId", requirement.getId()).put("documentId", requirement.getDocumentId())
                 .put("parseRunId", requirement.getParseRunId()).put("status", ready(requirement) ? "not_run" : "needs_review");
     }
@@ -231,7 +257,9 @@ public class RequirementMatchService {
     @Transactional(readOnly = true)
     public ObjectNode detail(CurrentUser user, String id, String runId) {
         var run = runWhere("where id=? and requirement_id=?", runId, id);
-        if (run == null) throw new BusinessException(404, "比对轮次不存在");
+        if (run == null) {
+            throw new BusinessException(404, "比对轮次不存在");
+        }
         var project = project(user, run.input().project());
         return view(project, requirements.findById(id).orElse(null), run, true);
     }
@@ -241,7 +269,9 @@ public class RequirementMatchService {
         var run = runWhere("where id=? and requirement_id=? and current_run=1", runId, requirement.getId());
         if (run != null) {
             var view = view(project, requirement, run, true);
-            if (view.path("result").isObject()) return view;
+            if (view.path("result").isObject()) {
+                return view;
+            }
         }
         throw new BusinessException(409, "比对轮次已失效或未完成，请刷新");
     }
@@ -271,13 +301,17 @@ public class RequirementMatchService {
             return reference;
         }
         for (JsonNode candidate : stage.path("candidates")) {
-            if (candidateId.equals(candidate.path("id").asText())) return reference.put("version", candidate.path("version").asInt());
+            if (candidateId.equals(candidate.path("id").asText())) {
+                return reference.put("version", candidate.path("version").asInt());
+            }
         }
         throw new BusinessException(409, "候选不属于该轮的可用结果");
     }
 
     boolean referenceAvailable(Project project, Requirement requirement, JsonNode reference) {
-        if (!reference.isObject()) return true;
+        if (!reference.isObject()) {
+            return true;
+        }
         var snapshot = snapshot(requirement);
         return !work.retired(project.getId(), requirement.getDocumentId())
                 && reference.path("inputFingerprint").asText().equals(digest(snapshot.toString()))
@@ -286,7 +320,9 @@ public class RequirementMatchService {
 
     JsonNode readableResponse(Project project, JsonNode response) {
         var reference = response.path("matchReference");
-        if (!(response instanceof ObjectNode row) || !reference.isObject() || referenceReadable(project, reference)) return response;
+        if (!(response instanceof ObjectNode row) || !reference.isObject() || referenceReadable(project, reference)) {
+            return response;
+        }
         var safe = row.deepCopy().put("status", "待复核").put("confirmationReason", "采纳依据已不可访问，请重新核对")
                 .put("restrictedMatchReference", true);
         safe.put("draft", "").put("conditions", "").put("evidence", "");
@@ -298,9 +334,13 @@ public class RequirementMatchService {
         String library = reference.path("library").asText();
         if ("capability".equals(library)) {
             for (var candidate : reference.path("sources")) {
-                if (!readableSource(project, "capability_record", candidate.path("id").asText(), candidate.path("version").asInt())) return false;
+                if (!readableSource(project, "capability_record", candidate.path("id").asText(), candidate.path("version").asInt())) {
+                    return false;
+                }
                 for (var evidence : candidate.path("evidenceRefs")) {
-                    if (!readableSource(project, "evidence_record", evidence.path("id").asText(), evidence.path("version").asInt())) return false;
+                    if (!readableSource(project, "evidence_record", evidence.path("id").asText(), evidence.path("version").asInt())) {
+                        return false;
+                    }
                 }
             }
             return !reference.path("sources").isEmpty();
@@ -325,9 +365,13 @@ public class RequirementMatchService {
     }
 
     void requireReference(Project project, Requirement requirement, JsonNode reference) {
-        if (!reference.isObject()) return;
+        if (!reference.isObject()) {
+            return;
+        }
         publicationAccess.lockBu(project.getBuId());
-        if (!referenceAvailable(project, requirement, reference)) throw new BusinessException(409, "已采纳的比对依据已失效，请重新核对");
+        if (!referenceAvailable(project, requirement, reference)) {
+            throw new BusinessException(409, "已采纳的比对依据已失效，请重新核对");
+        }
     }
 
     List<String> adoptedAfter(String cursor) {
@@ -342,17 +386,27 @@ public class RequirementMatchService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void recheckAdoption(String id) {
         var before = requirements.findById(id).orElse(null);
-        if (before == null) return;
+        if (before == null) {
+            return;
+        }
         var project = projects.findByIdForUpdate(before.getProjectId()).orElse(null);
-        if (project == null || project.isArchived() || work.retired(project.getId(), before.getDocumentId())) return;
-        if (documents.findByIdForUpdate(before.getDocumentId()).isEmpty()) return;
+        if (project == null || project.isArchived() || work.retired(project.getId(), before.getDocumentId())) {
+            return;
+        }
+        if (documents.findByIdForUpdate(before.getDocumentId()).isEmpty()) {
+            return;
+        }
         var requirement = requirements.findByIdForUpdate(id).orElse(null);
-        if (requirement == null) return;
+        if (requirement == null) {
+            return;
+        }
         publicationAccess.lockBu(project.getBuId());
         var response = jdbc.query("select payload from requirement_response where requirement_id=? for update",
                 (row, n) -> parse(row.getString(1)), id).stream().findFirst().orElse(json.nullNode());
         if (!(response instanceof ObjectNode row) || row.has("matchReferenceInvalidatedAt") || !row.hasNonNull("matchReference")
-                || referenceAvailable(project, requirement, row.path("matchReference"))) return;
+                || referenceAvailable(project, requirement, row.path("matchReference"))) {
+            return;
+        }
         String reason = "已采纳的比对依据失效，请重新核对";
         row.put("status", "待复核").put("version", row.path("version").asLong(1) + 1).put("confirmationReason", reason)
                 .put("matchReferenceInvalidatedAt", java.time.Instant.now().toString());
@@ -392,7 +446,9 @@ public class RequirementMatchService {
         var requirement = requirements.findByIdForUpdate(job.requirement()).orElse(null);
         var run = runWhere("where id=? and lease_token=? and current_run=1 and lease_until>utc_timestamp(6) for update",
                 job.id(), job.leaseToken());
-        if (run == null) return null;
+        if (run == null) {
+            return null;
+        }
         if (!currentInput(project, document, requirement, run)) {
             supersede(run.requirement());
             return null;
@@ -444,13 +500,17 @@ public class RequirementMatchService {
                 .put("sourceRequirementVersion", run.requirementVersion()).put("policyVersion", run.policyVersion())
                 .put("status", run.status()).put("attempts", run.attempts());
         view.set("matchOrder", json.valueToTree(run.input().order()));
-        if (!run.current()) return view.put("status", "superseded");
+        if (!run.current()) {
+            return view.put("status", "superseded");
+        }
         if (!currentInput(project, documents.findById(run.document()).orElse(null), requirement, run)) {
             return view.put("status", "superseded");
         }
         if (!"completed".equals(run.status())) {
             view.set("stages", run.progress().path("stages"));
-            if (run.progress().has("reason")) view.set("reason", run.progress().get("reason"));
+            if (run.progress().has("reason")) {
+                view.set("reason", run.progress().get("reason"));
+            }
             return view;
         }
         var result = jdbc.query("select scope_stamp,payload from requirement_match_result where run_id=?",
@@ -458,7 +518,9 @@ public class RequirementMatchService {
         if (result == null || !evaluator.stillCurrent(run.input(), result.stamp())) {
             return view.put("status", "blocked").put("reason", "MATCH_SCOPE_CHANGED");
         }
-        if (detail) view.set("result", result.payload());
+        if (detail) {
+            view.set("result", result.payload());
+        }
         else {
             view.put("matchedLibrary", result.payload().path("matchedLibrary").asText(null))
                     .put("conclusion", result.payload().path("conclusion").asText()).put("knowledgeGap", result.payload().path("knowledgeGap").asBoolean());
@@ -469,13 +531,21 @@ public class RequirementMatchService {
 
     private ObjectNode publicProgress(JsonNode payload) {
         var safe = json.createObjectNode();
-        if (payload.has("reason")) safe.set("reason", payload.get("reason"));
+        if (payload.has("reason")) {
+            safe.set("reason", payload.get("reason"));
+        }
         var stages = safe.putObject("stages");
         payload.path("stages").fields().forEachRemaining(entry -> {
             var row = stages.putObject(entry.getKey()).put("status", entry.getValue().path("status").asText());
-            if (entry.getValue().has("reason")) row.set("reason", entry.getValue().get("reason"));
-            if (entry.getValue().has("platformRequestId")) row.set("platformRequestId", entry.getValue().get("platformRequestId"));
-            if (entry.getValue().has("indexVersion")) row.set("indexVersion", entry.getValue().get("indexVersion"));
+            if (entry.getValue().has("reason")) {
+                row.set("reason", entry.getValue().get("reason"));
+            }
+            if (entry.getValue().has("platformRequestId")) {
+                row.set("platformRequestId", entry.getValue().get("platformRequestId"));
+            }
+            if (entry.getValue().has("indexVersion")) {
+                row.set("indexVersion", entry.getValue().get("indexVersion"));
+            }
         });
         return safe;
     }
@@ -546,7 +616,9 @@ public class RequirementMatchService {
     }
 
     private void requireVersion(Requirement requirement, long version) {
-        if (!Objects.equals(requirement.getVersion(), version)) throw new BusinessException(409, "条款已变更，请刷新");
+        if (!Objects.equals(requirement.getVersion(), version)) {
+            throw new BusinessException(409, "条款已变更，请刷新");
+        }
     }
 
     private boolean ready(Requirement requirement) {
@@ -556,14 +628,18 @@ public class RequirementMatchService {
     private ObjectNode snapshot(Requirement requirement) {
         var source = baseInput(requirement);
         var saved = context(requirement.getId());
-        if (digest(source.toString()).equals(saved.sourceFingerprint())) source.set("context", saved.payload());
+        if (digest(source.toString()).equals(saved.sourceFingerprint())) {
+            source.set("context", saved.payload());
+        }
         return source;
     }
 
     private ObjectNode runSnapshot(Requirement requirement) {
         var input = snapshot(requirement);
         long workVersion = work.version(requirement.getProjectId());
-        if (workVersion > 1) input.put("workVersion", workVersion);
+        if (workVersion > 1) {
+            input.put("workVersion", workVersion);
+        }
         return input;
     }
 
@@ -614,8 +690,13 @@ public class RequirementMatchService {
     }
 
     private JsonNode parse(String value) {
-        if (value == null) return json.createObjectNode();
+        if (value == null) {
+            return json.createObjectNode();
+        }
         try { return json.readTree(value); }
-        catch (JsonProcessingException failure) { throw new IllegalStateException("比对记录格式异常", failure); }
+        catch (JsonProcessingException failure) {
+            log.error("解析比对记录失败 errorType={}", failure.getClass().getSimpleName());
+            throw new IllegalStateException("比对记录格式异常", failure);
+        }
     }
 }

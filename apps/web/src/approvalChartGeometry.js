@@ -9,8 +9,8 @@ export function buildApprovalLineGeometry(data,{width=760,height=240}={}){
  const points=data.map((point,index)=>({index,x:plot.left+(data.length>1?index/(data.length-1):0.5)*(plot.right-plot.left),currentY:y(point.averageHours),previousY:y(point.previousAverageHours)}));
  const segments=field=>{
   const result=[];let current=[];
-  for(const point of points){if(point[field]===null){if(current.length)result.push(current);current=[];}else current.push({x:point.x,y:point[field]});}
-  if(current.length)result.push(current);return result;
+  for(const point of points){if(point[field]===null){if(current.length) { result.push(current); } current=[];}else { current.push({x:point.x,y:point[field]}); }}
+  if(current.length) { result.push(current); } return result;
  };
  return {width,height,plot,maxValue,points,series:{current:segments('currentY'),previous:segments('previousY')},
   ticks:Array.from({length:5},(_,index)=>({value:step*index,y:y(step*index)}))};

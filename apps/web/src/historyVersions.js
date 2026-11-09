@@ -2,13 +2,13 @@ const normalized=value=>String(value??'').trim().replace(/\s+/g,' ');
 export const versionFamily=doc=>doc.familyId||doc.id;
 export function latestHistoryClauses(rows){
  const latest=new Map();
- for(const row of rows)if(!latest.has(row.id)||Number(row.version)>Number(latest.get(row.id).version))latest.set(row.id,row);
+ for(const row of rows)if(!latest.has(row.id)||Number(row.version)>Number(latest.get(row.id).version)) { latest.set(row.id,row); }
  return [...latest.values()];
 }
 export function compareHistoryVersions(before,after){
  const left=new Set(latestHistoryClauses(before)),right=new Set(latestHistoryClauses(after)),pairs=[];
  for(const field of ['requirement','clauseNo']){
-  const group=rows=>{const map=new Map();for(const row of rows){const key=normalized(row[field]);if(key)map.set(key,[...(map.get(key)||[]),row]);}return map;};
+  const group=rows=>{const map=new Map();for(const row of rows){const key=normalized(row[field]);if(key) { map.set(key,[...(map.get(key)||[]),row]); }}return map;};
   const a=group(left),b=group(right);
   for(const [key,rows] of a)if(rows.length===1&&b.get(key)?.length===1){const old=rows[0],next=b.get(key)[0];pairs.push({before:old,after:next});left.delete(old);right.delete(next);}
  }

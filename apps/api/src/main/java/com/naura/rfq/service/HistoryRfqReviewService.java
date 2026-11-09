@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class HistoryRfqReviewService {
     private static final String SELECT = "select id,version,revision,project_id,scope,payload from `history-rfq-record`";
     private static final Set<String> EDITABLE = Set.of("草稿", "退回");
@@ -50,7 +52,9 @@ public class HistoryRfqReviewService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public ObjectNode transition(CurrentUser user, String buId, String id, int version, long revision, String action, String reason) {
         access.requireWriter(user, buId, Set.of("publish", "return", "revoke").contains(action));
-        if (Set.of("publish", "revoke").contains(action)) access.lockBu(buId);
+        if (Set.of("publish", "revoke").contains(action)) {
+            access.lockBu(buId);
+        }
         var chain = lock(buId, id);
         var row = checked(user, buId, chain, version, revision);
         String note = clean(reason);
@@ -85,7 +89,9 @@ public class HistoryRfqReviewService {
                 && java.util.Objects.equals(sourceDocument.get().scope(), row.scope()), "历史条款缺少同范围的来源文档");
 
         for (Clause previous : chain) {
-            if (!previous.active()) continue;
+            if (!previous.active()) {
+                continue;
+            }
             requireReadable(user, buId, previous);
             previous.payload().put("validity", "被替代").put("supersededByVersion", row.version());
             save(user, buId, previous, "替代历史 RFQ 旧版本", "新版本 V" + row.version());
@@ -113,7 +119,9 @@ public class HistoryRfqReviewService {
         requireState(active == row.version(), "仅当前发布版本可以撤销");
         requireReason(reason);
         row.payload().put("status", "已撤销").put("validity", "已撤销");
-        if (row.buShared()) index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), null);
+        if (row.buShared()) {
+            index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), null);
+        }
         return save(user, buId, row, "撤销历史 RFQ 条款", reason);
     }
 
@@ -156,19 +164,25 @@ public class HistoryRfqReviewService {
     private ObjectNode withIndexStatus(String buId, Clause row) {
         var status = index.status(Library.HISTORY_RFQ, buId, row.id(), row.version());
         var result = row.payload().deepCopy().put("revision", row.revision()).put("indexStatus", status.state());
-        if (status.operation() != null) result.put("indexOperation", status.operation());
+        if (status.operation() != null) {
+            result.put("indexOperation", status.operation());
+        }
         return result;
     }
 
     private void requireReadable(CurrentUser user, String buId, Clause row) {
         String project = row.projectId();
-        if (project == null) project = KnowledgePublicationAccess.recordProjectId(row.payload());
+        if (project == null) {
+            project = KnowledgePublicationAccess.recordProjectId(row.payload());
+        }
         access.requireScope(user, buId, project, row.scope());
     }
 
     private void requireIndependentReview(CurrentUser user, Clause row) {
         requireState("待审核".equals(row.status()), "仅待审核的历史条款可以审核");
-        if (user.id().equals(row.payload().path("submitterId").asText())) throw new BusinessException(403, "同一版本不得自审");
+        if (user.id().equals(row.payload().path("submitterId").asText())) {
+            throw new BusinessException(403, "同一版本不得自审");
+        }
     }
 
     private void requireContent(Clause row) {
@@ -178,11 +192,15 @@ public class HistoryRfqReviewService {
     }
 
     private void requireReason(String reason) {
-        if (reason.isBlank()) throw new BusinessException(422, "请填写操作原因");
+        if (reason.isBlank()) {
+            throw new BusinessException(422, "请填写操作原因");
+        }
     }
 
     private void requireState(boolean allowed, String message) {
-        if (!allowed) throw new BusinessException(409, message);
+        if (!allowed) {
+            throw new BusinessException(409, message);
+        }
     }
 
     private String clean(String value) { return value == null ? "" : value.strip(); }
@@ -210,6 +228,7 @@ public class HistoryRfqReviewService {
             return new Clause(row.getString("id"), row.getInt("version"), row.getLong("revision"), row.getString("project_id"),
                     row.getString("scope"), (ObjectNode) json.readTree(row.getString("payload")));
         } catch (JsonProcessingException failure) {
+            log.error("解析历史条款失败 errorType={}", failure.getClass().getSimpleName());
             throw new IllegalStateException("历史条款格式异常", failure);
         }
     }

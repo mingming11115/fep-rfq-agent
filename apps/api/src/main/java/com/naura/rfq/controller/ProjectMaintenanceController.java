@@ -26,7 +26,9 @@ public class ProjectMaintenanceController {
         @NotNull @PositiveOrZero private Long version;
         @NotBlank @Size(max=500) private String reason;
         @JsonSetter public void setVersion(JsonNode value) {
-            if(!value.isIntegralNumber() || !value.canConvertToLong())throw new IllegalArgumentException("版本必须是整数");
+            if(!value.isIntegralNumber() || !value.canConvertToLong()) {
+                throw new IllegalArgumentException("版本必须是整数");
+            }
             version=value.longValue();
         }
         public void setReason(String value) { reason=value; }
@@ -40,15 +42,21 @@ public class ProjectMaintenanceController {
         public boolean hasCustomer() { return customerPresent; }
         public boolean hasDeadline() { return deadlinePresent; }
         @JsonSetter public void setName(JsonNode value) {
-            if(!value.isTextual() || value.textValue().isBlank())throw new IllegalArgumentException("项目名称不能为空");
+            if(!value.isTextual() || value.textValue().isBlank()) {
+                throw new IllegalArgumentException("项目名称不能为空");
+            }
             name=value.textValue().trim();
         }
         @JsonSetter public void setCustomer(JsonNode value) {
-            if(!value.isNull() && !value.isTextual())throw new IllegalArgumentException("客户须为文本");
+            if(!value.isNull() && !value.isTextual()) {
+                throw new IllegalArgumentException("客户须为文本");
+            }
             customerPresent=true;customer=value.isNull()?null:value.textValue().trim();
         }
         @JsonSetter public void setDeadline(JsonNode value) {
-            if(!value.isNull() && !value.isTextual())throw new IllegalArgumentException("截止日期须为文本");
+            if(!value.isNull() && !value.isTextual()) {
+                throw new IllegalArgumentException("截止日期须为文本");
+            }
             deadlinePresent=true;deadline=ProjectMaintenanceService.parseDeadline(value.isNull()?null:value.textValue());
         }
     }

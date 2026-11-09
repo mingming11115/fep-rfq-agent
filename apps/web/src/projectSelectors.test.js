@@ -22,11 +22,11 @@ test('demo board covers every stage with usable approvals and bound export recor
  assert.deepEqual(state.projects.map(p=>getProjectSummary(state,p.id,'demo-sales').stage).sort(),['待上传','解析中','解析中','评审中','审批完成','已导出'].sort());
  for(const project of state.projects){
   const stage=getProjectSummary(state,project.id,'demo-sales').stage;
-  if(!['审批完成','已导出'].includes(stage))continue;
+  if(!['审批完成','已导出'].includes(stage)) { continue; }
   const snapshot=state.snapshotsByProject[project.id][0];
   assert.deepEqual(getExportIssues(state.requirementsByProject[project.id],state.reviewsByProject[project.id]),[]);
   assert.notEqual(snapshot.createdById,snapshot.reviewedById);
-  if(stage==='已导出')assert.ok(snapshot.exports.some(record=>record.snapshotId===snapshot.id&&record.type==='正式应答'));
+  if(stage==='已导出') { assert.ok(snapshot.exports.some(record=>record.snapshotId===snapshot.id&&record.type==='正式应答')); }
   state.requirementsByProject[project.id][0].draft='修改后的答复';
   assert.equal(getProjectSummary(state,project.id,'demo-sales').stage,'评审中');
  }

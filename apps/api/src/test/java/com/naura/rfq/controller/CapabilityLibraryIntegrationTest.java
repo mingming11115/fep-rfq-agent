@@ -142,7 +142,9 @@ class CapabilityLibraryIntegrationTest {
     }
 
     private ResultActions call(MockHttpServletRequestBuilder request, String actor) throws Exception {
-        if (!(request instanceof MockMultipartHttpServletRequestBuilder)) request.contentType("application/json");
+        if (!(request instanceof MockMultipartHttpServletRequestBuilder)) {
+            request.contentType("application/json");
+        }
         return mvc.perform(request.header("Authorization", "Bearer " + jwt.issue(actor)));
     }
 

@@ -21,7 +21,7 @@ const testOne = async (browser, dsf, label) => {
   await page.waitForTimeout(900);
   const r = await page.evaluate(() => {
     const dd = [...document.querySelectorAll('.ant-select-dropdown')].find(d => !d.className.includes('hidden'));
-    if (!dd) return { dom: false };
+    if (!dd) { return { dom: false }; }
     const rect = dd.getBoundingClientRect();
     const cs = getComputedStyle(dd);
     return { dom: true, visible: cs.visibility === 'visible' && cs.opacity === '1' && rect.height > 0, rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }, dpr: window.devicePixelRatio };

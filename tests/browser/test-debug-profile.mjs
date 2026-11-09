@@ -5,7 +5,7 @@ const BASE = 'http://127.0.0.1:5173';
 const OUT = fileURLToPath(new URL('../../.local/artifacts/browser/', import.meta.url));
 mkdirSync(OUT,{recursive:true});
 const PROFILE = process.env.RFQ_CHROME_PROFILE;
-if (!PROFILE) throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.');
+if (!PROFILE) { throw new Error('Set RFQ_CHROME_PROFILE to an isolated Chrome test profile.'); }
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   channel: 'chrome', headless: false,

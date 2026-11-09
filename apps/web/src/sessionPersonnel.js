@@ -1,7 +1,7 @@
 const ROLE_BY_CODE = { SR: 'SR', TECH: '技术', APPROVER: '技术', BU_ADMIN: 'BU管理员' };
 
 export function resolveLoginIdentity(user) {
-  if (!user?.id) return null;
+  if (!user?.id) { return null; }
   const role = user.roles?.find(grant => ROLE_BY_CODE[grant.role])?.role;
   return { actorId: user.id, actorRole: user.systemAdmin ? '后台管理' : ROLE_BY_CODE[role] || '未配置' };
 }
@@ -9,7 +9,7 @@ export function resolveLoginIdentity(user) {
 /** 将已认证会话接入本机业务权限模型；BU角色不自动授予项目参与权或审批资格。 */
 export function hydrateSessionPersonnel(state, user, { activate = false } = {}) {
   const identity = resolveLoginIdentity(user);
-  if (!identity) return state;
+  if (!identity) { return state; }
   const grants = (user.roles || []).filter(grant => grant.buId && ROLE_BY_CODE[grant.role]);
   const managedBuIds = [...new Set(grants.filter(grant => grant.role === 'BU_ADMIN').map(grant => grant.buId))];
   const accountsById = { ...state.accountsById, [user.id]: {
@@ -21,8 +21,8 @@ export function hydrateSessionPersonnel(state, user, { activate = false } = {}) 
   for (const id of buIds) {
     const unit = user.bus?.find(unit => unit.id === id) || { id, name: id };
     const index = businessUnits.findIndex(known => known.id === id);
-    if (index < 0) businessUnits.push(unit);
-    else businessUnits[index] = { ...businessUnits[index], ...unit };
+    if (index < 0) { businessUnits.push(unit); }
+    else { businessUnits[index] = { ...businessUnits[index], ...unit }; }
   }
   const buPersonnelByBuId = Object.fromEntries(Object.entries(state.buPersonnelByBuId || {})
     .map(([id, members]) => [id, members.filter(member => member.userId !== user.id)]));

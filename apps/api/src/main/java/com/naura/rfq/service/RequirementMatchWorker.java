@@ -24,17 +24,21 @@ public class RequirementMatchWorker {
 
     @Scheduled(fixedDelayString = "${rfq.match.poll-interval-ms:3000}")
     void tick() {
-        if (enabled) runOnce();
+        if (enabled) {
+            runOnce();
+        }
     }
 
     @Scheduled(fixedDelayString = "${rfq.match.reference-check-interval-ms:30000}")
     void recheckReferences() {
-        if (!enabled) return;
+        if (!enabled) {
+            return;
+        }
         var batch = runs.adoptedAfter(reviewCursor);
         for (String id : batch) {
             try { runs.recheckAdoption(id); }
             catch (RuntimeException failure) {
-                log.warn("requirement.match.reference_check_failed requirementId={} errorType={}",
+                log.error("requirement.match.reference_check_failed requirementId={} errorType={}",
                         id, failure.getClass().getSimpleName());
             }
         }
@@ -47,21 +51,25 @@ public class RequirementMatchWorker {
             String phase = "claim";
             try {
                 var job = runs.claim(id, UUID.randomUUID().toString());
-                if (job == null) continue;
+                if (job == null) {
+                    continue;
+                }
                 MatchEvaluator.Evaluation outcome;
                 try {
                     outcome = runs.active(job) ? evaluator.evaluate(job.input()) : failure("MATCH_INPUT_CHANGED");
                 } catch (RuntimeException failure) {
-                    log.warn("requirement.match.evaluate_failed runId={} requirementId={} attempt={} errorType={}",
+                    log.error("requirement.match.evaluate_failed runId={} requirementId={} attempt={} errorType={}",
                             id, job.requirement(), job.attempts(), failure.getClass().getSimpleName());
                     outcome = failure("MATCH_WORKER_ERROR");
                 }
                 phase = "persist";
                 var finished = runs.finish(job, outcome);
-                if (finished != null) logResult(job, finished, started);
+                if (finished != null) {
+                    logResult(job, finished, started);
+                }
             } catch (RuntimeException failure) {
                 // A database interruption leaves the lease recoverable by the next worker.
-                log.warn("requirement.match.delivery_failed runId={} phase={} errorType={} durationMs={}", id,
+                log.error("requirement.match.delivery_failed runId={} phase={} errorType={} durationMs={}", id,
                         phase, failure.getClass().getSimpleName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             }
         }
@@ -73,7 +81,9 @@ public class RequirementMatchWorker {
         String stage = "-";
         for (String name : job.input().order()) {
             String status = stages.path(name).path("status").asText();
-            if ("failed".equals(status) || "blocked".equals(status)) stage = name;
+            if ("failed".equals(status) || "blocked".equals(status)) {
+                stage = name;
+            }
         }
         var stageProgress = stages.path(stage);
         String reason = progress.path("reason").asText(stageProgress.path("reason").asText("-"));
