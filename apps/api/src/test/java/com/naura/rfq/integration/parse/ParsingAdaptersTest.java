@@ -115,6 +115,16 @@ class ParsingAdaptersTest {
                 .doesNotContain("external.call.payload", source, "test-key");
         } finally { s.stop(0); }
     }
+    @Test void validModelOutputWithoutFinishReasonIsAccepted() throws Exception {
+        var response = json.writeValueAsString(Map.of("choices", List.of(
+            Map.of("message", Map.of("content", answer(0, source))))));
+        var s = server(200, response, 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(blocks());
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.issues()).isEmpty();
+        } finally { s.stop(0); }
+    }
     @Test void optInLogsModelInputAndOutputWithoutApiKey(CapturedOutput output) throws Exception {
         var reply = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(envelope(answer(0, source)));
         reply.put("echo", "test-key");

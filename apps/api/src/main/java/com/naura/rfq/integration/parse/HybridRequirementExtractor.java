@@ -95,9 +95,6 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                 JsonNode response = http.post(config, request, parseRunId);
                 phase = "validation";
                 JsonNode choice = response.path("choices").path(0);
-                if (!"stop".equals(choice.path("finish_reason").asText())) {
-                    throw new ModelValidationException("响应未完整结束");
-                }
                 String content = choice.path("message").path("content").asText("").trim();
                 if (content.startsWith("```")) {
                     content = content.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
