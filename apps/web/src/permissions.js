@@ -2,7 +2,7 @@ import {getPersonnelContext,canAccessProject,getEligiblePersonnel,canManageBu} f
 import {getConfirmationActorIds,getResponseReview,getReviewActorIds,hasAssignedConfirmer} from './confirmationPolicy.js';
 const modernRoles=['后台管理','BU管理员','SR','技术'];
 const modernPermissions={
- 'project:create':['SR'],'project:manage':['SR'],'project:handover':['SR'],'source:manage':['SR'],
+ 'project:create':['SR'],'project:manage':['SR'],'project:handover':['SR'],'source:manage':['SR'],'source:reparse':['SR','BU管理员'],
  'response:edit':['SR','技术'],'response:submit':['SR'],'response:confirm':['SR','技术'],
  'review:process':['SR','技术'],'review:clarify':['SR'],'review:communicate':['SR'],'review:approve':['SR','技术'],
  'snapshot:submit':['SR'],'snapshot:approve':['SR','技术'],'export:configure':['SR'],'export:download':['SR'],
@@ -12,7 +12,7 @@ const modernPermissions={
 };
 function modernCan(role,action,context){
  if(!modernPermissions[action]?.includes(role))return false;
- if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action))return false;
+ if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','source:reparse','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action))return false;
  // Without context this is a UI capability query. Mutation boundaries always pass state.
  if(!context)return true;
  const {state,actorId=state?.actorId,projectId,requirementId,buId=state?.projects?.find(p=>p.id===projectId)?.buId}=context;
@@ -21,6 +21,7 @@ function modernCan(role,action,context){
  if(role==='后台管理')return !!state.accountsById[actorId].systemAdmin;
  if(role==='BU管理员'){
   if(!canManageBu(state,actorId,buId))return false;
+  if(action==='source:reparse')return canAccessProject(state,actorId,projectId);
   if(action==='resource:approve')return !!getPersonnelContext(state,actorId,buId).member?.enabled&&!!getPersonnelContext(state,actorId,buId).member?.resourceQualifications?.includes(context.resourceKind==='capability'?'capability-publish':'knowledge-publish');
   return true;
  }

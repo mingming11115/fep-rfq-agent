@@ -3,7 +3,8 @@
 <mapper namespace="com.naura.rfq.mapper.ProjectMapper">
 
     <sql id="columns">id, code, name, customer, bu_id, owner_id, stage, version, created_by, created_at,
-        updated_at, deadline, archived_from_stage, archived_at, archived_by, archive_reason</sql>
+        updated_at, deadline, archived_from_stage, archived_at, archived_by, archive_reason,
+        group_id, group_path, group_catalog_version, group_values</sql>
 
     <sql id="scopeFilter">
         <where>
@@ -89,9 +90,11 @@
 
     <insert id="insert">
         insert into project (id, code, name, customer, bu_id, owner_id, stage, version, created_by,
-                             created_at, updated_at, deadline, archived_from_stage, archived_at, archived_by, archive_reason)
+                             created_at, updated_at, deadline, archived_from_stage, archived_at, archived_by, archive_reason,
+                             group_id, group_path, group_catalog_version, group_values)
         values (#{id}, #{code}, #{name}, #{customer}, #{buId}, #{ownerId}, #{stage},
-                coalesce(#{version}, 0), #{createdBy}, #{createdAt}, #{updatedAt}, #{deadline}, #{archivedFromStage}, #{archivedAt}, #{archivedBy}, #{archiveReason})
+                coalesce(#{version}, 0), #{createdBy}, #{createdAt}, #{updatedAt}, #{deadline}, #{archivedFromStage}, #{archivedAt}, #{archivedBy}, #{archiveReason},
+                #{groupId}, #{groupPath}, #{groupCatalogVersion}, #{groupValues})
     </insert>
 
     <sql id="assignments">

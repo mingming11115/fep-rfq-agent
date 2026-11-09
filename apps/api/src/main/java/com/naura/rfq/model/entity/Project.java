@@ -23,6 +23,11 @@ public class Project {
 
     private String ownerId;
 
+    private String groupId;
+    private String groupPath;
+    private Long groupCatalogVersion;
+    private String groupValues;
+
     private String stage = "DRAFT";
     private LocalDate deadline;
     private String archivedFromStage;

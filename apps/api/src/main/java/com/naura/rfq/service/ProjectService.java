@@ -14,6 +14,7 @@ import com.naura.rfq.security.CurrentUser;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -25,6 +26,7 @@ public class ProjectService {
     private final AuditService audit;
     private final ProjectAccessService projectAccess;
     private final ConfirmationAssignmentService confirmationAssignments;
+    private final KnowledgeGroupService groups;
 
     public PageView<ProjectView> list(CurrentUser user,
             int page,
@@ -47,7 +49,7 @@ public class ProjectService {
         return ProjectView.of(project);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ProjectView create(CurrentUser user, CreateProjectRequest request) {
         String buId = access.defaultBu(user, request.buId());
         access.requireSourceManager(user, buId);
@@ -63,6 +65,11 @@ public class ProjectService {
         project.setBuId(buId);
         project.setOwnerId(request.ownerId() == null || request.ownerId().isBlank() ? user.id() : request.ownerId());
         projectAccess.requireOwner(project.getOwnerId(),buId);
+        var binding = groups.bindProject(buId, request.groupId());
+        project.setGroupId(request.groupId());
+        project.setGroupPath(binding.path());
+        project.setGroupCatalogVersion(binding.catalogVersion());
+        project.setGroupValues(binding.values().toString());
         project.setStage("DRAFT");
         project.setCreatedBy(user.id());
         projects.insert(project);

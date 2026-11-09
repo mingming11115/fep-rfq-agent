@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.security.CurrentUser;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class KnowledgeGroupService {
     private final AuditService audit;
 
     public record Membership(long revision, List<String> groupIds) {}
+    record ProjectBinding(String path, long catalogVersion, JsonNode values) {}
     private record Resource(String projectId, String scope, ObjectNode payload) {}
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -75,28 +78,51 @@ public class KnowledgeGroupService {
         return data;
     }
 
-    JsonNode groupIds(String bu, List<String> requested, JsonNode previous) {
-        if (requested == null || requested.size() > 100) throw new BusinessException(400, "分组关联格式无效");
+    ProjectBinding bindProject(String bu, String id) {
+        if (id == null || id.isBlank()) throw new BusinessException(400, "请选择当前 BU 的分组");
+        // Serialize binding with directory edits so a disabled group cannot be bound concurrently.
+        access.lockBu(bu);
         var catalog = catalog(bu);
         var nodes = nodes(catalog);
+        var path = enabledPath(nodes, disabledLevels(catalog), id);
+        var values = nodes.get(id).path("values");
+        long version = catalog.path("writeRevision").asLong();
+        return new ProjectBinding(String.join(" / ", path), version, values.isObject() ? values : json.createObjectNode());
+    }
+
+    private Set<String> disabledLevels(JsonNode catalog) {
         var disabledLevels = new HashSet<String>();
         catalog.path("schema").path("levels").forEach(level -> {
             if (!level.path("enabled").asBoolean(true)) disabledLevels.add(level.path("id").asText());
         });
+        return disabledLevels;
+    }
+
+    private List<String> enabledPath(Map<String, JsonNode> nodes, Set<String> disabledLevels, String id) {
+        var path = new ArrayList<String>();
+        for (var node = nodes.get(id); node != null; node = nodes.get(node.path("parentId").asText())) {
+            if (!node.path("enabled").asBoolean(true) || disabledLevels.contains(node.path("levelId").asText())) {
+                throw new BusinessException(409, "不能关联停用的分组");
+            }
+            path.add(0, node.path("name").asText().strip());
+            if (path.size() > 4) invalid();
+        }
+        if (path.isEmpty()) throw new BusinessException(400, "分组不存在或不属于当前 BU");
+        return path;
+    }
+
+    JsonNode groupIds(String bu, List<String> requested, JsonNode previous) {
+        if (requested == null || requested.size() > 100) throw new BusinessException(400, "分组关联格式无效");
+        var catalog = catalog(bu);
+        var nodes = nodes(catalog);
+        var disabledLevels = disabledLevels(catalog);
         var result = json.createArrayNode();
         var seen = new HashSet<String>();
         var retained = new HashSet<String>();
         previous.forEach(item -> retained.add(item.asText()));
         for (String id : requested) {
             if (id == null || !nodes.containsKey(id)) throw new BusinessException(400, "分组不存在或不属于当前 BU");
-            if (!retained.contains(id)) {
-                var node = nodes.get(id);
-                for (int level = 0; node != null && level < 5; level++, node = nodes.get(node.path("parentId").asText())) {
-                    if (!node.path("enabled").asBoolean(true) || disabledLevels.contains(node.path("levelId").asText())) {
-                        throw new BusinessException(409, "不能关联停用的分组");
-                    }
-                }
-            }
+            if (!retained.contains(id)) enabledPath(nodes, disabledLevels, id);
             if (seen.add(id)) result.add(id);
         }
         return result;
@@ -119,7 +145,8 @@ public class KnowledgeGroupService {
         if (levels.isEmpty() || levels.size() > 4) invalid();
         var nodes = nodes(value);
         if (nodes.size() != value.path("nodes").size()) invalid();
-        var names = new HashSet<String>();
+        var oldNodes = nodes(previous);
+        var names = new HashMap<String, Boolean>();
         for (var entry : nodes.entrySet()) {
             var node = entry.getValue();
             String parent = node.path("parentId").asText("");
@@ -127,14 +154,23 @@ public class KnowledgeGroupService {
             Integer level = levels.get(node.path("levelId").asText());
             var parentNode = nodes.get(parent);
             if (!validId(entry.getKey()) || name.isBlank() || name.length() > 200 || level == null
-                    || !names.add(parent + "\n" + name.toLowerCase(Locale.ROOT))
                     || !parent.isEmpty() && (parentNode == null || levels.getOrDefault(parentNode.path("levelId").asText(), 99) >= level)) invalid();
+            // Existing model revisions can share a name in imported catalogs.
+            String key = groupNameKey(node);
+            JsonNode old = oldNodes.get(entry.getKey());
+            boolean unchanged = old != null && key.equals(groupNameKey(old));
+            Boolean earlierUnchanged = names.putIfAbsent(key, unchanged);
+            if (earlierUnchanged != null && (!earlierUnchanged || !unchanged)) invalid();
         }
         for (var old : previous.path("nodes")) {
             var node = nodes.get(old.path("id").asText());
             if (node == null || !node.path("parentId").asText("").equals(old.path("parentId").asText(""))
                     || !node.path("levelId").equals(old.path("levelId"))) invalid();
         }
+    }
+
+    private static String groupNameKey(JsonNode node) {
+        return node.path("parentId").asText("") + "\n" + node.path("name").asText().strip().toLowerCase(Locale.ROOT);
     }
 
     private static boolean validId(String id) { return id.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,127}"); }

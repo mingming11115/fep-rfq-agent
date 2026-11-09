@@ -5,7 +5,7 @@ import { ProTable } from '@ant-design/pro-components';
 import { StatusBadge } from './ui';
 import { getProjectSummary } from '../projectSelectors';
 
-export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, onOpenProject, onOpenModel, onTransfer, onDelete, viewControl }) {
+export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, onOpenProject, onOpenModel, onTransfer, onDelete, sourceReparse, viewControl }) {
   const data = rows.map(project => ({ ...project, summary: getProjectSummary(appState, project.id, appState.actorId) }));
   const columns = [
     { title: '项目 / 客户', dataIndex: 'name', width: 260, render: (_, p) => <><Button type="link" onClick={() => onOpenProject(p.id, 'view')}>{p.name}</Button><small className="rfq-table-meta">{p.id} · {p.customer || '客户待补充'}</small></> },
@@ -19,6 +19,7 @@ export default function RfqProjectTable({ rows, appState, canManage, isBuAdmin, 
       <Button type="link" title={p.groupPath || (p.modelId ? [p.modelName, p.modelRevision].filter(Boolean).join(' · ') : '该 RFQ 尚未绑定目录')} onClick={() => onOpenModel(p)}>查看关联组</Button>
       <Dropdown trigger={['click']} menu={{ items: [
         { key:'settings',label:isBuAdmin?'项目配置':'编辑项目',onClick:()=>onOpenProject(p.id,'settings') },
+        ...(sourceReparse?.hasSources(p.id) ? [{ key:'reparse',label:'重新解析',onClick:()=>sourceReparse.open(p.id) }] : []),
         ...(canManage && p.ownerId===appState.actorId ? [
           { type:'divider' },
           { key:'transfer',label:'移交负责人',onClick:()=>onTransfer(p) },

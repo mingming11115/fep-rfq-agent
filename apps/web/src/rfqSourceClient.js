@@ -14,6 +14,14 @@ export async function parseRfqSource(projectId,file,api=defaultApi){
  if((file.sourceProjectId||file.backendProjectId)&&(file.sourceProjectId||file.backendProjectId)!==projectId)throw new Error('文件所属项目不一致');
  const run=await api.post(`/documents/${encodeURIComponent(file.backendDocumentId)}/parse-runs`);
  if(!['completed','partial'].includes(run.status))throw new Error(run.message||'解析未完成，请重试');
+ try {
+  return {run,rows:await readParsedRows(projectId,file,run,api)};
+ } catch (cause) {
+  throw Object.assign(new Error('解析已完成，但读取新条款失败，请刷新页面查看结果',{cause}),{run});
+ }
+}
+
+async function readParsedRows(projectId,file,run,api){
  const rows=[];
  for(let page=1,total=1;page<=total;page++){
   const result=await api.get(`/projects/${encodeURIComponent(file.backendProjectId||projectId)}/requirements?page=${page}&size=100`);
@@ -27,5 +35,5 @@ export async function parseRfqSource(projectId,file,api=defaultApi){
   });
  }
  if(rows.length!==run.requirementCount)throw new Error('条款查询数量与解析结果不一致，请刷新后重试');
- return {run,rows};
+ return rows;
 }

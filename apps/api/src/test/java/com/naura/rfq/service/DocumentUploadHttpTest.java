@@ -15,10 +15,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.jdbc.SqlConfig;
 import static org.assertj.core.api.Assertions.*;
 import static com.naura.rfq.support.TestStreams.zeroStream;
 
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Sql(scripts = "/project-groups.sql", config = @SqlConfig(encoding = "UTF-8"))
 class DocumentUploadHttpTest {
     @LocalServerPort int port;
     @Autowired ObjectMapper json;
@@ -35,7 +38,7 @@ class DocumentUploadHttpTest {
         assertThat(response.statusCode()).isEqualTo(200);return json.readTree(response.body()).path("data");
     }
     String token() throws Exception {return post("/auth/login",null,Map.of("username","sr01","password","Rfq@2026")).path("token").asText();}
-    String project(String token) throws Exception {return post("/projects",token,Map.of("code","H"+UUID.randomUUID().toString().substring(0,12),"name","真实HTTP原件验收")).path("id").asText();}
+    String project(String token) throws Exception {return post("/projects",token,Map.of("code","H"+UUID.randomUUID().toString().substring(0,12),"name","真实HTTP原件验收","groupId","TEST-PROCESS")).path("id").asText();}
     HttpRequest upload(String token,String project,HttpRequest.BodyPublisher payload) {
         String boundary="rfqDocumentBoundary";
         var prefix=HttpRequest.BodyPublishers.ofByteArray(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"客户 需求.PDF\"\r\nContent-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));

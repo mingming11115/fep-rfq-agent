@@ -66,7 +66,9 @@ class MapperIntegrationTest {
         long matched = projects.countPage(List.of("BU-FEP"));
         long unmatched = projects.countPage(List.of("BU-NOT-EXIST"));
 
-        assertThat(matched).isEqualTo(projects.countPage(null));
+        long expected = projects.findAll().stream().filter(project -> "BU-FEP".equals(project.getBuId())).count();
+        assertThat(matched).isPositive().isEqualTo(expected);
+        assertThat(projects.findPage(List.of("BU-FEP"), query)).allMatch(project -> "BU-FEP".equals(project.getBuId()));
         assertThat(projects.findPage(List.of("BU-NOT-EXIST"), query)).isEmpty();
         assertThat(unmatched).isZero();
     }

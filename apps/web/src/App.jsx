@@ -1,6 +1,7 @@
 import {assignConfirmation} from './confirmationAssignmentClient';
 import {restoreResponse,writeResponse} from './responseClient';
-import {useSourceParsing} from './useSourceParsing';
+import {getReparseSources,useSourceParsing} from './useSourceParsing';
+import SourceReparseDialog from './components/SourceReparseDialog';
 import {databaseAccounts,switchDatabaseAccount} from './databaseAccountSwitch';
 import {readGenericCatalog,resolveGroupBinding} from './genericCatalog';
 import { UiButton, UiInput } from './components/AntContent';
@@ -95,9 +96,23 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
  const [route,setRoute]=useState(()=>parseWorkRoute(location.hash)),routeRef=useRef(route);
  const [focusedRequirementId,setFocusedRequirementId]=useState(()=>route.requirementId||null);
  const [finalReviewOpen,setFinalReviewOpen]=useState(false);
+ const [reparseTarget,setReparseTarget]=useState(null);
  const timers=useRef([]),pageRef=useRef(page);const update=fn=>{const changed=fn(stateRef.current),next=reconcileTasks(databaseBacked?changed:invalidatePendingSnapshots(upgradePrototypeState(synchronizeResponseReviews(changed,stateRef.current),createDemoState())));stateRef.current=next;setState(next);};
  const project=state.projects.find(p=>p.id===(route.projectId||state.activeProjectId))||state.projects[0]||{id:'',name:'未选择项目'},requirements=state.requirementsByProject[project.id]||[],reviews=state.reviewsByProject[project.id]||[],snapshots=state.snapshotsByProject[project.id]||[];
- useSourceParsing({state,stateRef,update,onReload,toast});
+ const reparseSource=useSourceParsing({state,stateRef,update,onReload,toast});
+ const sourceReparse={
+  hasSources:(projectId,fileId)=>getReparseSources(state,projectId).some(file=>!fileId||file.id===fileId),
+  open:(projectId,fileId)=>guarded(()=>setReparseTarget({projectId,fileId})),
+ };
+ const reparseProject=reparseTarget&&state.projects.find(row=>row.id===reparseTarget.projectId);
+ const reparseFiles=reparseProject?getReparseSources(state,reparseProject.id):[];
+ function submitReparse(projectId,fileId){
+  const sourceRoute=routeRef.current;
+  return reparseSource(projectId,fileId,(file,row)=>{
+   if(reparseTarget?.fileId!==fileId||routeRef.current!==sourceRoute||!DETAIL_PAGES.includes(sourceRoute.page))return;
+   rawNavigate(sourceRoute.page,{...sourceRoute,projectId,fileId,sourceVersion:file.version,requirementId:row?.id,taskId:undefined,reviewId:undefined,action:undefined},true);
+  });
+ }
  const finalReviewGate=getFinalReviewGate(state,project.id);
  useEffect(()=>setFinalReviewOpen(false),[state.actorId,state.actorRole,project.id,page]);
  const item=NAV_ITEMS.find(n=>n.key===(page==='reviews'?'response':page)),isProjectPage=item?.section==='项目';
@@ -147,12 +162,13 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
   try{
    assertPermission(current.actorRole,'project:create',context);
    if(['name','ownerId','deadline'].some(key=>!form[key]?.trim()))throw new Error('请填写项目名称、负责人和截止时间');
-   const catalog=readRfqCatalog(localStorage,context),binding=databaseBacked?{}:resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog),form.groupId,buId);
+   const localBinding=databaseBacked?null:resolveGroupBinding(readGenericCatalog(localStorage,buId,readRfqCatalog(localStorage,context)),form.groupId,buId);
    const code=databaseBacked?`RFQ-${Date.now().toString(36).toUpperCase()}`:`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number((p.code||p.id).match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
    const {technicalMode,srId,technicalIds,technicalRepresentativeId,...projectForm}=form;
    const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId,technicalMode,srId,technicalIds,technicalRepresentativeId});
    const saved=await createBackendProject({...form,id:code,buId});
    const id=saved.id;
+   const binding=localBinding||{groupId:saved.groupId,groupPath:saved.groupPath,groupCatalogVersion:saved.groupCatalogVersion,groupValues:saved.groupValues};
    const p={...projectForm,...binding,id,code:saved.code,backendProjectId:id,backendBuId:saved.buId,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:saved.createdAt||new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:saved.version||1};
    if(databaseBacked)p.defaultConfirmationAssigneeId=current.actorId;
    update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.groupPath||[p.modelName,p.modelRevision,p.processCode,p.processName].filter(Boolean).join(" / ")}`));
@@ -314,7 +330,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
    return {...current,reviewsByProject:{...current.reviewsByProject,[projectId]:[item,...rows.filter(row=>row.id!==item.id)]}};
   });
  }
- const common={onConfigureFinalReview:configureFinalReview,onReload,onDeviation:receiveDeviation,onLibraryRefresh:refreshLibrary,onSelectBu:buId=>update(st=>({...st,activeBuId:buId})),permissionContext,onPersonnelAction,onAssignConfirmation,route,canBusinessAction,taskContextError,onFilesChange:(projectId,files)=>{if(!canPerform(stateRef.current.actorRole,'source:manage',{state:stateRef.current,actorId:stateRef.current.actorId,projectId}))return;if(JSON.stringify(stateRef.current.documentsByProject?.[projectId])!==JSON.stringify(files))update(s=>({...s,documentsByProject:{...s.documentsByProject,[projectId]:files}}));},onExportScope:scope=>{if(!canPerform(stateRef.current.actorRole,'export:configure',{state:stateRef.current,actorId:stateRef.current.actorId,projectId:project.id}))return;if(JSON.stringify(stateRef.current.exportScopesByProject?.[project.id])!==JSON.stringify(scope))update(s=>({...s,exportScopesByProject:{...s.exportScopesByProject,[project.id]:scope}}));},onAdoptReview:adoptReview,onSubmitRequirement:submitRequirement,onAnalysisRun:analysisRun,actorId:state.actorId,appState:['BU管理员','后台管理'].includes(state.actorRole)?state:viewState,onAppUpdate:databaseBacked?unavailable:update,onTransferProject:transferProject,project,requirements,reviews,snapshots,audit:scopedAudit,members:state.membersByProject?.[project.id]??state.members??[],actorRole:state.actorRole,toast,navigate,logEvent};
+ const common={sourceReparse,onConfigureFinalReview:configureFinalReview,onReload,onDeviation:receiveDeviation,onLibraryRefresh:refreshLibrary,onSelectBu:buId=>update(st=>({...st,activeBuId:buId})),permissionContext,onPersonnelAction,onAssignConfirmation,route,canBusinessAction,taskContextError,onFilesChange:(projectId,files)=>{if(!canPerform(stateRef.current.actorRole,'source:manage',{state:stateRef.current,actorId:stateRef.current.actorId,projectId}))return;if(JSON.stringify(stateRef.current.documentsByProject?.[projectId])!==JSON.stringify(files))update(s=>({...s,documentsByProject:{...s.documentsByProject,[projectId]:files}}));},onExportScope:scope=>{if(!canPerform(stateRef.current.actorRole,'export:configure',{state:stateRef.current,actorId:stateRef.current.actorId,projectId:project.id}))return;if(JSON.stringify(stateRef.current.exportScopesByProject?.[project.id])!==JSON.stringify(scope))update(s=>({...s,exportScopesByProject:{...s.exportScopesByProject,[project.id]:scope}}));},onAdoptReview:adoptReview,onSubmitRequirement:submitRequirement,onAnalysisRun:analysisRun,actorId:state.actorId,appState:['BU管理员','后台管理'].includes(state.actorRole)?state:viewState,onAppUpdate:databaseBacked?unavailable:update,onTransferProject:transferProject,project,requirements,reviews,snapshots,audit:scopedAudit,members:state.membersByProject?.[project.id]??state.members??[],actorRole:state.actorRole,toast,navigate,logEvent};
  const pages={'bu-admin':<BuAdminPage {...common}/>,projects:<ProjectsPage {...common} onCreateProject={createProject} onOpenProject={openProject} onDeleteProject={deleteProject} onRestoreProject={undoDeleteProject}/>,tasks:<TasksPage {...common} onOpenTask={openTask} onTaskAction={taskAction}/>,analysis:<AnalysisRecordsPage {...common} onOpenProject={selectProject}/>,dashboard:state.actorRole==='BU管理员'?<BuDashboardPage {...common}/>:<DashboardPage {...common} onOpenTask={openTask} onOpenProject={openProject}/>,response:<ResponsePage {...common} focusedRequirementId={focusedRequirementId} onUpdateRequirement={updateRequirement} onConfirm={confirm} onCreateReview={createReview} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>,reviews:<ReviewsPage {...common} initialReviewId={route.reviewId} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>,export:<ExportPage {...common} onSnapshot={onSnapshot}/>,knowledge:<KnowledgePage {...common} knowledgeType="standard"/>,history:<HistoryKnowledgePage {...common} seedKnowledge={databaseBacked?[]:KNOWLEDGE}/>,capabilities:<CapabilitiesPage key={activeBuId} {...common}/>,settings:<SettingsPage {...common} embedded={DETAIL_PAGES.includes(page)} onProjectChange={changeProject} onInvalidateRequirements={invalidate} onMembersChange={changeMembers}/>,audit:<AuditPage {...common}/>,admin:<PlatformAdminPage {...common}/>};
  const pending=selectMyTasks(state,{actorId:state.actorId,tab:'pending'}).length;
  const summary=getProjectSummary(state,project.id,state.actorId),activeNav=roleNavigation.find(n=>n.page===page||page==='history'&&n.page==='knowledge')?.key||(ADMIN_PAGES.includes(page)?'admin':PROJECT_PAGES.includes(page)?'projects':page);
@@ -330,6 +346,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
 onLogout={logout}
  contentKey={getWorkspaceContentKey({actorId:state.actorId,actorRole:state.actorRole,buId:activeBuId,projectId:project.id,page})}
  footer={<footer className="app-footer"><span>FEP · RFQ 工作空间</span>{!databaseBacked&&canPerform(state.actorRole,'project:manage')&&<UiButton className="text-link" onClick={()=>setReset(true)}><RotateCcw size={12}/>重置数据</UiButton>}</footer>}>
+ {reparseProject&&reparseFiles.length>0&&<SourceReparseDialog key={JSON.stringify(reparseTarget)} project={reparseProject} files={reparseFiles} currentFileId={reparseTarget.fileId} onClose={()=>setReparseTarget(null)} onReparse={submitReparse}/>}
  {!missingProject&&pageAllowed&&finalReviewOpen&&canPerform(state.actorRole,'snapshot:submit',permissionContext)&&<ExportPage {...common} onSnapshot={onSnapshot} launchOnly onClose={()=>setFinalReviewOpen(false)} onSubmitted={()=>setFinalReviewOpen(false)}/>}
  <OverlayPresence>{!missingProject&&pageAllowed&&DETAIL_PAGES.includes(page)&&shouldOpenSourceUpload(route,state.actorRole)&&<SourceUploadDialog project={project} files={state.documentsByProject[project.id]||[]} onSubmit={uploadFromDetail} onClose={()=>{const next=getSourceUploadExitRoute(route,false);rawNavigate(next.page,next);}}/>}</OverlayPresence>
  <OverlayPresence>{help&&<Drawer title="从这里开始体验" onClose={()=>setHelp(false)}><div className="guide-intro"><span className="brand-mark">F</span><h2>一次完整的 RFQ 应答流程</h2><p>项目、原件与条款由后端读取。页面按当前登录账号的数据库授权展示。</p></div><div className="flow-steps">{[['projects','新建项目','填写基本信息，明确负责人并关联工艺。'],['response','解析客户 RFQ','上传客户文件，解析完成后直接处理应答项。'],['response','RFQ细则比对','逐条完善应答，必要时邀请评审人共同确认。'],['export','生成并导出','预览条款结果，按原件格式下载带应答批注的正式文档。']].map(([key,title,desc],i)=><button key={key} onClick={()=>{setHelp(false);navigate(key);}}><b>{i+1}</b><span><strong>{title}</strong><small>{desc}</small></span><ArrowRight size={17}/></button>)}</div><div className="inline-notice">顶部只显示当前登录账号已获授权的身份。未接入后端的功能不会提示已保存。</div></Drawer>}</OverlayPresence>
