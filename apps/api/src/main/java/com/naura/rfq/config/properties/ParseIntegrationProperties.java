@@ -23,6 +23,7 @@ public class ParseIntegrationProperties {
     @Getter @Setter
     public static class Llm extends Endpoint {
         private String model = "";
+        private boolean logPayload;
         private int batchChars = 16000;
         private int batchBlocks = 20;
     }

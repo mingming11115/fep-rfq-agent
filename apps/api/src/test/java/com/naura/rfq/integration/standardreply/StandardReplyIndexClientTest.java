@@ -12,12 +12,16 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@ExtendWith(OutputCaptureExtension.class)
 class StandardReplyIndexClientTest {
     private static final String BU = "BU-A";
     private static final String DATASET = "rfq.a.standard-reply";
@@ -59,7 +63,7 @@ class StandardReplyIndexClientTest {
     }
 
     @Test
-    void createsMissingDatasetAndWaitsUntilItsJobIsSearchable() throws Exception {
+    void createsMissingDatasetAndWaitsUntilItsJobIsSearchable(CapturedOutput output) throws Exception {
         replies = List.of(new Reply(404, "{\"error\":{\"code\":\"DATASET_NOT_FOUND\"}}"),
             new Reply(202, "{\"job_id\":\"job-1\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
             new Reply(200, "{\"status\":\"running\"}"),
@@ -81,6 +85,9 @@ class StandardReplyIndexClientTest {
         assertThat(created.at("/records/0/id").asText()).isEqualTo("REPLY-1");
         assertThat(created.at("/records/0/updated_at").asText()).isEqualTo(UPDATED_AT.toString());
         assertThat(created.at("/records/0/data")).isEqualTo(payload());
+        assertThat(output.getAll()).contains("external.call.request", "external.call.response",
+            "service=semantic_index operation=ingest", "service=semantic_index operation=poll", "status=404", "status=202")
+            .doesNotContain("test-index-key");
     }
 
     @Test
@@ -108,7 +115,7 @@ class StandardReplyIndexClientTest {
     }
 
     @Test
-    void searchesWithBuAndIdFiltersAndRejectsHitsOutsideTheAllowedScope() throws Exception {
+    void searchesWithBuAndIdFiltersAndRejectsHitsOutsideTheAllowedScope(CapturedOutput output) throws Exception {
         replies = List.of(new Reply(200, """
             {"request_id":"req-1","index_version":3,"hits":[{"source_id":"R1","fields":{"record_version":2},"score":0.02}]}
             """), new Reply(200, """
@@ -124,6 +131,8 @@ class StandardReplyIndexClientTest {
         assertThat(body.at("/result_options/include_matched_chunks").asBoolean(true)).isFalse();
         assertThatThrownBy(() -> client.search(BU, false, "设备定位精度", List.of("R1")))
                 .isInstanceOf(StandardReplyIndexClient.SearchFailure.class).hasMessage("INVALID_SEARCH_SCOPE");
+        assertThat(output.getAll()).contains("service=semantic_index operation=search", "status=200")
+            .doesNotContain("设备定位精度", "test-index-key");
     }
 
     @Test

@@ -122,7 +122,7 @@ public class ParseService {
                 if (block.issue() != null) issues.add(block.anchor() + "：" + block.issue());
             }
             phase = "extract";
-            ExtractionResult result = extractor.extractWithReport(rawBlocks);
+            ExtractionResult result = extractor.extractWithReport(rawBlocks, run.getId());
             run.setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
             phase = "source_review";

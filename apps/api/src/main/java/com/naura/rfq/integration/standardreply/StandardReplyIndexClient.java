@@ -3,6 +3,7 @@ package com.naura.rfq.integration.standardreply;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.naura.rfq.integration.ExternalCallLog;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -13,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
@@ -48,7 +50,7 @@ public class StandardReplyIndexClient {
         body.putObject("result_options").put("include_matched_chunks", false).putArray("return_fields").add("record_version");
         Reply result;
         try {
-            result = request("/semantic-datasets/" + dataset + ":search", body);
+            result = request("search", "/semantic-datasets/" + dataset + ":search", body);
         } catch (Failure failure) {
             throw new SearchFailure(failure.getMessage(), List.of("TRANSPORT_ERROR", "REQUEST_TIMEOUT", "INTERRUPTED")
                     .contains(failure.getMessage()));
@@ -98,11 +100,11 @@ public class StandardReplyIndexClient {
         }
 
         String path = "/semantic-datasets/" + dataset + ":ingest";
-        var result = request(path, body);
+        var result = request("ingest", path, body);
         if (result.status() == 404 && "DATASET_NOT_FOUND".equals(result.errorCode())) {
             if ("delete".equals(operation)) return new Delivery(true, null);
             addDatasetConfig(body, history);
-            result = request(path, body);
+            result = request("ingest", path, body);
         }
         if (result.status() != 202 && result.status() != 200) throw result.failure(false);
         JsonNode response = result.body();
@@ -116,7 +118,7 @@ public class StandardReplyIndexClient {
 
     Delivery poll(String jobId, String replyId) {
         requireJobId(jobId);
-        var result = request("/ingestion-jobs/" + jobId, null);
+        var result = request("poll", "/ingestion-jobs/" + jobId, null);
         if (result.status() != 200) throw result.failure(result.status() == 404);
         JsonNode response = result.body();
         return switch (response.path("status").asText()) {
@@ -161,15 +163,19 @@ public class StandardReplyIndexClient {
         advanced.putArray("return_fields").add("record_version");
     }
 
-    private Reply request(String path, ObjectNode body) {
+    private Reply request(String operation, String path, ObjectNode body) {
         if (!settings.enabled()) throw new Failure("INDEX_NOT_CONFIGURED", false);
         var builder = HttpRequest.newBuilder(URI.create(settings.endpoint(path))).timeout(TIMEOUT)
             .header("X-API-Key", settings.apiKey()).header("Accept", "application/json");
         if (body == null) builder.GET();
         else builder.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body.toString()));
-        var pending = http.sendAsync(builder.build(), info -> new LimitedBody());
+        var request = builder.build();
+        var call = new ExternalCallLog("semantic_index", operation, request, null);
+        CompletableFuture<HttpResponse<byte[]>> pending = null;
         try {
+            pending = http.sendAsync(request, info -> new LimitedBody());
             var response = pending.get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            call.response(response.statusCode(), response.body().length);
             JsonNode parsed;
             try {
                 parsed = json.readTree(response.body());
@@ -183,13 +189,19 @@ public class StandardReplyIndexClient {
             return new Reply(response.statusCode(), parsed);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            call.failed(e);
             throw new Failure("INTERRUPTED", false);
         } catch (java.util.concurrent.TimeoutException e) {
+            call.failed(e);
             throw new Failure("REQUEST_TIMEOUT", false);
         } catch (java.util.concurrent.ExecutionException e) {
+            call.failed(e);
             throw new Failure("TRANSPORT_ERROR", false);
+        } catch (RuntimeException e) {
+            call.failed(e);
+            throw e;
         } finally {
-            if (!pending.isDone()) pending.cancel(true);
+            if (pending != null && !pending.isDone()) pending.cancel(true);
         }
     }
 

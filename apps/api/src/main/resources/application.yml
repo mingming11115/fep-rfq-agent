@@ -64,6 +64,7 @@ rfq:
         url: ${RFQ_LLM_URL:}
         api-key: ${RFQ_LLM_API_KEY:}
         model: ${RFQ_LLM_MODEL:}
+        log-payload: ${RFQ_LLM_LOG_PAYLOAD:false}
         connect-timeout: ${RFQ_LLM_CONNECT_TIMEOUT:3s}
         timeout: ${RFQ_LLM_TIMEOUT:30s}
         batch-chars: ${RFQ_LLM_BATCH_CHARS:16000}

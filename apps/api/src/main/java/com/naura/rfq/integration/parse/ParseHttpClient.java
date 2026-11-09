@@ -1,14 +1,17 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.core.io.JsonStringEncoder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
+import com.naura.rfq.integration.ExternalCallLog;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -17,36 +20,64 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /** Bounded response and whole-request deadline, including request upload and response body. */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class ParseHttpClient {
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
     private final ObjectMapper json;
     private final ConcurrentHashMap<Duration, HttpClient> clients = new ConcurrentHashMap<>();
 
-    public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body) throws Exception {
+    public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String parseRunId) throws Exception {
         URI uri = URI.create(settings.getUrl());
         if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null || uri.getUserInfo() != null)
             throw new IllegalArgumentException("服务地址未配置或不合法");
         Duration timeout = positive(settings.getTimeout());
         HttpClient client = clients.computeIfAbsent(positive(settings.getConnectTimeout()), duration -> HttpClient.newBuilder()
             .connectTimeout(duration).followRedirects(HttpClient.Redirect.NEVER).build());
+        byte[] requestBytes = json.writeValueAsBytes(body);
         var builder = HttpRequest.newBuilder(uri).timeout(timeout)
             .header("Content-Type", "application/json; charset=UTF-8")
-            .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body)));
+            .POST(HttpRequest.BodyPublishers.ofByteArray(requestBytes));
         if (settings.getApiKey() != null && !settings.getApiKey().isBlank())
             builder.header("Authorization", "Bearer " + settings.getApiKey());
-        var pending = client.sendAsync(builder.build(), info -> new LimitedBody());
+        var request = builder.build();
+        boolean llm = settings instanceof ParseIntegrationProperties.Llm;
+        boolean logPayload = settings instanceof ParseIntegrationProperties.Llm config && config.isLogPayload();
+        var call = new ExternalCallLog(llm ? "llm" : "ocr", llm ? "chat_completions" : "recognise", request, parseRunId);
+        if (logPayload) logPayload(call, "request", requestBytes, settings.getApiKey());
+
+        CompletableFuture<HttpResponse<byte[]>> pending = null;
+        HttpResponse<byte[]> response;
         try {
-            HttpResponse<byte[]> response = pending.get(Math.max(1, timeout.toMillis()), TimeUnit.MILLISECONDS);
-            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new RemoteStatusException(response.statusCode());
-            return json.readTree(response.body());
+            pending = client.sendAsync(request, info -> new LimitedBody());
+            response = pending.get(Math.max(1, timeout.toMillis()), TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            call.failed(e);
+            throw e;
         } finally {
-            if (!pending.isDone()) pending.cancel(true);
+            if (pending != null && !pending.isDone()) pending.cancel(true);
         }
+        call.response(response.statusCode(), response.body().length);
+        if (logPayload) logPayload(call, "response", response.body(), settings.getApiKey());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) throw new RemoteStatusException(response.statusCode());
+        try {
+            return json.readTree(response.body());
+        } catch (java.io.IOException e) {
+            call.failed(e);
+            throw e;
+        }
+    }
+
+    private static void logPayload(ExternalCallLog call, String direction, byte[] bytes, String apiKey) {
+        String body = new String(bytes, StandardCharsets.UTF_8);
+        if (apiKey != null && !apiKey.isBlank()) body = body.replace(apiKey, "[REDACTED]");
+        String quoted = new String(JsonStringEncoder.getInstance().quoteAsString(body));
+        log.info("external.call.payload callId={} service=llm direction={} body=\"{}\"", call.callId(), direction, quoted);
     }
     private Duration positive(Duration value) {
         if (value == null || value.isNegative() || value.isZero()) throw new IllegalArgumentException("服务超时必须大于零");

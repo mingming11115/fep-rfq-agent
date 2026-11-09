@@ -13,12 +13,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 @Primary
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class HybridRequirementExtractor implements RequirementExtractor {
     private final RuleBasedExtractor rules;
     private final ParseIntegrationProperties properties;
@@ -46,13 +48,23 @@ public class HybridRequirementExtractor implements RequirementExtractor {
     }
 
     public ExtractionResult extractWithReport(List<RawBlock> blocks) {
+        return extractWithReport(blocks, null);
+    }
+
+    public ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId) {
         var config = properties.getLlm();
-        if (!config.isEnabled()) return new ExtractionResult(rules.extract(blocks), rules.name(), List.of());
+        if (!config.isEnabled()) {
+            log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
+            return new ExtractionResult(rules.extract(blocks), rules.name(), List.of());
+        }
         List<ExtractedRequirement> results = new ArrayList<>();
         List<String> issues = new ArrayList<>();
         boolean modelUsed = false;
         boolean unavailable = false;
         List<RawBlock> readable = blocks.stream().filter(b -> b.hasText() && !RawBlock.IMAGE.equals(b.type())).toList();
+        if (readable.isEmpty()) {
+            log.info("document.parse.llm.skipped parseRunId={} reason=no_readable_blocks", parseRunId);
+        }
         int position = 0;
         while (position < readable.size()) {
             List<RawBlock> batch = new ArrayList<>();
@@ -63,6 +75,9 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                 batch.add(b); chars += b.text().length(); position++;
             } while (position < readable.size() && batch.size() < Math.max(1, config.getBatchBlocks()));
             if (unavailable) { results.addAll(rules.extract(batch)); continue; }
+            int firstBlockIndex = batch.get(0).index();
+            long startedAt = System.nanoTime();
+            String phase = "preflight";
             try {
                 if (config.getModel().isBlank() || chars > Math.max(1, config.getBatchChars())) {
                     throw new IllegalArgumentException("模型配置或批次上限");
@@ -71,15 +86,27 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                     "messages", List.of(Map.of("role", "system", "content", PROMPT),
                         Map.of("role", "user", "content", json.writeValueAsString(batch.stream().map(b -> Map.of(
                             "blockIndex", b.index(), "text", b.text(), "sectionPath", b.sectionPath() == null ? "" : b.sectionPath())).toList()))));
-                JsonNode response = http.post(config, request);
+                phase = "request";
+                log.info("document.parse.llm.request parseRunId={} model={} firstBlockIndex={} blocks={} chars={}",
+                    parseRunId, config.getModel(), firstBlockIndex, batch.size(), chars);
+                JsonNode response = http.post(config, request, parseRunId);
+                phase = "validation";
                 JsonNode choice = response.path("choices").path(0);
                 if (!"stop".equals(choice.path("finish_reason").asText())) throw new IllegalArgumentException("响应未完整结束");
                 String content = choice.path("message").path("content").asText("").trim();
                 if (content.startsWith("```")) content = content.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
-                results.addAll(validate(json.readTree(content), batch));
+                var accepted = validate(json.readTree(content), batch);
+                results.addAll(accepted);
                 modelUsed = true;
+                log.info("document.parse.llm.accepted parseRunId={} model={} firstBlockIndex={} acceptedBlockIndexes={} requirements={} durationMs={}",
+                    parseRunId, config.getModel(), firstBlockIndex,
+                    accepted.stream().map(ExtractedRequirement::blockIndex).distinct().toList(), accepted.size(),
+                    (System.nanoTime() - startedAt) / 1_000_000);
             } catch (Exception exception) {
-                issues.add("模型批次 " + batch.get(0).index() + " 已降级规则抽取：" + ParseHttpClient.reason(exception));
+                String reason = ParseHttpClient.reason(exception);
+                log.warn("document.parse.llm.fallback parseRunId={} model={} firstBlockIndex={} phase={} reason={} durationMs={}",
+                    parseRunId, config.getModel(), firstBlockIndex, phase, reason, (System.nanoTime() - startedAt) / 1_000_000);
+                issues.add("模型批次 " + firstBlockIndex + " 已降级规则抽取：" + reason);
                 results.addAll(rules.extract(batch));
                 // A failing endpoint is tried only once in a run; valid earlier batches survive.
                 unavailable = true;

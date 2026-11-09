@@ -15,9 +15,13 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.poi.util.Units;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import static org.assertj.core.api.Assertions.*;
 
+@ExtendWith(OutputCaptureExtension.class)
 class ParsingAdaptersTest {
     final ObjectMapper json = new ObjectMapper();
     final String source = "1.1 泵的设计压力应不低于 2 MPa。";
@@ -57,10 +61,12 @@ class ParsingAdaptersTest {
         return json.writeValueAsString(Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", content)))));
     }
 
-    @Test void disabledModelUsesRulesWithoutWarning() {
+    @Test void disabledModelUsesRulesWithoutWarning(CapturedOutput output) {
         var result = extractor(settings("", false)).extractWithReport(blocks());
         assertThat(result.extractor()).isEqualTo("rule-based-v1");
         assertThat(result.requirements()).hasSize(1); assertThat(result.issues()).isEmpty();
+        assertThat(output.getAll()).contains("document.parse.llm.skipped", "reason=disabled")
+            .doesNotContain("document.parse.llm.request");
     }
     @Test void modelMayIgnoreDemoNoticeWithoutFallingBack() throws Exception {
         var input = List.of(RawBlock.paragraph(0, DocumentNoticeExtractionTest.NOTICE, "", null, "p0"),
@@ -89,13 +95,32 @@ class ParsingAdaptersTest {
             assertThat(result.issues()).isEmpty();
         } finally { s.stop(0); }
     }
-    @Test void modelOutputKeepsValidatedOriginalSource() throws Exception {
+    @Test void modelOutputKeepsValidatedOriginalSource(CapturedOutput output) throws Exception {
         var s = server(200, envelope(answer(0, source)), 0);
         try {
             var result = extractor(settings(url(s), true)).extractWithReport(blocks());
             assertThat(result.extractor()).isEqualTo("llm:test-model");
             assertThat(result.requirements()).singleElement().satisfies(r -> assertThat(r.originalText()).isEqualTo(source));
             assertThat(result.issues()).isEmpty();
+            assertThat(output.getAll()).contains("document.parse.llm.request", "document.parse.llm.accepted",
+                "model=test-model", "acceptedBlockIndexes=[0]", "external.call.request", "external.call.response",
+                "service=llm operation=chat_completions", "status=200")
+                .doesNotContain("external.call.payload", source, "test-key");
+        } finally { s.stop(0); }
+    }
+    @Test void optInLogsModelInputAndOutputWithoutApiKey(CapturedOutput output) throws Exception {
+        var reply = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(envelope(answer(0, source)));
+        reply.put("echo", "test-key");
+        var s = server(200, reply.toString(), 0);
+        try {
+            var config = settings(url(s), true);
+            config.getLlm().setLogPayload(true);
+            extractor(config).extractWithReport(blocks(), "RUN-test");
+            assertThat(output.getAll().lines().toList())
+                .anySatisfy(line -> assertThat(line).contains("external.call.payload", "direction=request", source))
+                .anySatisfy(line -> assertThat(line).contains("external.call.payload", "direction=response",
+                    "设计压力至少 2 MPa", "[REDACTED]"));
+            assertThat(output.getAll()).contains("parseRunId=RUN-test").doesNotContain("test-key");
         } finally { s.stop(0); }
     }
     @Test void wrongCitationAndMalformedJsonFallBack() throws Exception {
@@ -108,7 +133,7 @@ class ParsingAdaptersTest {
             } finally { s.stop(0); }
         }
     }
-    @Test void errorsAndTimeoutsFallBackWithoutLeakingResponseBody() throws Exception {
+    @Test void errorsAndTimeoutsFallBackWithoutLeakingResponseBody(CapturedOutput output) throws Exception {
         for (int status : List.of(429, 500, 200)) {
             var s = server(status, "secret-provider-body", status == 200 ? 400 : 0);
             try {
@@ -117,6 +142,8 @@ class ParsingAdaptersTest {
                 assertThat(String.join("", result.issues())).doesNotContain("secret-provider-body");
             } finally { s.stop(0); }
         }
+        assertThat(output.getAll()).contains("document.parse.llm.fallback", "reason=HTTP 429", "reason=HTTP 500")
+            .doesNotContain("secret-provider-body", "test-key", source);
     }
     @Test void unaccountedBlocksCannotSilentlyDisappear() throws Exception {
         var s = server(200, envelope("{\"requirements\":[],\"ignoredBlockIndexes\":[]}"), 0);
@@ -134,7 +161,7 @@ class ParsingAdaptersTest {
             assertThat(result.requirements().get(0).originalText()).contains("安全保护装置");
         } finally { s.stop(0); }
     }
-    @Test void slowDripResponseCannotExceedWholeRequestDeadline() throws Exception {
+    @Test void slowDripResponseCannotExceedWholeRequestDeadline(CapturedOutput output) throws Exception {
         HttpServer s = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         s.createContext("/", exchange -> {
             try {
@@ -151,6 +178,7 @@ class ParsingAdaptersTest {
             var result = extractor(config).extractWithReport(blocks());
             assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(600));
             assertThat(result.issues()).isNotEmpty();
+            assertThat(output.getAll()).contains("external.call.failed", "TimeoutException");
         } finally { s.stop(0); }
     }
     @Test void ocrDisabledPreservesScanPlaceholder() throws Exception {
@@ -182,7 +210,7 @@ class ParsingAdaptersTest {
             assertThat(b.type()).isEqualTo(RawBlock.IMAGE); assertThat(b.issue()).isNotBlank();
         });
     }
-    @Test void ocrSuccessKeepsProvenanceAndAnchor() throws Exception {
+    @Test void ocrSuccessKeepsProvenanceAndAnchor(CapturedOutput output) throws Exception {
         var s = server(200, json.writeValueAsString(Map.of("text", source)), 0);
         try {
             Path pdf = dir.resolve("scan.pdf");
@@ -192,6 +220,8 @@ class ParsingAdaptersTest {
                 assertThat(b.text()).isEqualTo(source); assertThat(b.provenance()).isEqualTo("ocr");
                 assertThat(b.anchor()).isEqualTo("page-1");
             });
+            assertThat(output.getAll()).contains("external.call.request", "external.call.response",
+                "service=ocr operation=recognise", "status=200").doesNotContain(source, "imageBase64");
         } finally { s.stop(0); }
     }
     @Test void wordPicturesBesideTextAreNotDropped() throws Exception {

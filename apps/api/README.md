@@ -90,6 +90,7 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 | RFQ_LLM_URL | 空 | **完整** Chat Completions URL，例如内网 `http://model-gateway:8000/v1/chat/completions` |
 | RFQ_LLM_MODEL | 空 | 模型名称，由实际网关提供 |
 | RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |
+| RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后在 `external.call.payload` 中记录 LLM 请求和响应正文，包含 RFQ 原文。 |
 | RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 30s | 连接及整次请求超时 |
 | RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 每批最多原文字符/块数；超大单块退回规则 |
 | RFQ_OCR_ENABLED | false | OCR 开关 |
@@ -128,7 +129,7 @@ OCR 使用本项目定义的轻量 HTTP JSON 协议，可通过适配服务对�
 {"imageBase64":"不带data:前缀的图片Base64","mimeType":"image/png","anchor":"page-1"}
 ```
 
-成功返回 HTTP 2xx 和 `{"text":"识别出的完整文字"}`。空白结果、错误响应或非法 JSON 都按无法识别处理。PDF 扫描页上传 PNG；DOCX 图片保留原始媒体类型。HTTP 响应最多 2 MiB；不跟随重定向，日志与用户提示不包含远端响应正文和密钥。
+成功返回 HTTP 2xx 和 `{"text":"识别出的完整文字"}`。空白结果、错误响应或非法 JSON 都按无法识别处理。PDF 扫描页上传 PNG；DOCX 图片保留原始媒体类型。HTTP 响应最多 2 MiB，禁用重定向。OCR 日志记录请求和响应字节数，用户提示只显示错误摘要。
 
 没有填写真实服务地址和凭据时，可完整使用上传与原生文字/规则解析。当前通过本地 HTTP 假服务验证成功、错误、超时和降级，尚未与指定供应商实网联调。
 
@@ -176,6 +177,8 @@ docker compose up --build -d rfq-service
 Compose 将原件和批阅稿保存在 `/app/data` 的命名卷内。数据库由外部提供，`RFQ_DB_URL` 必须能从容器访问；macOS 本机数据库可用 `host.docker.internal`。健康检查 `GET /actuator/health`，仅开放 health / info 管理端点。
 
 在 `apps/api` 目录运行 `docker compose logs -f rfq-service` 查看运行日志。Compose 使用 Docker `local` 日志驱动，每个 RFQ 容器最多保留 5 个 20 MiB 的轮转文件，保留时长随日志量变化。API 响应头 `X-Request-Id` 可用于查询同次请求的访问日志和异常，访问日志记录路由模板、HTTP 状态和耗时。解析和比对任务可通过 `parseRunId` 关联，手工重跑请求可通过日志中的 `runId` 关联。
+
+搜索 `external.call` 可查看 LLM、OCR 和语义知识库的出站请求。通过 `callId` 关联同一次调用的请求、响应和传输失败。语义知识库的检索、写入和轮询分别标记为 `search`、`ingest` 和 `poll`。默认记录方法、目标主机、字节数、HTTP 状态和耗时。开启 `RFQ_LLM_LOG_PAYLOAD=true` 后，使用同一 `callId` 查找 LLM 的 `direction=request` 和 `direction=response` 正文。
 
 ## 原生 Word/PDF 批阅与 ONLYOFFICE
 

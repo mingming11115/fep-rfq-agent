@@ -22,7 +22,7 @@ public class OcrClient {
         if (image.length > properties.getOcr().getMaxImageBytes()) return pending(index, section, anchor, "图片超过 OCR 大小上限");
         try {
             var response = http.post(properties.getOcr(), Map.of("imageBase64", Base64.getEncoder().encodeToString(image),
-                "mimeType", mimeType, "anchor", anchor));
+                "mimeType", mimeType, "anchor", anchor), null);
             var text = response.path("text");
             if (!text.isTextual() || text.asText().isBlank()) throw new IllegalArgumentException("识别结果为空");
             return new RawBlock(index, RawBlock.PARAGRAPH, text.asText().trim(), java.util.List.of(), section, null,
