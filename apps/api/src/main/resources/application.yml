@@ -21,6 +21,10 @@ spring:
       connection-timeout: 10000
   flyway:
     locations: classpath:db
+logging:
+  pattern:
+    level: "%5p requestId=%X{requestId:--}"
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.naura.rfq.model.entity

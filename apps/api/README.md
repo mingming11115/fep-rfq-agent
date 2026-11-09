@@ -175,6 +175,8 @@ docker compose up --build -d rfq-service
 
 Compose 将原件和批阅稿保存在 `/app/data` 的命名卷内。数据库由外部提供，`RFQ_DB_URL` 必须能从容器访问；macOS 本机数据库可用 `host.docker.internal`。健康检查 `GET /actuator/health`，仅开放 health / info 管理端点。
 
+在 `apps/api` 目录运行 `docker compose logs -f rfq-service` 查看运行日志。Compose 使用 Docker `local` 日志驱动，每个 RFQ 容器最多保留 5 个 20 MiB 的轮转文件，保留时长随日志量变化。API 响应头 `X-Request-Id` 可用于查询同次请求的访问日志和异常，访问日志记录路由模板、HTTP 状态和耗时。解析和比对任务可通过 `parseRunId` 关联，手工重跑请求可通过日志中的 `runId` 关联。
+
 ## 原生 Word/PDF 批阅与 ONLYOFFICE
 
 历史批阅接口保留：`/api/craft` 提供原件/批阅稿存储和修订并发控制，`/api/office` 提供 ONLYOFFICE 签名会话和回调。它们与 `/api/rfq` 业务文档是独立的文件记录，不会自动触发解析或同步条款。批阅接口仍沿用各自访问凭据，未接入 `/api/rfq` 的项目业务权限。

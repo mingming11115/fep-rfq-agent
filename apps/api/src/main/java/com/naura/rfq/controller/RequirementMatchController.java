@@ -8,6 +8,7 @@ import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.RequirementMatchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/rfq")
 @RequiredArgsConstructor
+@Slf4j
 public class RequirementMatchController {
     private final RequirementMatchService matches;
 
@@ -55,7 +57,9 @@ public class RequirementMatchController {
     @PostMapping("/requirements/{id}/match-runs")
     public ResponseEntity<ApiResponse<RequirementMatchService.Accepted>> retry(@PathVariable String id,
             @Valid @RequestBody RequirementMatchRequest.Retry request) {
-        return ResponseEntity.accepted().body(ApiResponse.success(matches.retry(CurrentUserHolder.require(), id, request)));
+        var accepted = matches.retry(CurrentUserHolder.require(), id, request);
+        log.info("requirement.match.retry_accepted runId={} requirementId={} status={}", accepted.runId(), id, accepted.status());
+        return ResponseEntity.accepted().body(ApiResponse.success(accepted));
     }
 
     @GetMapping("/requirements/{id}/match-input")

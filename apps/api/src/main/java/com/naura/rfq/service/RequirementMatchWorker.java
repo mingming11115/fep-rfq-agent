@@ -2,8 +2,10 @@ package com.naura.rfq.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.event.Level;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -32,7 +34,8 @@ public class RequirementMatchWorker {
         for (String id : batch) {
             try { runs.recheckAdoption(id); }
             catch (RuntimeException failure) {
-                log.warn("比对依据复核暂未完成 requirement={} type={}", id, failure.getClass().getSimpleName());
+                log.warn("requirement.match.reference_check_failed requirementId={} errorType={}",
+                        id, failure.getClass().getSimpleName());
             }
         }
         reviewCursor = batch.size() < 25 ? "" : batch.get(batch.size() - 1);
@@ -40,6 +43,8 @@ public class RequirementMatchWorker {
 
     public void runOnce() {
         for (String id : runs.due()) {
+            long started = System.nanoTime();
+            String phase = "claim";
             try {
                 var job = runs.claim(id, UUID.randomUUID().toString());
                 if (job == null) continue;
@@ -47,15 +52,41 @@ public class RequirementMatchWorker {
                 try {
                     outcome = runs.active(job) ? evaluator.evaluate(job.input()) : failure("MATCH_INPUT_CHANGED");
                 } catch (RuntimeException failure) {
-                    log.warn("条款比对失败 run={} type={}", id, failure.getClass().getSimpleName());
+                    log.warn("requirement.match.evaluate_failed runId={} requirementId={} attempt={} errorType={}",
+                            id, job.requirement(), job.attempts(), failure.getClass().getSimpleName());
                     outcome = failure("MATCH_WORKER_ERROR");
                 }
-                runs.finish(job, outcome);
+                phase = "persist";
+                var finished = runs.finish(job, outcome);
+                if (finished != null) logResult(job, finished, started);
             } catch (RuntimeException failure) {
                 // A database interruption leaves the lease recoverable by the next worker.
-                log.warn("比对任务未能交付 run={} type={}", id, failure.getClass().getSimpleName());
+                log.warn("requirement.match.delivery_failed runId={} phase={} errorType={} durationMs={}", id,
+                        phase, failure.getClass().getSimpleName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             }
         }
+    }
+
+    private void logResult(RequirementMatchService.Run job, RequirementMatchService.Finished finished, long started) {
+        var progress = finished.progress();
+        var stages = progress.path("stages");
+        String stage = "-";
+        for (String name : job.input().order()) {
+            String status = stages.path(name).path("status").asText();
+            if ("failed".equals(status) || "blocked".equals(status)) stage = name;
+        }
+        var stageProgress = stages.path(stage);
+        String reason = progress.path("reason").asText(stageProgress.path("reason").asText("-"));
+        Level level = switch (finished.status()) {
+            case "failed", "retry_wait" -> Level.WARN;
+            case "blocked" -> job.attempts() == 1 ? Level.WARN : Level.DEBUG;
+            default -> Level.DEBUG;
+        };
+        log.atLevel(level).log("requirement.match.result runId={} requirementId={} documentId={} parseRunId={} projectId={}"
+                        + " status={} stage={} reason={} attempt={} retryInSeconds={} durationMs={} platformRequestId={} indexVersion={}",
+                job.id(), job.requirement(), job.document(), job.parseRun(), job.input().project(), finished.status(), stage,
+                reason, job.attempts(), finished.retrySeconds(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
+                stageProgress.path("platformRequestId").asText("-"), stageProgress.path("indexVersion").asText("-"));
     }
 
     private MatchEvaluator.Evaluation failure(String reason) {

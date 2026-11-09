@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,6 +95,7 @@ public class ParseService {
             throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
         }
 
+        long started = System.nanoTime();
         ParseRun run = new ParseRun();
         run.setId(Ids.next("RUN"));
         run.setDocumentId(documentId);
@@ -108,6 +110,7 @@ public class ParseService {
         List<RawBlock> rawBlocks;
         List<ExtractedRequirement> extracted;
         List<String> issues = new ArrayList<>();
+        String phase = "read";
         try {
             rawBlocks = readBlocks(document);
             if (rawBlocks.isEmpty()) throw new DocumentReadException("文档没有可读取内容");
@@ -118,15 +121,19 @@ public class ParseService {
             for (RawBlock block : rawBlocks) {
                 if (block.issue() != null) issues.add(block.anchor() + "：" + block.issue());
             }
+            phase = "extract";
             ExtractionResult result = extractor.extractWithReport(rawBlocks);
             run.setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
+            phase = "source_review";
             extracted = withSourceReview(result.requirements(), rawBlocks);
             if (extracted.isEmpty() && !previous.isEmpty()) {
                 throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
             }
         } catch (Exception exception) {
-            log.warn("解析失败 document={} type={}", documentId, exception.getClass().getSimpleName());
+            log.warn("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
+                    run.getId(), documentId, project.getId(), phase, exception.getClass().getSimpleName(),
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             run.setStatus(ParseRun.FAILED);
             String reason = exception instanceof DocumentReadException ? exception.getMessage() : "解析失败，请检查文档及服务配置；已有结果保留";
             run.setMessage(truncate(reason, 990));
@@ -173,6 +180,9 @@ public class ParseService {
         matches.parsed(project, document, saved.stream().map(Saved::requirement).toList());
         audit.successInBu(actorId, project.getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
+        log.info("document.parse.result parseRunId={} documentId={} projectId={} status={} blocks={} requirements={} issues={} durationMs={}",
+                run.getId(), documentId, project.getId(), run.getStatus(), rawBlocks.size(), saved.size(), issueCount,
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         return view(run);
     }
 

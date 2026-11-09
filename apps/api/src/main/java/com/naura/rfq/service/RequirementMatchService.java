@@ -55,6 +55,7 @@ public class RequirementMatchService {
     record Run(String id, String requirement, String document, int documentVersion, String parseRun, long requirementVersion,
             long policyVersion, String fingerprint, boolean current, String status, String leaseToken, int attempts,
             JsonNode progress, MatchEvaluator.Input input) {}
+    record Finished(String status, int retrySeconds, ObjectNode progress) {}
     private record Result(JsonNode stamp, JsonNode payload) {}
 
     public Policy policy(CurrentUser user, String bu) {
@@ -385,16 +386,16 @@ public class RequirementMatchService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public void finish(Run job, MatchEvaluator.Evaluation outcome) {
+    public Finished finish(Run job, MatchEvaluator.Evaluation outcome) {
         var project = projects.findByIdForUpdate(job.input().project()).orElse(null);
         var document = documents.findByIdForUpdate(job.document()).orElse(null);
         var requirement = requirements.findByIdForUpdate(job.requirement()).orElse(null);
         var run = runWhere("where id=? and lease_token=? and current_run=1 and lease_until>utc_timestamp(6) for update",
                 job.id(), job.leaseToken());
-        if (run == null) return;
+        if (run == null) return null;
         if (!currentInput(project, document, requirement, run)) {
             supersede(run.requirement());
-            return;
+            return null;
         }
         String state = outcome.state();
         int delay = outcome.retrySeconds();
@@ -430,10 +431,11 @@ public class RequirementMatchService {
             delay = Math.max(delay, 5 << (failures - 1));
         }
         progress.put("failureCount", failures);
-        jdbc.update("""
+        int updated = jdbc.update("""
                 update requirement_match_run set status=?,next_attempt_at=timestampadd(second,?,utc_timestamp(6)),
                     lease_token=null,lease_until=null,progress=? where id=? and lease_token=?
                 """, state, delay == 0 ? null : delay, progress.toString(), run.id(), run.leaseToken());
+        return updated == 1 ? new Finished(state, delay, progress) : null;
     }
 
     private ObjectNode view(Project project, Requirement requirement, Run run, boolean detail) {
