@@ -2353,3 +2353,89 @@ new file mode 100644
 +    assert_eq!(h.state().session.rev(), revision);
 +    assert!(!h.state().session.dirty);
 +}
+diff --git a/Cargo.lock b/Cargo.lock
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6708,6 +6708,7 @@
+  "serde",
+  "serde_json",
+  "thiserror 2.0.21",
++ "unicode-script",
+  "unicode-segmentation",
+  "wordcraft-geom",
+ ]
+diff --git a/crates/doc/Cargo.toml b/crates/doc/Cargo.toml
+--- a/crates/doc/Cargo.toml
++++ b/crates/doc/Cargo.toml
+@@ -20,6 +20,7 @@
+ serde = { workspace = true }
+ serde_json = { workspace = true }
+ thiserror = { workspace = true }
++unicode-script = { workspace = true }
+ unicode-segmentation = { workspace = true }
+ 
+ [dev-dependencies]
+diff --git a/crates/doc/src/document.rs b/crates/doc/src/document.rs
+--- a/crates/doc/src/document.rs
++++ b/crates/doc/src/document.rs
+@@ -443,8 +443,7 @@
+         Ok(id)
+     }
+ 
+-    /// Count words like Word's status bar (whitespace-separated tokens containing a letter or digit,
+-    /// including generated numbered-list labels).
++    /// Count Han characters and other words in the body, including generated numbered-list labels.
+     pub fn word_count(&self) -> usize {
+         self.story_word_count(StoryRef::Body)
+     }
+diff --git a/crates/doc/src/tests.rs b/crates/doc/src/tests.rs
+--- a/crates/doc/src/tests.rs
++++ b/crates/doc/src/tests.rs
+@@ -16,6 +16,13 @@
+     let d = Document::from_text("Hello, world!\nThis is — a test 42.\n\n");
+     assert_eq!(d.word_count(), 7);
+     assert_eq!(count_words(" -- "), 0);
++}
++
++#[test]
++fn word_count_counts_han_characters_individually() {
++    let document = Document::from_text("设备验收要求，𠮷〇。\nRFQ-12包含3项 測試");
++    assert_eq!(document.word_count(), 15);
++    assert_eq!(count_words("规格ABC-123"), 3);
+ }
+ 
+ #[test]
+diff --git a/crates/doc/src/text_walk.rs b/crates/doc/src/text_walk.rs
+--- a/crates/doc/src/text_walk.rs
++++ b/crates/doc/src/text_walk.rs
+@@ -1,11 +1,28 @@
++use unicode_script::{Script, UnicodeScript};
++
+ use super::block::{Block, Blocks};
+ use super::parts::PartKind;
+ use super::position::Path;
+ use super::{InlineObject, Numbering, numbering, para, section, styles};
+ 
+-/// Words in `s` (tokens separated by whitespace that contain at least one alphanumeric char).
++/// Count each Han character separately and group other letters and digits into words.
+ pub fn count_words(s: &str) -> usize {
+-    s.split(|c: char| c.is_whitespace() || c == para::OBJ).filter(|w| w.chars().any(char::is_alphanumeric)).count()
++    let mut count = 0;
++    let mut in_word = false;
++    for c in s.chars() {
++        if c.is_whitespace() || c == para::OBJ {
++            in_word = false;
++        } else if c.is_alphanumeric() {
++            if c.script() == Script::Han {
++                count += 1;
++                in_word = false;
++            } else if !in_word {
++                count += 1;
++                in_word = true;
++            }
++        }
++    }
++    count
+ }
+ 
+ /// How deep in nested tables [`Document::para_paths`] goes: cells below this are skipped.

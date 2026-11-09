@@ -5,7 +5,11 @@ import {mkdir} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
-test('generic catalog renders BU directory, configuration dialog and field editor',async()=>{
+test('generic catalog renders BU directory, configuration dialog and field editor',async t=>{
+ // Use rc-overflow's RAF fallback so its Node MessagePorts do not keep the test alive.
+ const originalChannel=globalThis.MessageChannel;
+ globalThis.MessageChannel=undefined;
+ t.after(()=>{globalThis.MessageChannel=originalChannel;});
  const window=new Window({url:'http://localhost'});Object.assign(globalThis,{window,document:window.document,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),SVGElement:window.SVGElement,Element:window.Element,HTMLElement:window.HTMLElement,ShadowRoot:window.ShadowRoot,IS_REACT_ACT_ENVIRONMENT:true});
  const output=fileURLToPath(new URL('../node_modules/.cache/generic-catalog-ui.mjs',import.meta.url));await mkdir(fileURLToPath(new URL('../node_modules/.cache/',import.meta.url)),{recursive:true});
  await build({entryPoints:[fileURLToPath(new URL('./pages/GenericCatalog.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic'});

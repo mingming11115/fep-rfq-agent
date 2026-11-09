@@ -91,7 +91,9 @@ test('batch confirmation runs from the directory and retains excluded and failed
     assert.equal(checked('1.2 Low confidence'),true);
     assert.equal(checked('1.3 Rejected save'),true);
     await click([...result.querySelectorAll('button')].find(button=>button.textContent.replace(/\s/g,'')==='完成'));
-    assert.equal(document.querySelector('.ant-modal'),null,'finishing closes the batch result dialog');
+    // Happy DOM does not emit the browser's CSS animation-end event.
+    await act(async()=>{result.dispatchEvent(new h.window.Event('animationend',{bubbles:true}));});
+    assert.equal(Boolean(document.querySelector('.ant-modal')),false,'finishing closes the batch result dialog');
     assert.deepEqual(confirmations,[['R1',1],['R3',1]],'finishing does not repeat any confirmation');
   }finally{await h.close();}
 });
@@ -121,7 +123,7 @@ test('technical users enter their own pending card and reselect only when identi
  }finally{await h.close();}
 });
 
-test('only mine scopes response navigation to the current account assignments',async()=>{
+test('only mine scopes response navigation to the current account assignments',async t=>{
  const h=await harness('only-mine'),{ResponsePage,node,root,settle,click}=h;
  const row={projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'1',original:'Source',conclusion:'Comply',status:'待确认',version:1,confirmationAssignmentSource:'explicit'};
  const requirements=[
@@ -132,10 +134,14 @@ test('only mine scopes response navigation to the current account assignments',a
   {...row,id:'R5',clause:'5',title:'My review',confirmationAssigneeId:'other'},
  ];
  const audit=[
-  {id:'A1',object:'R1',action:'Other user updated a response',actor:'Other user'},
-  {id:'A2',object:'R2',action:'I updated a response',actor:'Me'},
+  {id:'A1',objectId:'R1',objectType:'requirement',action:'Other user updated a response',actorId:'other',createdAt:'2026-11-09T03:00:00Z'},
+  {id:'A2',objectId:'R2',objectType:'requirement',action:'I updated a response',actorId:'me',createdAt:'2026-11-09T02:00:00Z'},
  ];
- const props={project:{id:'P',name:'Project',buId:'BU'},requirements,reviews:[{id:'V1',title:'Review',requirementId:'R5',reviewerIds:['me'],status:'待处理'}],route:{page:'response',projectId:'P'},appState:{dataSource:'mysql',accountsById:{},commentsByProject:{},membersByProject:{},audit},actorRole:'SR',actorId:'me',canBusinessAction:()=>false,navigate:()=>{},toast:()=>{}};
+ t.mock.method(globalThis,'fetch',async url=>{
+  assert.equal(url,'/api/rfq/projects/P/activity');
+  return Response.json({code:0,data:audit});
+ });
+ const props={project:{id:'P',name:'Project',buId:'BU'},requirements,reviews:[{id:'V1',title:'Review',requirementId:'R5',reviewerIds:['me'],status:'待处理'}],route:{page:'response',projectId:'P'},appState:{dataSource:'mysql',accountsById:{},commentsByProject:{},membersByProject:{}},actorRole:'SR',actorId:'me',canBusinessAction:()=>false,navigate:()=>{},toast:()=>{}};
  const render=async overrides=>act(async()=>{root.render(React.createElement(ResponsePage,{...props,...overrides}));await settle();});
  const filter=()=>[...node.querySelectorAll('label')].find(label=>label.textContent==='只看我的')?.querySelector('input');
  const title=()=>node.querySelector('.response-card-title-row h2')?.textContent;

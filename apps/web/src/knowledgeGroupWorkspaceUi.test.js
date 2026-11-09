@@ -6,7 +6,11 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
 import {createDemoState} from './data.js';
-test('knowledge group tree filters shared replies and ungrouped records, and RFQ form has one required group choice',async()=>{
+test('knowledge group tree filters shared replies and ungrouped records, and RFQ form has one required group choice',async t=>{
+ // Use rc-overflow's RAF fallback so its Node MessagePorts do not keep the test alive.
+ const originalChannel=globalThis.MessageChannel;
+ globalThis.MessageChannel=undefined;
+ t.after(()=>{globalThis.MessageChannel=originalChannel;});
  const window=new Window({url:'http://localhost'});Object.assign(globalThis,{window,document:window.document,localStorage:window.localStorage,sessionStorage:window.sessionStorage,Document:window.Document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},IS_REACT_ACT_ENVIRONMENT:true});
  const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});const output=directory+'knowledge-group-ui.mjs';
  await build({stdin:{contents:"export {default as Workspace} from './components/AdminWorkspace';export {KnowledgePage} from './pages/ReferencePages';export {default as CreateRfq} from './components/CreateRfqDialog';",resolveDir:fileURLToPath(new URL('.',import.meta.url)),loader:'jsx'},outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});

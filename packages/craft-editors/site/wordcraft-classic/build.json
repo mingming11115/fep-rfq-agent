@@ -1,7 +1,7 @@
 {
   "editor": "wordcraft",
   "version": "0.13.2",
-  "patchSha256": "867004207878109657627cfa4ee9fcc4aa50f315e4d2811263216effbd39ed0c",
+  "patchSha256": "d7f59ccbb5686dad6d264abb36cfa24111dbe8ea0614dbe5f380a5a581922fa0",
   "files": {
     "ATTRIBUTION-craft-fonts.md": "aa2aa7eec68c32ac2da6ff7162ca9100ab3680e4c7b98365fc7c74ddd4167d07",
     "LICENSE-APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
@@ -11,7 +11,7 @@
     "OFL-noto-sans-cjk-sc.txt": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
     "index.html": "acebbce19df6922fd0fef7ec42e1997c84ce65308b0217d6c245a78e322e3048",
     "snippets\\eframe-d31a8450ea12dfc1\\inline0.js": "22a98f9d0c5a0532d291bdc9a3050439420b3d11143b4568fcfd3c66fff36995",
-    "wordcraft-classic.js": "9312d6758c1c2ca66f12783687b2a65fa3143b3d6981205076ccd5ff61488362",
-    "wordcraft-classic_bg.wasm": "c54bd5513275b705669582fa54e194120fc8fff08234e9fc07cb6e9d70f45fe0"
+    "wordcraft-classic.js": "a09da28f77fb48cc6112470edea0d6d6557c515bc975ca027c1a76f81b4a78ab",
+    "wordcraft-classic_bg.wasm": "61c7620eb6f542e3078e944fd6f30cc9b26c746fa9ecfdf5f6a33ffcd49010aa"
   }
 }
