@@ -130,8 +130,8 @@ class ParsingAdaptersTest {
             assertThat(output.getAll()).contains("parseRunId=RUN-test").doesNotContain("test-key");
         } finally { s.stop(0); }
     }
-    @Test void wrongCitationAndMalformedJsonFallBack() throws Exception {
-        for (String bad : List.of(answer(9, source), answer(0, "伪造的客户原文"), "{bad")) {
+    @Test void wrongCitationAndMalformedJsonFallBack(CapturedOutput output) throws Exception {
+        for (String bad : List.of(answer(9, source), answer(0, "伪造的客户原文"), "{model-private-content")) {
             var s = server(200, envelope(bad), 0);
             try {
                 var result = extractor(settings(url(s), true)).extractWithReport(blocks());
@@ -139,6 +139,13 @@ class ParsingAdaptersTest {
                 assertThat(result.requirements()).hasSize(1); assertThat(result.issues()).isNotEmpty();
             } finally { s.stop(0); }
         }
+        var fallbackLogs = output.getAll().lines()
+            .filter(line -> line.contains("document.parse.llm.fallback") && line.contains("phase=validation"))
+            .toList();
+        assertThat(fallbackLogs)
+            .anySatisfy(line -> assertThat(line).contains("validationDetail=来源校验失败"))
+            .anySatisfy(line -> assertThat(line).contains("validationDetail=模型输出不是有效的 JSON"));
+        assertThat(output.getAll()).doesNotContain("伪造的客户原文", "model-private-content", source, "test-key");
     }
     @Test void errorsAndTimeoutsFallBackWithoutLeakingResponseBody(CapturedOutput output) throws Exception {
         for (int status : List.of(429, 500, 200)) {

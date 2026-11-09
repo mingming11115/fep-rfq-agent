@@ -1,5 +1,6 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
@@ -95,7 +96,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                 phase = "validation";
                 JsonNode choice = response.path("choices").path(0);
                 if (!"stop".equals(choice.path("finish_reason").asText())) {
-                    throw new IllegalArgumentException("响应未完整结束");
+                    throw new ModelValidationException("响应未完整结束");
                 }
                 String content = choice.path("message").path("content").asText("").trim();
                 if (content.startsWith("```")) {
@@ -110,8 +111,9 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                     (System.nanoTime() - startedAt) / 1_000_000);
             } catch (Exception exception) {
                 String reason = ParseHttpClient.reason(exception);
-                log.error("document.parse.llm.fallback parseRunId={} model={} firstBlockIndex={} phase={} reason={} durationMs={}",
-                    parseRunId, config.getModel(), firstBlockIndex, phase, reason, (System.nanoTime() - startedAt) / 1_000_000);
+                String detail = "validation".equals(phase) ? validationDetail(exception) : "-";
+                log.error("document.parse.llm.fallback parseRunId={} model={} firstBlockIndex={} phase={} reason={} validationDetail={} durationMs={}",
+                    parseRunId, config.getModel(), firstBlockIndex, phase, reason, detail, (System.nanoTime() - startedAt) / 1_000_000);
                 issues.add("模型批次 " + firstBlockIndex + " 已降级规则抽取：" + reason);
                 results.addAll(rules.extract(batch));
                 // A failing endpoint is tried only once in a run; valid earlier batches survive.
@@ -140,25 +142,35 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         return new ExtractionResult(ordered, used, issues);
     }
 
+    private static String validationDetail(Exception exception) {
+        if (exception instanceof ModelValidationException) {
+            return exception.getMessage();
+        }
+        if (exception instanceof JsonProcessingException) {
+            return "模型输出不是有效的 JSON";
+        }
+        return exception.getClass().getSimpleName();
+    }
+
     private List<ExtractedRequirement> validate(JsonNode response, List<RawBlock> batch) {
         if (response == null || !response.path("requirements").isArray() || !response.path("ignoredBlockIndexes").isArray()) {
-            throw new IllegalArgumentException("缺少输出字段");
+            throw new ModelValidationException("缺少输出字段");
         }
         Map<Integer, RawBlock> sources = new HashMap<>(); batch.forEach(b -> sources.put(b.index(), b));
         Map<Integer, java.util.BitSet> spans = new HashMap<>();
         Set<Integer> covered = new HashSet<>(); Set<Integer> ignored = new HashSet<>(); Set<String> seen = new HashSet<>();
         List<ExtractedRequirement> results = new ArrayList<>();
         if (response.path("requirements").size() > 1000) {
-            throw new IllegalArgumentException("条款过多");
+            throw new ModelValidationException("条款过多");
         }
         for (JsonNode candidate : response.path("requirements")) {
             if (!candidate.path("blockIndex").isIntegralNumber()) {
-                throw new IllegalArgumentException("来源编号缺失");
+                throw new ModelValidationException("来源编号缺失");
             }
             int index = candidate.path("blockIndex").asInt(); RawBlock source = sources.get(index);
             String quote = required(candidate, "originalText"); String text = required(candidate, "requirementText");
             if (source == null || !source.text().contains(quote) || !seen.add(index + ":" + quote + ":" + text)) {
-                throw new IllegalArgumentException("来源校验失败");
+                throw new ModelValidationException("来源校验失败");
             }
             covered.add(index);
             var span = spans.computeIfAbsent(index, key -> new java.util.BitSet(source.text().length()));
@@ -180,7 +192,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         }
         for (JsonNode index : response.path("ignoredBlockIndexes")) {
             if (!index.isIntegralNumber() || !sources.containsKey(index.asInt()) || covered.contains(index.asInt()) || !ignored.add(index.asInt())) {
-                throw new IllegalArgumentException("忽略范围非法");
+                throw new ModelValidationException("忽略范围非法");
             }
         }
         for (var entry : sources.entrySet()) {
@@ -191,29 +203,35 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             String text = entry.getValue().text();
             for (int i = 0; i < text.length(); i++) {
                 if (!Character.isWhitespace(text.charAt(i)) && !span.get(i)) {
-                    throw new IllegalArgumentException("块内原文覆盖不完整");
+                    throw new ModelValidationException("块内原文覆盖不完整");
                 }
             }
         }
         covered.addAll(ignored);
         if (!covered.equals(sources.keySet())) {
-            throw new IllegalArgumentException("内容块覆盖不完整");
+            throw new ModelValidationException("内容块覆盖不完整");
         }
         // Model may not silently discard a clause already recognised by the deterministic extractor.
         if (rules.extract(batch).stream().anyMatch(r -> ignored.contains(r.blockIndex()))) {
-            throw new IllegalArgumentException("模型忽略了候选要求");
+            throw new ModelValidationException("模型忽略了候选要求");
         }
         return results;
     }
     private String required(JsonNode node, String field) {
         String text = optional(node, field);
         if (text == null || text.length() > 16000) {
-            throw new IllegalArgumentException("字段缺失或超长");
+            throw new ModelValidationException("字段缺失或超长");
         }
         return text;
     }
     private String optional(JsonNode node, String field) {
         JsonNode value = node.path(field);
         return value.isTextual() && !value.asText().isBlank() ? value.asText().trim() : null;
+    }
+
+    private static class ModelValidationException extends IllegalArgumentException {
+        ModelValidationException(String message) {
+            super(message);
+        }
     }
 }
