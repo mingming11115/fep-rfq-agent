@@ -1,4 +1,4 @@
-import {createKnowledgeLibraryClient} from '../knowledgeLibraryClient';
+import {createKnowledgeLibraryClient,libraryPermissions} from '../knowledgeLibraryClient';
 import {CAPABILITIES} from '../modelProcessSeeds';
 import {resourceStorageKey,selectReadableResources} from '../resourceVisibility';
 import React,{useEffect,useState,useRef} from 'react';
@@ -25,7 +25,7 @@ export default function KnowledgeGroupWorkspace({page,onNavigate,context,childre
  useEffect(()=>{if(databaseBacked)setCatalog(load());},[databaseBacked,context.state.resourcesByBuId?.[buId]?.catalog]);
  const selectGroup=id=>{setGroupId(id);try{sessionStorage.setItem(storageKey,id);}catch{}onNavigate(page,null,{groupId:id,buId});};
  useEffect(()=>{if(validGroup(initialGroupId))setGroupId(initialGroupId);},[initialGroupId,buId]);
- const canConfigure=canPerform(role,'model:configure',context);
+ const canConfigure=databaseBacked?libraryPermissions(context,role,'reply').configure:canPerform(role,'model:configure',context);
  const selected=catalog.nodes.find(n=>n.id===groupId),title=selected?nodePath(catalog,selected.id):groupId===ALL_GROUPS?'全部资料':'未分组';
  const tree=parent=>catalog.nodes.filter(n=>(n.parentId||'')===parent).flatMap(n=>{const children=tree(n.id),match=!query||nodePath(catalog,n.id).toLowerCase().includes(query.toLowerCase());return match||children.length?[{key:n.id,title:<span>{n.name}{!nodeEnabled(catalog,n.id)&&<Tag>停用</Tag>}</span>,children}]:[];});
  const scope={catalog,groupId,selectGroup,updateCatalog:setCatalog,defaultGroupIds:selected&&nodeEnabled(catalog,groupId)?[groupId]:[],matches:(kind,row)=>matchesResourceGroup(kind,row,groupId,catalog),groups:(kind,row)=>resourceGroupIds(kind,row,catalog),validate:(values,previous=[])=>validateResourceGroups(catalog,values,previous)};

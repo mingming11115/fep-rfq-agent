@@ -229,13 +229,16 @@ POST /api/rfq/projects
 | Body(JSON) | `customer` | string | ❌ | 客户名称 |
 | Body(JSON) | `ownerId` | string | ❌ | 负责人，缺省为当前用户 |
 | Body(JSON) | `buId` | string | ❌ | 所属 BU，缺省取当前用户第一个 BU |
+| Body(JSON) | `groupId` | string | ✅ | 当前 BU 的一个启用分组。分组及其上级和对应层级均须启用 |
 
 ```json
-{ "code": "RFQ-2026-002", "name": "循环水泵改造", "customer": "南方电网" }
+{ "code": "RFQ-2026-002", "name": "循环水泵改造", "customer": "南方电网", "groupId": "<当前 BU 分组 ID>" }
 ```
 
 **权限**：SR / BU_ADMIN（规范 §5 顺序：归属校验 → 角色校验 → 业务）
-**错误**：`400 项目编号已存在：xxx` / `403 当前账号未绑定任何事业部`
+**错误**：项目编号重复、分组缺失或不属于当前 BU 时返回 400。分组、上级或层级已停用时返回 409。
+
+创建、列表和详情返回绑定时保存的 `groupId`、`groupPath`、`groupCatalogVersion` 和 `groupValues`。此前未绑定分组的项目省略这些字段。
 
 ---
 
@@ -557,10 +560,10 @@ TOKEN=$(curl -s --noproxy "*" -X POST http://127.0.0.1:48083/api/rfq/auth/login 
   -H "Content-Type: application/json" \
   -d '{"username":"sr01","password":"<演示密码>"}' | python -c "import sys,json;print(json.load(sys.stdin)['data']['token'])")
 
-# 2) 创建项目
+# 2) 创建项目。将占位值替换为所属 BU 已启用的分组 ID。
 curl -s --noproxy "*" -X POST http://127.0.0.1:48083/api/rfq/projects \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"code":"RFQ-TEST-001","name":"联调测试项目"}'
+  -d '{"code":"RFQ-TEST-001","name":"联调测试项目","groupId":"<当前 BU 分组 ID>"}'
 
 # 3) 载入示例 RFQ（无需真实文件）
 curl -s --noproxy "*" -X POST http://127.0.0.1:48083/api/rfq/projects/<projectId>/documents/sample \

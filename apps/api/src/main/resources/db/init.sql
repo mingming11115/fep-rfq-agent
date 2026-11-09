@@ -368,6 +368,14 @@ create table if not exists rfq_document_replacement (
 );
 -- RFQ_MIGRATION_V16_END
 
+-- RFQ_MIGRATION_V17
+alter table project
+    add column group_id varchar(128) null,
+    add column group_path varchar(1024) null,
+    add column group_catalog_version bigint null,
+    add column group_values json null;
+-- RFQ_MIGRATION_V17_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

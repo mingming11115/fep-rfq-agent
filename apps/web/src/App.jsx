@@ -163,12 +163,13 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
   try{
    assertPermission(current.actorRole,'project:create',context);
    if(['name','ownerId','deadline'].some(key=>!form[key]?.trim()))throw new Error('请填写项目名称、负责人和截止时间');
-   const catalog=readRfqCatalog(localStorage,context),binding=databaseBacked?{}:resolveGroupBinding(readGenericCatalog(localStorage,buId,catalog),form.groupId,buId);
+   const localBinding=databaseBacked?null:resolveGroupBinding(readGenericCatalog(localStorage,buId,readRfqCatalog(localStorage,context)),form.groupId,buId);
    const code=databaseBacked?`RFQ-${Date.now().toString(36).toUpperCase()}`:`RFQ-${String(Math.max(0,...[...current.projects,...Object.values(current.deletedProjectsById||{}).map(record=>record.project)].map(p=>Number((p.code||p.id).match(/\d+$/)?.[0]||0)))+1).padStart(3,'0')}`;
    const {technicalMode,srId,technicalIds,technicalRepresentativeId,...projectForm}=form;
    const personnel=createProjectPersonnel(current,{buId,ownerId:form.ownerId,technicalMode,srId,technicalIds,technicalRepresentativeId});
    const saved=await createBackendProject({...form,id:code,buId});
    const id=saved.id;
+   const binding=localBinding||{groupId:saved.groupId,groupPath:saved.groupPath,groupCatalogVersion:saved.groupCatalogVersion,groupValues:saved.groupValues};
    const p={...projectForm,...binding,id,code:saved.code,backendProjectId:id,backendBuId:saved.buId,createdById:current.actorId,buId,...personnel,technicalReviewSettings:createProjectReviewSettings(technicalMode),createdAt:saved.createdAt||new Date().toISOString(),name:form.name.trim(),equipment:[binding.modelName,binding.modelRevision,binding.modelConfig].filter(Boolean).join(' · '),owner:personnel.owner,version:databaseBacked?saved.version:saved.version||1};
    if(databaseBacked)p.defaultConfirmationAssigneeId=current.actorId;
    update(s=>event({...s,projects:[p,...s.projects],activeProjectId:id,membersByProject:{...s.membersByProject,[id]:structuredClone(s.members||[])},requirementsByProject:{...s.requirementsByProject,[id]:[]},reviewsByProject:{...s.reviewsByProject,[id]:[]},snapshotsByProject:{...s.snapshotsByProject,[id]:[]}},'创建项目',id,`${p.name} · ${p.groupPath||[p.modelName,p.modelRevision,p.processCode,p.processName].filter(Boolean).join(" / ")}`));

@@ -35,7 +35,7 @@ class ProjectMaintenanceIntegrationTest extends AcceptanceSupport {
     }
     @Test void projectCreationPersistsDeadlineAndRejectsOverlongMetadata() throws Exception {
         String sr=token("sr01");
-        var created=ok(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","日期验收","deadline","2027-01-20")),sr));
+        var created=ok(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","日期验收","deadline","2027-01-20","groupId",PROJECT_GROUP)),sr));
         assertThat(created.path("deadline").asText()).isEqualTo("2027-01-20");
         mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","长".repeat(201))),sr)).andExpect(status().isBadRequest());
     }

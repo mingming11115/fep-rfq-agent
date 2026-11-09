@@ -75,23 +75,23 @@ class ProjectAccessIntegrationTest extends AcceptanceSupport {
     }
     @Test void ownerMustBeActiveSrInSameBu() throws Exception {
         String sr=token("sr01");
-        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId","demo-technical")),sr))
+        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId","demo-technical","groupId",PROJECT_GROUP)),sr))
                 .andExpect(status().isBadRequest());
-        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId","missing-user")),sr))
+        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId","missing-user","groupId",PROJECT_GROUP)),sr))
                 .andExpect(status().isBadRequest());
         String admin=token("admin"); var foreign=newUser(admin,newBu(admin),"SR");
-        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId",foreign.path("id").asText())),sr))
+        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId",foreign.path("id").asText(),"groupId",PROJECT_GROUP)),sr))
                 .andExpect(status().isBadRequest());
         var inactive=newUser(admin,"BU-FEP","SR"); String inactiveId=inactive.path("id").asText();
         ok(auth(body(patch("/api/rfq/admin/users/"+inactiveId+"/status"),Map.of("status","DISABLED")),admin));
-        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId",inactiveId)),sr))
+        mvc.perform(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","负责人验收","ownerId",inactiveId,"groupId",PROJECT_GROUP)),sr))
                 .andExpect(status().isBadRequest());
     }
     @Test void projectCreatorIsTheDefaultConfirmerWhenTheOwnerIsDifferent() throws Exception {
         String creator=token("sr01");
         var owner=newUser(token("admin"),"BU-FEP","SR");
         var project=ok(auth(body(post("/api/rfq/projects"),Map.of("code","P"+unique(),"name","确认人验收",
-                "ownerId",owner.path("id").asText())),creator));
+                "ownerId",owner.path("id").asText(),"groupId",PROJECT_GROUP)),creator));
         String id=project.path("id").asText();
         var workflow=ok(auth(get("/api/rfq/projects/"+id+"/workflow-records"),creator));
         assertThat(workflow.path("defaultConfirmationAssigneeId").asText()).isEqualTo("demo-sales");

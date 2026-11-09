@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -16,7 +18,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@Sql(scripts = "/project-groups.sql", config = @SqlConfig(encoding = "UTF-8"))
 public abstract class AcceptanceSupport {
+    protected static final String PROJECT_GROUP = "TEST-PROCESS";
     @Autowired protected MockMvc mvc;
     @Autowired protected ObjectMapper json;
 
@@ -43,6 +47,6 @@ public abstract class AcceptanceSupport {
                 "password", "TestOnly@2026", "buId", buId, "role", role)), admin));
     }
     protected String newProject(String sr, String code) throws Exception {
-        return ok(auth(body(post("/api/rfq/projects"), Map.of("code", code, "name", "权限验收项目")), sr)).path("id").asText();
+        return ok(auth(body(post("/api/rfq/projects"), Map.of("code", code, "name", "权限验收项目", "groupId", PROJECT_GROUP)), sr)).path("id").asText();
     }
 }

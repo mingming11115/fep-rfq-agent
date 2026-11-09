@@ -10,5 +10,6 @@ public record CreateProjectRequest(
         @Size(max=200) String customer,
         String ownerId,
         String buId,
-        String deadline) {
+        String deadline,
+        @Size(max=128) String groupId) {
 }

@@ -10,7 +10,7 @@ function backendBu(project,user){
 }
 
 export async function createBackendProject(project,api=defaultApi,user=readSession()?.user){
- return api.post('/projects',{code:project.code||project.id,name:project.name.trim(),customer:project.customer||'',ownerId:project.ownerId,buId:backendBu(project,user),deadline:project.deadline});
+ return api.post('/projects',{code:project.code||project.id,name:project.name.trim(),customer:project.customer||'',ownerId:project.ownerId,buId:backendBu(project,user),deadline:project.deadline,groupId:project.groupId});
 }
 
 export function updateBackendProjectArchive(project,archive,reason,api=defaultApi){
