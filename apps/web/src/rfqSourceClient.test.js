@@ -13,6 +13,13 @@ test('failure and unknown local sources never generate substitute clauses',async
  await assert.rejects(()=>parseRfqSource('P',{backendDocumentId:'D'},{post:async()=>({status:'failed',message:'解析失败'})}),/解析失败/);
 });
 
+test('a failed read after committed parsing is distinguishable from a failed parse',async()=>{
+ const run={id:'RUN',status:'completed',requirementCount:1};
+ await assert.rejects(()=>parseRfqSource('P',{backendDocumentId:'D'},{
+  post:async()=>run,get:async()=>{throw new Error('请求超时');},
+ }),error=>error.run===run&&error.message.includes('解析已完成'));
+});
+
 test('the semiconductor demo project uploads the selected bytes and uses only backend clauses',async()=>{
  const projectId='RFQ-DEMO-UPLOAD',calls=[],original=new Blob(['unique uploaded requirement']);
  const api={
