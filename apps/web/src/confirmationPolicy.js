@@ -4,7 +4,7 @@ import {canAccessProject,getPersonnelContext} from './personnelDomain.js';
 export const getReviewActorIds = review => [...new Set((review?.reviewerIds ?? (review?.ownerId ? [review.ownerId] : [])).filter(Boolean))];
 export const hasAssignedConfirmer = row => row?.confirmationAssignmentSource === 'explicit' && !!row?.confirmationAssigneeId;
 export function getResponseReview(state,projectId,requirementId){
- return (state.reviewsByProject?.[projectId]||[]).find(r=>r.requirementId===requirementId&&r.kind!=='clarification'&&r.status!=='已取消'&&Array.isArray(r.reviewerIds));
+ return (state.reviewsByProject?.[projectId]||[]).find(r=>r.requirementId===requirementId&&!['clarification','deviation'].includes(r.kind)&&r.status!=='已取消'&&Array.isArray(r.reviewerIds));
 }
 export function getDefaultConfirmationActorId(state,projectId){
  const project=state.projects?.find(p=>p.id===projectId);

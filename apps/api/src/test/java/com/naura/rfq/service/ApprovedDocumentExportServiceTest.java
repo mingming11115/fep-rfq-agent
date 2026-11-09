@@ -72,7 +72,7 @@ class ApprovedDocumentExportServiceTest {
             var roles = mock(UserBuRoleMapper.class);
             var originals = mock(DocumentService.class);
             var exporter = new ApprovedDocumentExportService(jdbc, json, projects, documents, requirements, blocks,
-                    profiles, users, roles, mock(AccessGuard.class), originals);
+                    profiles, users, roles, mock(AccessGuard.class), originals, mock(RequirementMatchService.class), mock(ProjectWorkScope.class));
             when(projects.findById(projectId)).thenReturn(Optional.of(project));
             when(documents.findByProjectIdOrderByCreatedAtDesc(projectId)).thenReturn(List.of(document));
             when(jdbc.queryForList(startsWith("select payload from response_snapshot"), eq(String.class), eq(projectId)))

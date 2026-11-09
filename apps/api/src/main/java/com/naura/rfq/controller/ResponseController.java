@@ -12,12 +12,14 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class ResponseController {
     private final ResponseService service;
-    public record WriteRequest(Long version,Long sourceVersion,JsonNode patch) {}
+    public record WriteRequest(Long version,Long sourceVersion,JsonNode patch,String matchRunId,String candidateId,String detachMatchReason) {
+        ResponseService.MatchChoice choice() { return new ResponseService.MatchChoice(matchRunId, candidateId, detachMatchReason); }
+    }
     public record RestoreRequest(Long version, Long sourceVersion, String kind, Long historyVersion) {}
     @PatchMapping
-    public ApiResponse<JsonNode> save(@PathVariable String id,@RequestBody WriteRequest request){return ApiResponse.success(service.write(CurrentUserHolder.require(),id,request.version(),request.sourceVersion(),request.patch(),false));}
+    public ApiResponse<JsonNode> save(@PathVariable String id,@RequestBody WriteRequest request){return ApiResponse.success(service.write(CurrentUserHolder.require(),id,request.version(),request.sourceVersion(),request.patch(),false,request.choice()));}
     @PostMapping("/confirm")
-    public ApiResponse<JsonNode> confirm(@PathVariable String id,@RequestBody WriteRequest request){return ApiResponse.success(service.write(CurrentUserHolder.require(),id,request.version(),request.sourceVersion(),request.patch(),true));}
+    public ApiResponse<JsonNode> confirm(@PathVariable String id,@RequestBody WriteRequest request){return ApiResponse.success(service.write(CurrentUserHolder.require(),id,request.version(),request.sourceVersion(),request.patch(),true,request.choice()));}
 
     @GetMapping("/history")
     public ApiResponse<ResponseService.History> history(@PathVariable String id) {

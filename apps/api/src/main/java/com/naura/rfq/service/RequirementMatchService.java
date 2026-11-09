@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -42,6 +43,10 @@ public class RequirementMatchService {
     private final AuditService audit;
     private final CapabilityMatch capability;
     private final MatchEvaluator evaluator;
+    private final MatchDeviationService deviations;
+    private final ProjectWorkScope work;
+    @Value("${rfq.match.low-confidence-threshold:0}")
+    private double lowConfidenceThreshold;
 
     public record Policy(List<String> matchOrder, long version, String changedBy, String changedAt) {}
     public record Accepted(String runId, String status) {}
@@ -103,12 +108,43 @@ public class RequirementMatchService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Accepted retry(CurrentUser user, String id, RequirementMatchRequest.Retry request) {
         var scope = lockForUser(user, id);
+        requireMatchEditor(user, scope.project());
         String key = "manual:" + request.requestId();
         var prior = runWhere("where requirement_id=? and request_key=?", id, key);
         if (prior != null) return new Accepted(prior.id(), prior.status());
         requireVersion(scope.requirement(), request.sourceRequirementVersion());
         if (!ready(scope.requirement())) throw new BusinessException(409, "请先核对条款原文");
         return enqueue(scope, policy(scope.project().getBuId()), "manual", key);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ObjectNode reject(CurrentUser user, String id, String runId, String reason) {
+        var scope = lockForUser(user, id);
+        requireMatchEditor(user, scope.project());
+        completed(scope.project(), scope.requirement(), runId);
+        return deviations.record(scope.project(), scope.requirement(), runId, "rejected", reason.trim());
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ObjectNode closeDeviation(CurrentUser user, String id, long version, String reason) {
+        var scope = lockForUser(user, id);
+        requireMatchEditor(user, scope.project());
+        return deviations.close(user, scope.project(), scope.requirement(), version, reason.trim());
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ObjectNode professionalReview(CurrentUser user, String id, RequirementMatchRequest.ProfessionalReview request) {
+        var scope = lockForUser(user, id);
+        requireMatchEditor(user, scope.project());
+        return deviations.assignReview(user, scope.project(), scope.requirement(), request.version(), request.reviewerIds(),
+                request.deadline(), request.reason().trim());
+    }
+
+    private void requireMatchEditor(CurrentUser user, Project project) {
+        if (user.roles().stream().noneMatch(role -> project.getBuId().equals(role.buId())
+                && Set.of("SR", "TECH", "BU_ADMIN").contains(role.role()))) {
+            throw new BusinessException(403, "当前账号无权处理比对结果");
+        }
     }
 
     public ObjectNode context(CurrentUser user, String id) {
@@ -166,13 +202,29 @@ public class RequirementMatchService {
         var items = jdbc.query("select id" + filter + " order by document_id,sort_order,id limit ? offset ?",
                 (rs, n) -> rs.getString("id"), projectId, documentId, documentId, parseRunId, parseRunId,
                 safeSize, (long) (safePage - 1) * safeSize).stream().map(id -> {
-                    var requirement = requirement(id);
-                    var run = runWhere("where requirement_id=? and current_run=1", id);
-                    if (run != null) return view(project, requirement, run, false);
-                    return json.createObjectNode().put("requirementId", id).put("documentId", requirement.getDocumentId())
-                            .put("parseRunId", requirement.getParseRunId()).put("status", ready(requirement) ? "not_run" : "needs_review");
+                    return currentView(project, requirement(id), false);
                 }).toList();
         return PageView.of(items, count, safePage, safeSize);
+    }
+
+    @Transactional(readOnly = true)
+    public ObjectNode current(CurrentUser user, String id) {
+        var requirement = requirement(id);
+        var project = project(user, requirement.getProjectId());
+        var view = currentView(project, requirement, true);
+        var deviation = deviations.find(project, requirement);
+        if (deviation != null) view.set("deviation", deviation);
+        var reference = jdbc.query("select json_extract(payload,'$.matchReference') from requirement_response where requirement_id=? and json_contains_path(payload,'one','$.matchReference')",
+                (row, n) -> parse(row.getString(1)), id).stream().findFirst().orElse(json.nullNode());
+        if (reference.isObject()) view.put("referenceInvalid", !referenceAvailable(project, requirement, reference));
+        return view;
+    }
+
+    private ObjectNode currentView(Project project, Requirement requirement, boolean detail) {
+        var run = runWhere("where requirement_id=? and current_run=1", requirement.getId());
+        if (run != null) return view(project, requirement, run, detail);
+        return json.createObjectNode().put("requirementId", requirement.getId()).put("documentId", requirement.getDocumentId())
+                .put("parseRunId", requirement.getParseRunId()).put("status", ready(requirement) ? "not_run" : "needs_review");
     }
 
     @Transactional(readOnly = true)
@@ -181,6 +233,131 @@ public class RequirementMatchService {
         if (run == null) throw new BusinessException(404, "比对轮次不存在");
         var project = project(user, run.input().project());
         return view(project, requirements.findById(id).orElse(null), run, true);
+    }
+
+    private ObjectNode completed(Project project, Requirement requirement, String runId) {
+        publicationAccess.lockBu(project.getBuId());
+        var run = runWhere("where id=? and requirement_id=? and current_run=1", runId, requirement.getId());
+        if (run != null) {
+            var view = view(project, requirement, run, true);
+            if (view.path("result").isObject()) return view;
+        }
+        throw new BusinessException(409, "比对轮次已失效或未完成，请刷新");
+    }
+
+    ObjectNode adopt(Project project, Requirement requirement, String runId, String candidateId) {
+        if (runId == null || runId.isBlank() || candidateId == null || candidateId.isBlank()) {
+            throw new BusinessException(400, "请选择比对轮次和候选");
+        }
+        var result = completed(project, requirement, runId).path("result");
+        String library = result.path("matchedLibrary").asText();
+        var stage = result.path("stages").path(library);
+        var reference = json.createObjectNode().put("runId", runId).put("library", library)
+                .put("candidateId", candidateId).put("inputFingerprint", digest(snapshot(requirement).toString()))
+                .put("workVersion", deviations.workVersion(project.getId()));
+        if ("capability".equals(library) && "capability".equals(candidateId) && !"待确认".equals(result.path("conclusion").asText())) {
+            String capabilityStamp = jdbc.queryForObject("""
+                    select json_unquote(json_extract(scope_stamp,'$.capability')) from requirement_match_result where run_id=?
+                    """, String.class, runId);
+            reference.put("capabilityFingerprint", capabilityStamp);
+            var sources = reference.putArray("sources");
+            for (var check : stage.path("checks")) {
+                for (var candidate : check.path("candidates")) {
+                    var source = sources.addObject().put("id", candidate.path("id").asText()).put("version", candidate.path("version").asInt());
+                    source.set("evidenceRefs", candidate.path("evidenceRefs"));
+                }
+            }
+            return reference;
+        }
+        for (JsonNode candidate : stage.path("candidates")) {
+            if (candidateId.equals(candidate.path("id").asText())) return reference.put("version", candidate.path("version").asInt());
+        }
+        throw new BusinessException(409, "候选不属于该轮的可用结果");
+    }
+
+    boolean referenceAvailable(Project project, Requirement requirement, JsonNode reference) {
+        if (!reference.isObject()) return true;
+        var snapshot = snapshot(requirement);
+        return !work.retired(project.getId(), requirement.getDocumentId())
+                && reference.path("inputFingerprint").asText().equals(digest(snapshot.toString()))
+                && evaluator.referenceAvailable(new MatchEvaluator.Input(project.getBuId(), project.getId(), snapshot, DEFAULT_ORDER), reference);
+    }
+
+    JsonNode readableResponse(Project project, JsonNode response) {
+        var reference = response.path("matchReference");
+        if (!(response instanceof ObjectNode row) || !reference.isObject() || referenceReadable(project, reference)) return response;
+        var safe = row.deepCopy().put("status", "待复核").put("confirmationReason", "采纳依据已不可访问，请重新核对")
+                .put("restrictedMatchReference", true);
+        safe.put("draft", "").put("conditions", "").put("evidence", "");
+        safe.remove(List.of("matchReference", "confirmedAt", "confirmedBy", "confirmedById"));
+        return safe;
+    }
+
+    private boolean referenceReadable(Project project, JsonNode reference) {
+        String library = reference.path("library").asText();
+        if ("capability".equals(library)) {
+            for (var candidate : reference.path("sources")) {
+                if (!readableSource(project, "capability_record", candidate.path("id").asText(), candidate.path("version").asInt())) return false;
+                for (var evidence : candidate.path("evidenceRefs")) {
+                    if (!readableSource(project, "evidence_record", evidence.path("id").asText(), evidence.path("version").asInt())) return false;
+                }
+            }
+            return !reference.path("sources").isEmpty();
+        }
+        String table = switch (library) {
+            case "standard_reply" -> "`standard-reply-record`";
+            case "history_rfq" -> "`history-rfq-record`";
+            default -> "";
+        };
+        return !table.isEmpty() && readableSource(project, table, reference.path("candidateId").asText(), reference.path("version").asInt());
+    }
+
+    private boolean readableSource(Project project, String table, String id, int version) {
+        return jdbc.query("select project_id,scope,payload from " + table + " where bu_id=? and id=? and version=?",
+                (row, n) -> {
+                    String scope = row.getString("scope");
+                    String owner = row.getString("project_id");
+                    String origin = KnowledgePublicationAccess.recordProjectId(parse(row.getString("payload")));
+                    return (origin.isBlank() || project.getId().equals(origin))
+                            && (owner == null && "BU共享".equals(scope) || project.getId().equals(owner) && "仅当前项目".equals(scope));
+                }, project.getBuId(), id, version).stream().findFirst().orElse(false);
+    }
+
+    void requireReference(Project project, Requirement requirement, JsonNode reference) {
+        if (!reference.isObject()) return;
+        publicationAccess.lockBu(project.getBuId());
+        if (!referenceAvailable(project, requirement, reference)) throw new BusinessException(409, "已采纳的比对依据已失效，请重新核对");
+    }
+
+    List<String> adoptedAfter(String cursor) {
+        return jdbc.queryForList("""
+                select requirement_id from requirement_response
+                where requirement_id>? and json_contains_path(payload,'one','$.matchReference')
+                and not json_contains_path(payload,'one','$.matchReferenceInvalidatedAt')
+                order by requirement_id limit 25
+                """, String.class, cursor);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void recheckAdoption(String id) {
+        var before = requirements.findById(id).orElse(null);
+        if (before == null) return;
+        var project = projects.findByIdForUpdate(before.getProjectId()).orElse(null);
+        if (project == null || project.isArchived() || work.retired(project.getId(), before.getDocumentId())) return;
+        if (documents.findByIdForUpdate(before.getDocumentId()).isEmpty()) return;
+        var requirement = requirements.findByIdForUpdate(id).orElse(null);
+        if (requirement == null) return;
+        publicationAccess.lockBu(project.getBuId());
+        var response = jdbc.query("select payload from requirement_response where requirement_id=? for update",
+                (row, n) -> parse(row.getString(1)), id).stream().findFirst().orElse(json.nullNode());
+        if (!(response instanceof ObjectNode row) || row.has("matchReferenceInvalidatedAt") || !row.hasNonNull("matchReference")
+                || referenceAvailable(project, requirement, row.path("matchReference"))) return;
+        String reason = "已采纳的比对依据失效，请重新核对";
+        row.put("status", "待复核").put("version", row.path("version").asLong(1) + 1).put("confirmationReason", reason)
+                .put("matchReferenceInvalidatedAt", java.time.Instant.now().toString());
+        row.remove(List.of("confirmedAt", "confirmedBy", "confirmedById"));
+        jdbc.update("update requirement_response set payload=?,updated_at=current_timestamp where requirement_id=?", row.toString(), id);
+        deviations.record(project, requirement, row.path("matchReference").path("runId").asText(), "source_invalidated", reason);
     }
 
     List<String> due() {
@@ -231,6 +408,18 @@ public class RequirementMatchService {
             } else {
                 jdbc.update("insert into requirement_match_result(run_id,scope_stamp,payload) values (?,?,?)",
                         run.id(), outcome.stamp().toString(), outcome.result().toString());
+                if (outcome.result().path("knowledgeGap").asBoolean()) {
+                    deviations.record(project, requirement, run.id(), "knowledge_gap", "三个知识库均未命中");
+                }
+                if ("不满足".equals(outcome.result().path("conclusion").asText())) {
+                    deviations.record(project, requirement, run.id(), "capability_contradiction", "能力依据显示不满足，请分派技术评审");
+                }
+                String matched = outcome.result().path("matchedLibrary").asText();
+                var similarity = outcome.result().path("stages").path(matched).path("candidates").path(0).path("businessSimilarity");
+                if (lowConfidenceThreshold > 0 && lowConfidenceThreshold <= 1
+                        && similarity.isNumber() && similarity.asDouble() < lowConfidenceThreshold) {
+                    deviations.record(project, requirement, run.id(), "low_confidence", "候选相似度低于当前配置阈值");
+                }
             }
         }
         int failures = "retry_wait".equals(state) ? run.progress().path("failureCount").asInt() + 1 : 0;
@@ -291,7 +480,7 @@ public class RequirementMatchService {
 
     private Accepted enqueue(Scope scope, Policy policy, String reason, String requestKey) {
         var requirement = scope.requirement();
-        var input = snapshot(requirement);
+        var input = runSnapshot(requirement);
         String fingerprint = digest(input.toString());
         if (requestKey == null) {
             var current = runWhere("where requirement_id=? and current_run=1", requirement.getId());
@@ -326,9 +515,10 @@ public class RequirementMatchService {
 
     private boolean currentInput(Project project, CustomerDocument document, Requirement requirement, Run run) {
         return project != null && !project.isArchived() && document != null && requirement != null && ready(requirement)
+                && !work.retired(project.getId(), document.getId())
                 && project.getBuId().equals(run.input().bu()) && requirement.getDocumentId().equals(run.document())
                 && document.getVersion() == run.documentVersion() && Objects.equals(requirement.getParseRunId(), run.parseRun())
-                && run.fingerprint().equals(digest(snapshot(requirement).toString()));
+                && run.fingerprint().equals(digest(runSnapshot(requirement).toString()));
     }
 
     private Scope lockForUser(CurrentUser user, String id) {
@@ -336,6 +526,7 @@ public class RequirementMatchService {
         var project = projects.findByIdForUpdate(reference.getProjectId()).orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireActiveProject(project);
+        work.requireEditable(project.getId(), reference.getDocumentId());
         var document = documents.findByIdForUpdate(reference.getDocumentId()).orElseThrow(() -> new BusinessException(404, "原件不存在"));
         var requirement = requirements.findByIdForUpdate(id)
                 .orElseThrow(() -> new BusinessException(409, "条款已重新解析，请刷新"));
@@ -365,6 +556,13 @@ public class RequirementMatchService {
         var saved = context(requirement.getId());
         if (digest(source.toString()).equals(saved.sourceFingerprint())) source.set("context", saved.payload());
         return source;
+    }
+
+    private ObjectNode runSnapshot(Requirement requirement) {
+        var input = snapshot(requirement);
+        long workVersion = work.version(requirement.getProjectId());
+        if (workVersion > 1) input.put("workVersion", workVersion);
+        return input;
     }
 
     private String sourceFingerprint(Requirement requirement) { return digest(baseInput(requirement).toString()); }

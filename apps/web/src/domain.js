@@ -75,7 +75,7 @@ export function getExportIssues(requirements = [], reviews = [], projectId) {
     if (messages.length) issues.push({ id: row.id,objectType:'requirement',objectId:row.id,route:{page:'response',requirementId:row.id,fileId:row.sourceFileId,sourceVersion:row.sourceVersion}, label: `${row.clause || ''} ${row.title || '要求条目'}`.trim(), message: messages.join('；') });
   }
   for (const review of reviews) {
-    if (!['已关闭','已取消'].includes(review.status)) issues.push({ id: review.id,objectType:'review',objectId:review.id,route:{page:'reviews',reviewId:review.id,requirementId:review.requirementId}, label: review.title || '评审事项', message: `关联评审尚未关闭（${review.status || '待处理'}），请完成全部评审确认` });
+    if (!['已关闭','已取消'].includes(review.status)) issues.push({ id: review.id,objectType:'review',objectId:review.id,route:review.kind==='deviation'?{page:'response',requirementId:review.requirementId}:{page:'reviews',reviewId:review.id,requirementId:review.requirementId}, label: review.title || '评审事项', message: `关联评审尚未关闭（${review.status || '待处理'}），请完成全部评审确认` });
   }
   return issues;
 }

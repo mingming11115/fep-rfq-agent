@@ -246,13 +246,14 @@ Excel 支持单工作表 `.xlsx`，最多 5 MiB、1,000 条数据。首行按顺
 
 ## 项目条款自动比对
 
-解析或人工修正保存有效条款时，同一事务生成比对轮次。设置 `RFQ_MATCH_WORKER_ENABLED=true` 开启后台自动执行。后台按轮次保存的 BU 顺序逐库执行，首次命中后保留后续库的 `not_run` 状态。索引同步等待会自动继续，服务超时或限流会退避重试。结果回查会重新核对条款输入和当前可用来源。项目应答表单与工作台可以通过下列接口接入。
+解析或人工修正保存有效条款时，同一事务生成比对轮次。设置 `RFQ_MATCH_WORKER_ENABLED=true` 开启后台自动执行。后台按轮次保存的 BU 顺序逐库执行，首次命中后保留后续库的 `not_run` 状态。索引同步等待会自动继续，服务超时或限流会退避重试。结果回查会重新核对条款输入和当前可用来源。数据库模式下，工作台读取当前条款的比对结果，BU 管理员可配置新轮次的比对顺序。
 
 | 方法与路径 | 用途 |
 | --- | --- |
 | `GET /api/rfq/business-units/{buId}/match-policy` | 查询顺序和配置版本，初始顺序为 `standard_reply → history_rfq → capability`。 |
 | `PUT /api/rfq/business-units/{buId}/match-policy` | 本 BU 管理员提交 `version` 和由三个库组成的 `matchOrder`。新顺序用于此后建的轮次。 |
 | `GET /api/rfq/projects/{projectId}/match-results` | 分页查询当前轮次和分库状态。支持 `documentId`、`parseRunId`、`page`、`size`。 |
+| `GET /api/rfq/requirements/{id}/match-result` | 读取当前轮次、授权候选和偏离事项。 |
 | `GET /api/rfq/requirements/{id}/match-runs/{runId}` | 查看分库状态、建议及候选的精确版本。原文或来源变化后返回待重跑状态。 |
 | `POST /api/rfq/requirements/{id}/match-runs` | 提交 `sourceRequirementVersion` 和唯一 `requestId` 重跑。相同操作 ID 返回原轮次。 |
 | `GET /api/rfq/requirements/{id}/match-input` | 查询当前条款已确认的适用条件和设备指标。 |
@@ -278,7 +279,15 @@ Excel 支持单工作表 `.xlsx`，最多 5 MiB、1,000 条数据。首行按顺
 }
 ```
 
-各设备项和指标同时满足才支持整体结论。范围端点、运算符与能力库使用相同字段。`capabilityApplicable=false` 表示经确认不适用机型能力。以 `knowledgeGap=true` 表示三库均成功查询且全部未命中。知识缺口和建议随比对结果保存，前端展示、建议采纳以及偏离事项流转尚未接入。
+各设备项和指标同时满足才支持整体结论。范围端点、运算符与能力库使用相同字段。`capabilityApplicable=false` 表示经确认不适用机型能力。以 `knowledgeGap=true` 表示三库均成功查询且全部未命中。工作台采纳建议时，把轮次及候选 ID 随草稿或确认请求写入。服务端保存具体知识和证据版本，确认及正式导出时复核。开启 Worker 后，失效引用也会定期转为待复核。三库未命中、明确拒绝和来源失效合并到同一工作版本的偏离事项。完成试点校准后，可通过 `RFQ_MATCH_LOW_CONFIDENCE_THRESHOLD` 配置文本候选的低置信度阈值，默认 `0` 关闭此触发。
+
+## 定稿、历史回流与原件换版
+
+数据库模式下，项目设置维护最终评审人和技术评审方式。SR 提交冻结范围后，服务端按最新原件、应答、未关闭事项和来源引用校验。指定 SR 与必需的技术评审人逐人投票。全部通过时自动生成项目范围内的历史条款草稿，之后由历史 RFQ 库独立发布。
+
+新版原件通过项目设置的「原件换版」登记。核对期间，新版可以解析和起草，定稿范围沿用当前生效原件。负责人确认影响范围后切换工作版本，新版条款需重新确认，原件和旧快照继续用于追溯。对应表在 `init.sql` 的 V15 和 V16 定义。
+
+知识库分组由 BU 管理员维护。历史原件的文档信息和补录条款可单独保存，关联新版或重新解析均会生成新的历史文档和条款草稿。能力库可从已发布的历史答复提取带明确运算符和单位的指标候选，维护人核对配置与证据后再提交发布。
 
 # RFQ 原件存储切换
 

@@ -94,6 +94,42 @@ class HistoryRfqPublicationIntegrationTest {
         assertThat(jdbc.queryForObject("select count(*) from history_rfq_index_sync where bu_id=?", Integer.class, bu)).isZero();
     }
 
+    @Test void savesGroupsAndMetadataThenReparsesWithoutChangingOriginalDrafts() throws Exception {
+        String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);
+        String actor = user(bu, "M");
+        String base = "/api/rfq/business-units/" + bu;
+        String catalog = """
+                {"buId":"%s","version":1,"schema":{"title":"分组","levels":[{"id":"model","name":"机型"}]},
+                 "nodes":[{"id":"group1","name":"原件","levelId":"model","enabled":true}]}
+                """.formatted(bu);
+        call(put(base + "/knowledge-groups").contentType("application/json").content(catalog), actor)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.writeRevision").value(1));
+        call(put(base + "/knowledge-groups").contentType("application/json").content(catalog), actor).andExpect(status().isConflict());
+        String path = base + "/history-rfq";
+        byte[] bytes = docx();
+        String content = call(multipart(path + "/import").file(new MockMultipartFile("file", "history.docx",
+                "application/octet-stream", bytes)).param("shareWithBu", "true"), actor)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String id = JsonPath.read(content, "$.data.document.id");
+        String document = path + "/documents/" + id;
+        call(patch(document).contentType("application/json").content("""
+                {"revision":1,"metadata":{"customer":"客户A"},"groupIds":["group1"]}
+                """), actor).andExpect(status().isOk()).andExpect(jsonPath("$.data.revision").value(2));
+        call(post(document + "/clauses").contentType("application/json").content("""
+                {"id":"HK-manual","clauseNo":"M","title":"人工补录","requirement":"要求","answer":"答复"}
+                """), actor).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("草稿"));
+        String result = call(post(document + "/reparse").contentType("application/json").content("{\"revision\":2}"), actor)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.document.previousDocumentId").value(id))
+                .andExpect(jsonPath("$.data.document.version").value("V2"))
+                .andExpect(jsonPath("$.data.document.groupIds[0]").value("group1"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String newId = JsonPath.read(result, "$.data.document.id");
+        call(get(path + "/documents/" + newId + "/original"), actor).andExpect(status().isOk()).andExpect(content().bytes(bytes));
+        call(get(path + "/clauses/HK-manual/versions/1"), actor).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.documentId").value(id));
+    }
+
     private ResultActions action(String path, String action, String actor, long revision, String reason) throws Exception {
         return call(post(path + "/" + action).contentType("application/json")
                 .content("{\"revision\":" + revision + ",\"reason\":\"" + reason + "\"}"), actor);

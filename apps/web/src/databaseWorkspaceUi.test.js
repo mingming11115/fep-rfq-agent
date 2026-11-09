@@ -19,7 +19,12 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',stage:'DRAFT',version:0};
  let parsed=false,parseCalls=0;
  const source={id:'D',projectId:'P',name:'客户.docx',version:0,status:'PARSING'};
- globalThis.fetch=async url=>{if(url.endsWith('/download'))return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404});if(url.endsWith('/parse-runs')){parseCalls++;if(url.includes('/FAILED/'))return new Response(JSON.stringify({code:1,msg:'补充资料解析失败'}),{status:422});parsed=true;return new Response(JSON.stringify({code:0,data:{id:'RUN',status:'completed',requirementCount:1}}));}const value=url.endsWith('/auth/me')?user:url.includes('/members')?[{userId:'sr',displayName:'数据库用户',roles:['SR'],enabled:true,canConfirm:true}]:url.includes('/documents?')?{list:[{...source,status:parsed?'PARSED':'PARSING'},{...source,id:'FAILED',name:'补充资料.docx',status:'FAILED'}],total:2}:url.includes('/requirements?')?{list:parsed?[{id:'R',projectId:'P',documentId:'D',originalText:'客户的真实要求',title:'真实条款',version:0,extractionStatus:'VALID'}]:[],total:parsed?1:0}:{list:[project],total:1};return new Response(JSON.stringify({code:0,data:value}));};
+ globalThis.fetch=async url=>{
+  if(url.endsWith('/requirements/R/match-result'))return new Response(JSON.stringify({code:0,data:{
+   runId:'MATCH-DB',status:'completed',matchOrder:['history_rfq','standard_reply','capability'],
+   result:{matchedLibrary:'history_rfq',conclusion:'待确认',stages:{history_rfq:{status:'hit',candidates:[{id:'H',version:2,title:'数据库历史候选',answer:'真实参考答复'}]}}}
+  }}));
+  if(url.endsWith('/download'))return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404});if(url.endsWith('/parse-runs')){parseCalls++;if(url.includes('/FAILED/'))return new Response(JSON.stringify({code:1,msg:'补充资料解析失败'}),{status:422});parsed=true;return new Response(JSON.stringify({code:0,data:{id:'RUN',status:'completed',requirementCount:1}}));}const value=url.endsWith('/auth/me')?user:url.includes('/members')?[{userId:'sr',displayName:'数据库用户',roles:['SR'],enabled:true,canConfirm:true}]:url.includes('/documents?')?{list:[{...source,status:parsed?'PARSED':'PARSING'},{...source,id:'FAILED',name:'补充资料.docx',status:'FAILED'}],total:2}:url.includes('/requirements?')?{list:parsed?[{id:'R',projectId:'P',documentId:'D',originalText:'客户的真实要求',title:'真实条款',version:0,extractionStatus:'VALID'}]:[],total:parsed?1:0}:{list:[project],total:1};return new Response(JSON.stringify({code:0,data:value}));};
  const folder=fileURLToPath(new URL('../.test-build/',import.meta.url));await mkdir(folder,{recursive:true});const output=path.join(folder,'database-workspace.mjs');
  await build({entryPoints:[fileURLToPath(new URL('./DatabaseWorkspace.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'},define:{'import.meta.env':'{"BASE_URL":"/","VITE_RFQ_DATA_MODE":"mysql"}'},plugins:[{name:'preview',setup(builder){builder.onResolve({filter:/SourceDocumentPane$/},()=>({path:'preview',namespace:'preview'}));builder.onLoad({filter:/.*/,namespace:'preview'},()=>({contents:'export default function Preview(){return null}',loader:'js'}));}},{name:'raw',setup(builder){builder.onResolve({filter:/\.html\?raw$/},args=>({path:path.resolve(args.resolveDir,args.path.slice(0,-4)),namespace:'raw'}));builder.onLoad({filter:/.*/,namespace:'raw'},async args=>({contents:await readFile(args.path,'utf8'),loader:'text'}));}}]});
  const {default:Workspace}=await import(pathToFileURL(output));const {createRoot}=await import('react-dom/client');const {App:AntApp}=await import('antd');
@@ -35,6 +40,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.ok(!node.textContent.includes('浏览器伪条款'));
   assert.equal(parseCalls,1,'parsing runs once without mounting the retired page');
   assert.ok(node.textContent.includes('客户的真实要求'));
+  assert.ok(node.querySelector('[aria-label="知识库比对"]').textContent.includes('数据库历史候选'));
   assert.ok(!node.textContent.includes('查看解析结果'));
   assert.ok(!node.textContent.includes('RFQ解析'));
   const retry=[...node.querySelectorAll('button')].find(button=>button.textContent.includes('重新解析'));

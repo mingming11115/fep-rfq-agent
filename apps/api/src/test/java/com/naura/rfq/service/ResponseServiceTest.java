@@ -31,7 +31,8 @@ class ResponseServiceTest {
         when(documents.findByIdForUpdate("D")).thenReturn(Optional.of(new CustomerDocument()));
         when(jdbc.queryForList(anyString(),eq(String.class),any(Object[].class))).thenReturn(List.of());
         when(confirmationAssignments.defaultAssigneeId(p)).thenReturn("sr");
-        service=new ResponseService(jdbc,json,requirements,projects,documents,profiles,guard,audit,confirmationAssignments);
+        service=new ResponseService(jdbc,json,requirements,projects,documents,profiles,guard,audit,confirmationAssignments,
+                mock(RequirementMatchService.class),mock(ProjectWorkScope.class),mock(MatchDeviationService.class));
     }
     @Test void ownerCanSaveAndConfirm(){
         var saved=service.write(sr,"R",1L,0L,json.createObjectNode().put("conclusion","Comply"),false);

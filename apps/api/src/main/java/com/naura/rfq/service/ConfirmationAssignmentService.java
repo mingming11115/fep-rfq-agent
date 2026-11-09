@@ -65,7 +65,7 @@ public class ConfirmationAssignmentService {
     private Requirement requirement(String id) {
         return requirements.findById(id).orElseThrow(()->new BusinessException(404,"条款不存在"));
     }
-    private boolean eligible(Project project,String id) {
+    boolean eligible(Project project,String id) {
         return qualified(project.getBuId(),id)
                 &&(id.equals(project.getOwnerId())||members.find(project.getId(),id).map(ProjectMember::isEnabled).orElse(false));
     }

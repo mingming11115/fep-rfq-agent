@@ -43,8 +43,36 @@ public class HistoryRfqController {
     @PostMapping(value = LIBRARY + "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<HistoryRfqService.Intake> importFile(@PathVariable String buId, @RequestParam MultipartFile file,
             @RequestParam(required = false) MultipartFile responseFile, @RequestParam(required = false) String projectId,
-            @RequestParam(defaultValue = "false") boolean shareWithBu) throws IOException {
-        return ApiResponse.success(intake.upload(CurrentUserHolder.require(), buId, file, responseFile, projectId, shareWithBu));
+            @RequestParam(defaultValue = "false") boolean shareWithBu, @RequestParam(required = false) String previousDocumentId,
+            @RequestParam(required = false) Long revision, @RequestParam(required = false) String changeNote) throws IOException {
+        return ApiResponse.success(intake.upload(CurrentUserHolder.require(), buId, file, responseFile, projectId, shareWithBu,
+                previousDocumentId, revision, changeNote));
+    }
+
+    @PatchMapping(LIBRARY + "/documents/{id}")
+    public ApiResponse<ObjectNode> editDocument(@PathVariable String buId, @PathVariable String id,
+            @RequestBody HistoryRfqService.DocumentEdit request) {
+        return ApiResponse.success(intake.editDocument(CurrentUserHolder.require(), buId, id, request));
+    }
+
+    @PostMapping(LIBRARY + "/documents/{id}/clauses")
+    public ApiResponse<ObjectNode> manualClause(@PathVariable String buId, @PathVariable String id,
+            @RequestBody HistoryRfqService.Manual request) {
+        return ApiResponse.success(intake.addManual(CurrentUserHolder.require(), buId, id, request));
+    }
+
+    @PostMapping(LIBRARY + "/documents/manual")
+    public ApiResponse<HistoryRfqService.Intake> manualDocument(@PathVariable String buId,
+            @RequestBody HistoryRfqService.ManualDocument request) {
+        return ApiResponse.success(intake.createManual(CurrentUserHolder.require(), buId, request));
+    }
+
+    public record Reparse(long revision) {}
+
+    @PostMapping(LIBRARY + "/documents/{id}/reparse")
+    public ApiResponse<HistoryRfqService.Intake> reparse(@PathVariable String buId, @PathVariable String id,
+            @RequestBody Reparse request) throws IOException {
+        return ApiResponse.success(intake.reparse(CurrentUserHolder.require(), buId, id, request.revision()));
     }
 
     @PostMapping("/projects/{projectId}/snapshots/{snapshotId}/history-rfq")

@@ -21,7 +21,7 @@ function sectionPath(value){
 export function mapDatabaseRequirement(row,files,owner){
  const file=files.find(file=>file.id===row.documentId);
  return {...row,clause:row.customerClauseNo||'',original:row.originalText||'',sourceOriginal:row.originalText||'',
-  source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',sectionPath:sectionPath(row.sectionPath),
+  source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',activeForApproval:file?.activeForApproval!==false,sectionPath:sectionPath(row.sectionPath),
   category:'未分类',status:'待确认',conclusion:'',draft:'',conditions:row.conditionsText||'',evidence:'',reason:'',
   matchLevel:'none',score:0,backendVersion:row.version,version:Math.max(1,row.version),owner,
   confirmationAssigneeId:row.confirmationAssigneeId||null,confirmationAssignmentSource:row.confirmationAssigneeId?'explicit':null,
@@ -49,15 +49,20 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
   const members=state.buPersonnelByBuId[row.buId]||[],owner=state.accountsById[row.ownerId]?.name||row.ownerId;
   state.projects.push({...metadata,...row,backendStage:row.stage,backendProjectId:row.id,backendBuId:row.buId,owner,createdById:row.createdBy||'',
    defaultConfirmationAssigneeId:workflow.defaultConfirmationAssigneeId,
-   participantIds:[...new Set([...(metadata.participantIds||[]),row.ownerId,workflow.defaultConfirmationAssigneeId,user.id].filter(Boolean))],equipment:metadata.equipment||'',responseReviewSchemaVersion:1,
+   workVersion:workflow.workVersion||1,replacements:workflow.replacements||[],
+   participantIds:[...new Set([...(workflow.participantIds||metadata.participantIds||[]),row.ownerId,workflow.defaultConfirmationAssigneeId,user.id].filter(Boolean))],equipment:metadata.equipment||'',responseReviewSchemaVersion:1,
    technicalReviewSettings:metadata.technicalReviewSettings||{technicalMode:'all',version:1},approvalConfig:metadata.approvalConfig||{finalReviewers:{srId:null,technicalIds:[],technicalRepresentativeId:null}},
   });
+  const replacements=workflow.replacements||[];
+  const retired=new Set(replacements.flatMap(item=>item.status==='active'?[item.oldDocumentId]:item.status==='cancelled'?[item.newDocumentId]:[]));
+  const pending=new Set(replacements.filter(item=>item.status==='pending').map(item=>item.newDocumentId));
   const documents=(details[row.id]?.documents||[]).map(file=>({...file,backendDocumentId:file.id,backendProjectId:row.id,
+   retired:retired.has(file.id),activeForApproval:!retired.has(file.id)&&!pending.has(file.id),
    version:`V${file.version}.0`,purpose:'要求来源',size:file.sizeBytes,
    status:({PARSED:'完成',UPLOADED:'待核对',PARSING:'处理中',PARTIAL:'部分完成',FAILED:'失败'})[file.status]||file.status,
   }));
-  state.documentsByProject[row.id]=documents;
-  state.requirementsByProject[row.id]=(details[row.id]?.requirements||[]).map(requirement=>{
+  state.documentsByProject[row.id]=documents.filter(file=>!file.retired);
+  state.requirementsByProject[row.id]=(details[row.id]?.requirements||[]).filter(requirement=>!retired.has(requirement.documentId)).map(requirement=>{
    const source=mapDatabaseRequirement(requirement,documents,owner),response=workflow.responses?.find(r=>r.id===requirement.id)||{};
    return {...source,...response,id:source.id,projectId:row.id,title:source.title,clause:source.clause,original:source.original,sourceOriginal:source.sourceOriginal,
     source:source.source,sourceFileId:source.sourceFileId,sourceVersion:source.sourceVersion,sectionPath:source.sectionPath,backendVersion:source.backendVersion,
@@ -67,7 +72,8 @@ export function mapDatabaseWorkspace({user,projects,directories,details,resource
   state.membersByProject[row.id]=members.filter(member=>[row.ownerId,user.id].includes(member.userId)).map(member=>({
    id:member.userId,name:member.displayName,role:member.roles.join(' / '),scope:'后端授权项目',status:member.enabled?'生效':'停用',canConfirm:member.canConfirm,
   }));
-  state.reviewsByProject[row.id]=workflow.reviews||[];state.snapshotsByProject[row.id]=workflow.snapshots||[];state.commentsByProject[row.id]=[];
+  const requirementIds=new Set(state.requirementsByProject[row.id].map(requirement=>requirement.id));
+  state.reviewsByProject[row.id]=(workflow.reviews||[]).filter(review=>!review.requirementId||requirementIds.has(review.requirementId));state.snapshotsByProject[row.id]=workflow.snapshots||[];state.commentsByProject[row.id]=[];
  }
  state.activeProjectId=state.projects[0]?.id||'';
  return reconcileTasks(hydrateSessionPersonnel(state,user,{activate:true}));

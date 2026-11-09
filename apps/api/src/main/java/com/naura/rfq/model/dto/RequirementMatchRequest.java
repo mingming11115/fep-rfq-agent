@@ -19,6 +19,12 @@ public final class RequirementMatchRequest {
     public record Retry(@NotNull @PositiveOrZero Long sourceRequirementVersion,
             @NotBlank @Pattern(regexp = "[A-Za-z0-9_-]{1,64}") String requestId) {}
 
+    public record Reject(@NotBlank @Size(max = 900) String reason) {}
+
+    public record CloseDeviation(@NotNull @Positive Long version, @NotBlank @Size(max = 900) String reason) {}
+    public record ProfessionalReview(@NotNull @Positive Long version, @NotNull @Size(min = 1, max = 20) List<@NotBlank String> reviewerIds,
+            @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String deadline, @NotBlank @Size(max = 900) String reason) {}
+
     public record Input(@NotNull @PositiveOrZero Long sourceRequirementVersion, @NotNull @PositiveOrZero Long version,
             @NotNull @Valid Context context) {}
 

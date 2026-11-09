@@ -42,7 +42,7 @@ export function ReviewsPage({project,requirements=[],reviews=[],onUpdateReview,o
  useEffect(()=>{const previous=registerNavigationGuard?null:window.__rfqRequestNavigation;const hook=next=>guard(next)&&(!previous||previous(next));if(registerNavigationGuard)return registerNavigationGuard(hook);window.__rfqRequestNavigation=hook;return()=>{if(window.__rfqRequestNavigation===hook)window.__rfqRequestNavigation=previous;};},[registerNavigationGuard]);
  useEffect(()=>{if(initialReviewId)setActiveId(initialReviewId);},[initialReviewId]);
  useEffect(()=>{if(embedded&&!activeId)onCloseEmbedded?.();},[embedded,activeId]);
- const open=r=>{const next=()=>setActiveId(r.id);if(guard(next))next();};
+ const open=r=>{const next=()=>r.kind==='deviation'?navigate('response',r.requirementId):setActiveId(r.id);if(guard(next))next();};
  const close=()=>setActiveId(null);
  const filtered=reviews.filter(r=>`${r.title} ${r.id} ${r.description||''} ${r.owner||''}`.toLowerCase().includes(query.toLowerCase())&&(status==='全部'||status==='已完成'?status==='全部'||isClosed(r):!isClosed(r))&&(type==='全部类别'||r.type===type)&&(!mine||getReviewActorIds(r).includes(actorId)));
  return <div className={`flow-page ${inline?'response-inline-review':''}`}>
@@ -60,9 +60,12 @@ const exportColumns = [
 const defaultMapping = Object.fromEntries(exportColumns.map(({key}) => [key, key]));
 const defaultTemplate = { id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' };
 
-export function ExportPage({ project, requirements = [], reviews = [], snapshots = [], appState, permissionContext, onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, launchOnly = false, onClose, onSubmitted, logEvent = () => {} }) {
+export function ExportPage({ project, requirements: projectRequirements = [], reviews: projectReviews = [], snapshots = [], appState, permissionContext, onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, launchOnly = false, onClose, onSubmitted, logEvent = () => {} }) {
   const databaseBacked=appState?.dataSource==='mysql';
   const canDownload=canPerform(actorRole,'export:download',permissionContext);
+  const requirements=projectRequirements.filter(row=>row.activeForApproval!==false);
+  const activeIds=new Set(requirements.map(row=>row.id));
+  const reviews=projectReviews.filter(row=>!row.requirementId||activeIds.has(row.requirementId));
   const canSubmit=canPerform(actorRole,'snapshot:submit',permissionContext);
   const projectSnapshots = snapshots.filter(s => s.projectId === project.id);
   const latest = latestSnapshot(projectSnapshots);
@@ -78,13 +81,14 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
   const detail = projectSnapshots.find((s) => s.id === detailId);
   const savedApproval = (() => { if(databaseBacked)return null;try { return JSON.parse(localStorage.getItem(`fep-rfq-management-approval-${project.id}`) || 'null'); } catch { return null; } })();
   const effectiveApproval = project.approvalConfig !== undefined ? project.approvalConfig : savedApproval || { final: '最终审批人' };
   const finalReviewConfig=(()=>{try{return {value:getProjectFinalReview(appState,project.id),error:''};}catch(e){return {value:null,error:e.message};}})();
   const requiredFinalReviewers=finalReviewConfig.value?getRequiredFinalReviewers(finalReviewConfig.value):[];
   const approvalConfigIssues=finalReviewConfig.error?[{id:'approval-config',label:'SR与技术组最终评审配置',message:finalReviewConfig.error}]:[];
-  const storedDocuments=databaseBacked?null:readDocumentState(project.id),currentFiles=appState?.documentsByProject?.[project.id];
+  const storedDocuments=databaseBacked?null:readDocumentState(project.id),currentFiles=appState?.documentsByProject?.[project.id]?.filter(file=>file.activeForApproval!==false);
   const documentState = currentFiles !== undefined ? { files: currentFiles, parsed: (storedDocuments?.parsed||[]).filter(row=>currentFiles.some(file=>file.id===row.sourceFileId)) } : storedDocuments;
   const unimportedParsed = (documentState?.parsed || []).filter((r) => !requirements.some((current) => current.id === r.id));
   const unfinishedFiles = (documentState?.files || []).filter((f) => f.purpose === '要求来源' && !(documentState?.files || []).some((newer) => newer.previousVersionId === f.id) && ['排队中', '处理中', '失败'].includes(f.status));
@@ -92,7 +96,7 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   const exportIssues = getExportIssues(requirements, reviews, project.id);
   const issues = [...exportIssues, ...documentIssues, ...approvalConfigIssues];
   const unconfirmedComply=getUnconfirmedComplyRows(requirements,project.id);
-  const approvalScope={...(databaseBacked?{format:'mysql-business-v1'}:{}),rows:requirements,sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval,personnel:getFinalReviewScope(appState,project.id)},template:activeTemplate,mapping,attachments:[]};
+  const approvalScope={...(databaseBacked?{format:'mysql-business-v1',...(project.workVersion>1?{workVersion:project.workVersion}:{})}:{}),rows:requirements,sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval,personnel:getFinalReviewScope(appState,project.id)},template:activeTemplate,mapping,attachments:[]};
   useEffect(()=>{onExportScope?.(approvalScope);},[JSON.stringify(approvalScope)]);
   const signature = (rows) => JSON.stringify(rows.map((r) => ({ id: r.id, version: r.version, status: r.status, original: r.original, conclusion: r.conclusion, draft: r.draft, conditions: r.conditions, evidence: r.evidence, reason: r.reason, owner: r.owner })).sort((a, b) => a.id.localeCompare(b.id)));
   function validity(snapshot) {
@@ -117,7 +121,8 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
   }
   function closeAction() { if(launchOnly)onClose?.();else setAction(null); }
   function startAction(kind) { setAction(kind); setReason(''); setError(''); }
-  function submitSnapshot() {
+  async function submitSnapshot() {
+    if (savingSnapshot) return;
     if(!canSubmit)return setError('当前身份无提交快照权限');
     if (issues.length) { setError(`当前仍有 ${issues.length} 个检查项未通过，请返回修正。`); return; }
     if (latest?.status==='审批中'&&!latest.stale&&latest.approvalFingerprint===snapshotFingerprint(approvalScope)) {
@@ -125,9 +130,12 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     }
     const returned=latest?.status==='已退回'?latest:null;
     const snapshot = { ...makeSnapshot(project.id, requirements, actorRole), ...(returned?{revisionOf:returned.id}:{}), approvalFingerprint:snapshotFingerprint(approvalScope),approvalScope:structuredClone(approvalScope),createdById:actorId,finalReview:structuredClone(finalReviewConfig.value),template: { ...activeTemplate }, mapping: { ...mapping }, approvalConfig: { ...effectiveApproval }, submissionReason: reason.trim() || '必需人工确认已完成，系统推荐Comply未人工确认项交由本轮评审核对', history: [{ id: uid('EVENT'), action: '提交快照审批', actor: actorRole, time: now(), reason: reason.trim() || '检查通过，冻结应答快照' }], attachments: [] };
-    if(onSnapshot(snapshot)===false)return; logEvent('提交快照审批', snapshot.id, `${requirements.length} 条要求；系统推荐Comply未人工确认 ${unconfirmedComply.length} 条`); toast('已冻结快照，等待指定SR与技术组评审'); setAction(null); setDetailId(snapshot.id); onSubmitted?.(snapshot.id);
+    setSavingSnapshot(true);
+    try { if (await onSnapshot(snapshot) === false) return; }
+    finally { setSavingSnapshot(false); } logEvent('提交快照审批', snapshot.id, `${requirements.length} 条要求；系统推荐Comply未人工确认 ${unconfirmedComply.length} 条`); toast('已冻结快照，等待指定SR与技术组评审'); setAction(null); setDetailId(snapshot.id); onSubmitted?.(snapshot.id);
   }
-  function reviewSnapshot() {
+  async function reviewSnapshot() {
+    if (savingSnapshot) return;
     const current = projectSnapshots.find((s) => s.id === detailId);
     if (!current || current.status !== '审批中') { setError('对象状态已变化，请返回快照列表核对'); return; }
     if (approvalConfigIssues.length) { setError(approvalConfigIssues[0].message); return; }
@@ -138,7 +146,11 @@ export function ExportPage({ project, requirements = [], reviews = [], snapshots
     const label = action === 'approve' ? '批准定稿' : '退回快照';
     let patch;
     try{const side=getRequiredFinalReviewers(current.finalReview).find(r=>r.actorId===actorId)?.side;patch=applyFinalReviewDecision(current,{actorId,side,result:action==='approve'?'approved':'rejected',reason});}catch(e){setError(e.message);return;}
-    if(onSnapshot(patch)===false)return; logEvent(label,current.id,reason);toast(patch.status==='已批准'?'SR与技术组已全部通过，可正式导出':patch.status==='已退回'?'快照已退回，修改重提后需重新评审':'本人已通过，继续等待其他必需评审人');setAction(null);
+    setSavingSnapshot(true);
+    let saved;
+    try { saved = await onSnapshot(patch); if (saved === false) return; }
+    finally { setSavingSnapshot(false); }
+    logEvent(label,current.id,reason);toast((saved.status || patch.status)==='已批准'?'SR与技术组已全部通过，可正式导出':(saved.status || patch.status)==='已退回'?'快照已退回，修改重提后需重新评审':'本人已通过，继续等待其他必需评审人');setAction(null);
   }
 
   async function downloadFormal() {

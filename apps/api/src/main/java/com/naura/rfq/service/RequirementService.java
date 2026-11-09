@@ -26,6 +26,7 @@ public class RequirementService {
     private final AccessGuard access;
     private final AuditService audit;
     private final RequirementMatchService matches;
+    private final ProjectWorkScope work;
 
     public PageView<RequirementView> list(CurrentUser user, String projectId,
             int page,
@@ -51,6 +52,7 @@ public class RequirementService {
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
         access.requireActiveProject(project);
+        work.requireEditable(project.getId(), requirement.getDocumentId());
 
         // Use the same document lock as re-parsing so a human edit cannot be lost mid-run.
         var document = documents.findByIdForUpdate(requirement.getDocumentId())

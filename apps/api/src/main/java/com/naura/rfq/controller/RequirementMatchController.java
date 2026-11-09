@@ -42,6 +42,11 @@ public class RequirementMatchController {
         return ApiResponse.success(matches.list(CurrentUserHolder.require(), projectId, documentId, parseRunId, page, size));
     }
 
+    @GetMapping("/requirements/{id}/match-result")
+    public ApiResponse<ObjectNode> current(@PathVariable String id) {
+        return ApiResponse.success(matches.current(CurrentUserHolder.require(), id));
+    }
+
     @GetMapping("/requirements/{id}/match-runs/{runId}")
     public ApiResponse<ObjectNode> detail(@PathVariable String id, @PathVariable String runId) {
         return ApiResponse.success(matches.detail(CurrentUserHolder.require(), id, runId));
@@ -61,5 +66,22 @@ public class RequirementMatchController {
     @PutMapping("/requirements/{id}/match-input")
     public ApiResponse<ObjectNode> saveContext(@PathVariable String id, @Valid @RequestBody RequirementMatchRequest.Input request) {
         return ApiResponse.success(matches.saveContext(CurrentUserHolder.require(), id, request));
+    }
+
+    @PostMapping("/requirements/{id}/match-runs/{runId}/reject")
+    public ApiResponse<ObjectNode> reject(@PathVariable String id, @PathVariable String runId,
+            @Valid @RequestBody RequirementMatchRequest.Reject request) {
+        return ApiResponse.success(matches.reject(CurrentUserHolder.require(), id, runId, request.reason()));
+    }
+
+    @PostMapping("/requirements/{id}/match-deviation/close")
+    public ApiResponse<ObjectNode> closeDeviation(@PathVariable String id,
+            @Valid @RequestBody RequirementMatchRequest.CloseDeviation request) {
+        return ApiResponse.success(matches.closeDeviation(CurrentUserHolder.require(), id, request.version(), request.reason()));
+    }
+
+    @PostMapping("/requirements/{id}/match-deviation/review")
+    public ApiResponse<ObjectNode> professionalReview(@PathVariable String id, @Valid @RequestBody RequirementMatchRequest.ProfessionalReview request) {
+        return ApiResponse.success(matches.professionalReview(CurrentUserHolder.require(), id, request));
     }
 }

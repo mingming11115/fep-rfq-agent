@@ -2,6 +2,7 @@ package com.naura.rfq.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.integration.export.AnnotatedOriginal;
 import com.naura.rfq.integration.export.AnnotatedOriginal.Note;
@@ -54,6 +55,8 @@ public class ApprovedDocumentExportService {
     private final UserBuRoleMapper roles;
     private final AccessGuard access;
     private final DocumentService originalFiles;
+    private final RequirementMatchService matches;
+    private final ProjectWorkScope work;
 
     public record ExportFile(String name, String contentType, byte[] bytes) {}
 
@@ -72,39 +75,7 @@ public class ApprovedDocumentExportService {
             throw new BusinessException(409, "当前版本的最终评审尚未通过，请刷新后核对");
         }
         validateReviewers(project, snapshot.path("finalReview").path("reviewers"));
-        if (payloads("select payload from response_review where project_id=?", projectId).stream()
-                .anyMatch(review -> !Set.of("已关闭", "已取消").contains(review.path("status").asText()))) throw changed();
-        var sourceFiles = documents.findByProjectIdOrderByCreatedAtDesc(projectId).stream()
-                .collect(Collectors.toMap(CustomerDocument::getId, Function.identity()));
-        var sourceRows = requirements.findByProjectIdOrderBySortOrder(projectId).stream()
-                .collect(Collectors.toMap(Requirement::getId, Function.identity()));
-        var responses = payloads("select payload from requirement_response where project_id=?", projectId).stream()
-                .collect(Collectors.toMap(row -> row.path("id").asText(), Function.identity()));
-        JsonNode scope = snapshot.path("approvalScope");
-        validateScope(projectId, scope, sourceFiles);
-        if (sourceRows.isEmpty() || snapshot.path("rows").size() != sourceRows.size()) throw changed();
-
-        Map<String, List<Note>> notes = new LinkedHashMap<>();
-        Map<String, Map<String, DocumentBlock>> anchors = new LinkedHashMap<>();
-        Set<String> seenRows = new HashSet<>();
-        for (var row : snapshot.path("rows")) {
-            String id = row.path("id").asText();
-            var requirement = sourceRows.get(id);
-            var response = responses.get(id);
-            if (!seenRows.add(id) || requirement == null || response == null) throw changed();
-            var source = sourceFiles.get(requirement.getDocumentId());
-            if (source == null || !source.getId().equals(row.path("sourceFileId").asText())
-                    || !version(source).equals(row.path("sourceVersion").asText())
-                    || !sameAnswer(row, requirement, response)) throw changed();
-            var documentAnchors = anchors.computeIfAbsent(source.getId(), fileId -> blocks.findByDocumentIdOrderByBlockIndex(fileId)
-                    .stream().collect(Collectors.toMap(DocumentBlock::getId, Function.identity())));
-            var block = documentAnchors.get(requirement.getBlockId());
-            if (block == null || block.getSourceAnchor() == null || block.getSourceAnchor().isBlank()) {
-                throw new BusinessException(409, "条款缺少原文定位：" + row.path("clause").asText(id));
-            }
-            notes.computeIfAbsent(source.getId(), ignored -> new ArrayList<>())
-                    .add(new Note(block.getSourceAnchor(), requirement.getOriginalText(), commentText(row)));
-        }
+        var notes = validateContents(project, snapshot);
 
         if (notes.size() == 1) {
             var entry = notes.entrySet().iterator().next();
@@ -127,7 +98,75 @@ public class ApprovedDocumentExportService {
         }
     }
 
-    private JsonNode latestSnapshot(String projectId) {
+    Map<String, List<Note>> validateContents(Project project, JsonNode snapshot) {
+        return validateContents(project, snapshot, false);
+    }
+
+    Map<String, List<Note>> validateContents(Project project, JsonNode snapshot, boolean pinSources) {
+        String projectId = project.getId();
+        if (snapshot.has("workVersion") && snapshot.path("workVersion").asLong() != work.version(projectId)) throw changed();
+        var excluded = work.inactiveDocuments(projectId);
+        var sourceFiles = documents.findByProjectIdOrderByCreatedAtDesc(projectId).stream()
+                .filter(file -> !excluded.contains(file.getId()))
+                .collect(Collectors.toMap(CustomerDocument::getId, Function.identity()));
+        var sourceRows = requirements.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(row -> sourceFiles.containsKey(row.getDocumentId()))
+                .collect(Collectors.toMap(Requirement::getId, Function.identity()));
+        if (payloads("select payload from response_review where project_id=?", projectId).stream()
+                .anyMatch(review -> (review.path("requirementId").asText().isBlank() || sourceRows.containsKey(review.path("requirementId").asText()))
+                        && !Set.of("已关闭", "已取消").contains(review.path("status").asText()))) throw changed();
+        var responses = payloads("select payload from requirement_response where project_id=?", projectId).stream()
+                .collect(Collectors.toMap(row -> row.path("id").asText(), Function.identity()));
+        JsonNode scope = snapshot.path("approvalScope");
+        validateScope(projectId, scope, sourceFiles);
+        if (sourceRows.isEmpty() || snapshot.path("rows").size() != sourceRows.size()) throw changed();
+
+        Map<String, List<Note>> notes = new LinkedHashMap<>();
+        Map<String, Map<String, DocumentBlock>> anchors = new LinkedHashMap<>();
+        Set<String> seenRows = new HashSet<>();
+        for (var row : snapshot.path("rows")) {
+            String id = row.path("id").asText();
+            var requirement = sourceRows.get(id);
+            var response = responses.get(id);
+            if (!seenRows.add(id) || requirement == null || response == null
+                    || requirement.getExtractionStatus() != null && !"VALID".equals(requirement.getExtractionStatus()) || !"已确认".equals(response.path("status").asText())
+                    || response.has("sourceRequirementVersion") && response.path("sourceRequirementVersion").asLong(-1) != requirement.getVersion()) throw changed();
+            if (response.hasNonNull("matchReference") && !matches.referenceAvailable(project, requirement, response.path("matchReference"))) throw changed();
+            var source = sourceFiles.get(requirement.getDocumentId());
+            if (source == null || !source.getId().equals(row.path("sourceFileId").asText())
+                    || !version(source).equals(row.path("sourceVersion").asText())
+                    || !sameAnswer(row, requirement, response)) throw changed();
+            var documentAnchors = anchors.computeIfAbsent(source.getId(), fileId -> blocks.findByDocumentIdOrderByBlockIndex(fileId)
+                    .stream().collect(Collectors.toMap(DocumentBlock::getId, Function.identity())));
+            var block = documentAnchors.get(requirement.getBlockId());
+            if (block == null || block.getSourceAnchor() == null || block.getSourceAnchor().isBlank()) {
+                throw new BusinessException(409, "条款缺少原文定位：" + row.path("clause").asText(id));
+            }
+            if (pinSources && row instanceof ObjectNode frozen) {
+                validateFinalAnswer(response);
+                frozen.put("sourceAnchor", block.getSourceAnchor());
+                frozen.put("sourceRequirementVersion", requirement.getVersion());
+                frozen.put("section", requirement.getSectionPath());
+                if (response.hasNonNull("matchReference")) frozen.set("matchReference", response.get("matchReference"));
+                else frozen.remove("matchReference");
+            }
+            notes.computeIfAbsent(source.getId(), ignored -> new ArrayList<>())
+                    .add(new Note(block.getSourceAnchor(), requirement.getOriginalText(), commentText(row)));
+        }
+
+        return notes;
+    }
+
+    private static void validateFinalAnswer(JsonNode response) {
+        String conclusion = response.path("conclusion").asText();
+        if (!Set.of("Comply", "有条件 Comply", "不满足", "不适用").contains(conclusion) || response.path("draft").asText().isBlank()
+                || "有条件 Comply".equals(conclusion) && response.path("conditions").asText().isBlank()
+                || Set.of("Comply", "有条件 Comply").contains(conclusion) && response.path("evidence").asText().isBlank()) {
+            throw new BusinessException(409, "定稿需要完整答复、适用条件和应答依据");
+        }
+    }
+
+    JsonNode latestSnapshot(String projectId) {
         var snapshots = payloads("select payload from response_snapshot where project_id=? order by id", projectId);
         Set<String> superseded = snapshots.stream().map(row -> row.path("revisionOf").asText(""))
                 .collect(Collectors.toSet());
@@ -169,7 +208,7 @@ public class ApprovedDocumentExportService {
                 && "approved".equals(vote.path("result").asText());
     }
 
-    private void validateReviewers(Project project, JsonNode reviewers) {
+    void validateReviewers(Project project, JsonNode reviewers) {
         validateReviewer(project, reviewers.path("srId").asText(), Set.of("SR"));
         for (var reviewer : reviewers.path("technicalIds")) {
             validateReviewer(project, reviewer.asText(), Set.of("TECH", "APPROVER"));

@@ -18,10 +18,24 @@ public class RequirementMatchWorker {
 
     @Value("${rfq.match.worker-enabled:false}")
     private boolean enabled;
+    private String reviewCursor = "";
 
     @Scheduled(fixedDelayString = "${rfq.match.poll-interval-ms:3000}")
     void tick() {
         if (enabled) runOnce();
+    }
+
+    @Scheduled(fixedDelayString = "${rfq.match.reference-check-interval-ms:30000}")
+    void recheckReferences() {
+        if (!enabled) return;
+        var batch = runs.adoptedAfter(reviewCursor);
+        for (String id : batch) {
+            try { runs.recheckAdoption(id); }
+            catch (RuntimeException failure) {
+                log.warn("比对依据复核暂未完成 requirement={} type={}", id, failure.getClass().getSimpleName());
+            }
+        }
+        reviewCursor = batch.size() < 25 ? "" : batch.get(batch.size() - 1);
     }
 
     public void runOnce() {

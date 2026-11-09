@@ -55,6 +55,8 @@ public class ParseService {
     private final ProjectMapper projects;
     private final AccessGuard access;
     private final RequirementMatchService matches;
+    private final ProjectWorkScope work;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public record ParseRunView(String id, String documentId, String status, int totalBlocks,
             int processedBlocks, int requirementCount, int issueCount, String message,
@@ -68,12 +70,28 @@ public class ParseService {
         var project = projects.findByIdForUpdate(reference.getProjectId())
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireActiveProject(project);
+        work.requireEditable(project.getId(), documentId);
         CustomerDocument document = documents.findByIdForUpdate(documentId)
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
 
         List<Requirement> previous = requirements.findByDocumentIdForUpdate(documentId);
         if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
+        }
+        if (!previous.isEmpty() && Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists(
+                    select 1 from requirement r join requirement_response a on a.requirement_id=r.id where r.document_id=?
+                    union all
+                    select 1 from requirement r join response_confirmation_history h on h.requirement_id=r.id where r.document_id=?
+                    union all
+                    select 1 from requirement r join response_review v on v.project_id=r.project_id
+                        and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id where r.document_id=?
+                    union all
+                    select 1 from response_snapshot where project_id=?
+                        and json_search(payload,'one',?,null,'$.rows[*].sourceFileId') is not null
+                )
+                """, Boolean.class, documentId, documentId, documentId, project.getId(), documentId))) {
+            throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
         }
 
         ParseRun run = new ParseRun();

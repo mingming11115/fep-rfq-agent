@@ -344,6 +344,30 @@ create table requirement_match_result (
 );
 -- RFQ_MIGRATION_V14_END
 
+-- RFQ_MIGRATION_V15
+create table if not exists project_work_version (
+    project_id varchar(64) primary key,
+    work_version bigint not null default 1,
+    created_at timestamp(6) not null default current_timestamp(6)
+);
+-- RFQ_MIGRATION_V15_END
+
+-- RFQ_MIGRATION_V16
+create table if not exists rfq_document_replacement (
+    project_id varchar(64) not null,
+    old_document_id varchar(64) not null,
+    new_document_id varchar(64) primary key,
+    status varchar(16) not null,
+    work_version bigint,
+    created_by varchar(64) not null,
+    created_at timestamp(6) not null default current_timestamp(6),
+    activated_by varchar(64),
+    activated_at timestamp(6),
+    reason varchar(900),
+    index idx_replacement_scope (project_id,status,old_document_id)
+);
+-- RFQ_MIGRATION_V16_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

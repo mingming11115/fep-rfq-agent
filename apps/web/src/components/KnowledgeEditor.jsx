@@ -18,7 +18,7 @@ function EditorField({ label, required = false, children }) {
   </div>;
 }
 
-export default function KnowledgeEditor({ form, isNew, error, onChange, onSave, onClose, sourceOptions = {documents:[],people:[]} }) {
+export default function KnowledgeEditor({ form, isNew, error, onChange, onSave, onClose, sourceOptions = {documents:[],people:[]}, lockedSource=false, saving=false }) {
   const historical = form.type === 'history';
   const name = historical ? '历史 RFQ 知识' : '标准回复';
   const titleRef = useRef(null), requirementRef = useRef(null), answerRef = useRef(null);
@@ -30,14 +30,15 @@ export default function KnowledgeEditor({ form, isNew, error, onChange, onSave, 
     onSave();
   };
 
-  return <Modal open centered width={800} onCancel={onClose}
+  return <Modal open centered width={800} onCancel={saving?undefined:onClose} maskClosable={!saving} closable={!saving}
     title={`${form.newVersion ? '修订' : isNew ? '新增' : '编辑'}${name}`}
     className="rfq-ant-modal knowledge-editor-modal"
     styles={{ body: { maxHeight: 'min(680px, calc(100dvh - 176px))', overflowY: 'auto' } }}
-    footer={<><UiButton onClick={onClose}>取消</UiButton><UiButton className="btn-primary" onClick={save}>保存草稿</UiButton></>}>
+    footer={<><UiButton onClick={onClose} disabled={saving}>取消</UiButton><UiButton className="btn-primary" onClick={save} disabled={saving}>保存草稿</UiButton></>}>
     <div className="knowledge-editor">
       <p className="knowledge-editor-intro">{historical ? '记录历史项目的要求与最终答复。' : '整理可重复使用的客户要求与标准回复。'}保存后由 BU 管理员审核发布。</p>
       {error && <p className="knowledge-editor-error" role="alert">{error}</p>}
+      {lockedSource?<p className="knowledge-editor-help">来源文件：{form.sourceFileName||form.source||'—'}{form.sourceRow? ` · 第 ${form.sourceRow} 行`:''}</p>:<>
       <GroupPicker value={form.groupIds||[]} onChange={groupIds=>change('groupIds',groupIds)}/><section className="knowledge-editor-source-section" aria-label="来源">
         <div className="knowledge-editor-source">
           <EditorField label="来源类型">
@@ -64,7 +65,7 @@ export default function KnowledgeEditor({ form, isNew, error, onChange, onSave, 
           </EditorField>}
           {!form.sourceType && form.source && <p className="knowledge-editor-help knowledge-editor-legacy-source">原来源：{form.source}</p>}
         </div>
-      </section>
+      </section></>}
       <section className="knowledge-editor-content" aria-label="回复内容">
         <EditorField label={historical ? '知识标题' : '回复标题'} required>
           <UiInput aria-label={historical ? '知识标题' : '回复标题'} aria-required="true" autoFocus ref={titleRef}

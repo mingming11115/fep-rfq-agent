@@ -93,6 +93,18 @@ class MatchEvaluator {
         return true;
     }
 
+    boolean referenceAvailable(Input input, JsonNode reference) {
+        String library = reference.path("library").asText();
+        if (CAPABILITY.equals(library)) {
+            var current = capability.evaluate(input.bu(), input.project(), input.snapshot().path("context"));
+            return reference.path("capabilityFingerprint").asText().equals(digest(current.toString()));
+        }
+        if (!STANDARD.equals(library) && !HISTORY.equals(library)) return false;
+        var sources = scope(input, library);
+        var source = sources.sources().get(reference.path("candidateId").asText());
+        return !sources.unknown() && source != null && source.version() == reference.path("version").asInt();
+    }
+
     private ObjectNode textStage(Input input, String library, Scope scope) {
         var stage = json.createObjectNode();
         if (scope.unknown()) return stage.put("status", "blocked").put("reason", "SOURCE_SCOPE_UNVERIFIED");

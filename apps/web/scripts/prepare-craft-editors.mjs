@@ -14,9 +14,10 @@ export async function prepareCraftEditor({editor,source,target,patch}){
   const patchBytes=await readFile(patch);
   // Git on Windows can change only the diff's line endings. Compiled assets remain byte exact.
   if(![digest(patchBytes),digest(patchBytes.toString('utf8').replace(/\r\n/g,'\n'))].includes(manifest.patchSha256))throw new Error(`${editor} 编辑器补丁已更新，请运行 npm run craft:build。`);
-  for(const [name,hash] of Object.entries(manifest.files))if(digest(await readFile(path.join(source,name)))!==hash)throw new Error(`${editor} 编译文件校验失败，请重新构建。`);
+  const files=Object.entries(manifest.files).map(([name,hash])=>[name.replaceAll('\\','/'),hash]);
+  for(const [name,hash] of files)if(digest(await readFile(path.join(source,name)))!==hash)throw new Error(`${editor} 编译文件校验失败，请重新构建。`);
   await mkdir(target,{recursive:true});
-  for(const name of [...Object.keys(manifest.files),'build.json']){
+  for(const name of [...files.map(([name])=>name),'build.json']){
     const bytes=await readFile(path.join(source,name)),destination=path.join(target,name);
     try{if((await readFile(destination)).equals(bytes))continue;}catch(error){if(error.code!=='ENOENT')throw error;}
     await mkdir(path.dirname(destination),{recursive:true});

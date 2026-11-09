@@ -55,6 +55,16 @@ public class CapabilityLibraryService {
                 "manual:" + digest(user.id() + "\n" + clean(project) + "\n" + payload), false);
     }
 
+    @Transactional(readOnly = true)
+    public JsonNode extractHistoryMetrics(CurrentUser user, String buId, String id, int version) {
+        access.requireCapabilityWriter(user, buId, false, false);
+        var row = catalog.required(Table.HISTORY, buId, id, version);
+        catalog.requireReadable(user, buId, row);
+        if (!active(row)) throw new BusinessException(422, "仅可从有效的已发布历史 RFQ 条款提取指标");
+        return json.valueToTree(HistoryCapabilityExtraction.fromAnswer(row.payload().path("answer").asText(),
+                row.payload().path("conditions").asText()));
+    }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public ObjectNode fromHistory(CurrentUser user, String buId, String historyId, int historyVersion, CapabilityLibraryRequest.Draft input) {
         begin(user, buId, false);
@@ -374,7 +384,8 @@ public class CapabilityLibraryService {
     }
 
     private ObjectNode view(String buId, Row row) {
-        return row.payload().put("revision", row.revision()).put("eligible", eligible(buId, row));
+        return row.payload().deepCopy().put("id", row.id()).put("version", row.version())
+                .put("revision", row.revision()).put("eligible", eligible(buId, row));
     }
 
     private static boolean active(Row row) {

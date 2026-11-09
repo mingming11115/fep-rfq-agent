@@ -39,6 +39,7 @@ rfq:
   match:
     worker-enabled: ${RFQ_MATCH_WORKER_ENABLED:false}
     poll-interval-ms: ${RFQ_MATCH_POLL_INTERVAL_MS:3000}
+    low-confidence-threshold: ${RFQ_MATCH_LOW_CONFIDENCE_THRESHOLD:0}
   storage-type: ${RFQ_STORAGE_TYPE:local}
   storage-dir: ${RFQ_STORAGE_DIR:./data/rfq-files}
   minio:

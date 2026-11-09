@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,12 +35,22 @@ public class HistoryRfqService {
     private final DocumentStorage storage;
     private final HistoryParseService parser;
     private final AuditService audit;
+    private final KnowledgeGroupService groups;
 
     public record Intake(ObjectNode document, List<ObjectNode> clauses, boolean duplicate) {}
     public record Original(String name, String contentType, byte[] bytes) {}
+    public record DocumentEdit(long revision, JsonNode metadata, List<String> groupIds) {}
+    public record Manual(String id, String title, String clauseNo, String section, String requirement, String answer, String conditions) {}
+    public record ManualDocument(String name, String projectId, boolean shareWithBu, Manual clause) {}
+    private record SourceDocument(Scope scope, ObjectNode payload, JsonNode originals) {}
 
     public Intake upload(CurrentUser user, String buId, MultipartFile file, MultipartFile responseFile,
             String projectId, boolean shareWithBu) throws IOException {
+        return upload(user, buId, file, responseFile, projectId, shareWithBu, null, null, null);
+    }
+
+    public Intake upload(CurrentUser user, String buId, MultipartFile file, MultipartFile responseFile,
+            String projectId, boolean shareWithBu, String previousId, Long revision, String note) throws IOException {
         access.requireWriter(user, buId, false);
         String scopedProject = projectId == null || projectId.isBlank() ? null : projectId.strip();
         if ((scopedProject == null) != shareWithBu) {
@@ -47,46 +58,181 @@ public class HistoryRfqService {
         }
         var scope = new Scope(buId, scopedProject);
         access.requireScope(user, buId, scope.projectId(), scope.name());
+        var previous = previousId == null ? null : sourceDocument(user, buId, previousId);
+        if (previous != null && !scope.equals(previous.scope())) throw new BusinessException(400, "新版须沿用历史原件的可见范围");
         var files = new ArrayList<StoredOriginal>();
         boolean retained = false;
         try {
             files.add(save(file));
             if (responseFile != null && !responseFile.isEmpty()) files.add(save(responseFile));
-            String fingerprint = "upload:" + scope.key() + ":" + files.get(0).file().sha256()
-                    + ":" + (files.size() == 2 ? files.get(1).file().sha256() : "");
-            var duplicate = existing(scope, fingerprint, false);
-            if (duplicate != null) return duplicate;
-
-            var sources = new ArrayList<HistorySource>();
-            for (int i = 0; i < files.size(); i++) {
-                var source = files.get(i);
-                sources.add(parser.readStored(source.file(), source.name(), i == 0 ? "main:" : "answer:"));
+            String fingerprint = "upload:" + MatchEvaluator.digest(scope.key() + ":" + (previousId == null ? "" : previousId)
+                    + ":" + files.get(0).file().sha256() + ":" + (files.size() == 2 ? files.get(1).file().sha256() : ""));
+            // Preserve idempotency for files uploaded before document versions were supported.
+            if (previous == null) {
+                String legacy = "upload:" + scope.key() + ":" + files.get(0).file().sha256()
+                        + ":" + (files.size() == 2 ? files.get(1).file().sha256() : "");
+                var existing = existing(scope, legacy, false);
+                if (existing != null) return existing;
+                fingerprint = legacy;
             }
-            var parsed = parser.extract(sources);
-            String id = Ids.next("HD");
-            var document = document(user, scope, id, files.get(0).name(), "history-upload");
-            if (files.size() == 2) document.put("responseName", files.get(1).name());
-            document.set("metadata", json.valueToTree(parsed.metadata()));
-            document.set("issues", json.valueToTree(parsed.issues()));
-            var summaries = document.putArray("sources");
-            sources.forEach(source -> summaries.addObject().put("name", source.name()).put("prefix", source.prefix()));
-            document.put("parseStatus", !parsed.clauses().isEmpty() && parsed.issues().isEmpty()
-                    && parsed.clauses().stream().allMatch(row -> row.issues().isEmpty())
-                    ? "complete" : "partial");
-            var clauses = parsed.clauses().stream()
-                    .map(row -> draft(user, scope, document, json.valueToTree(row))).toList();
-            var originals = json.createArrayNode();
-            for (var source : files) {
-                originals.addObject().put("name", source.name()).put("ref", source.file().storageRef())
-                        .put("size", source.file().size()).put("sha256", source.file().sha256());
-            }
-            var result = new TransactionTemplate(transactions).execute(status ->
-                    saveIntake(user, scope, fingerprint, document, clauses, originals));
+            var result = parseAndStore(user, scope, files, fingerprint, previous, revision, note);
             retained = result != null && !result.duplicate();
             return result;
         } finally {
             if (!retained) files.forEach(this::discard);
         }
+    }
+
+    private Intake parseAndStore(CurrentUser user, Scope scope, List<StoredOriginal> files, String fingerprint,
+            SourceDocument previous, Long revision, String note) throws IOException {
+        var duplicate = existing(scope, fingerprint, false);
+        if (duplicate != null) return duplicate;
+        var sources = new ArrayList<HistorySource>();
+        for (int i = 0; i < files.size(); i++) {
+            var source = files.get(i);
+            sources.add(parser.readStored(source.file(), source.name(), i == 0 ? "main:" : "answer:"));
+        }
+        var parsed = parser.extract(sources);
+        var document = document(user, scope, Ids.next("HD"), files.get(0).name(), "history-upload");
+        if (files.size() == 2) document.put("responseName", files.get(1).name());
+        var metadata = json.valueToTree(parsed.metadata());
+        document.set("metadata", metadata);
+        document.set("issues", json.valueToTree(parsed.issues()));
+        var summaries = document.putArray("sources");
+        sources.forEach(source -> summaries.addObject().put("name", source.name()).put("prefix", source.prefix()));
+        document.put("parseStatus", !parsed.clauses().isEmpty() && parsed.issues().isEmpty()
+                && parsed.clauses().stream().allMatch(row -> row.issues().isEmpty()) ? "complete" : "partial");
+        var clauses = parsed.clauses().stream().map(row -> draft(user, scope, document, json.valueToTree(row))).toList();
+        var originals = json.createArrayNode();
+        for (var source : files) {
+            originals.addObject().put("name", source.name()).put("ref", source.file().storageRef())
+                    .put("size", source.file().size()).put("sha256", source.file().sha256());
+        }
+        return new TransactionTemplate(transactions).execute(status -> {
+            access.lockBu(scope.buId());
+            var repeated = existing(scope, fingerprint, true);
+            if (repeated != null) return repeated;
+            if (previous != null) {
+                String parent = previous.payload().path("id").asText();
+                var current = sourceDocument(user, scope.buId(), parent).payload();
+                requireRevision(current, revision);
+                String family = current.path("familyId").asText(parent);
+                var newer = jdbc.queryForObject("""
+                        select count(*) from history_document where bu_id=?
+                        and json_unquote(json_extract(payload,'$.previousDocumentId'))=?
+                        """, Integer.class, scope.buId(), parent);
+                if (newer > 0) throw new BusinessException(409, "该版本已有后续版本，请从最新版本继续");
+                int number = current.path("versionNumber").asInt(1) + 1;
+                document.put("familyId", family).put("previousDocumentId", parent).put("versionNumber", number)
+                        .put("version", "V" + number).put("changeNote", limited(note, 900, false));
+                if (current.has("groupIds")) document.set("groupIds", current.path("groupIds"));
+                if (current.path("metadata").isObject()) {
+                    var combined = (ObjectNode) current.path("metadata").deepCopy();
+                    metadata.fields().forEachRemaining(entry -> {
+                        if (!entry.getValue().asText().isBlank() && combined.path(entry.getKey()).asText().isBlank()) {
+                            combined.set(entry.getKey(), entry.getValue());
+                        }
+                    });
+                    document.set("metadata", combined);
+                }
+            }
+            return saveIntake(user, scope, fingerprint, document, clauses, originals);
+        });
+    }
+
+    public Intake reparse(CurrentUser user, String buId, String id, long revision) throws IOException {
+        access.requireWriter(user, buId, false);
+        var source = sourceDocument(user, buId, id);
+        requireRevision(source.payload(), revision);
+        var files = new ArrayList<StoredOriginal>();
+        for (var original : source.originals()) {
+            files.add(new StoredOriginal(original.path("name").asText(),
+                    new DocumentStorage.StoredFile(original.path("ref").asText(), original.path("size").asLong(), original.path("sha256").asText())));
+        }
+        if (files.isEmpty()) throw new BusinessException(409, "该文档没有可重新解析的独立原件");
+        return parseAndStore(user, source.scope(), files, "reparse:" + id + ":" + revision, source, revision, "重新解析原件");
+    }
+
+    @Transactional
+    public ObjectNode editDocument(CurrentUser user, String bu, String id, DocumentEdit request) {
+        access.requireWriter(user, bu, false);
+        access.lockBu(bu);
+        var document = sourceDocument(user, bu, id).payload();
+        requireRevision(document, request.revision());
+        var metadata = document.path("metadata") instanceof ObjectNode old ? old : document.putObject("metadata");
+        if (request.metadata() != null && request.metadata().isObject()) {
+            for (String field : Set.of("customer", "projectName", "model", "config", "date")) {
+                if (request.metadata().has(field)) metadata.put(field, limited(request.metadata().path(field).asText(), 300, false));
+            }
+        }
+        if (request.groupIds() != null) document.set("groupIds", groups.groupIds(bu, request.groupIds(), document.path("groupIds")));
+        document.put("revision", request.revision() + 1);
+        jdbc.update("update history_document set payload=? where bu_id=? and id=?", document.toString(), bu, id);
+        audit.successInBu(user.id(), bu, "维护历史 RFQ 文档信息", "history_document", id, "");
+        return document;
+    }
+
+    @Transactional
+    public Intake createManual(CurrentUser user, String bu, ManualDocument request) {
+        access.requireWriter(user, bu, false);
+        String project = request.projectId() == null || request.projectId().isBlank() ? null : request.projectId().strip();
+        if ((project == null) != request.shareWithBu() || request.clause() == null) throw new BusinessException(400, "请填写可见范围和首条要求");
+        var scope = new Scope(bu, project);
+        access.requireScope(user, bu, project, scope.name());
+        String fingerprint = "manual:" + MatchEvaluator.digest(scope.key() + ":" + user.id() + ":" + limited(request.clause().id(), 128, true));
+        var doc = document(user, scope, Ids.next("HD"), limited(request.name(), 250, true), "manual")
+                .put("parseStatus", "manual").put("manual", true);
+        var result = saveIntake(user, scope, fingerprint, doc, List.of(), null);
+        if (result.duplicate()) return result;
+        return new Intake(doc, List.of(addManual(user, bu, doc.path("id").asText(), request.clause())), false);
+    }
+
+    @Transactional
+    public ObjectNode addManual(CurrentUser user, String bu, String documentId, Manual request) {
+        access.requireWriter(user, bu, false);
+        access.lockBu(bu);
+        var source = sourceDocument(user, bu, documentId);
+        String id = limited(request.id(), 128, true);
+        if (!id.matches("HK-[A-Za-z0-9-]{1,80}")) throw new BusinessException(400, "补录操作编号无效");
+        var duplicate = jdbc.query("select payload from `history-rfq-record` where bu_id=? and id=? and version=1",
+                (row, n) -> (ObjectNode) decode(row.getString(1)), bu, id).stream().findFirst().orElse(null);
+        if (duplicate != null) {
+            if (!documentId.equals(duplicate.path("documentId").asText()) || !user.id().equals(duplicate.path("createdById").asText())) {
+                throw new BusinessException(409, "条款编号已使用");
+            }
+            return duplicate;
+        }
+        var clause = draft(user, source.scope(), source.payload(), json.createObjectNode()
+                .put("clauseNo", limited(request.clauseNo(), 128, false)).put("section", limited(request.section(), 300, false))
+                .put("requirement", limited(request.requirement(), 4000, true)).put("answer", limited(request.answer(), 8000, false))
+                .put("conditions", limited(request.conditions(), 2000, false)))
+                .put("id", id).put("manual", true).put("createdById", user.id());
+        if (request.title() != null && !request.title().isBlank()) clause.put("title", limited(request.title(), 200, true));
+        jdbc.update("insert into `history-rfq-record`(bu_id,id,version,project_id,scope,payload) values (?,?,1,?,?,?)",
+                bu, id, source.scope().projectId(), source.scope().name(), clause.toString());
+        audit.successInBu(user.id(), bu, "手工补录历史条款", "history-rfq-record", id, documentId);
+        return clause;
+    }
+
+    private SourceDocument sourceDocument(CurrentUser user, String bu, String id) {
+        var source = jdbc.query("select project_id,scope,payload,originals from history_document where bu_id=? and id=? order by version desc limit 1",
+                (row, n) -> new SourceDocument(new Scope(bu, row.getString("project_id")),
+                        (ObjectNode) decode(row.getString("payload")), row.getString("originals") == null ? json.nullNode() : decode(row.getString("originals"))), bu, id)
+                .stream().findFirst().orElseThrow(() -> new BusinessException(404, "历史 RFQ 文档不存在"));
+        access.requireScope(user, bu, source.scope().projectId(), source.payload().path("scope").asText(source.scope().name()));
+        String origin = KnowledgePublicationAccess.recordProjectId(source.payload());
+        if (!origin.isBlank()) access.requireScope(user, bu, origin, "仅当前项目");
+        return source;
+    }
+
+    private void requireRevision(ObjectNode doc, Long revision) {
+        if (revision == null || revision != doc.path("revision").asLong()) throw new BusinessException(409, "历史原件已变化，请刷新");
+    }
+
+    private String limited(String value, int limit, boolean required) {
+        String text = value == null ? "" : value.strip();
+        if (text.length() > limit || required && text.isEmpty()) throw new BusinessException(400, "历史记录字段为空或超出长度限制");
+        return text;
     }
 
     @Transactional
@@ -116,6 +262,7 @@ public class HistoryRfqService {
                     .put("requirementAnchor", row.path("sourceAnchor").asText())
                     .put("originRequirementId", row.path("id").asText()).put("sourceFileId", row.path("sourceFileId").asText())
                     .put("sourceFileVersion", row.path("sourceVersion").asText()).put("sourceSnapshotId", snapshotId);
+            if (row.hasNonNull("sourceRequirementVersion")) source.set("sourceRequirementVersion", row.get("sourceRequirementVersion"));
             clauses.add(draft(user, scope, document, source));
         }
         return saveIntake(user, scope, fingerprint, document, clauses, null);
@@ -175,7 +322,7 @@ public class HistoryRfqService {
 
     private ObjectNode document(CurrentUser user, Scope scope, String id, String name, String sourceType) {
         var result = json.createObjectNode().put("id", id).put("familyId", id).put("buId", scope.buId()).put("name", name)
-                .put("version", "V1").put("revision", 1).put("scope", scope.name()).put("sourceType", sourceType)
+                .put("version", "V1").put("versionNumber", 1).put("revision", 1).put("scope", scope.name()).put("sourceType", sourceType)
                 .put("uploadedBy", user.displayName()).put("uploadedById", user.id()).put("createdAt", Instant.now().toString());
         if (scope.projectId() != null) result.put("projectId", scope.projectId());
         return result;

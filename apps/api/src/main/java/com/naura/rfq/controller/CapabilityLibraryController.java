@@ -1,5 +1,6 @@
 package com.naura.rfq.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.api.ApiResponse;
 import com.naura.rfq.model.dto.CapabilityLibraryRequest;
@@ -37,6 +38,11 @@ public class CapabilityLibraryController {
     @PostMapping("/capabilities")
     public ApiResponse<ObjectNode> create(@PathVariable String buId, @Valid @RequestBody CapabilityLibraryRequest.Draft request) {
         return ApiResponse.success(capabilities.create(CurrentUserHolder.require(), buId, request));
+    }
+
+    @GetMapping("/history/{id}/versions/{version}/metrics")
+    public ApiResponse<JsonNode> extractMetrics(@PathVariable String buId, @PathVariable String id, @PathVariable int version) {
+        return ApiResponse.success(capabilities.extractHistoryMetrics(CurrentUserHolder.require(), buId, id, version));
     }
 
     @PostMapping("/history/{id}/versions/{version}/candidate")

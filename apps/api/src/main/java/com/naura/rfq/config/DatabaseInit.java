@@ -35,6 +35,10 @@ class DatabaseInit {
     private static final String V13_END = "-- RFQ_MIGRATION_V13_END";
     private static final String V14_START = "-- RFQ_MIGRATION_V14\n";
     private static final String V14_END = "-- RFQ_MIGRATION_V14_END";
+    private static final String V15_START = "-- RFQ_MIGRATION_V15\n";
+    private static final String V15_END = "-- RFQ_MIGRATION_V15_END";
+    private static final String V16_START = "-- RFQ_MIGRATION_V16\n";
+    private static final String V16_END = "-- RFQ_MIGRATION_V16_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -63,7 +67,13 @@ class DatabaseInit {
         var match = resource("V14__requirement_match.sql",
                 sql.substring(sql.indexOf(V14_START) + V14_START.length(), sql.indexOf(V14_END)),
                 "classpath:db/init.sql#V14");
-        var resources = List.of(baseline, standardReplies, history, capability, match);
+        var workflow = resource("V15__project_work_version.sql",
+                sql.substring(sql.indexOf(V15_START) + V15_START.length(), sql.indexOf(V15_END)),
+                "classpath:db/init.sql#V15");
+        var replacements = resource("V16__rfq_document_replacement.sql",
+                sql.substring(sql.indexOf(V16_START) + V16_START.length(), sql.indexOf(V16_END)),
+                "classpath:db/init.sql#V16");
+        var resources = List.of(baseline, standardReplies, history, capability, match, workflow, replacements);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {
@@ -99,7 +109,9 @@ class DatabaseInit {
                         Integer.class, IMPORT_MARKER) == 1) {
                 if (hasTable(jdbc, "standard-reply-record") && hasTable(jdbc, "history-rfq-record")
                         && hasTable(jdbc, "standard_reply_index_sync")) {
-                    String version = hasTable(jdbc, "requirement_match_result") ? "14"
+                    String version = hasTable(jdbc, "rfq_document_replacement") ? "16"
+                            : hasTable(jdbc, "project_work_version") ? "15"
+                            : hasTable(jdbc, "requirement_match_result") ? "14"
                             : hasColumn(jdbc, "capability_record", "source_fingerprint") ? "13"
                             : hasTable(jdbc, "history_rfq_index_sync") ? "12" : "11";
                     Flyway.configure().configuration(flyway.getConfiguration()).baselineVersion(version).load().baseline();
