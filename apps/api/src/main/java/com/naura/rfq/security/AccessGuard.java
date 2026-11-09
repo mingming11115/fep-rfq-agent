@@ -48,7 +48,7 @@ public class AccessGuard {
     }
 
     public void requireActiveProject(Project project) {
-        if(project.isArchived())throw new BusinessException(409,"项目已归档，请恢复后再修改");
+        if(project.isArchived())throw new BusinessException(409,"项目已删除，请恢复后再修改");
     }
 
     /** null denotes platform scope; an ordinary user can never produce an empty unrestricted scope. */

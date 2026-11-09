@@ -55,24 +55,26 @@ public class ProjectMaintenanceService {
     }
 
     @Transactional
-    public Project archive(CurrentUser actor,String id,long version,String reason) {
+    public Project softDelete(CurrentUser actor,String id,long version,String legacyReason) {
         Project project=editable(actor,id,version);
-        if(!ProjectStage.isActive(project.getStage()))throw new BusinessException(409,"当前项目阶段不允许归档");
+        if(!ProjectStage.isActive(project.getStage()))throw new BusinessException(409,"当前项目阶段不允许删除");
         String previous=project.getStage();
+        String reason=legacyReason==null?null:legacyReason.trim();
         project.setArchivedFromStage(previous); project.setArchivedAt(Instant.now());
-        project.setArchivedBy(actor.id()); project.setArchiveReason(reason.trim());
+        project.setArchivedBy(actor.id()); project.setArchiveReason(reason);
         project.setStage(ProjectStage.CANCELLED.name()); persist(project);
-        audit.successInBu(actor.id(),project.getBuId(),"归档项目","project",id,
-                previous+" → CANCELLED；"+versionDetail(version,project)+"；"+reason.trim());
+        String detail=previous+" → CANCELLED；"+versionDetail(version,project);
+        audit.successInBu(actor.id(),project.getBuId(),reason==null?"删除项目":"归档项目","project",id,
+                reason==null?detail:detail+"；"+reason);
         return project;
     }
 
     @Transactional
     public Project restore(CurrentUser actor,String id,long version,String reason) {
         Project project=editable(actor,id,version);
-        if(!project.isArchived())throw new BusinessException(409,"项目尚未归档，不能恢复");
+        if(!project.isArchived())throw new BusinessException(409,"项目尚未删除，不能恢复");
         String previous=project.getArchivedFromStage();
-        if(!ProjectStage.isActive(previous))throw new BusinessException(409,"缺少可靠的归档前阶段，请联系管理员核对历史记录");
+        if(!ProjectStage.isActive(previous))throw new BusinessException(409,"缺少可靠的删除前阶段，请联系管理员核对历史记录");
         project.setStage(previous); project.setArchivedFromStage(null); project.setArchivedAt(null);
         project.setArchivedBy(null); project.setArchiveReason(null); persist(project);
         audit.successInBu(actor.id(),project.getBuId(),"恢复项目","project",id,

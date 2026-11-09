@@ -20,27 +20,27 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
  const [projectAction,setProjectAction]=useState(null),[actionReason,setActionReason]=useState(''),[submitting,setSubmitting]=useState(false);
  useEffect(()=>sessionStorage.setItem('rfq.projects.filters',JSON.stringify(f)),[f]);
  const lastDeleted=Object.values(appState.deletedProjectsById||{}).at(-1);
- const archiveEnabled=appState.dataSource==='mysql';
+ const hasDeletedList=appState.dataSource==='mysql';
  const tabs=isBuAdmin?[['all','全部']]:[['all','全部'],['initiated','我发起的'],['participated','我参与的']];
- if(archiveEnabled)tabs.push(['archived','已归档']);
+ if(hasDeletedList)tabs.push(['archived','已删除']);
  const tab=tabs.some(([key])=>key===f.tab)?f.tab:'all';
  const rows=selectProjects(appState,{actorId:appState.actorId,tab,query:f.query}),change=(key,value)=>setF(old=>({...old,[key]:value}));
- const canArchive=project=>{
-  if(!archiveEnabled)return canManage&&project.ownerId===appState.actorId;
+ const canMaintainProject=project=>{
+  if(!hasDeletedList)return canManage&&project.ownerId===appState.actorId;
   const {enabled,member,managed}=getPersonnelContext(appState,appState.actorId,project.buId);
   return isBuAdmin?managed:canManage&&enabled&&member.roles.includes('SR')&&project.ownerId===appState.actorId;
  };
- const archivedRows=(appState.archivedProjects||[]).filter(p=>`${p.name} ${p.code} ${p.id} ${p.customer||''}`.toLowerCase().includes(f.query.toLowerCase()));
+ const deletedRows=(appState.archivedProjects||[]).filter(p=>`${p.name} ${p.code} ${p.id} ${p.customer||''}`.toLowerCase().includes(f.query.toLowerCase()));
  const restoring=projectAction?.archived===true;
- const actionLabel=restoring?'恢复':archiveEnabled?'归档':'删除';
+ const actionLabel=restoring?'恢复':'删除';
  function openProjectAction(project){setActionReason('');setProjectAction(project);}
  function closeProjectAction(){if(!submitting)setProjectAction(null);}
  async function submitProjectAction(){
-  if(submitting||archiveEnabled&&!actionReason.trim())return;
+  if(submitting||restoring&&!actionReason.trim())return;
   setSubmitting(true);
   try{
-   const submit=restoring?onRestoreProject:onDeleteProject;
-   if(await submit(projectAction,actionReason)!==false)setProjectAction(null);
+   const result=await (restoring?onRestoreProject(projectAction,actionReason):onDeleteProject(projectAction));
+   if(result!==false)setProjectAction(null);
   }finally{setSubmitting(false);}
  }
  const openModel=p=>{
@@ -63,21 +63,20 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
  <ProFormText name="query" label="关键词" placeholder="搜索名称、编号或客户" fieldProps={{'aria-label':'搜索项目',allowClear:true}}/>
  </QueryFilter>
  {tab==='archived'?<div ref={resultsRef} className="rfq-project-results">
-  <Table rowKey="id" dataSource={archivedRows} locale={{emptyText:'没有符合条件的归档项目'}} scroll={{x:640}} columns={[
+  <Table rowKey="id" dataSource={deletedRows} locale={{emptyText:'没有符合条件的已删除项目'}} scroll={{x:640}} columns={[
    {title:'项目 / 客户',key:'project',render:(_,p)=><><strong>{p.name}</strong><small className="rfq-table-meta">{p.code||p.id} · {p.customer||'客户待补充'}</small></>},
    {title:'负责人',dataIndex:'ownerId',render:id=>personName(appState,id)},
-   {title:'归档原因',dataIndex:'archiveReason',render:value=>value||'—'},
-   {title:'操作',key:'actions',render:(_,p)=>canArchive(p)&&<UiButton className="text-link" onClick={()=>openProjectAction(p)}>恢复项目</UiButton>},
+   {title:'操作',key:'actions',render:(_,p)=>canMaintainProject(p)&&<UiButton className="text-link" onClick={()=>openProjectAction(p)}>恢复项目</UiButton>},
   ]}/>
  </div>:<>
- {f.view==='cards'&&<div className="rfq-project-toolbar"><span className="muted">{rows.length} 个项目</span>{viewControl}</div>}<div ref={resultsRef} className="rfq-project-results">{f.view==='cards'?<div className="workspace-project-grid">{rows.map(p=>{const s=getProjectSummary(appState,p.id,appState.actorId);return <article className="workspace-project-card" key={p.id}><div className="workspace-card-top"><StatusBadge status={s.stage}/><small>{p.id}</small></div><button className="workspace-project-title" onClick={()=>onOpenProject(p.id,'view')}>{p.name}</button><p>{p.customer||'客户待补充'}</p><div className="workspace-project-meta"><span>负责人 <b>{p.owner}</b></span><span>截止 <b>{p.deadline||'未设置'}</b></span></div><div className="workspace-progress"><span style={{width:`${s.total?s.confirmed/s.total*100:0}%`}}/></div><small>确认 {s.confirmed}/{s.total} · 评审 {s.reviews} · 重新确认 {s.rechecks}</small><div className="workspace-card-actions"><UiButton className="btn btn-sm" onClick={()=>onOpenProject(p.id,isBuAdmin?'response':'continue')}>{isBuAdmin?'查看RFQ':'继续处理'} {s.pending>0&&`(${s.pending})`}<ArrowRight size={14}/></UiButton><UiButton className="text-link" title={p.groupPath||(p.modelId?[p.modelName,p.modelRevision].filter(Boolean).join(' · '):'该 RFQ 尚未绑定目录')} onClick={()=>openModel(p)}>查看关联组</UiButton>{canManage&&p.ownerId===appState.actorId&&<><UiButton className="text-link" onClick={()=>{setTransfer(p);setTo('');setReason('');}}>移交</UiButton></>}{canArchive(p)&&<UiButton className="text-link workspace-delete-button" onClick={()=>openProjectAction(p)}>{archiveEnabled?'归档':'删除'}</UiButton>}</div></article>;})}</div>:<RfqProjectTable sourceReparse={sourceReparse} viewControl={viewControl} rows={rows} appState={appState} canManage={canManage} isBuAdmin={isBuAdmin} onOpenProject={onOpenProject} onOpenModel={openModel} onTransfer={p=>{setTransfer(p);setTo('');setReason('');}} onDelete={openProjectAction} canArchive={canArchive} archiveEnabled={archiveEnabled}/>}{f.view==='cards'&&!rows.length&&<div className="workspace-empty">{isBuAdmin?'没有符合条件的项目，可调整筛选条件。':'没有符合条件的项目。可调整筛选或新建 RFQ。'}</div>}</div></>}</section>
+ {f.view==='cards'&&<div className="rfq-project-toolbar"><span className="muted">{rows.length} 个项目</span>{viewControl}</div>}<div ref={resultsRef} className="rfq-project-results">{f.view==='cards'?<div className="workspace-project-grid">{rows.map(p=>{const s=getProjectSummary(appState,p.id,appState.actorId);return <article className="workspace-project-card" key={p.id}><div className="workspace-card-top"><StatusBadge status={s.stage}/><small>{p.id}</small></div><button className="workspace-project-title" onClick={()=>onOpenProject(p.id,'view')}>{p.name}</button><p>{p.customer||'客户待补充'}</p><div className="workspace-project-meta"><span>负责人 <b>{p.owner}</b></span><span>截止 <b>{p.deadline||'未设置'}</b></span></div><div className="workspace-progress"><span style={{width:`${s.total?s.confirmed/s.total*100:0}%`}}/></div><small>确认 {s.confirmed}/{s.total} · 评审 {s.reviews} · 重新确认 {s.rechecks}</small><div className="workspace-card-actions"><UiButton className="btn btn-sm" onClick={()=>onOpenProject(p.id,isBuAdmin?'response':'continue')}>{isBuAdmin?'查看RFQ':'继续处理'} {s.pending>0&&`(${s.pending})`}<ArrowRight size={14}/></UiButton><UiButton className="text-link" title={p.groupPath||(p.modelId?[p.modelName,p.modelRevision].filter(Boolean).join(' · '):'该 RFQ 尚未绑定目录')} onClick={()=>openModel(p)}>查看关联组</UiButton>{canManage&&p.ownerId===appState.actorId&&<><UiButton className="text-link" onClick={()=>{setTransfer(p);setTo('');setReason('');}}>移交</UiButton></>}{canMaintainProject(p)&&<UiButton className="text-link workspace-delete-button" onClick={()=>openProjectAction(p)}>删除</UiButton>}</div></article>;})}</div>:<RfqProjectTable sourceReparse={sourceReparse} viewControl={viewControl} rows={rows} appState={appState} canManage={canManage} isBuAdmin={isBuAdmin} onOpenProject={onOpenProject} onOpenModel={openModel} onTransfer={p=>{setTransfer(p);setTo('');setReason('');}} onDelete={openProjectAction} canMaintainProject={canMaintainProject}/>}{f.view==='cards'&&!rows.length&&<div className="workspace-empty">{isBuAdmin?'没有符合条件的项目，可调整筛选条件。':'没有符合条件的项目。可调整筛选或新建 RFQ。'}</div>}</div></>}</section>
  <OverlayPresence>{projectAction&&<Modal title={actionLabel+' RFQ 项目'} onClose={closeProjectAction} footer={<>
   <UiButton className="btn" disabled={submitting} onClick={closeProjectAction}>取消</UiButton>
-  <UiButton className={restoring?'btn btn-primary':'btn btn-danger'} loading={submitting} disabled={archiveEnabled&&!actionReason.trim()} onClick={submitProjectAction}>确认{actionLabel}</UiButton>
+  <UiButton className={restoring?'btn btn-primary':'btn btn-danger'} loading={submitting} disabled={restoring&&!actionReason.trim()} onClick={submitProjectAction}>确认{actionLabel}</UiButton>
  </>}>
   <p>确认{actionLabel}“{projectAction.name}”？</p>
-  <p className="muted">{restoring?'项目将恢复至归档前的阶段，并重新出现在活动列表。':archiveEnabled?'项目及相关待办将从工作列表移出。项目资料和工作记录会保留，可在「已归档」中恢复。':'项目及相关待办将从工作列表移出；删除后可撤销，恢复应答、审批及协作记录。'}</p>
-  {archiveEnabled&&<label className="field"><span>{actionLabel}原因</span><UiTextArea aria-label={actionLabel+'原因'} maxLength={500} value={actionReason} disabled={submitting} onChange={e=>setActionReason(e.target.value)}/></label>}
+  <p className="muted">{restoring?'项目将恢复至删除前的阶段，并重新出现在活动列表。':hasDeletedList?'项目及相关待办将从工作列表移出。项目资料和工作记录会保留，可在「已删除」中恢复。':'项目及相关待办将从工作列表移出；删除后可撤销，恢复应答、审批及协作记录。'}</p>
+  {restoring&&<label className="field"><span>恢复原因</span><UiTextArea aria-label="恢复原因" maxLength={500} value={actionReason} disabled={submitting} onChange={e=>setActionReason(e.target.value)}/></label>}
  </Modal>}</OverlayPresence>
  <OverlayPresence>{modal&&canManage&&<CreateRfqDialog appState={appState} onClose={()=>setModal(false)} onCreateProject={onCreateProject} onCatalogChange={logEvent}/>}</OverlayPresence><OverlayPresence>{transfer&&canManage&&<Modal title="移交项目负责人" onClose={()=>setTransfer(null)} footer={<><UiButton className="btn" onClick={()=>setTransfer(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={()=>{if(!to||!reason.trim()){toast('请选择负责人并填写原因','error');return;}if(onTransferProject(transfer.id,to,reason)===false)return;setTransfer(null);toast('负责人已移交；专业职责与待办处理人继续保留');}}>确认移交</UiButton></>}><p>{transfer.name} · 当前负责人 {transfer.owner}</p><div className="field"><span>新负责人</span><PersonPicker label="新负责人" people={Object.values(appState.accountsById||{}).filter(a=>a.id!==transfer.ownerId&&canAccessProject(appState,a.id,transfer.id)&&getPersonnelContext(appState,a.id,transfer.buId).member?.roles.includes('SR'))} value={to} onChange={setTo} emptyLabel="暂无可接收此项目的已授权SR"/></div><label className="field"><span>移交原因</span><UiTextArea className="input" value={reason} onChange={e=>setReason(e.target.value)}/></label><p className="muted">移交只更改项目负责人。待办改派需在任务中心逐项转办。</p></Modal>}</OverlayPresence></div>;
 }

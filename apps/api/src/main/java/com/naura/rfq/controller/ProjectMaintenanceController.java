@@ -68,9 +68,13 @@ public class ProjectMaintenanceController {
         return ApiResponse.success(ProjectView.of(service.handover(CurrentUserHolder.require(),id,
                 request.getVersion(),request.getOwnerId(),request.getReason())));
     }
+    @DeleteMapping("/{id}")
+    public ApiResponse<ProjectView> delete(@PathVariable String id,@RequestParam @PositiveOrZero long version) {
+        return ApiResponse.success(ProjectView.of(service.softDelete(CurrentUserHolder.require(),id,version,null)));
+    }
     @PostMapping("/{id}/archives")
     public ApiResponse<ProjectView> archive(@PathVariable String id,@Valid @RequestBody ActionRequest request) {
-        return ApiResponse.success(ProjectView.of(service.archive(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
+        return ApiResponse.success(ProjectView.of(service.softDelete(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
     }
     @PostMapping("/{id}/restorations")
     public ApiResponse<ProjectView> restore(@PathVariable String id,@Valid @RequestBody ActionRequest request) {

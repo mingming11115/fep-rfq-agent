@@ -4,7 +4,7 @@
 
 ## 公共约定和权限
 
-前缀 `/api/rfq`；要求 Bearer JWT。成功 HTTP 200 + `{code:0,msg:"成功",data:ProjectView}`。写操作必填非负整数 version 与非空 reason（最多 500 字符），使用事务项目行锁及 SQL 乐观锁；成功仅递增一次版本，并在同事务记录审计。
+前缀 `/api/rfq`，要求 Bearer JWT。成功返回 HTTP 200 和 `{code:0,msg:"成功",data:ProjectView}`。写操作必填非负整数 version，修改、移交与恢复还须提供非空 reason（最多 500 字符）。写操作使用事务项目行锁及 SQL 乐观锁，成功时递增一次版本并在同一事务记录审计。
 
 仅本 BU 管理员或该项目当前负责人且具有本 BU SR 角色可以维护。普通技术、其他已授权 SR 和纯平台身份不能修改、移交或归档。负责人移交不会删除原负责人的已有项目授权或 SR 参与权限；其项目维护权随 ownerId 变化。如需撤销所有访问，仍由管理员使用项目授权接口处理。
 
@@ -42,15 +42,13 @@ POST `/projects/{id}/handovers`
 
 移交后新负责人可以维护项目，原负责人保留已有读取与 SR 参与权限，并失去仅负责人拥有的项目维护/移交权。审计记录双方 ID、原因与版本变化。
 
-## 3. 归档项目
+## 3. 删除项目
 
-POST `/projects/{id}/archives`
+DELETE `/projects/{id}?version=5`
 
-```json
-{"version":5,"reason":"本轮客户项目结束"}
-```
+查询参数 `version` 必填，删除无需请求体或原因。服务端执行软删除，将 stage 置为 CANCELLED，记录 archivedFromStage、archivedAt 和 archivedBy。项目、原件、解析记录、条款、成员和审计均保留。项目已删除、版本过期或阶段无法识别时返回 409。
 
-服务端将 stage 置为 CANCELLED，记录 archivedFromStage、archivedAt、archivedBy、archiveReason。已有项目、原件、解析记录、条款、成员和审计均保留。已归档或无法识别的旧阶段返回 409。
+旧客户端仍可使用 POST `/projects/{id}/archives`，携带原有的 `version` 和 `reason`。
 
 归档后暂停 `/api/rfq` 的以下业务写入：基本信息、移交、原件上传、示例上传、触发解析、人工修正条款。原有权限仍决定历史详情、原件、条款和解析结果的读取。项目授权管理继续开放，管理员仍可撤销归档项目的访问。
 
@@ -74,7 +72,7 @@ POST `/projects/{id}/restorations`
 
 GET `/projects?page=1&size=20&archived=false&keyword=ACME&stage=PARSING`
 
-- archived 默认 false，查询可见活动项目；true 只查询可见归档项目。
+- archived 默认为 false，查询可见活动项目。传 true 查询可见的已删除项目，包含历史归档记录。
 - keyword 搜索编码、名称、客户，最多 200 字符；按普通文本匹配，`%`、`_` 不作为用户通配符。
 - stage 选填：DRAFT、PARSING、REVIEWING、APPROVED、EXPORTED、CANCELLED；其他值 400。
 - 权限、归档状态和过滤都在 SQL 分页及计数前执行；archived=false 与 stage=CANCELLED 组合得到空页。

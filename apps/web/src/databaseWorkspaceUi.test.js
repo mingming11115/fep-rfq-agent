@@ -22,16 +22,17 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  const failedRequest=new Promise(resolve=>{finishFailed=resolve;});
  const source={id:'D',projectId:'P',name:'客户.docx',version:0,status:'PARSING'};
  globalThis.fetch=async (url,options)=>{
-  if(url.endsWith('/projects/P/archives')||url.endsWith('/projects/P/restorations')){
-   const body=JSON.parse(options.body);
+  const deleting=options.method==='DELETE'&&url.startsWith('/api/rfq/projects/P?');
+  if(deleting||url.endsWith('/projects/P/restorations')){
+   const body=deleting?{version:Number(new URL(url,'http://localhost').searchParams.get('version'))}:JSON.parse(options.body);
    projectActions.push({url,method:options.method,...body});
-   if(body.version!==projectVersion||!body.reason?.trim())return new Response(JSON.stringify({code:1,msg:'无效的项目操作'}),{status:409});
-   archived=url.endsWith('/archives');projectVersion++;
+   if(body.version!==projectVersion||(deleting?options.body!==undefined:!body.reason?.trim()))return new Response(JSON.stringify({code:1,msg:'无效的项目操作'}),{status:409});
+   archived=deleting;projectVersion++;
    return new Response(JSON.stringify({code:0,data:{...project,version:projectVersion,archived}}));
   }
   if(url.startsWith('/api/rfq/projects?')){
    const archiveList=new URL(url,'http://localhost').searchParams.get('archived')==='true';
-   const list=archived===archiveList?[{...project,version:projectVersion,archived,stage:archived?'CANCELLED':'DRAFT',archiveReason:archived?'客户暂停项目':null}]:[];
+   const list=archived===archiveList?[{...project,version:projectVersion,archived,stage:archived?'CANCELLED':'DRAFT',archiveReason:null}]:[];
    return new Response(JSON.stringify({code:0,data:{list,total:list.length}}));
   }
   if(url.endsWith('/requirements/R/match-result'))return new Response(JSON.stringify({code:0,data:{
@@ -117,15 +118,14 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   });
   await act(async()=>{window.location.hash='#/projects';window.dispatchEvent(new window.HashChangeEvent('hashchange'));await settle();});
   await click('更多操作 从数据库读取的项目');
-  await click('归档项目','[role="menuitem"]');
-  assert.ok([...document.querySelectorAll('button')].find(button=>button.textContent==='确认归档')?.disabled,'archive requires a reason');
-  await fillReason('归档原因','客户暂停项目');
-  await click('确认归档');
-  assert.deepEqual(projectActions,[{url:'/api/rfq/projects/P/archives',method:'POST',version:0,reason:'客户暂停项目'}]);
+  await click('删除项目','[role="menuitem"]');
+  assert.equal(document.querySelector('[role="dialog"] textarea'),null,'deletion has no reason field');
+  await click('确认删除');
+  assert.deepEqual(projectActions,[{url:'/api/rfq/projects/P?version=0',method:'DELETE',version:0}]);
   assert.ok(!node.textContent.includes('从数据库读取的项目'),'an archived project leaves the active list');
   await act(async()=>{root.render(React.createElement(AntApp,null,React.createElement(Workspace,{key:'fresh-load'})));await settle();});
-  await click('已归档','[role="tab"]');
-  assert.ok(node.textContent.includes('从数据库读取的项目'));assert.ok(node.textContent.includes('客户暂停项目'));
+  await click('已删除','[role="tab"]');
+  assert.ok(node.textContent.includes('从数据库读取的项目'));
   await click('恢复项目');
   await fillReason('恢复原因','客户重启项目');
   await click('确认恢复');

@@ -10,7 +10,7 @@ import RfqAppLayout from './components/RfqAppLayout';
 import { consumeLoginIdentity, readSession, logout } from './authClient';
 import {loadLibraryResources} from './knowledgeLibraryClient';
 import { hydrateSessionPersonnel, mergeMemberDirectory } from './sessionPersonnel';
-import {createBackendProject,updateBackendProjectArchive} from './rfqProjectClient';
+import {createBackendProject,deleteBackendProject,restoreBackendProject} from './rfqProjectClient';
 import BuAdminPage,{ProjectPersonnelPanel,PlatformAdminPage} from './pages/BuAdminPage';
 import {canAccessProject,getPersonnelContext,personName,getProjectFinalReview,getRequiredFinalReviewers,configureProjectFinalReviewers,assignProjectDuty} from './personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomain';
@@ -146,21 +146,21 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
  function taskAction(id,action){const s=stateRef.current,t=s.tasksById[id];try{if(action.type==='transfer'){if(databaseBacked)return unavailable();update(st=>event(transferBusinessTask(st,{taskId:id,to:action.to,reason:action.reason}),'转办任务',id,action.reason));return true;}const next=applyTaskAction(t,{...action,actorId:s.actorId,objectVersion:t?.objectVersion,at:new Date().toISOString()},s);update(s=>event({...s,tasksById:{...s.tasksById,[id]:next}},action.type==='transfer'?'转办任务':'接手任务',id,action.reason||''));return true;}catch(e){toast(e.message,'error');return false;}}
  function openTask(task,mode='view',returnKey='tasks'){guarded(()=>{const t=stateRef.current.tasksById[task.id];if(!t||!canAccessProject(stateRef.current,stateRef.current.actorId,t.projectId)){toast('任务不存在，请刷新后查看','error');return;}if(mode==='start'&&!taskAction(t.id,{type:'start'}))return;update(s=>({...s,activeProjectId:t.projectId}));rawNavigate(t.objectType==='requirement'||t.kind==='response-revise'?'response':t.objectType==='review'?'reviews':'export',{projectId:t.projectId,requirementId:t.requirementId,reviewId:t.reviewId,snapshotId:t.snapshotId,taskId:t.id,action:mode,returnKey});});}
  function openProject(id,mode='view',details={}){if(mode==='continue'){const task=selectMyTasks(stateRef.current,{actorId:stateRef.current.actorId,projectId:id})[0];if(task){openTask(task,'start','projects');return;}}selectProject(id,['documents','settings','versions'].includes(mode)?mode:mode==='view'?'settings':'response',details);}
- async function persistProjectArchive(project,archive,reason){
-  try{await updateBackendProjectArchive(project,archive,reason);}
+ async function persistProjectAction(action,successMessage){
+  try{await action();}
   catch(error){toast(error.message,'error');return false;}
-  toast(archive?'项目已归档':'项目已恢复');
+  toast(successMessage);
   const {actorId,actorRole,activeBuId}=stateRef.current;
   onReload?.({actorId,actorRole,activeBuId});
   return true;
  }
- function deleteProject(project,reason){
-  if(databaseBacked)return persistProjectArchive(project,true,reason);
+ function deleteProject(project){
+  if(databaseBacked)return persistProjectAction(()=>deleteBackendProject(project),'项目已删除');
   const {id}=project;
   try{update(s=>event(removeProject(s,id),'删除项目',id,'项目及相关待办已移出，可撤销删除'));toast('项目已删除，可在列表中撤销');return true;}catch(error){toast(error.message,'error');return false;}
  }
  function undoDeleteProject(project,reason){
-  if(databaseBacked)return persistProjectArchive(project,false,reason);
+  if(databaseBacked)return persistProjectAction(()=>restoreBackendProject(project,reason),'项目已恢复');
   const {id}=project;
   try{update(s=>event(restoreProject(s,id),'撤销删除项目',id,'项目及相关工作记录已恢复'));toast('项目已恢复');return true;}catch(error){toast(error.message,'error');return false;}
  }

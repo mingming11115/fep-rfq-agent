@@ -13,9 +13,14 @@ export async function createBackendProject(project,api=defaultApi,user=readSessi
  return api.post('/projects',{code:project.code||project.id,name:project.name.trim(),customer:project.customer||'',ownerId:project.ownerId,buId:backendBu(project,user),deadline:project.deadline,groupId:project.groupId});
 }
 
-export function updateBackendProjectArchive(project,archive,reason,api=defaultApi){
+export function deleteBackendProject(project,api=defaultApi){
  const id=encodeURIComponent(project.backendProjectId||project.id);
- return api.post(`/projects/${id}/${archive?'archives':'restorations'}`,{version:project.version,reason:reason.trim()});
+ return api.delete(`/projects/${id}?version=${encodeURIComponent(project.version)}`);
+}
+
+export function restoreBackendProject(project,reason,api=defaultApi){
+ const id=encodeURIComponent(project.backendProjectId||project.id);
+ return api.post(`/projects/${id}/restorations`,{version:project.version,reason:reason.trim()});
 }
 
 export async function ensureBackendProject(project,api=defaultApi,user=readSession()?.user){
