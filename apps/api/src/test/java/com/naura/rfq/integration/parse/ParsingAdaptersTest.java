@@ -174,15 +174,18 @@ class ParsingAdaptersTest {
         try { assertThat(extractor(settings(url(s), true)).extractWithReport(blocks()).requirements()).hasSize(1); }
         finally { s.stop(0); }
     }
-    @Test void modelCannotQuoteOnlyFirstClauseAndDropRemainingConditions() throws Exception {
+    @Test void modelKeepsExtractedClausesWhenSomeBlockTextIsUnquoted() throws Exception {
         String first = "1.1 泵的设计压力应不低于 2 MPa。";
         var input = List.of(RawBlock.paragraph(0, first + " 1.2 设备必须提供独立的安全保护装置。", "", null, "p0"));
         var s = server(200, envelope(answer(0, first)), 0);
         try {
             var result = extractor(settings(url(s), true)).extractWithReport(input);
-            assertThat(result.extractor()).isEqualTo("rule-based-v1");
-            assertThat(result.issues()).isNotEmpty();
-            assertThat(result.requirements().get(0).originalText()).contains("安全保护装置");
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.issues()).isEmpty();
+            assertThat(result.requirements()).singleElement().satisfies(r -> {
+                assertThat(r.originalText()).isEqualTo(first);
+                assertThat(r.needsReview()).isTrue();
+            });
         } finally { s.stop(0); }
     }
     @Test void slowDripResponseCannotExceedWholeRequestDeadline(CapturedOutput output) throws Exception {

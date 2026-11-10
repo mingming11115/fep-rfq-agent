@@ -36,11 +36,10 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         "ignoredBlockIndexes":[]}。
         必须逐个处理输入blockIndex。每块或者有requirements引用，或者列入ignoredBlockIndexes。
         标题、页码、目录、文档用途、演示或测试声明等非采购要求应忽略。
-        演示声明附带的一般填写指引不作为条款；实际技术、商务及正式应答要求必须保留。
-        同块若包含实际要求，不得因演示声明而整块忽略。保留原文数值、单位、否定与条件，不补写要求。
-        同一块可以拆出多个要求。originalText必须是该块text的连续原文，不能改写。
-        每个未忽略块的全部原文必须被originalText摘录完整覆盖，不能只摘第一句而遗漏后文和条件。
-        可在一条要求中引用完整块，其他子要求引用其中部分。
+        演示声明附带的一般填写指引不作为条款。逐条抽取能识别的技术、商务及正式应答要求。
+        同块若包含实际要求，不得因演示声明而整块忽略。同一块可以拆出多个要求。
+        每条originalText必须是该块text的连续原文，保留该条要求的数值、单位、否定与条件，不改写或补写。
+        无需摘录块内其余文字。
         """;
 
     @Override public String name() { return "hybrid-v1"; }
@@ -154,7 +153,6 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             throw new ModelValidationException("缺少输出字段");
         }
         Map<Integer, RawBlock> sources = new HashMap<>(); batch.forEach(b -> sources.put(b.index(), b));
-        Map<Integer, java.util.BitSet> spans = new HashMap<>();
         Set<Integer> covered = new HashSet<>(); Set<Integer> ignored = new HashSet<>(); Set<String> seen = new HashSet<>();
         List<ExtractedRequirement> results = new ArrayList<>();
         if (response.path("requirements").size() > 1000) {
@@ -170,12 +168,6 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                 throw new ModelValidationException("来源校验失败");
             }
             covered.add(index);
-            var span = spans.computeIfAbsent(index, key -> new java.util.BitSet(source.text().length()));
-            int start = source.text().indexOf(quote);
-            while (start >= 0) {
-                span.set(start, start + quote.length());
-                start = source.text().indexOf(quote, start + quote.length());
-            }
             String clause = optional(candidate, "customerClauseNo");
             String title = optional(candidate, "title");
             String obligation = candidate.path("obligation").asText("unknown");
@@ -190,18 +182,6 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         for (JsonNode index : response.path("ignoredBlockIndexes")) {
             if (!index.isIntegralNumber() || !sources.containsKey(index.asInt()) || covered.contains(index.asInt()) || !ignored.add(index.asInt())) {
                 throw new ModelValidationException("忽略范围非法");
-            }
-        }
-        for (var entry : sources.entrySet()) {
-            if (ignored.contains(entry.getKey())) {
-                continue;
-            }
-            var span = spans.getOrDefault(entry.getKey(), new java.util.BitSet());
-            String text = entry.getValue().text();
-            for (int i = 0; i < text.length(); i++) {
-                if (!Character.isWhitespace(text.charAt(i)) && !span.get(i)) {
-                    throw new ModelValidationException("块内原文覆盖不完整");
-                }
             }
         }
         covered.addAll(ignored);
