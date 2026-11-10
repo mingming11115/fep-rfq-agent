@@ -10,13 +10,16 @@ export function craftClauseTargets(source,rows,engine,blocks=[]){
     if(type==='paragraph') { paragraphs.push(fold(content)); }
     if(type!=='table') { continue; }
     for(const line of content.split('\n')){
-      const cells=line.split(' | ').filter(cell=>cell.trim());
+      const fields=line.split(' | ');
+      const cells=fields.filter(cell=>cell.trim());
       if(cells.length<2) { continue; }
       // Extraction uses colons or pipes between cells. WordCraft searches across cells with spaces.
       const native=fold(cells.join(' '));
       const serialized=fold(line);
+      const lastTextCell=fields.findLastIndex(cell=>cell.trim());
+      const withoutTrailingEmptyCells=fold(fields.slice(0,lastTextCell+1).join(' | '));
       tableRows.push({serialized,native});
-      for(const extracted of [fold(cells.join('：')),serialized]){
+      for(const extracted of [fold(cells.join('：')),serialized,withoutTrailingEmptyCells]){
         tableQuotes.set(extracted,tableQuotes.has(extracted)&&tableQuotes.get(extracted)!==native?null:native);
       }
     }

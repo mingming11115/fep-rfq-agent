@@ -36,3 +36,11 @@ test('Word table targets locate a unique row when the quote ends at a cell separ
   assert.equal(craftClauseTargets(source,[row],'wordcraft',[table,repeated])[0].quote,prefix);
   assert.equal(craftClauseTargets(source,[row],'pdfcraft',[table])[0].quote,prefix);
 });
+
+test('Word table targets locate rows when extracted quotes omit trailing empty cells',()=>{
+  const source={projectId:'P',fileId:'F',sourceVersion:'1'};
+  const table={type:'table',content:'No | Item | Spec | Notes\n1 | 设计压力 | 2 MPa | '};
+  const row={id:'R',projectId:'P',sourceFileId:'F',original:'1 | 设计压力 | 2 MPa'};
+
+  assert.equal(craftClauseTargets(source,[row],'wordcraft',[table])[0].quote,'1 设计压力 2 MPa');
+});
