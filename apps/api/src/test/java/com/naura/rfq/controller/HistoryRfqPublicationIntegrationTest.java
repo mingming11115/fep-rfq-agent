@@ -128,8 +128,19 @@ class HistoryRfqPublicationIntegrationTest {
         byte[] bytes = docx();
         String content = call(multipart(path + "/import").file(new MockMultipartFile("file", "history.docx",
                 "application/octet-stream", bytes)).param("shareWithBu", "true"), actor)
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.clauses[0].title").value("上料"))
+                .andExpect(jsonPath("$.data.clauses[0].originalText").value("3.2：上料：300 mm：支持自动上料"))
+                .andExpect(jsonPath("$.data.clauses[0].requirementText").value("支持自动上料"))
+                .andExpect(jsonPath("$.data.clauses[0].answer").value("需配置模块 S"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String id = JsonPath.read(content, "$.data.document.id");
+        String clauseId = JsonPath.read(content, "$.data.clauses[0].id");
+        call(patch(path + "/clauses/" + clauseId + "/versions/1").contentType("application/json").content("""
+                {"revision":0,"title":"上料","requirement":"支持自动上料和对准","answer":"需配置模块 S","conditions":"硅材料"}
+                """), actor).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requirementText").value("支持自动上料和对准"))
+                .andExpect(jsonPath("$.data.originalText").value("3.2：上料：300 mm：支持自动上料"));
         String document = path + "/documents/" + id;
         call(patch(document).contentType("application/json").content("""
                 {"revision":1,"metadata":{"customer":"客户A"},"groupIds":["group1"]}
@@ -167,8 +178,9 @@ class HistoryRfqPublicationIntegrationTest {
 
     private byte[] docx() throws Exception {
         try (var doc = new XWPFDocument(); var bytes = new ByteArrayOutputStream()) {
-            var table = doc.createTable(2, 4);
-            String[][] rows = {{"编号", "客户要求", "历史答复", "适用条件"}, {"3.2", "支持自动上料", "需配置模块 S", "硅材料"}};
+            var table = doc.createTable(2, 6);
+            String[][] rows = {{"编号", "项目Item", "规格", "Description", "历史答复", "适用条件"},
+                    {"3.2", "上料", "300 mm", "支持自动上料", "需配置模块 S", "硅材料"}};
             for (int r = 0; r < rows.length; r++) {
                 for (int c = 0; c < rows[r].length; c++) table.getRow(r).getCell(c).setText(rows[r][c]);
             }

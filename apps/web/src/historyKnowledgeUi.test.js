@@ -15,7 +15,7 @@ test('history document UI separates metadata, repairs missing answers and enforc
  const {default:Page}=await import(pathToFileURL(out)),{createRoot}=await import('react-dom/client');
  const state={accountsById:{sr:{enabled:true},bu:{enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'}],projects:[],buPersonnelByBuId:{A:[{userId:'sr',roles:['SR'],enabled:true},{userId:'bu',roles:[],enabled:true,resourceQualifications:['knowledge-publish']}]}};
  localStorage.setItem('rfq.history.documents.v1:A',JSON.stringify([{id:'D1',buId:'A',name:'客户历史RFQ.docx',version:'V1',metadata:{customer:'客户A',model:'机型A'},scope:'FEP 授权项目',parseStatus:'partial',sources:[{name:'客户历史RFQ.docx',prefix:'main:',blocks:[{type:'paragraph',anchor:'body/1',text:'3.2 要求支持自动上料'}]}],issues:[]}]));
- localStorage.setItem('rfq.reference.knowledge.v1:A',JSON.stringify([{id:'K1',buId:'A',type:'history',documentId:'D1',version:1,sourceKey:'main:body/1',clauseNo:'3.2',requirement:'要求支持自动上料',answer:'',conditions:'',requirementAnchor:'main:body/1',status:'草稿',scope:'FEP 授权项目',issues:['缺少历史答复'],submitterId:'sr'}]));
+ localStorage.setItem('rfq.reference.knowledge.v1:A',JSON.stringify([{id:'K1',buId:'A',type:'history',documentId:'D1',version:1,sourceKey:'main:body/1',clauseNo:'3.2',title:'自动上料',originalText:'3.2 要求支持自动上料',requirementText:'要求支持自动上料',metricsJson:'{"specification":"300 mm"}',requirement:'要求支持自动上料',answer:'',conditions:'',requirementAnchor:'main:body/1',status:'草稿',scope:'FEP 授权项目',issues:['缺少历史答复'],submitterId:'sr'}]));
  const host=document.createElement('div');document.body.append(host);const root=createRoot(host),messages=[];
  const settle=async()=>{for(let n=0;n<5;n++)await new Promise(resolve=>setTimeout(resolve,0));};
  const click=async text=>act(async()=>{const button=[...document.querySelectorAll('button')].find(node=>node.textContent.replaceAll(' ','')===text.replaceAll(' ',''));assert.ok(button,text);assert.equal(button.disabled,false,text);button.click();await settle();});
@@ -25,8 +25,16 @@ test('history document UI separates metadata, repairs missing answers and enforc
   await render('sr','SR');assert.match(host.textContent,/客户历史RFQ/);await click('查看');
   assert.match(host.textContent,/客户A/);assert.match(host.textContent,/缺少历史答复/);await click('查看／编辑');
   assert.ok(document.querySelector('[aria-label="客户要求"]'));assert.equal(document.querySelector('[aria-label="应答结论"]'),null);
+  assert.equal(document.querySelector('[aria-label="条款标题"]').value,'自动上料');
+  assert.equal(document.querySelector('[aria-label="客户要求原文"]').value,'3.2 要求支持自动上料');
+  assert.equal(document.querySelector('[aria-label="规格"]').value,'300 mm');
+  await type('客户要求','要求支持自动上料和对准');
   await act(async()=>{const input=document.querySelector('textarea[aria-label="历史答复"]');Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype,'value').set.call(input,'需配置上料模块 S');input.dispatchEvent(new w.Event('input',{bubbles:true}));await settle();});
-  await click('保存草稿');assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].answer,'需配置上料模块 S');
+  await click('保存草稿');
+  const savedDraft=JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0];
+  assert.equal(savedDraft.answer,'需配置上料模块 S');
+  assert.equal(savedDraft.requirementText,'要求支持自动上料和对准');
+  assert.equal(savedDraft.originalText,'3.2 要求支持自动上料');
   await act(async()=>{const checkbox=host.querySelector('tbody input[type="checkbox"]');assert.ok(checkbox);checkbox.click();await settle();});await click('提交审核');
   assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].status,'待审核');
   await render('bu','BU管理员');await click('查看');await act(async()=>{host.querySelector('tbody input[type="checkbox"]').click();await settle();});await click('批准发布');
