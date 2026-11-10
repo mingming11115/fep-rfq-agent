@@ -32,7 +32,7 @@ import {assertCapabilityProcess} from '../modelProcessDomain';
 import {getSourceUploadRoute} from '../navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus } from "../components/icons";
+import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation } from '../domain';
 import './response-page.css';
@@ -572,10 +572,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 <section className="panel response-editor">
   <div className="response-column-heading">
     {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
-    {onDeleteExtractedRequirement && canManageSource && !staleSource && active.backendVersion != null &&
-      <UiButton className="text-link" danger disabled={!!reparseBlocked} onClick={() => setDeleteTarget(active)}>
-        删除误提取条款
-      </UiButton>}
     {databaseBacked && <UiButton className="text-link" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
       <History size={15}/>确认历史
     </UiButton>}
@@ -640,6 +636,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
                 <UiButton type="button" className="icon-btn" aria-label="下一条" title={nextCard ? `下一条 · ${nextCard.title}` : '下一条'} disabled={cardBusy || !cardRows.length} onClick={() => browseCard(1)}><ChevronRight size={16}/></UiButton>
               </nav>
               {cardVisible && actorRole !== '最终审批人' && <div className="response-fixed-primary-actions">
+                {onDeleteExtractedRequirement && canManageSource && !staleSource && active.backendVersion != null &&
+                  <UiButton type="button" className="icon-btn" danger aria-label="删除误提取条款" title="删除误提取条款"
+                    disabled={!!reparseBlocked} onClick={() => setDeleteTarget(active)}><Trash2 size={15}/></UiButton>}
                 <UiButton type="button" className="text-link" disabled={cardBusy} onClick={deferCard}>稍后处理</UiButton>
                 <UiButton type="button" className="btn" disabled={cardBusy || !canEdit || !dirty} onClick={() => saveDraft()}><Save size={14}/>保存草稿</UiButton>
                 {['SR','技术'].includes(actorRole) && confirmedLocked && <UiButton type="button" className="btn" disabled={cardBusy || !canConfirm} onClick={() => setReconfirmKey(`${active.id}:${active.version}`)}><Pencil size={14}/>再次确认</UiButton>}
