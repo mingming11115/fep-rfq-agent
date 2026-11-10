@@ -14,6 +14,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
+import org.apache.poi.xwpf.usermodel.TableRowHeightRule;
 import org.apache.poi.xwpf.usermodel.XWPFComment;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -21,7 +22,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 
-/** Writes a copy of the original with native comments, using the parser's source anchors. */
+/** Writes answers into a copy of the original, using the parser's source anchors. */
 public final class AnnotatedOriginal {
     private static final String AUTHOR = "RFQ 正式应答";
     private static final Pattern PDF_PAGE = Pattern.compile("page-(\\d+)(?:/.*)?");
@@ -31,6 +32,36 @@ public final class AnnotatedOriginal {
     private AnnotatedOriginal() {}
 
     public record Note(String anchor, String quote, String text) {}
+
+    public static byte[] wordWithAnswers(byte[] original, List<Note> notes) throws IOException {
+        try (var document = new XWPFDocument(new ByteArrayInputStream(original));
+             var output = new ByteArrayOutputStream()) {
+            // Resolve every anchor before inserting text changes any table row's quote.
+            var paragraphs = notes.stream().map(note -> locateWord(document, note, true)).toList();
+            for (int index = 0; index < notes.size(); index++) {
+                var paragraph = paragraphs.get(index);
+                allowTableRowsToExpand(paragraph);
+                var run = paragraph.createRun();
+                for (String line : notes.get(index).text().split("\\R", -1)) {
+                    run.addBreak();
+                    run.setText(line);
+                }
+            }
+            document.write(output);
+            return output.toByteArray();
+        }
+    }
+
+    private static void allowTableRowsToExpand(XWPFParagraph paragraph) {
+        var body = paragraph.getBody();
+        while (body instanceof XWPFTableCell cell) {
+            var row = cell.getTableRow();
+            if (row.getHeightRule() == TableRowHeightRule.EXACT) {
+                row.setHeightRule(TableRowHeightRule.AT_LEAST);
+            }
+            body = row.getTable().getBody();
+        }
+    }
 
     public static byte[] word(byte[] original, List<Note> notes) throws IOException {
         try (var document = new XWPFDocument(new ByteArrayInputStream(original));
@@ -42,7 +73,7 @@ public final class AnnotatedOriginal {
             BigInteger id = comments.getComments().stream().map(XWPFComment::getId).map(BigInteger::new)
                     .max(BigInteger::compareTo).orElse(BigInteger.valueOf(-1));
             for (var note : notes) {
-                var paragraph = locateWord(document, note);
+                var paragraph = locateWord(document, note, false);
                 id = id.add(BigInteger.ONE);
                 var comment = comments.createComment(id);
                 comment.setAuthor(AUTHOR);
@@ -64,7 +95,7 @@ public final class AnnotatedOriginal {
         }
     }
 
-    private static XWPFParagraph locateWord(XWPFDocument document, Note note) {
+    private static XWPFParagraph locateWord(XWPFDocument document, Note note, boolean acceptRuleQuote) {
         var imported = IMPORTED_PARAGRAPH.matcher(note.anchor());
         if (imported.matches()) {
             var element = at(document.getBodyElements(), Integer.parseInt(imported.group(1)), note);
@@ -100,7 +131,7 @@ public final class AnnotatedOriginal {
             }
             table = cell.getTables().get(0);
         }
-        var matching = table.getRows().stream().filter(row -> contains(rowText(row), note.quote())).toList();
+        var matching = table.getRows().stream().filter(row -> rowContains(row, note.quote(), acceptRuleQuote)).toList();
         if (matching.size() != 1) {
             throw missingAnchor(note);
         }
@@ -110,8 +141,10 @@ public final class AnnotatedOriginal {
                 .orElseThrow(() -> missingAnchor(note));
     }
 
-    private static String rowText(XWPFTableRow row) {
-        return row.getTableCells().stream().map(XWPFTableCell::getText).collect(Collectors.joining(" "));
+    private static boolean rowContains(XWPFTableRow row, String quote, boolean acceptRuleQuote) {
+        var cells = row.getTableCells().stream().map(XWPFTableCell::getText).toList();
+        return contains(String.join(" ", cells), quote)
+                || acceptRuleQuote && contains(cells.stream().filter(cell -> !cell.isBlank()).collect(Collectors.joining("：")), quote);
     }
 
     private static boolean contains(String text, String quote) {
@@ -158,6 +191,6 @@ public final class AnnotatedOriginal {
     }
 
     private static BusinessException missingAnchor(Note note) {
-        return new BusinessException(409, "无法在原件定位条款批注：" + note.quote());
+        return new BusinessException(409, "无法在原件定位条款：" + note.quote());
     }
 }

@@ -39,7 +39,7 @@ test('layout keeps the workspace tab node mounted when entering and leaving deta
  }finally{await h.close();}
 });
 
-test('MySQL SR previews approved clause results and downloads the annotated original',async t=>{
+test('MySQL SR previews approved clause results and downloads the Word body export',async t=>{
  const h=await harness('mysql-export');
  t.after(()=>h.close());
  const projectId='P',buId='BU',actorId='sr';
@@ -90,7 +90,7 @@ test('MySQL SR previews approved clause results and downloads the annotated orig
  const preview=h.host.querySelector('tbody');
  assert.match(preview.textContent,/客户要求.*Comply.*批准的应答/);
  await act(async()=>button('导出文档',h.host).click());
- assert.deepEqual(downloads,[['/api/rfq/projects/P/snapshots/S/annotated-export','Bearer test-token']]);
+ assert.deepEqual(downloads,[['/api/rfq/projects/P/snapshots/S/annotated-export?wordInBody=true','Bearer test-token']]);
  assert.equal(filename,'客户-正式应答.docx');
  assert.equal(await file.text(),'annotated original');
 

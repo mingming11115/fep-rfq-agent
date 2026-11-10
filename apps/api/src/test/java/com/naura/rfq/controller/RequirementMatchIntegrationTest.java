@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.integration.standardreply.StandardReplyIndexClient;
 import com.naura.rfq.service.JwtService;
 import com.naura.rfq.service.RequirementMatchWorker;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.UUID;
@@ -343,7 +344,16 @@ class RequirementMatchIntegrationTest {
         assertThat(finalVote.path("status").asText()).isEqualTo("已批准");
         assertThat(finalVote.path("historyCandidateCount").asInt()).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from history_document where project_id=?", Integer.class, owner.project())).isEqualTo(1);
-        mvc.perform(get(path + "/snapshots/" + snapshotId + "/annotated-export").header("Authorization", owner.auth())).andExpect(status().isOk());
+        var exported = mvc.perform(get(path + "/snapshots/" + snapshotId + "/annotated-export")
+                .param("wordInBody", "true").header("Authorization", owner.auth())).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var word = new XWPFDocument(new ByteArrayInputStream(exported))) {
+            assertThat(word.getParagraphs()).singleElement().satisfies(paragraph -> assertThat(paragraph.getText())
+                    .startsWith("1.1 设备应支持自动上料并具备安全联锁。\n")
+                    .contains("结论：不满足\n答复：当前设备无法满足双工位要求")
+                    .doesNotContain("测试报告 V1"));
+            assertThat(word.getDocComments()).isNull();
+        }
 
         String newFile = request(multipart(path + "/documents/" + old + "/replacement")
                 .file(rfqFile("1.1 设备应支持双工位上料并具备安全联锁。")), owner).path("newDocumentId").asText();
@@ -355,7 +365,8 @@ class RequirementMatchIntegrationTest {
         assertThat(request(post(impactPath + "/activate").contentType("application/json").content(json.createObjectNode()
                 .put("fingerprint", impact.path("fingerprint").asText()).put("reason", "已核对原件和影响范围").toString()), owner)
                 .path("workVersion").asLong()).isEqualTo(2L);
-        mvc.perform(get(path + "/snapshots/" + snapshotId + "/annotated-export").header("Authorization", owner.auth())).andExpect(status().isConflict());
+        mvc.perform(get(path + "/snapshots/" + snapshotId + "/annotated-export")
+                .param("wordInBody", "true").header("Authorization", owner.auth())).andExpect(status().isConflict());
     }
 
     private JsonNode firstRun(Fixture f, String doc) throws Exception {

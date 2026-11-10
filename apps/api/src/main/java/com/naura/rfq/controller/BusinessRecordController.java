@@ -55,8 +55,9 @@ public class BusinessRecordController {
     }
 
     @GetMapping("/projects/{projectId}/snapshots/{snapshotId}/annotated-export")
-    public ResponseEntity<byte[]> annotatedExport(@PathVariable String projectId, @PathVariable String snapshotId) throws IOException {
-        var file = exports.download(CurrentUserHolder.require(), projectId, snapshotId);
+    public ResponseEntity<byte[]> annotatedExport(@PathVariable String projectId, @PathVariable String snapshotId,
+            @RequestParam(defaultValue = "false") boolean wordInBody) throws IOException {
+        var file = exports.download(CurrentUserHolder.require(), projectId, snapshotId, wordInBody);
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-store")
                 .header("X-Content-Type-Options", "nosniff")

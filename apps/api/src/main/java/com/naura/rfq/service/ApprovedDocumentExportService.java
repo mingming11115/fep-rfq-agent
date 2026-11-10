@@ -63,7 +63,7 @@ public class ApprovedDocumentExportService {
     public record ExportFile(String name, String contentType, byte[] bytes) {}
 
     @Transactional(readOnly = true)
-    public ExportFile download(CurrentUser user, String projectId, String snapshotId) throws IOException {
+    public ExportFile download(CurrentUser user, String projectId, String snapshotId, boolean wordInBody) throws IOException {
         var project = projects.findById(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         boolean sales = user.roles().stream().anyMatch(grant -> grant.buId().equals(project.getBuId()) && grant.role().equals("SR"));
@@ -81,12 +81,12 @@ public class ApprovedDocumentExportService {
 
         if (notes.size() == 1) {
             var entry = notes.entrySet().iterator().next();
-            return annotate(user, entry.getKey(), entry.getValue());
+            return exportDocument(user, entry.getKey(), entry.getValue(), wordInBody);
         }
         try (var bytes = new ByteArrayOutputStream(); var zip = new ZipOutputStream(bytes)) {
             Set<String> filenames = new HashSet<>();
             for (var entry : notes.entrySet()) {
-                var file = annotate(user, entry.getKey(), entry.getValue());
+                var file = exportDocument(user, entry.getKey(), entry.getValue(), wordInBody);
                 String name = file.name();
                 for (int number = 2; !filenames.add(name.toLowerCase(Locale.ROOT)); number++) {
                     name = insertSuffix(file.name(), "-" + number);
@@ -168,7 +168,7 @@ public class ApprovedDocumentExportService {
                 }
             }
             notes.computeIfAbsent(source.getId(), ignored -> new ArrayList<>())
-                    .add(new Note(block.getSourceAnchor(), requirement.getOriginalText(), commentText(row)));
+                    .add(new Note(block.getSourceAnchor(), requirement.getOriginalText(), answerText(row)));
         }
 
         return notes;
@@ -302,23 +302,24 @@ public class ApprovedDocumentExportService {
 
     private static String version(CustomerDocument file) { return "V" + file.getVersion() + ".0"; }
 
-    private static String commentText(JsonNode row) {
+    private static String answerText(JsonNode row) {
         String clause = row.path("clause").asText("");
         String conditions = row.path("conditions").asText("");
         return (clause.isBlank() ? "" : "条款 " + clause + "\n") + "结论：" + row.path("conclusion").asText()
                 + "\n答复：" + row.path("draft").asText() + (conditions.isBlank() ? "" : "\n适用条件：" + conditions);
     }
 
-    private ExportFile annotate(CurrentUser user, String sourceId, List<Note> notes) throws IOException {
+    private ExportFile exportDocument(CurrentUser user, String sourceId, List<Note> notes, boolean wordInBody) throws IOException {
         var original = originalFiles.download(user, sourceId);
         String name = safeName(original.name());
         byte[] bytes;
         if (name.toLowerCase(Locale.ROOT).endsWith(".docx")) {
-            bytes = AnnotatedOriginal.word(original.content(), notes);
+            bytes = wordInBody ? AnnotatedOriginal.wordWithAnswers(original.content(), notes)
+                    : AnnotatedOriginal.word(original.content(), notes);
         } else if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
             bytes = AnnotatedOriginal.pdf(original.content(), notes);
         } else {
-            throw new BusinessException(409, "原件格式不支持批注导出：" + name);
+            throw new BusinessException(409, "原件格式不支持正式导出：" + name);
         }
         return new ExportFile(insertSuffix(name, "-正式应答"), original.contentType(), bytes);
     }

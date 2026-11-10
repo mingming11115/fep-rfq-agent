@@ -129,17 +129,17 @@ class ApprovedDocumentExportServiceTest {
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes.size(), "unused"));
 
             String snapshotId = snapshot.path("id").asText();
-            var exported = exporter.download(actor, projectId, snapshotId);
+            var exported = exporter.download(actor, projectId, snapshotId, false);
             assertThat(exported.name()).isEqualTo("客户-正式应答.docx");
             try (var copy = new XWPFDocument(new ByteArrayInputStream(exported.bytes()))) {
                 assertThat(copy.getComments()).hasSize(sourceRows.size());
                 assertThat(copy.getComments()[0].getText()).contains("答复：" + snapshot.path("rows").get(0).path("draft").asText());
             }
             var tech = new CurrentUser("tech", "李工", false, List.of(new CurrentUser.RoleGrant(bu, "TECH")));
-            assertThatThrownBy(() -> exporter.download(tech, projectId, snapshotId))
+            assertThatThrownBy(() -> exporter.download(tech, projectId, snapshotId, true))
                     .isInstanceOfSatisfying(BusinessException.class, error -> assertThat(error.getCode()).isEqualTo(403));
             sourceRows.get(0).setOriginalText("已经修改的原文");
-            assertThatThrownBy(() -> exporter.download(actor, projectId, snapshotId))
+            assertThatThrownBy(() -> exporter.download(actor, projectId, snapshotId, true))
                     .isInstanceOfSatisfying(BusinessException.class, error -> assertThat(error.getCode()).isEqualTo(409));
         }
     }

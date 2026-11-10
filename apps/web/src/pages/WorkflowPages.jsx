@@ -157,10 +157,10 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
     if (!canDownload || !exportCheck.valid || exporting) { return; }
     setExporting(true);
     try {
-      const path = `/projects/${encodeURIComponent(project.id)}/snapshots/${encodeURIComponent(latest.id)}/annotated-export`;
+      const path = `/projects/${encodeURIComponent(project.id)}/snapshots/${encodeURIComponent(latest.id)}/annotated-export?wordInBody=true`;
       const { blob, filename } = await api.download(path);
       downloadCraftBlob(blob, filename);
-      toast('已生成带批注的正式应答');
+      toast('已生成正式应答文档');
     } catch (err) {
       console.error('下载正式导出文件失败', err);
       toast(`导出失败：${err.message}`, 'error');

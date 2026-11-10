@@ -8,6 +8,7 @@ import java.util.List;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.poi.xwpf.usermodel.TableRowHeightRule;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 
@@ -16,22 +17,56 @@ class AnnotatedOriginalTest {
         var original = new ByteArrayOutputStream();
         try (var document = new XWPFDocument()) {
             document.createParagraph().createRun().setText("客户要求");
-            var table = document.createTable(2, 2);
+            var table = document.createTable(4, 2);
             table.getRow(0).getCell(0).setText("编号");
             table.getRow(1).getCell(0).setText("2.1");
             table.getRow(1).getCell(1).setText("安全联锁");
+            table.getRow(2).getCell(0).setText("设备：须提供备用电源");
+            table.getRow(3).getCell(0).setText("设备");
+            table.getRow(3).getCell(1).setText("须提供备用电源");
             document.write(original);
         }
         var result = AnnotatedOriginal.word(original.toByteArray(), List.of(
                 new AnnotatedOriginal.Note("body/0", "客户要求", "结论：Comply"),
-                new AnnotatedOriginal.Note("body/1", "2.1 | 安全联锁", "答复：支持安全联锁")));
+                new AnnotatedOriginal.Note("body/1", "2.1 | 安全联锁", "答复：支持安全联锁"),
+                new AnnotatedOriginal.Note("body/1", "设备：须提供备用电源", "答复：支持备用电源")));
         try (var copy = new XWPFDocument(new ByteArrayInputStream(result))) {
             assertThat(copy.getParagraphs().get(0).getText()).isEqualTo("客户要求");
             assertThat(copy.getComments()).extracting(comment -> comment.getText())
-                    .containsExactly("结论：Comply", "答复：支持安全联锁");
+                    .containsExactly("结论：Comply", "答复：支持安全联锁", "答复：支持备用电源");
             assertThat(copy.getParagraphs().get(0).getCTP().getCommentRangeStartList()).hasSize(1);
             assertThat(copy.getTables().get(0).getRow(1).getCell(1).getParagraphs().get(0)
                     .getCTP().getCommentRangeStartList()).hasSize(1);
+            assertThat(copy.getTables().get(0).getRow(2).getCell(0).getParagraphs().get(0)
+                    .getCTP().getCommentRangeStartList()).hasSize(1);
+        }
+    }
+
+    @Test void wordBodyKeepsTableAnswersOnTheirSourceRowInOrder() throws Exception {
+        var original = new ByteArrayOutputStream();
+        try (var document = new XWPFDocument()) {
+            var table = document.createTable(2, 3);
+            table.getRow(0).getCell(0).setText("编号");
+            table.getRow(0).getCell(1).setText("客户要求");
+            table.getRow(0).getCell(2).setText("版本");
+            table.getRow(1).getCell(0).setText("2.1");
+            table.getRow(1).getCell(1).setText("设备须支持安全联锁");
+            table.getRow(1).getCell(2).setText("R2");
+            table.getRow(1).setHeight(240);
+            table.getRow(1).setHeightRule(TableRowHeightRule.EXACT);
+            document.write(original);
+        }
+        var result = AnnotatedOriginal.wordWithAnswers(original.toByteArray(), List.of(
+                new AnnotatedOriginal.Note("body/0", "2.1：设备须支持安全联锁：R2", "答复：支持安全联锁"),
+                new AnnotatedOriginal.Note("body/0", "2.1 | 设备须支持安全联锁 | R2", "适用条件：选配安全模块")));
+        try (var copy = new XWPFDocument(new ByteArrayInputStream(result))) {
+            var table = copy.getTables().get(0);
+            assertThat(table.getRow(0).getCell(1).getText()).isEqualTo("客户要求");
+            assertThat(table.getRow(1).getCell(1).getText())
+                    .isEqualTo("设备须支持安全联锁\n答复：支持安全联锁\n适用条件：选配安全模块");
+            assertThat(table.getRow(1).getCell(2).getText()).isEqualTo("R2");
+            assertThat(table.getRow(1).getHeight()).isEqualTo(240);
+            assertThat(table.getRow(1).getHeightRule()).isEqualTo(TableRowHeightRule.AT_LEAST);
         }
     }
 
