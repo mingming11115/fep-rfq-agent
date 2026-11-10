@@ -12,7 +12,7 @@ const modernPermissions={
 };
 function modernCan(role,action,context){
  if(!modernPermissions[action]?.includes(role)) { return false; }
- if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','source:reparse','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action)) { return false; }
+ if(context?.state?.dataSource==='mysql'&&!['response:edit','response:confirm','project:create','project:manage','project:handover','source:manage','source:reparse','snapshot:submit','snapshot:approve','export:download','analysis:view','audit:view','system:manage','bu:manage'].includes(action)) { return false; }
  // Without context this is a UI capability query. Mutation boundaries always pass state.
  if(!context) { return true; }
  const {state,actorId=state?.actorId,projectId,requirementId,buId=state?.projects?.find(p=>p.id===projectId)?.buId}=context;

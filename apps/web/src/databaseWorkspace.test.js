@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {loadDatabaseWorkspace,mapDatabaseWorkspace} from './databaseWorkspace.js';
 import {selectAccessibleState,getProjectSummary} from './projectSelectors.js';
 import {canPerform} from './permissions.js';
-import {selectMyTasks} from './taskDomain.js';
+import {assertBusinessAction,selectMyTasks} from './taskDomain.js';
 
 const user={id:'sr',displayName:'真实销售',roles:[{buId:'BU',role:'SR'}],bus:[{id:'BU',name:'事业部'}]};
 const member={userId:'sr',displayName:'真实销售',roles:['SR'],enabled:true,canConfirm:true,canFinalReview:true};
@@ -20,9 +20,28 @@ test('real database records use the original App shape without injected demo rec
  assert.deepEqual(state.requirementsByProject.P[0].sectionPath,['技术','性能']);assert.equal(state.requirementsByProject.P[0].backendVersion,0);
  assert.equal(state.documentsByProject.P[0].backendDocumentId,'D');assert.deepEqual(state.snapshotsByProject.P,[]);
  assert.equal(getProjectSummary(state,'P','sr').stage,'审批完成');
- assert.equal(canPerform('SR','snapshot:submit',{state,actorId:'sr',projectId:'P'}),false);
  assert.equal(canPerform('SR','response:confirm',{state,actorId:'sr',projectId:'P',requirementId:'R'}),true);
  assert.equal(canPerform('SR','response:edit',{state,actorId:'sr',projectId:'P'}),true,'response drafts now use the backend');
+});
+test('a project SR can submit a confirmed database response for final review',()=>{
+ const state=mapDatabaseWorkspace({user,projects:[{...project,stage:'REVIEWING'}],directories:{BU:[member]},
+  details:{P:{documents:[document],requirements:[requirement],workflow:{responses:[{id:'R',status:'已确认'}]}}}});
+ assert.equal(canPerform('SR','snapshot:submit',{state,actorId:'sr',projectId:'P'}),true);
+ assert.equal(canPerform('SR','snapshot:submit',{state,actorId:'sr',projectId:'other'}),false);
+ assert.deepEqual(selectMyTasks(state,{actorId:'sr'}),[]);
+});
+test('a pending database snapshot creates final-review tasks for the designated reviewers',()=>{
+ const technician={id:'tech',displayName:'李工',roles:[{buId:'BU',role:'TECH'}],bus:user.bus};
+ const techMember={userId:'tech',displayName:'李工',roles:['TECH'],enabled:true,canConfirm:true,canFinalReview:true};
+ const snapshot={id:'SNAP-1',projectId:'P',status:'审批中',version:1,round:1,finalReview:{
+  policy:'sr-and-technical',technicalMode:'all',ruleVersion:1,reviewers:{srId:'sr',technicalIds:['tech']},decisions:{sr:null,technicalByActorId:{}},
+ }};
+ const state=mapDatabaseWorkspace({user:technician,projects:[{...project,stage:'REVIEWING'}],directories:{BU:[member,techMember]},
+  details:{P:{workflow:{snapshots:[snapshot],participantIds:['sr','tech']}}}});
+ const tasks=selectMyTasks(state,{actorId:'tech',tab:'pending'});
+ assert.deepEqual(tasks.map(({kind,objectId})=>({kind,objectId})),[{kind:'final-approve',objectId:'SNAP-1'}]);
+ assert.equal(assertBusinessAction(state,{projectId:'P',objectType:'snapshot',objectId:'SNAP-1',action:'approve',route:{projectId:'P',taskId:tasks[0].id,action:'start'}}),true);
+ assert.equal(canPerform('技术','snapshot:submit',{state,actorId:'tech',projectId:'P'}),false);
 });
 test('empty authorized database stays empty and does not load browser samples',()=>{
  const state=mapDatabaseWorkspace({user,projects:[],directories:{BU:[member]},details:{}});

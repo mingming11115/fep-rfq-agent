@@ -132,8 +132,7 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
       const assignees=state.accountsById?getConfirmationActorIds(state,project.id,row):[kind==='draft'?'demo-sales':'demo-technical'];
       for(const assignee of assignees)ensure(project,row,'requirement',kind,assignee,{requirementId:row.id});
     }
-    if(databaseBacked) { continue; }
-    for(const review of reviews) {
+    for(const review of databaseBacked ? [] : reviews) {
       if(['已关闭','已取消'].includes(review.status)) { continue; }
       if(state.accountsById&&Array.isArray(review.reviewerIds)&&review.kind!=='clarification'){
         const row=state.requirementsByProject[project.id]?.find(r=>r.id===review.requirementId);
