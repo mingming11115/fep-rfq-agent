@@ -65,12 +65,14 @@ class RequirementMatchIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
-    @Test void uploadScopesTheFirstRecallAndChangingItRequeuesWithoutReparsing() throws Exception {
+    @Test void uploadAndReparseUseTheSelectedHistoryScope() throws Exception {
         var f = fixture();
         String a = "HD-A", b = "HD-B";
+        jdbc.update("update project set group_id='GROUP-A' where id=?", f.project());
         for (String id : List.of(a, b)) {
             var document = json.createObjectNode().put("id", id).put("name", id)
                     .put("scope", "BU共享").put("version", "V1");
+            document.putArray("groupIds").add("GROUP-OTHER").add(a.equals(id) ? "GROUP-A" : "GROUP-B");
             jdbc.update("insert into history_document(bu_id,id,version,scope,payload) values (?,?,1,'BU共享',?)",
                     f.bu(), id, document.toString());
         }
@@ -78,7 +80,8 @@ class RequirementMatchIntegrationTest {
         assertThat(request(get(options), f).at("/0/status").asText()).isEqualTo("unpublished");
         String id = request(multipart("/api/rfq/projects/" + f.project() + "/documents")
                 .file(rfqFile("1.1 设备应支持自动上料并具备安全联锁。")).param("historyDocumentIds", a), f).path("id").asText();
-        var parse = request(post("/api/rfq/documents/" + id + "/parse-runs"), f);
+        String parsePath = "/api/rfq/documents/" + id + "/parse-runs";
+        var parse = request(post(parsePath), f);
         var first = firstRun(f, id);
         String requirement = first.path("requirementId").asText(), firstId = first.path("runId").asText();
         String body = jdbc.queryForObject("select requirement_text from requirement where id=?", String.class, requirement);
@@ -112,28 +115,40 @@ class RequirementMatchIntegrationTest {
         verify(index).search(eq(f.bu()), eq(true), anyString(), eq(List.of(a + "-CLAUSE")));
         verify(index, never()).search(eq(f.bu()), eq(false), anyString(), anyList());
 
-        jdbc.update("insert into user_bu_role(user_id,bu_id,role) values (?,?,'SR')", f.bu() + "-A", f.bu());
-        String response = "/api/rfq/requirements/" + requirement + "/response";
-        request(patch(response).contentType("application/json").content("""
-                {"version":1,"sourceVersion":0,"patch":{"draft":"人工答复","conclusion":"Comply"}}
-                """), f);
-
-        String scope = "/api/rfq/documents/" + id + "/match-scope";
-        mvc.perform(put(scope).header("Authorization", f.auth()).contentType("application/json")
+        mvc.perform(post(parsePath).header("Authorization", f.auth()).contentType("application/json")
                 .content("{\"historyDocumentIds\":[\"HD-UNKNOWN\"]}")).andExpect(status().isBadRequest());
         assertThat(firstRun(f, id).path("runId").asText()).isEqualTo(firstId);
-        request(put(scope).contentType("application/json").content("{\"historyDocumentIds\":[\"HD-B\"]}"), f);
+        var reparse = request(post(parsePath).contentType("application/json").content("{\"historyDocumentIds\":[\"HD-B\"]}"), f);
         var second = firstRun(f, id);
-        assertThat(second.path("requirementId").asText()).isEqualTo(requirement);
-        assertThat(second.path("parseRunId").asText()).isEqualTo(parse.path("id").asText());
+        String reparsedRequirement = second.path("requirementId").asText();
+        assertThat(reparsedRequirement).isNotEqualTo(requirement);
+        assertThat(second.path("parseRunId").asText()).isEqualTo(reparse.path("id").asText()).isNotEqualTo(parse.path("id").asText());
+        assertThat(request(get("/api/rfq/documents/" + id), f).at("/historyDocumentIds/0").asText()).isEqualTo(b);
         assertThat(detail(f, requirement, firstId).path("status").asText()).isEqualTo("superseded");
         worker.runOnce();
-        assertThat(detail(f, requirement, second.path("runId").asText())
+        assertThat(detail(f, reparsedRequirement, second.path("runId").asText())
                 .at("/result/stages/history_rfq/candidates/0/documentId").asText()).isEqualTo(b);
+
+        request(post(parsePath).contentType("application/json").content("{\"historyDocumentIds\":[]}"), f);
+        var defaultRun = firstRun(f, id);
+        assertThat(defaultRun.path("matchOrder")).isEqualTo(json.createArrayNode().add("history_rfq"));
+        assertThat(request(get("/api/rfq/documents/" + id), f).path("historyDocumentIds").size()).isZero();
+        worker.runOnce();
+        var groupResult = detail(f, defaultRun.path("requirementId").asText(), defaultRun.path("runId").asText())
+                .at("/result/stages/history_rfq/candidates");
+        assertThat(groupResult.size()).isEqualTo(1);
+        assertThat(groupResult.get(0).path("documentId").asText()).isEqualTo(a);
+
+        jdbc.update("insert into user_bu_role(user_id,bu_id,role) values (?,?,'SR')", f.bu() + "-A", f.bu());
+        String answered = defaultRun.path("requirementId").asText();
+        request(patch("/api/rfq/requirements/" + answered + "/response").contentType("application/json").content("""
+                {"version":1,"sourceVersion":0,"patch":{"draft":"人工答复","conclusion":"Comply"}}
+                """), f);
+        mvc.perform(post(parsePath).header("Authorization", f.auth()).contentType("application/json")
+                .content("{\"historyDocumentIds\":[\"HD-B\"]}")).andExpect(status().isConflict());
+        assertThat(request(get("/api/rfq/documents/" + id), f).path("historyDocumentIds").size()).isZero();
         assertThat(jdbc.queryForObject("select payload->>'$.draft' from requirement_response where requirement_id=?",
-                String.class, requirement)).isEqualTo("人工答复");
-        request(put(scope).contentType("application/json").content("{\"historyDocumentIds\":[]}"), f);
-        assertThat(firstRun(f, id).path("matchOrder").size()).isEqualTo(3);
+                String.class, answered)).isEqualTo("人工答复");
     }
 
     @Test void policyIsVersionedAndRealParsingEnqueuesWithItsSnapshot() throws Exception {

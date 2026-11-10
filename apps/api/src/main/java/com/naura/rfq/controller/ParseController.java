@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,10 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ParseController {
     private final ParseQueryService service;
+    public record StartRequest(List<String> historyDocumentIds) {}
 
     @PostMapping("/documents/{documentId}/parse-runs")
-    public ApiResponse<ParseService.ParseRunView> start(@PathVariable String documentId) {
-        return ApiResponse.success(service.start(CurrentUserHolder.require(), documentId));
+    public ApiResponse<ParseService.ParseRunView> start(@PathVariable String documentId,
+            @RequestBody(required = false) StartRequest request) {
+        return ApiResponse.success(service.start(CurrentUserHolder.require(), documentId,
+                request == null ? null : request.historyDocumentIds()));
     }
 
     @GetMapping("/parse-runs/{runId}")

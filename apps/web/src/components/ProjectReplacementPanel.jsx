@@ -71,7 +71,7 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
         }} options={activeFiles.map(row => ({value:row.id,label:`${row.name} · ${row.version}`}))} style={{minWidth:260}}/>
       <Input aria-label="新版原件" type="file" accept=".docx,.pdf" key={sourceId} onChange={event => setFile(event.target.files[0] || null)}/>
       <Button disabled={!sourceId || !file || recallMode === 'selected' && !recallIds.length} loading={busy} onClick={() => run(upload)}>登记新版</Button>
-    </Space>{sourceId && <HistoryRecallPicker projectId={project.id} mode={recallMode} ids={recallIds}
+    </Space>{sourceId && <HistoryRecallPicker projectId={project.id} groupId={project.groupId} mode={recallMode} ids={recallIds}
       onMode={setRecallMode} onIds={setRecallIds} disabled={busy}/>}</>}
     <p>核对完成前，正式评审范围沿用原件。新版解析后可先起草应答。</p>
     {replacements.map(item => {

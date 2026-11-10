@@ -47,13 +47,11 @@ public class RequirementMatchService {
     private final MatchEvaluator evaluator;
     private final MatchDeviationService deviations;
     private final ProjectWorkScope work;
-    private final HistoryRecallScope historyRecall;
     @Value("${rfq.match.low-confidence-threshold:0}")
     private double lowConfidenceThreshold;
 
     public record Policy(List<String> matchOrder, long version, String changedBy, String changedAt) {}
     public record Accepted(String runId, String status) {}
-    public record DocumentScope(List<String> historyDocumentIds, int queuedCount) {}
     private record Scope(Project project, CustomerDocument document, Requirement requirement) {}
     private record SavedContext(long version, String sourceFingerprint, JsonNode payload) {}
     record Run(String id, String requirement, String document, int documentVersion, String parseRun, long requirementVersion,
@@ -114,34 +112,6 @@ public class RequirementMatchService {
             return;
         }
         enqueue(new Scope(project, document, requirement), policy(project.getBuId()), "correction", null);
-    }
-
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public DocumentScope changeDocumentScope(CurrentUser user, String documentId, List<String> ids) {
-        var existing = documents.findById(documentId).orElseThrow(() -> new BusinessException(404, "原件不存在"));
-        var project = projects.findByIdForUpdate(existing.getProjectId())
-                .orElseThrow(() -> new BusinessException(404, "项目不存在"));
-        access.requireProject(user, project);
-        access.requireSourceManager(user, project.getBuId());
-        access.requireActiveProject(project);
-        work.requireEditable(project.getId(), documentId);
-        var document = documents.findByIdForUpdate(documentId)
-                .orElseThrow(() -> new BusinessException(404, "原件不存在"));
-        var selected = historyRecall.validate(project, ids);
-        if (document.historyRecallIds().equals(selected)) {
-            return new DocumentScope(selected, 0);
-        }
-        document.setHistoryDocumentIds(String.join(",", selected));
-        documents.updateHistoryRecall(document);
-        var rows = requirements.findByDocumentIdForUpdate(documentId).stream().filter(this::ready).toList();
-        var policy = policy(project.getBuId());
-        String requestKey = "scope:" + Ids.next("RECALL");
-        for (var row : rows) {
-            enqueue(new Scope(project, document, row), policy, "history_scope", requestKey);
-        }
-        audit.successInBu(user.id(), project.getBuId(), "修改原件召回范围", "document", documentId,
-                selected.isEmpty() ? "三库策略" : String.join(", ", selected));
-        return new DocumentScope(selected, rows.size());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -532,6 +502,9 @@ public class RequirementMatchService {
                 .put("status", run.status()).put("attempts", run.attempts());
         view.set("matchOrder", json.valueToTree(run.input().order()));
         view.set("historyDocumentIds", json.valueToTree(run.input().historyDocumentIds()));
+        if (!run.input().historyGroupId().isEmpty()) {
+            view.put("historyGroupId", run.input().historyGroupId());
+        }
         if (!run.current()) {
             return view.put("status", "superseded");
         }
@@ -584,8 +557,9 @@ public class RequirementMatchService {
 
     private Accepted enqueue(Scope scope, Policy policy, String reason, String requestKey) {
         var requirement = scope.requirement();
-        var input = runSnapshot(requirement, scope.document());
-        var order = scope.document().historyRecallIds().isEmpty() ? policy.matchOrder() : List.of(MatchEvaluator.HISTORY);
+        var input = runSnapshot(requirement, scope.document(), scope.project().getGroupId());
+        var order = input.has("historyDocumentIds") || input.has("historyGroupId")
+                ? List.of(MatchEvaluator.HISTORY) : policy.matchOrder();
         String fingerprint = digest(input.toString());
         if (requestKey == null) {
             var current = runWhere("where requirement_id=? and current_run=1", requirement.getId());
@@ -623,7 +597,8 @@ public class RequirementMatchService {
                 && !work.retired(project.getId(), document.getId())
                 && project.getBuId().equals(run.input().bu()) && requirement.getDocumentId().equals(run.document())
                 && document.getVersion() == run.documentVersion() && Objects.equals(requirement.getParseRunId(), run.parseRun())
-                && run.fingerprint().equals(digest(runSnapshot(requirement, document).toString()));
+                && run.fingerprint().equals(digest(runSnapshot(requirement, document,
+                        run.input().historyGroupId().isEmpty() ? null : project.getGroupId()).toString()));
     }
 
     private Scope lockForUser(CurrentUser user, String id) {
@@ -667,11 +642,13 @@ public class RequirementMatchService {
         return source;
     }
 
-    private ObjectNode runSnapshot(Requirement requirement, CustomerDocument document) {
+    private ObjectNode runSnapshot(Requirement requirement, CustomerDocument document, String groupId) {
         var input = snapshot(requirement);
         var historyIds = document.historyRecallIds();
         if (!historyIds.isEmpty()) {
             input.set("historyDocumentIds", json.valueToTree(historyIds));
+        } else if (groupId != null && !groupId.isBlank()) {
+            input.put("historyGroupId", groupId);
         }
         long workVersion = work.version(requirement.getProjectId());
         if (workVersion > 1) {

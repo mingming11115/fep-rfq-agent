@@ -159,6 +159,8 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
     {run?.result?.knowledgeGap && <p>三库均未命中，请人工核对条款。</p>}
     {run?.historyDocumentIds?.length > 0 && run.result?.stages?.history_rfq?.status === 'miss' &&
       <p>指定文件内未找到匹配。</p>}
+    {run?.historyGroupId && run.result?.stages?.history_rfq?.status === 'miss' &&
+      <p>同 Group RFQ 内未找到匹配。</p>}
     {deviation && <div>
       <p>知识比对偏离　{deviation.status}</p>
       <ul>{deviation.triggers?.map(item => <li key={`${item.runId}:${item.type}`}>{item.reason}</li>)}</ul>

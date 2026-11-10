@@ -7,8 +7,6 @@ import com.naura.rfq.model.dto.RequirementMatchRequest;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.RequirementMatchService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -27,14 +25,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class RequirementMatchController {
     private final RequirementMatchService matches;
-
-    public record DocumentScopeRequest(@NotNull List<String> historyDocumentIds) {}
-
-    @PutMapping("/documents/{documentId}/match-scope")
-    public ApiResponse<RequirementMatchService.DocumentScope> changeDocumentScope(@PathVariable String documentId,
-            @Valid @RequestBody DocumentScopeRequest request) {
-        return ApiResponse.success(matches.changeDocumentScope(CurrentUserHolder.require(), documentId, request.historyDocumentIds()));
-    }
 
     @GetMapping("/business-units/{buId}/match-policy")
     public ApiResponse<RequirementMatchService.Policy> policy(@PathVariable String buId) {

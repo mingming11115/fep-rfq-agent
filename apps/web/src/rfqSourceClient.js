@@ -11,10 +11,11 @@ export async function uploadRfqSource(projectId,original,file,api=defaultApi,pro
  const saved=await api.upload(`/projects/${encodeURIComponent(backendProjectId)}/documents`,body,options);
  return {...file,historyDocumentIds:saved.historyDocumentIds??[],sourceProjectId:projectId,backendDocumentId:saved.id,backendProjectId,backendVersion:saved.version,status:'排队中'};
 }
-export async function parseRfqSource(projectId,file,api=defaultApi){
+export async function parseRfqSource(projectId,file,api=defaultApi,historyDocumentIds){
  if(!file.backendDocumentId) { throw new Error('此文件尚未关联后端原件，请重新上传后解析'); }
  if((file.sourceProjectId||file.backendProjectId)&&(file.sourceProjectId||file.backendProjectId)!==projectId) { throw new Error('文件所属项目不一致'); }
- const run=await api.post(`/documents/${encodeURIComponent(file.backendDocumentId)}/parse-runs`);
+ const scope=historyDocumentIds===undefined?undefined:{historyDocumentIds};
+ const run=await api.post(`/documents/${encodeURIComponent(file.backendDocumentId)}/parse-runs`,scope);
  if(!['completed','partial'].includes(run.status)) { throw new Error(run.message||'解析未完成，请重试'); }
  try {
   return {run,rows:await readParsedRows(projectId,file,run,api)};

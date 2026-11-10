@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {uploadRfqSource,parseRfqSource} from './rfqSourceClient.js';
 
+test('manual reparse sends the selected scope, including an explicit reset to the three-library policy',async()=>{
+ const bodies=[];
+ const api={post:async(path,body)=>{
+  assert.equal(path,'/documents/D/parse-runs');
+  bodies.push(body);
+  return {id:'RUN',status:'completed',requirementCount:0};
+ },get:async()=>({list:[]})};
+ const file={backendDocumentId:'D',historyDocumentIds:['HD-OLD']};
+ await parseRfqSource('P',file,api);
+ await parseRfqSource('P',file,api,['HD-NEW']);
+ await parseRfqSource('P',file,api,[]);
+ assert.deepEqual(bodies,[undefined,{historyDocumentIds:['HD-NEW']},{historyDocumentIds:[]}]);
+});
+
 test('upload sends selected history file versions before submitting parsing',async()=>{
  const historyDocumentIds=['HD-1','HD-2'];
  const api={

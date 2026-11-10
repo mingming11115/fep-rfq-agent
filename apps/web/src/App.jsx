@@ -106,9 +106,9 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
  };
  const reparseProject=reparseTarget&&state.projects.find(row=>row.id===reparseTarget.projectId);
  const reparseFiles=reparseProject?getReparseSources(state,reparseProject.id):[];
- function submitReparse(projectId,fileId){
+ function submitReparse(projectId,fileId,historyDocumentIds){
   const sourceRoute=routeRef.current;
-  return reparseSource(projectId,fileId,(file,row)=>{
+  return reparseSource(projectId,fileId,historyDocumentIds,(file,row)=>{
    if(reparseTarget?.fileId!==fileId||routeRef.current!==sourceRoute||!DETAIL_PAGES.includes(sourceRoute.page)) { return; }
    rawNavigate(sourceRoute.page,{...sourceRoute,projectId,fileId,sourceVersion:file.version,requirementId:row?.id,taskId:undefined,reviewId:undefined,action:undefined},true);
   });

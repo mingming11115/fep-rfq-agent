@@ -77,7 +77,7 @@ function SourceUploadSession({project,files=[],onSubmit,onClose,open=true,afterC
     onChange={({fileList:next})=>{setFileList(next);setSelected(uploadMetadata(next));setError('');setSubmitted(false);setStage(0);}}
     itemRender={(node,file)=><div>{node}{phases[file.uid]&&<small role="status">{phases[file.uid]}{file.status==='uploading'&&Number.isFinite(file.percent)?` ${Math.round(file.percent)}%`:''}</small>}{files.some(old=>old.name===file.name)&&<StatusBadge status="同名文件 · 新版本"/>}</div>}
   ><p className="ant-upload-drag-icon"><InboxOutlined/></p><p className="ant-upload-text">拖拽文件到这里，或点击选择</p><p className="ant-upload-hint">支持 DOCX、PDF · DOC 请先另存为 DOCX</p></AntUpload.Dragger>
-  <HistoryRecallPicker projectId={project.backendProjectId || project.id} mode={recallMode} ids={recallIds}
+  <HistoryRecallPicker projectId={project.backendProjectId || project.id} groupId={project.groupId} mode={recallMode} ids={recallIds}
     onMode={setRecallMode} onIds={setRecallIds} disabled={busy || submitted || uploaded.current.size > 0}/>
   {selected.length>1&&<small className="muted">本批上传的客户原件使用同一召回范围，解析后可以按原件分别修改。</small>}
   {duplicates&&<Field label="替换原因（保留原版本）" required wide><Input.TextArea disabled={busy||submitted} aria-label="替换原因" value={reason} onChange={e=>setReason(e.target.value)}/></Field>}

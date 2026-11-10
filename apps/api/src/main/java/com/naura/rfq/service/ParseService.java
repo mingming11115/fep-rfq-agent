@@ -57,6 +57,7 @@ public class ParseService {
     private final AccessGuard access;
     private final RequirementMatchService matches;
     private final ProjectWorkScope work;
+    private final HistoryRecallScope historyRecall;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public record ParseRunView(String id, String documentId, String status, int totalBlocks,
@@ -65,7 +66,7 @@ public class ParseService {
     }
 
     @Transactional
-    public ParseRunView run(String documentId, String actorId) {
+    public ParseRunView run(String documentId, String actorId, List<String> historyDocumentIds) {
         CustomerDocument reference = documents.findById(documentId)
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
         var project = projects.findByIdForUpdate(reference.getProjectId())
@@ -95,6 +96,8 @@ public class ParseService {
             throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
         }
 
+        var recallIds = historyDocumentIds == null ? document.historyRecallIds()
+                : historyRecall.validate(project, historyDocumentIds);
         long started = System.nanoTime();
         ParseRun run = new ParseRun();
         run.setId(Ids.next("RUN"));
@@ -181,6 +184,10 @@ public class ParseService {
         run.setMessage(truncate(run.getMessage(), 990));
         runs.update(run);
         documents.update(document);
+        if (!document.historyRecallIds().equals(recallIds)) {
+            document.setHistoryDocumentIds(String.join(",", recallIds));
+            documents.updateHistoryRecall(document);
+        }
         matches.parsed(project, document, saved.stream().map(Saved::requirement).toList());
         audit.successInBu(actorId, project.getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());

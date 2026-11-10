@@ -39,6 +39,8 @@ class MatchEvaluator {
     private final MatchTextScorer scorer = new MatchTextScorer();
 
     record Input(String bu, String project, JsonNode snapshot, List<String> order) {
+        String historyGroupId() { return snapshot.path("historyGroupId").asText(); }
+
         List<String> historyDocumentIds() {
             var ids = new ArrayList<String>();
             snapshot.path("historyDocumentIds").forEach(item -> ids.add(item.asText()));
@@ -138,7 +140,8 @@ class MatchEvaluator {
         if (shared.stream().anyMatch(source -> !source.synced())) {
             return stage.put("status", "blocked").put("reason", "INDEX_NOT_READY");
         }
-        int limit = input.historyDocumentIds().isEmpty() ? MAX_SEARCH_IDS : MAX_SCOPED_SEARCH_IDS;
+        int limit = input.historyDocumentIds().isEmpty() && input.historyGroupId().isEmpty()
+                ? MAX_SEARCH_IDS : MAX_SCOPED_SEARCH_IDS;
         if (scope.sources().size() > limit) {
             return stage.put("status", "blocked").put("reason", "SEARCH_SCOPE_TOO_LARGE");
         }
@@ -212,6 +215,12 @@ class MatchEvaluator {
         var selected = history ? input.historyDocumentIds() : List.<String>of();
         if (!selected.isEmpty() && !historyRecall.allowed(input.bu(), input.project(), selected)) {
             return new Scope(Map.of(), true);
+        }
+        if (history && selected.isEmpty() && !input.historyGroupId().isEmpty()) {
+            selected = historyRecall.groupDocuments(input.bu(), input.project(), input.historyGroupId());
+            if (selected.isEmpty()) {
+                return new Scope(Map.of(), false);
+            }
         }
         String fileFilter = String.join(",", selected);
         String table = history ? "`history-rfq-record`" : "`standard-reply-record`";

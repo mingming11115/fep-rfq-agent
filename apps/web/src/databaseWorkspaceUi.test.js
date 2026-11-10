@@ -16,9 +16,9 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  const user={id:'sr',displayName:'数据库用户',roles:[{buId:'BU',role:'SR'}],bus:[{id:'BU',name:'事业部'}]};
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
  localStorage.setItem('fep-rfq-app-v1',JSON.stringify({projects:[{id:'FAKE',name:'不应出现的前端模拟项目'}]}));
- const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',stage:'DRAFT',version:0};
+ const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',groupId:'GROUP-A',stage:'DRAFT',version:0};
  let parsed=false,parseCalls=0,archived=false,projectVersion=0,allowReparse=false,finishFailed,finishRetry;
- const projectActions=[];
+ const projectActions=[],parseBodies=[];
  const failedRequest=new Promise(resolve=>{finishFailed=resolve;});
  const retryRequest=new Promise(resolve=>{finishRetry=resolve;});
  const source={id:'D',projectId:'P',name:'客户.docx',version:0,status:'PARSING'};
@@ -43,6 +43,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   if(url.endsWith('/download')) { return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404}); }
   if(url.endsWith('/parse-runs')){
    parseCalls++;
+   parseBodies.push(JSON.parse(options.body));
    if(url.includes('/FAILED/')){
     if(parseCalls===2) { await failedRequest; }
     if(parseCalls===3) { await retryRequest; }
@@ -75,9 +76,12 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   const picker=document.querySelector('select[aria-label="选择重新解析的文件"]');
   assert.ok(picker);assert.equal(picker.value,'');assert.equal(button('确认重新解析').disabled,true);
   await act(async()=>{picker.value='FAILED';picker.dispatchEvent(new window.Event('change',{bubbles:true}));});
+  assert.ok(document.body.textContent.includes('仅从指定历史 RFQ 文件召回'));
+  assert.ok(document.body.textContent.includes('所有同 Group RFQ 比对'));
   const submit=button('确认重新解析');
   await act(async()=>{submit.click();submit.click();});
   assert.equal(parseCalls,2,'duplicate clicks submit the selected file once');
+  assert.deepEqual(parseBodies.slice(0,2),[{}, {historyDocumentIds:[]}]);
   assert.ok(document.body.textContent.includes('正在重新解析'));
   await act(async()=>{finishFailed();});
   assert.ok(document.body.textContent.includes('补充资料解析失败'));
@@ -89,6 +93,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.equal(parseCalls,2,'opening the workbench does not rerun completed documents');
   assert.ok(node.textContent.includes('客户的真实要求'));
   assert.ok(node.querySelector('[aria-label="知识库比对"]').textContent.includes('数据库历史候选'));
+  assert.ok(!button('修改范围并重新比对',node));
   assert.ok(!node.textContent.includes('查看解析结果'));
   assert.ok(!node.textContent.includes('RFQ解析'));
   const retry=[...node.querySelectorAll('.rfq-detail button')].find(item=>item.textContent.trim()==='重新解析'&&!item.hasAttribute('aria-label'));

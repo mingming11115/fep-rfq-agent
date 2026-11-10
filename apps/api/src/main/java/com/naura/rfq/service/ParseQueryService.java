@@ -26,13 +26,13 @@ public class ParseQueryService {
     private final DocumentBlockMapper blocks;
     private final AccessGuard access;
 
-    public ParseService.ParseRunView start(CurrentUser user, String documentId) {
+    public ParseService.ParseRunView start(CurrentUser user, String documentId, List<String> historyDocumentIds) {
         CustomerDocument document = requireDocument(documentId);
         Project project = projects.findById(document.getProjectId())
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
-        return parseService.run(documentId, user.id());
+        return parseService.run(documentId, user.id(), historyDocumentIds);
     }
 
     public ParseRun run(CurrentUser user, String runId) {

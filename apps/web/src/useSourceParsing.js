@@ -18,7 +18,7 @@ export function getReparseSources(state,projectId){
 export function useSourceParsing({state,stateRef,update,onReload,toast}){
  const running=useRef(new Set()),alive=useRef(true),needsReload=useRef(false);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
- async function runSource(projectId,file,{manual=false,onReparsed}={}){
+ async function runSource(projectId,file,{manual=false,historyDocumentIds,onReparsed}={}){
   const key=JSON.stringify([projectId,file.id]);
   if(running.current.has(key)){
    if(manual) { throw new Error('该文件正在解析'); }
@@ -30,11 +30,11 @@ export function useSourceParsing({state,stateRef,update,onReload,toast}){
   const patch=(s,changes)=>({...s,documentsByProject:{...s.documentsByProject,[projectId]:s.documentsByProject[projectId].map(row=>row.id===file.id?{...row,...changes}:row)}});
   if(!manual) { update(s=>patch(s,{status:'处理中',parseStage:'extracting',error:''})); }
   try{
-   const {run,rows}=await parseRfqSource(projectId,file);
+   const {run,rows}=await parseRfqSource(projectId,file,undefined,historyDocumentIds);
    if(!current()) { return; }
    const status=run.status==='partial'?'待核对':'完成';
    update(s=>{
-    const next=patch(s,{status,parseStage:'completed',parsedCount:rows.length,lastRunId:run.id,parsedAt:new Date().toLocaleString('zh-CN',{hour12:false}),error:run.message||''});
+    const next=patch(s,{status,parseStage:'completed',parsedCount:rows.length,lastRunId:run.id,parsedAt:new Date().toLocaleString('zh-CN',{hour12:false}),error:run.message||'',...(historyDocumentIds!==undefined?{historyDocumentIds}:{})});
     const otherRows=(next.requirementsByProject[projectId]||[]).filter(row=>row.sourceFileId!==file.id);
     const parsedRows=rows.map(row=>({...row,activeForApproval:file.activeForApproval!==false}));
     return {...next,requirementsByProject:{...next.requirementsByProject,[projectId]:importParsedRequirements(otherRows,parsedRows)},analysisRuns:appendAnalysisRun(next.analysisRuns,{id:run.id,projectId,fileId:file.id,sourceVersion:file.version,type:'parse',status,startedAt:run.startedAt,endedAt:run.finishedAt,successCount:rows.length,failedCount:0,needsHumanCount:run.issueCount})};
@@ -75,9 +75,9 @@ export function useSourceParsing({state,stateRef,update,onReload,toast}){
    }
   }
  },[state.documentsByProject,state.actorId,state.actorRole]);
- return (projectId,fileId,onReparsed)=>{
+ return (projectId,fileId,historyDocumentIds,onReparsed)=>{
   const file=getReparseSources(stateRef.current,projectId).find(row=>row.id===fileId);
   if(!file||isSourceParsing(file)) { throw new Error('该文件当前不可重新解析，请刷新后重试'); }
-  return runSource(projectId,file,{manual:true,onReparsed});
+  return runSource(projectId,file,{manual:true,historyDocumentIds,onReparsed});
  };
 }

@@ -39,7 +39,6 @@ import './response-page.css';
 import { sectionLabel } from '../documentStructure';
 import AssessmentPanel from '../components/AssessmentPanel';
 import RequirementMatchPanel from '../components/RequirementMatchPanel';
-import DocumentRecallControl from '../components/DocumentRecallControl';
 import RecommendedWording from '../components/RecommendedWording';
 import { generateRecommendedWording } from '../responseAdvice';
 import { matchingSuggestion } from '../responseRecommendation';
@@ -70,7 +69,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const routedSourceRow = route?.fileId && requirements.find(row => row.sourceFileId === route.fileId);
   const initialRow = selectResponseEntry({requirements,reviews,state:appState,projectId:project.id,actorRole,actorId,requirementId:focusedRequirementId||route?.requirementId||(!route?.reviewId&&routedSourceRow?.id),reviewId:route?.reviewId});
   const [activeId, setActiveId] = useState(initialRow?.id || null);
-  const [recallByDocument, setRecallByDocument] = useState({});
   const active = requirements.find((r) => r.id === activeId) || requirements[0];
   const databaseBacked = appState.dataSource === 'mysql';
   const [confirmationHistory, setConfirmationHistory] = useState(null);
@@ -538,8 +536,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':sourceSummary.status==='parsing'?'当前文件正在解析，完成后可在这里处理应答项。':'当前项目暂无可应答条款。'}/>}</div></div></div></div>; }
   const activeSourceAnchor={ ...makeSourceAnchor({ ...active, projectId: project.id }), ...(route?.requirementId === active.id ? { sourceVersion: route.sourceVersion || String(active.sourceVersion || '1'), fileId: route.fileId || active.sourceFileId || active.source || 'manual' } : {}) };
   const reparseFileId=active.sourceFileId;
-  const activeDocument=sourceSummary.files.find(file=>file.id===reparseFileId);
-  const recallIds=recallByDocument[activeDocument?.backendDocumentId] ?? activeDocument?.historyDocumentIds ?? [];
   const canReparseCurrent=!staleSource&&reparseFileId&&sourceReparse?.hasSources(project.id,reparseFileId);
   const reparseBlocked=dirty||reviewForm||candidateDirty.current||cardBusy;
   const reparseAction=canReparseCurrent&&<UiButton className="btn btn-sm" aria-label="重新解析当前文件"
@@ -560,11 +556,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 
         {detailTab === 'activity' && projectActivity}
         <div className="detail-clause-content response-clarification" style={{ display: detailTab === 'response' ? 'flex' : 'none' }}>
-          {databaseBacked&&activeDocument?.backendDocumentId&&<DocumentRecallControl key={activeDocument.backendDocumentId}
-            projectId={project.id} document={activeDocument} ids={recallIds}
-            historyDocuments={appState.resourcesByBuId?.[project.buId]?.historyDocuments || []}
-            canEdit={canManageSource&&!staleSource} disabled={!!reparseBlocked} toast={toast}
-            onSaved={ids=>setRecallByDocument(previous=>({...previous,[activeDocument.backendDocumentId]:ids}))}/>}
           <ResponseCardFilters stats={cardStats} filters={cardFilters} draft={cardFilterDraft} disabled={cardBusy} onApply={applyCardFilters}/>
           <div className="response-card-workspace">
           <div className="response-card-deck" aria-busy={cardBusy}>
@@ -587,7 +578,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   <Description rows={[[ '描述', active.requirementText || active.original ], [ '规格', active.specification ]]}/>
   <div hidden className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
         {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<UiButton className="text-link" onClick={() => goPage('export')}>查看最终审批</UiButton></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<UiButton className="text-link" onClick={() => openInlineReview(openReview.id)}>查看事项</UiButton></Notice>}
-        {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}{databaseBacked ? <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}:${recallIds.join(',')}`} row={active}
+        {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}{databaseBacked ? <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}`} row={active}
           resources={appState.resourcesByBuId?.[project.buId]} canRun={canEdit && !active.needsReview && canPerform(actorRole,'analysis:run')}
           canSetInput={canEdit && !active.needsReview && ['SR','技术','BU管理员'].includes(actorRole)}
           canAdopt={canEdit} actorId={actorId} canCloseDeviation={[project.ownerId,active.confirmationAssigneeId].includes(actorId)}

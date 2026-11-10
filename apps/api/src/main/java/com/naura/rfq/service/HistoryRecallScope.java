@@ -43,6 +43,19 @@ public class HistoryRecallScope {
                 .containsAll(ids);
     }
 
+    List<String> groupDocuments(String bu, String project, String groupId) {
+        return jdbc.query("""
+                select id,payload from history_document
+                where bu_id=:bu
+                  and ((project_id is null and scope='BU共享') or (project_id=:project and scope='仅当前项目'))
+                  and case when json_type(payload->'$.groupIds')='ARRAY'
+                      then json_contains(payload->'$.groupIds',json_quote(:groupId))
+                      else payload->>'$.groupId'=:groupId end
+                """, Map.of("bu", bu, "project", project, "groupId", groupId),
+                (row, n) -> visible(parse(row.getString("payload")), project) ? row.getString("id") : null)
+                .stream().filter(java.util.Objects::nonNull).toList();
+    }
+
     List<Choice> choices(Project project) {
         return jdbc.query("""
                 select d.id,d.payload,
