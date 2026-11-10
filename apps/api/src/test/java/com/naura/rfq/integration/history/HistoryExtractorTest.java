@@ -3,12 +3,20 @@ package com.naura.rfq.integration.history;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
+import com.naura.rfq.integration.parse.DocxBlockReader;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
+import com.naura.rfq.integration.parse.OcrClient;
 import com.naura.rfq.integration.parse.ParseHttpClient;
 import com.naura.rfq.integration.parse.RuleBasedExtractor;
 import com.naura.rfq.model.parse.RawBlock;
+import com.naura.rfq.model.vo.HistoryClause;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HistoryExtractorTest {
@@ -19,6 +27,44 @@ class HistoryExtractorTest {
 
     private HistoryExtractor withClient(ParseHttpClient client) {
         return new HistoryExtractor(rules, new HybridRequirementExtractor(rules, properties, client, json));
+    }
+
+    @Test void wordTabAlignsComplianceWithItsHeadingOrClause(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("aligned-responses.docx");
+        try (var doc = new XWPFDocument(); var output = Files.newOutputStream(file)) {
+            paragraph(doc, "1. 安全", "Heading1", 0, false);
+            paragraph(doc, "1.1 设备应设置急停按钮。", null, 0, true);
+            paragraph(doc, "1.2 防护门打开时设备必须停止。", null, 720, false);
+            paragraph(doc, "→ Comply", null, 0, false);
+            paragraph(doc, "1.3 设备应记录安全报警。", null, 0, true);
+            paragraph(doc, "答复：Conditional Comply", null, 0, true);
+            paragraph(doc, "1.4 设备应支持人工复位。", null, 0, true);
+            paragraph(doc, "2. 搬运", "Heading1", 0, false);
+            paragraph(doc, "2.1 设备应支持 300 mm 晶圆。", null, 720, false);
+            paragraph(doc, "Comply，标准夹具支持。", null, 0, true);
+            paragraph(doc, "2.2 设备应记录搬运次数。", null, 0, true);
+            doc.write(output);
+        }
+        var blocks = new DocxBlockReader(new OcrClient(properties, new ParseHttpClient(json))).read(file);
+        var result = history.extract(blocks, List.of());
+        assertThat(result.clauses()).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
+                .containsExactly(tuple("1.1", "Comply", "main:body/3"), tuple("1.2", "Comply", "main:body/3"),
+                        tuple("1.3", "Conditional Comply", "main:body/5"), tuple("1.4", "Comply", "main:body/3"),
+                        tuple("2.1", "Comply，标准夹具支持。", "main:body/9"), tuple("2.2", "", ""));
+        assertThat(result.issues()).isEmpty();
+    }
+
+    private void paragraph(XWPFDocument doc, String text, String style, int indent, boolean tab) {
+        var paragraph = doc.createParagraph();
+        if (style != null) {
+            paragraph.setStyle(style);
+        }
+        paragraph.setIndentationLeft(indent);
+        var run = paragraph.createRun();
+        if (tab) {
+            run.addTab();
+        }
+        run.setText(text);
     }
 
     @Test void usesTheNormalModelPromptWithOnlyCustomerColumnsAndRetainsTheOriginalAnswer() throws Exception {

@@ -60,13 +60,15 @@ public class DocxBlockReader implements DocumentBlockReader {
         for (IBodyElement element : elements) {
             String anchor = parentAnchor + "/" + elementIndex++;
             if (element instanceof XWPFParagraph paragraph) {
-                String text = clean(paragraph.getText());
-                int level = headingLevel(paragraph.getStyle());
+                String rawText = paragraph.getText();
+                String text = clean(rawText);
+                var layout = WordParagraphLayout.read(paragraph, rawText, headingLevel(paragraph.getStyle()));
+                int level = layout.headingLevel();
                 if (level > 0 && !text.isBlank()) {
                     applyHeading(sections, level, text);
                 }
                 if (!text.isBlank()) {
-                    blocks.add(RawBlock.paragraph(blocks.size(), text, sectionPath(sections), null, anchor));
+                    blocks.add(RawBlock.wordParagraph(blocks.size(), text, sectionPath(sections), anchor, layout));
                 }
                 readPictures(paragraph, blocks, sections, images, anchor);
             } else if (element instanceof XWPFTable table) {

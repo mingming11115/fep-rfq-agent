@@ -48,16 +48,7 @@ public class HistoryExtractor {
                     clause.feedback().isBlank() ? answer.feedback() : clause.feedback(), clause.requirementAnchor(),
                     answer.answerAnchor(), clause.issues(), clause.customerRequirement());
             }
-            List<String> reasons = new ArrayList<>(clause.issues());
-            if (clause.requirement().isBlank()) {
-                reasons.add("缺少客户要求");
-            }
-            if (clause.answer().isBlank()) {
-                reasons.add("缺少历史答复");
-            }
-            matched.add(new HistoryClause(clause.key(), clause.clauseNo(), clause.section(), clause.requirement(), clause.answer(),
-                clause.conditions(), clause.evidence(), clause.feedback(), clause.requirementAnchor(), clause.answerAnchor(),
-                reasons, clause.customerRequirement()));
+            matched.add(clause);
         }
         for (HistoryClause answer : answers) {
             var same = requirementsByNumber.getOrDefault(answer.clauseNo(), List.of());
@@ -66,7 +57,20 @@ public class HistoryExtractor {
                 issues.add("配套答复条款 " + (answer.clauseNo().isBlank() ? "（无编号）" : answer.clauseNo()) + " 未关联，请在原文中核对：" + answer.answerAnchor());
             }
         }
-        return new Result(metadata, matched, issues);
+        var answered = AlignedHistoryAnswers.apply(primary, matched, issues);
+        return new Result(metadata, answered.stream().map(this::flagMissingFields).toList(), issues);
+    }
+    private HistoryClause flagMissingFields(HistoryClause clause) {
+        List<String> reasons = new ArrayList<>(clause.issues());
+        if (clause.requirement().isBlank()) {
+            reasons.add("缺少客户要求");
+        }
+        if (clause.answer().isBlank()) {
+            reasons.add("缺少历史答复");
+        }
+        return new HistoryClause(clause.key(), clause.clauseNo(), clause.section(), clause.requirement(), clause.answer(),
+                clause.conditions(), clause.evidence(), clause.feedback(), clause.requirementAnchor(), clause.answerAnchor(),
+                reasons, clause.customerRequirement());
     }
     private Map<String, List<HistoryClause>> group(List<HistoryClause> clauses) {
         Map<String, List<HistoryClause>> grouped = new LinkedHashMap<>();
@@ -136,6 +140,9 @@ public class HistoryExtractor {
                 if (matcher.matches()) { metadata.putIfAbsent(entry.getValue(), matcher.group(1).trim()); meta = true; break; }
             }
             if (meta || (!section.isBlank() && section.endsWith(text))) {
+                continue;
+            }
+            if (!companion && AlignedHistoryAnswers.answerText(text) != null) {
                 continue;
             }
             var response = RESPONSE.matcher(text);

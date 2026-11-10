@@ -1,5 +1,7 @@
 package com.naura.rfq.model.parse;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -15,7 +17,15 @@ public record RawBlock(
         String clauseNo,
         String anchor,
         String provenance,
-        String issue) {
+        String issue,
+        @JsonIgnore ParagraphLayout paragraphLayout) {
+
+    public record ParagraphLayout(int textStartTwips, int headingLevel, BigInteger listId, int listLevel) { }
+
+    public RawBlock(int index, String type, String text, List<List<String>> tableRows,
+            String sectionPath, String clauseNo, String anchor, String provenance, String issue) {
+        this(index, type, text, tableRows, sectionPath, clauseNo, anchor, provenance, issue, null);
+    }
 
     public RawBlock(int index, String type, String text, List<List<String>> tableRows,
             String sectionPath, String clauseNo, String anchor) {
@@ -28,6 +38,10 @@ public record RawBlock(
 
     public static RawBlock paragraph(int index, String text, String sectionPath, String clauseNo, String anchor) {
         return new RawBlock(index, PARAGRAPH, text, List.of(), sectionPath, clauseNo, anchor);
+    }
+
+    public static RawBlock wordParagraph(int index, String text, String sectionPath, String anchor, ParagraphLayout layout) {
+        return new RawBlock(index, PARAGRAPH, text, List.of(), sectionPath, null, anchor, "native", null, layout);
     }
 
     public static RawBlock table(int index, List<List<String>> rows, String sectionPath, String anchor) {
