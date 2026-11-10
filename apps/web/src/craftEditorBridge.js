@@ -129,7 +129,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
   function schedule(){if(!alive||scheduled) { return; } scheduled=true;queueMicrotask(()=>{scheduled=false;void pump();});}
   function configurationFor(){
     const c=getContext();
-    const targets=craftClauseTargets(source,c.rows,engine).map(({anchor,tag,...target})=>{const row=c.rows.find(r=>r.id===target.id);return {...target,title:row?.title||'',page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(row))};});
+    const targets=craftClauseTargets(source,c.rows,engine,c.sourceBlocks).map(({anchor,tag,...target})=>{const row=c.rows.find(r=>r.id===target.id);return {...target,title:row?.title||'',page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(row))};});
     const linked=(c.comments||[]).filter(comment=>comment.nativeRef?.documentId===reference.id&&comment.nativeRef.key&&!comment.nativeDeleted).map(comment=>({nativeKey:comment.nativeRef.key,clauseId:comment.anchor.requirementId,...permissions({nativeKey:comment.nativeRef.key})}));
     for(const [nativeKey,clauseId] of Object.entries(associations))if(!linked.some(item=>item.nativeKey===nativeKey)) { linked.push({nativeKey,clauseId}); }
     return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),externalOutline:true,externalTools:engine==='wordcraft',targets,selectedId:c.selectedAnchor?.requirementId,associations:linked};

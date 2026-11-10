@@ -6,10 +6,12 @@ import com.naura.rfq.model.vo.DocumentView;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.DocumentService;
 import com.naura.rfq.service.DocumentReplacementService;
+import com.naura.rfq.service.HistoryRecallScope;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -34,8 +36,9 @@ public class DocumentController {
 
     @PostMapping("/projects/{projectId}/documents/{documentId}/replacement")
     public ApiResponse<ObjectNode> uploadReplacement(@PathVariable String projectId, @PathVariable String documentId,
-            @RequestParam("file") MultipartFile file) throws IOException {
-        return ApiResponse.success(replacements.upload(CurrentUserHolder.require(), projectId, documentId, file));
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) List<String> historyDocumentIds) throws IOException {
+        return ApiResponse.success(replacements.upload(CurrentUserHolder.require(), projectId, documentId, file, historyDocumentIds));
     }
 
     @GetMapping("/projects/{projectId}/document-replacements/{documentId}")
@@ -73,8 +76,14 @@ public class DocumentController {
 
     @PostMapping("/projects/{projectId}/documents")
     public ApiResponse<DocumentView> upload(@PathVariable String projectId,
-            @RequestParam("file") MultipartFile file) throws IOException {
-        return ApiResponse.success(service.upload(CurrentUserHolder.require(), projectId, file));
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) List<String> historyDocumentIds) throws IOException {
+        return ApiResponse.success(service.upload(CurrentUserHolder.require(), projectId, file, historyDocumentIds));
+    }
+
+    @GetMapping("/projects/{projectId}/history-recall-options")
+    public ApiResponse<List<HistoryRecallScope.Choice>> historyRecallOptions(@PathVariable String projectId) {
+        return ApiResponse.success(service.historyRecallChoices(CurrentUserHolder.require(), projectId));
     }
 
     @PostMapping("/projects/{projectId}/documents/sample")

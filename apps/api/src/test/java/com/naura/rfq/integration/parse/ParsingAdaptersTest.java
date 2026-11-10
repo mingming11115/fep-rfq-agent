@@ -40,6 +40,71 @@ class ParsingAdaptersTest {
         return new HybridRequirementExtractor(new RuleBasedExtractor(json), p, new ParseHttpClient(json), json);
     }
     List<RawBlock> blocks() { return List.of(RawBlock.paragraph(0, source, "设计", "1.1", "p0")); }
+
+    @Test void wordTableUsesItemColumnForTitleAndRetainsTheSourceRow() throws Exception {
+        var table = RawBlock.table(0, List.of(
+                List.of("No", "项目 Item", "规格", "Rev", "Description"),
+                List.of("3", "供电 Power Supply", "220 V / 50 Hz", "A", "控制柜应支持单相 AC 输入。")),
+                "技术规格", "body/1");
+
+        var rows = extractor(settings("", false)).extract(List.of(table));
+        assertThat(rows).singleElement().satisfies(row -> {
+            assertThat(row.customerClauseNo()).isEqualTo("3");
+            assertThat(row.title()).isEqualTo("供电 Power Supply");
+            assertThat(row.originalText()).isEqualTo("3：供电 Power Supply：220 V / 50 Hz：A：控制柜应支持单相 AC 输入。");
+        });
+        var metrics = json.readTree(rows.get(0).metricsJson());
+        assertThat(metrics.path("specification").asText()).isEqualTo("220 V / 50 Hz");
+        assertThat(metrics.path("metrics").size()).isEqualTo(2);
+    }
+    @Test void trailingEllipsisRecoversTheUniqueTableRow() throws Exception {
+        var table = RawBlock.table(0, List.of(
+            List.of("设计压力", "≥ 2 MPa", "在常温下适用"),
+            List.of("测试压力", "≥ 3 MPa", "出厂前验证")), "技术规格", "body/1");
+        var s = server(200, envelope(answer(0, "设计压力|...")), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(List.of(table));
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.requirements()).singleElement().satisfies(row ->
+                assertThat(row.originalText()).isEqualTo("设计压力 | ≥ 2 MPa | 在常温下适用"));
+        } finally { s.stop(0); }
+    }
+    @Test void trailingEllipsisCannotSelectBetweenTableRowsWithTheSamePrefix() throws Exception {
+        var table = RawBlock.table(0, List.of(
+            List.of("设计压力", "≥ 2 MPa", "常温"),
+            List.of("设计压力", "≥ 3 MPa", "高温")), "技术规格", "body/1");
+        var s = server(200, envelope(answer(0, "设计压力 | ...")), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(List.of(table));
+            assertThat(result.extractor()).isEqualTo("rule-based-v1");
+            assertThat(result.issues()).hasSize(1);
+        } finally { s.stop(0); }
+    }
+    @Test void bareEllipsisRecoversTheRowFromAnExactItemColumnMatch() throws Exception {
+        var table = RawBlock.table(0, List.of(
+            List.of("No", "项目 Item", "规格", "Description"),
+            List.of("1", "设计压力", "≥ 2 MPa", "在常温下适用"),
+            List.of("2", "测试压力", "≥ 3 MPa", "另见设计压力")), "技术规格", "body/1");
+        var s = server(200, envelope(answer(0, "...")), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(List.of(table));
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.requirements()).singleElement().satisfies(row ->
+                assertThat(row.originalText()).isEqualTo("1 | 设计压力 | ≥ 2 MPa | 在常温下适用"));
+        } finally { s.stop(0); }
+    }
+    @Test void bareEllipsisDoesNotSelectBetweenDuplicateItems() throws Exception {
+        var table = RawBlock.table(0, List.of(
+            List.of("项目 Item", "规格"),
+            List.of("设计压力", "≥ 2 MPa"),
+            List.of("设计压力", "≥ 3 MPa")), "技术规格", "body/1");
+        var s = server(200, envelope(answer(0, "…")), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(List.of(table));
+            assertThat(result.extractor()).isEqualTo("rule-based-v1");
+            assertThat(result.issues()).hasSize(1);
+        } finally { s.stop(0); }
+    }
     String answer(int block, String quote) throws Exception {
         return json.writeValueAsString(Map.of("requirements", List.of(Map.of("blockIndex", block,
             "originalText", quote, "item", "设计压力", "description", "设计压力至少 2 MPa",

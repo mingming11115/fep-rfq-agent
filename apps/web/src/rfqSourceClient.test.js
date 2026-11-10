@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {uploadRfqSource,parseRfqSource} from './rfqSourceClient.js';
+
+test('upload sends selected history file versions before submitting parsing',async()=>{
+ const historyDocumentIds=['HD-1','HD-2'];
+ const api={
+  get:async()=>({id:'P'}),
+  upload:async(path,body)=>{
+   assert.equal(path,'/projects/P/documents');
+   assert.deepEqual(body.getAll('historyDocumentIds'),historyDocumentIds);
+   return {id:'D',version:1,historyDocumentIds};
+  },
+ };
+ const file=await uploadRfqSource('P',new Blob(['data']),{name:'new.docx',historyDocumentIds},api);
+ assert.deepEqual(file.historyDocumentIds,historyDocumentIds);
+});
 test('real upload parses and fetches only persisted clauses from every page',async()=>{
  const calls=[];
  const api={get:async path=>{calls.push(path);if(!path.includes('requirements')) { return {id:'P'}; } return {list:[{id:path.includes('page=2')?'R2':'R1',documentId:'D',originalText:'300 mm',metricsJson:'{"specification":"300 mm"}'}],totalPages:2};},upload:async()=>({id:'D',version:1}),post:async()=>({status:'completed',requirementCount:2})};

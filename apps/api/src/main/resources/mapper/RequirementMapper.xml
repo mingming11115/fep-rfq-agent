@@ -10,36 +10,44 @@
     <select id="findById" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
-        where id = #{id}
+        where id = #{id} and extraction_status &lt;&gt; 'EXCLUDED'
     </select>
 
     <select id="findByIdForUpdate" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
-        select <include refid="columns"/> from requirement where id = #{id} for update
+        select <include refid="columns"/> from requirement
+        where id = #{id} and extraction_status &lt;&gt; 'EXCLUDED' for update
     </select>
 
     <select id="findByProjectIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
-        where project_id = #{projectId}
+        where project_id = #{projectId} and extraction_status &lt;&gt; 'EXCLUDED'
         order by sort_order asc
     </select>
 
     <select id="findByDocumentIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
-        where document_id = #{documentId}
+        where document_id = #{documentId} and extraction_status &lt;&gt; 'EXCLUDED'
         order by sort_order asc
     </select>
 
     <select id="findPage" resultType="com.naura.rfq.model.entity.Requirement">
         select <include refid="columns"/>
         from requirement
-        where project_id = #{projectId}
+        where project_id = #{projectId} and extraction_status &lt;&gt; 'EXCLUDED'
         order by ${q.orderBy}
         limit #{q.size} offset #{q.offset}
     </select>
 
     <select id="findByDocumentIdForUpdate" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
+        select <include refid="columns"/> from requirement
+        where document_id=#{documentId} and extraction_status &lt;&gt; 'EXCLUDED'
+        order by sort_order asc, id for update
+    </select>
+
+    <!-- Include excluded rows so re-parsing sees the human correction and preserves it. -->
+    <select id="findByDocumentIdForReparse" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
         select <include refid="columns"/> from requirement
         where document_id=#{documentId} order by sort_order asc, id for update
     </select>
@@ -47,7 +55,7 @@
     <select id="countByProjectId" resultType="long">
         select count(*)
         from requirement
-        where project_id = #{projectId}
+        where project_id = #{projectId} and extraction_status &lt;&gt; 'EXCLUDED'
     </select>
 
     <delete id="deleteByDocumentId">

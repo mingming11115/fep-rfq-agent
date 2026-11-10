@@ -44,7 +44,8 @@ public class HistoryRfqReviewService {
         access.requireWriter(user, buId, false);
         var row = checked(user, buId, lock(buId, id), version, request.revision());
         requireState(EDITABLE.contains(row.status()), "仅草稿或退回的历史条款可以修改");
-        row.payload().put("title", request.title().strip()).put("requirement", request.requirement().strip())
+        String description = request.requirement().strip();
+        row.payload().put("title", request.title().strip()).put("requirement", description).put("requirementText", description)
                 .put("answer", request.answer().strip()).put("conditions", clean(request.conditions()));
         return save(user, buId, row, "编辑历史 RFQ 草稿", "");
     }
@@ -64,6 +65,7 @@ public class HistoryRfqReviewService {
             case "return" -> returnForEdit(user, buId, row, note);
             case "revoke" -> revoke(user, buId, chain, row, note);
             case "revise" -> revise(user, buId, chain, row);
+            case "delete" -> deleteDraft(user, buId, row);
             default -> throw new BusinessException(404, "未知的历史 RFQ 操作");
         };
     }
@@ -75,10 +77,16 @@ public class HistoryRfqReviewService {
         return save(user, buId, row, "提交历史 RFQ 审核", reason);
     }
 
+    private ObjectNode deleteDraft(CurrentUser user, String buId, Clause row) {
+        requireState(EDITABLE.contains(row.status()), "仅草稿或退回的历史条款可以删除");
+        row.payload().put("status", "已删除").put("validity", "已删除");
+        return save(user, buId, row, "删除历史 RFQ 条款", "");
+    }
+
     private ObjectNode publish(CurrentUser user, String buId, List<Clause> chain, Clause row, String reason) {
         requireIndependentReview(user, row);
         requireState(!row.payload().path("submitterId").asText().isBlank(), "缺少提交人，请退回后重新提交");
-        requireState(latest(chain) == row.version(), "只能发布最新的待审核版本");
+        requireState(isLatestVisible(chain, row), "只能发布最新的待审核版本");
         requireContent(row);
         requireState(row.buShared() || "仅当前项目".equals(row.scope()) && row.projectId() != null,
                 "请通过历史 RFQ 导入入口确认共享范围后再发布");
@@ -126,9 +134,9 @@ public class HistoryRfqReviewService {
     }
 
     private ObjectNode revise(CurrentUser user, String buId, List<Clause> chain, Clause row) {
-        requireState(latest(chain) == row.version(), "已存在较新版本，请打开该版本");
+        requireState(isLatestVisible(chain, row), "已存在较新版本，请打开该版本");
         requireState(Set.of("已发布", "已撤销").contains(row.status()), "仅已发布或已撤销的条款可以修订");
-        int version = Math.addExact(row.version(), 1);
+        int version = Math.addExact(chain.get(chain.size() - 1).version(), 1);
         var next = row.payload().deepCopy();
         next.remove(List.of("submitterId", "submittedAt", "publishedById", "publishedAt", "supersededByVersion", "history"));
         next.put("version", version).put("revision", 0).put("status", "草稿").put("validity", "待核对");
@@ -205,7 +213,9 @@ public class HistoryRfqReviewService {
 
     private String clean(String value) { return value == null ? "" : value.strip(); }
 
-    private int latest(List<Clause> chain) { return chain.get(chain.size() - 1).version(); }
+    private boolean isLatestVisible(List<Clause> chain, Clause row) {
+        return chain.stream().noneMatch(candidate -> candidate.version() > row.version() && !"已删除".equals(candidate.status()));
+    }
 
     private List<Clause> lock(String buId, String id) {
         return jdbc.query(SELECT + " where bu_id=? and id=? order by version for update", this::map, buId, id);

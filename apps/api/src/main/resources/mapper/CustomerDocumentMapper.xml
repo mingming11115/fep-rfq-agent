@@ -3,7 +3,7 @@
 <mapper namespace="com.naura.rfq.mapper.CustomerDocumentMapper">
 
     <sql id="columns">id, project_id, name, version, purpose, storage_ref, content_type, size_bytes, sha256,
-        status, uploaded_by, created_at</sql>
+        status, uploaded_by, created_at, history_document_ids</sql>
 
     <select id="findById" resultType="com.naura.rfq.model.entity.CustomerDocument">
         select <include refid="columns"/>
@@ -51,14 +51,17 @@
 
     <insert id="insert">
         insert into customer_document (id, project_id, name, version, purpose, storage_ref, content_type,
-                                       size_bytes, sha256, status, uploaded_by, created_at)
+                                       size_bytes, sha256, status, uploaded_by, created_at, history_document_ids)
         values (#{id}, #{projectId}, #{name}, #{version}, #{purpose}, #{storageRef}, #{contentType},
-                #{sizeBytes}, #{sha256}, #{status}, #{uploadedBy}, #{createdAt})
+                #{sizeBytes}, #{sha256}, #{status}, #{uploadedBy}, #{createdAt}, #{historyDocumentIds})
     </insert>
 
     <update id="update">
         update customer_document
         set status = #{status}
         where id = #{id}
+    </update>
+    <update id="updateHistoryRecall">
+        update customer_document set history_document_ids = #{historyDocumentIds,jdbcType=VARCHAR} where id = #{id}
     </update>
 </mapper>

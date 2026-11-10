@@ -27,6 +27,24 @@ test('missing answers block the entire submit batch; independent approval is req
  assert.throws(()=>history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,id:'tech'}),/权限/);
  assert.equal(history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,id:'bu',canApprove:true})[0].status,'已发布');
 });
+test('deleting a draft version preserves the published version and its source document',()=>{
+ const {clauses:[parsed]}=history.mergeHistoryParse(doc,[],result,actor);
+ const published={...parsed,status:'已发布',validity:'有效'};
+ const draft={...parsed,version:2,status:'退回'};
+ assert.throws(()=>history.transitionHistoryClauses([published,draft],[`${draft.id}:1`],'delete',actor),/草稿或退回/);
+ assert.throws(()=>history.transitionHistoryClauses([published,draft],[`${draft.id}:2`],'delete',{...actor,canEdit:false}),/权限/);
+ const clauses=history.transitionHistoryClauses([published,draft],[`${draft.id}:2`],'delete',actor);
+ assert.equal(clauses[1].status,'已删除');
+ assert.equal(clauses[0],published);
+ const reparsed=history.mergeHistoryParse(doc,clauses,result,actor);
+ assert.equal(reparsed.clauses.find(row=>row.version===2).status,'已删除');
+ const state={accountsById:{sr:{enabled:true}},businessUnits:[{id:'A'}],
+  buPersonnelByBuId:{A:[{userId:'sr',roles:['SR'],enabled:true}]}};
+ const visible=history.selectHistoryResources({documents:[reparsed.document],clauses:reparsed.clauses},
+  {state,actorId:'sr',buId:'A'});
+ assert.equal(visible.documents[0].id,doc.id);
+ assert.deepEqual(visible.clauses.map(row=>row.version),[1]);
+});
 test('document scope is authoritative for every linked clause and queries find answer text',()=>{
  const clauses=[{id:'K',documentId:'D1',type:'history',requirement:'上料',answer:'增强夹持模块',scope:'FEP 授权项目'}];
  assert.equal(history.filterHistoryDocuments([doc],clauses,'增强夹持')[0].id,'D1');

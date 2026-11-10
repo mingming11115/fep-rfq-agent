@@ -106,7 +106,9 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
   const tab=knowledgeType; const setTab=type=>navigate?.(type==='history'?'history':'knowledge'); const [query, setQuery] = useState(''); const [status, setStatus] = useState('全部状态'); const [scope, setScope] = useState('全部项目'); const [selected, setSelected] = useState('K-021:1'); const [drawer, setDrawer] = useState(null); const [form, setForm] = useState(null); const [error, setError] = useState(''); const [review, setReview] = useState(null); const [importing, setImporting] = useState(false);
   const [page,setPage] = useState(1); const [pageSize,setPageSize] = useState(10);
   useEffect(() => setPage(1), [query,status,tab,scope,groupScope?.groupId]);
-  const tabItems=items.filter(r=>r.type===tab&&(!groupScope||groupScope.matches('reply',r)));
+  const [deleteTarget,setDeleteTarget]=useState(null);
+  const visibleItems=items.filter(row=>row.status!=='已删除');
+  const tabItems=visibleItems.filter(r=>r.type===tab&&(!groupScope||groupScope.matches('reply',r)));
   const filtered = tabItems.filter((r) => (status === '全部状态' || r.status === status) && (scope === '全部项目' || (r.source||'').includes('RFQ-001')) && `${r.id}${r.title}${r.requirement}${r.answer}`.toLowerCase().includes(query.toLowerCase()));
   const pageItems = filtered.slice((Math.min(page,Math.max(1,Math.ceil(filtered.length/pageSize)))-1)*pageSize,Math.min(page,Math.max(1,Math.ceil(filtered.length/pageSize)))*pageSize);
   const current = filtered.find((r) => `${r.id}:${r.version}` === selected) || filtered[0];
@@ -129,7 +131,29 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
   }
   let sourcedForm; try { sourcedForm = prepareKnowledgeSource(form,sourceOptions);if(groupScope) { sourcedForm.groupIds=groupScope.validate(form.groupIds||[],groupScope.groups('reply',items.find(r=>r.id===form.id&&r.version===form.version)||{})); } } catch (error) { console.error('校验知识资料来源失败', error); return setError(error.message); } const item = {...sourcedForm, status:'草稿', submitterRole:actorRole,submitterId:actorId, version:form.newVersion ? Math.max(...items.filter((r) => r.id === form.id).map((r) => r.version)) + 1 : form.version, history:[...(form.history || []), {date:today(),text:`${actorRole} 保存${form.newVersion ? '新版本' : ''}草稿`}]}; delete item.newVersion; setItems((all) => all.some((r) => r.id === item.id && r.version === item.version) ? all.map((r) => r.id === item.id && r.version === item.version ? item : r) : [...all, item]); setSelected(`${item.id}:${item.version}`); setForm(null); if(item.type!==tab) { setTab(item.type); } notify(`${item.type === 'history' ? '历史 RFQ 知识' : '标准回复'}草稿已保存；发布前需核对适用条件与来源`); };
   const requestAction = (item, action) => { if(!(action==='提交审核'?canEdit:canApprove)) { return toast?.('当前身份无此资料操作权限','error'); } if (['提交审核','批准发布'].includes(action) && !item.conditions?.trim()) { return toast?.('缺少适用条件，请先修订补齐', 'error'); } if (['批准发布','撤销','退回'].includes(action) && actorRole !== 'BU管理员') { return toast?.('当前角色无知识批准权，请切换为BU管理员', 'error'); } if (action === '批准发布' && item.submitterId === actorId) { return toast?.('同一版本不得自审，请由独立审批角色处理', 'error'); } setError('');setReview({item,action}); };
-  const actions = (item) => item && <>{databaseBacked&&rights.configure&&<ResourceGroupControl key={`${item.id}:${item.version}`}
+  const canDelete = item => canEdit && item.type==='standard' && ['草稿','退回'].includes(item.status);
+  const deleteReply = () => {
+    if (!canDelete(deleteTarget)) { return; }
+    const item = deleteTarget;
+    const finish = () => {
+      setDeleteTarget(null);
+      notify('已删除标准回复');
+    };
+    if (databaseBacked) {
+      setError('');
+      return mutation.run(()=>library.transition('reply',item,'delete'),finish,cause=>setError(cause.message));
+    }
+    setItems(all=>all.map(row=>row.id===item.id && row.version===item.version
+      ? {...row,status:'已删除',validity:'已删除'}
+      : row));
+    finish();
+  };
+  const actions = (item) => item && <>
+    {canDelete(item) && <UiButton className="btn btn-danger btn-sm" disabled={mutation.busy} onClick={() => {
+      setError('');
+      setDeleteTarget(item);
+    }}>删除</UiButton>}
+    {databaseBacked&&rights.configure&&<ResourceGroupControl key={`${item.id}:${item.version}`}
     kind="reply" row={item} client={library} refresh={refresh} toast={toast}/>}<UiButton className="btn btn-sm" disabled={!canEdit||mutation.busy||databaseBacked&&(item.status==='待审核'||item.validity==='被替代'||items.some(row=>row.id===item.id&&row.version>item.version))} onClick={() => edit(item)}>{['已发布','已撤销'].includes(item.status) ? '修订新版本' : '编辑草稿'}</UiButton>{['草稿','退回'].includes(item.status) && <UiButton className="btn btn-primary btn-sm" disabled={!canEdit} onClick={() => requestAction(item,'提交审核')}>提交审核</UiButton>}{item.status === '待审核' && <><UiButton className="btn btn-primary btn-sm" disabled={!canApprove} onClick={() => requestAction(item,'批准发布')}>批准发布</UiButton><UiButton className="btn btn-sm" disabled={!canApprove} onClick={() => requestAction(item,'退回')}>退回</UiButton></>}{item.status === '已发布' && (!databaseBacked||item.validity!=='被替代') && <UiButton className="btn btn-danger btn-sm" disabled={!canApprove} onClick={() => requestAction(item,'撤销')}>撤销</UiButton>}</>;
   const detail = (item) => <><div className="ref-detail-title"><div><span className="ref-eyebrow">{item.id} / VERSION {item.version}</span><h3>{item.title}</h3></div><Tag>{item.status}</Tag></div><div className="ref-content-section"><span className="ref-label">历史要求</span><p>{item.requirement}</p></div><div className="ref-answer"><span className="ref-label">最终答复 / 已批准口径</span><p>{item.answer}</p></div><KeyValues entries={[["适用条件",<ConditionTags value={item.conditions}/>],['来源',item.source],['有效性',item.validity || (item.status === '已发布' ? '有效' : '待核对')],['维护 / 提交角色',`${item.author} / ${item.submitterRole}`]]}/><Notice>发布内容修订后生成新版本，需重新审核。</Notice><div className="ref-action-row">{actions(item)}<UiButton className="btn btn-sm" onClick={() => setDrawer(item)}>版本与审核记录</UiButton></div></>;
   return <div className="ref-page"><Heading eyebrow={tab==='history'?'RFQ HISTORY':'KNOWLEDGE'} title={tab==='history'?'历史 RFQ':'标准回复库'} description={tab==='history'?'沉淀历史 RFQ 的要求、答复与适用条件，复用可追溯的项目经验。':undefined} actions={<><UiButton className="btn" disabled={!canEdit} onClick={() => {if(canEdit) { setImporting(true); }}}><Upload size={16}/>批量导入</UiButton>{!databaseBacked&&<UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => edit(null)}><Plus size={16}/>{tab === 'history' ? '新增历史 RFQ 知识' : '新增标准回复'}</UiButton>}</>}/><Notice>{databaseBacked?(canEdit?'上传标准回复文件生成草稿，由另一位具备发布资格的 BU 管理员审核。':'当前账号只能查看或按资格审核已有标准回复。'):canEdit?'所有角色均可维护应答知识；发布由BU管理员独立审核。':actorRole==='BU管理员'?'当前身份负责审核；应答知识可由所有角色维护。':'当前知识库为只读；请核对账号状态及所属BU权限。'}</Notice><div className="admin-stat-grid">{[['已发布知识',tabItems.filter(r=>r.status==='已发布').length],['候选与草稿',tabItems.filter(r=>['草稿','退回'].includes(r.status)).length],['待知识审核',tabItems.filter(r=>r.status==='待审核').length],['知识总数',tabItems.length]].map(([title,value])=><AdminCard key={title} size="small"><AdminStatistic title={title} value={value}/></AdminCard>)}</div><section className="panel"><QueryFilter className="rfq-query-form" layout="vertical" defaultCollapsed={false}
@@ -142,7 +166,13 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
  </QueryFilter><div className="ref-knowledge-layout"><div className="ref-knowledge-list ref-table-list"><div className="ref-list-heading">知识清单 <span>{filtered.length} 条</span></div><div className="table-wrap"><BusinessTable className="data-table"><thead><tr><th>编号 / 知识标题</th><th>状态</th><th>版本</th><th>操作</th></tr></thead><tbody>{pageItems.map((item) => <tr key={`${item.id}:${item.version}`} className={current?.id === item.id && current?.version === item.version ? 'ref-selected-row' : ''} onClick={() => setSelected(`${item.id}:${item.version}`)}><td><UiButton className="text-link" onClick={() => setSelected(`${item.id}:${item.version}`)}>{item.title}</UiButton><small>{item.id} · {item.source}</small></td><td><Tag>{item.status}</Tag></td><td>v{item.version}</td><td><UiButton className="text-link" onClick={() => {setSelected(`${item.id}:${item.version}`);setDrawer(item);}}>详情</UiButton></td></tr>)}</tbody></BusinessTable>{!filtered.length && <Empty/>}</div><Paginator total={filtered.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/></div><div className="ref-knowledge-detail">{filtered.length && current ? detail(current) : <Empty>选择一条知识查看详情</Empty>}</div></div></section>
   {form && <KnowledgeEditor form={form} isNew={!items.some(item => item.id === form.id)} error={error} sourceOptions={sourceOptions} lockedSource={databaseBacked} saving={mutation.busy}
     onChange={next => { setForm(next); if (error) { setError(''); } }} onSave={save} onClose={() => setForm(null)}/>}
-  {drawer && <Dialog drawer title={`${drawer.id} · 版本与审核记录`} onClose={() => setDrawer(null)}><KeyValues entries={[["当前版本",`v${drawer.version}`],['当前状态',drawer.status],['原始来源',drawer.source]]}/><h3 className="ref-section-title">版本链</h3>{items.filter((r) => r.id === drawer.id).sort((a,b) => b.version-a.version).map((r) => <div className="ref-version-row" key={r.version}><strong>v{r.version}</strong><Tag>{r.status}</Tag><UiButton className="text-link" onClick={() => {setTab(r.type);setSelected(`${r.id}:${r.version}`);setDrawer(null);}}>查看版本</UiButton></div>)}<h3 className="ref-section-title">审核与维护记录</h3><div className="ref-timeline">{(drawer.history || []).slice().reverse().map((h,i) => <div key={i}><span>{h.date}</span><p>{h.text}</p></div>)}</div></Dialog>}
+  {deleteTarget && <Dialog title="删除标准回复" onClose={mutation.busy ? ()=>{} : ()=>setDeleteTarget(null)}
+    footer={<><UiButton className="btn" disabled={mutation.busy} onClick={()=>setDeleteTarget(null)}>取消</UiButton>
+      <UiButton className="btn btn-danger" disabled={mutation.busy} onClick={deleteReply}>确认删除</UiButton></>}>
+    <p>「{deleteTarget.title}」的 v{deleteTarget.version} 将从知识清单移除。</p>
+    {error && <p className="ref-error" role="alert">{error}</p>}
+  </Dialog>}
+  {drawer && <Dialog drawer title={`${drawer.id} · 版本与审核记录`} onClose={() => setDrawer(null)}><KeyValues entries={[["当前版本",`v${drawer.version}`],['当前状态',drawer.status],['原始来源',drawer.source]]}/><h3 className="ref-section-title">版本链</h3>{visibleItems.filter((r) => r.id === drawer.id).sort((a,b) => b.version-a.version).map((r) => <div className="ref-version-row" key={r.version}><strong>v{r.version}</strong><Tag>{r.status}</Tag><UiButton className="text-link" onClick={() => {setTab(r.type);setSelected(`${r.id}:${r.version}`);setDrawer(null);}}>查看版本</UiButton></div>)}<h3 className="ref-section-title">审核与维护记录</h3><div className="ref-timeline">{(drawer.history || []).slice().reverse().map((h,i) => <div key={i}><span>{h.date}</span><p>{h.text}</p></div>)}</div></Dialog>}
   {review && <ReviewDialog {...review} onClose={() => setReview(null)} impact={!databaseBacked&&review.action === '撤销' ? 2 : 0} busy={mutation.busy} requestError={error} onConfirm={(reason) => {
     if(databaseBacked){
       setError('');

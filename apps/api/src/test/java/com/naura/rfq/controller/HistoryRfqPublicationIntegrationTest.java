@@ -45,12 +45,30 @@ class HistoryRfqPublicationIntegrationTest {
                 .andExpect(status().isOk()).andExpect(content().bytes(original));
         String version = path + "/clauses/" + id + "/versions/1";
         action(version, "submit", author, 0, "").andExpect(status().isOk());
+        action(version, "delete", author, 1, "").andExpect(status().isConflict());
         action(version, "publish", author, 1, "").andExpect(status().isForbidden());
         assertThat(jdbc.queryForObject("select count(*) from history_rfq_index_sync where bu_id=?", Integer.class, bu)).isZero();
         action(version, "publish", reviewer, 1, "已核对适用范围").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已发布"));
         assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
                 String.class, bu, id)).isEqualTo("upsert");
+        action(version, "delete", author, 2, "").andExpect(status().isConflict());
+        action(version, "revise", author, 2, "").andExpect(status().isOk());
+        String draft = path + "/clauses/" + id + "/versions/2";
+        action(draft, "delete", author, 1, "").andExpect(status().isConflict());
+        action(draft, "submit", author, 0, "").andExpect(status().isOk());
+        action(draft, "return", reviewer, 1, "核对原件").andExpect(status().isOk());
+        action(draft, "delete", author, 2, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已删除"));
+        action(draft, "submit", author, 3, "").andExpect(status().isConflict());
+        call(get("/api/rfq/business-units/" + bu + "/resources"), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyDocuments[0].id").value(documentId))
+                .andExpect(jsonPath("$.data.historyClauses.length()").value(1))
+                .andExpect(jsonPath("$.data.historyClauses[0].validity").value("有效"));
+        call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.clauses.length()").value(1));
+        action(version, "revise", author, 2, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.version").value(3));
         action(version, "revoke", reviewer, 2, "撤回失效答复").andExpect(status().isOk());
         assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
                 String.class, bu, id)).isEqualTo("delete");

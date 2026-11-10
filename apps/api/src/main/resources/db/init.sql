@@ -376,6 +376,10 @@ alter table project
     add column group_values json null;
 -- RFQ_MIGRATION_V17_END
 
+-- RFQ_MIGRATION_V18
+alter table customer_document add column history_document_ids varchar(1299) null;
+-- RFQ_MIGRATION_V18_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

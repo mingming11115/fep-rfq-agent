@@ -39,6 +39,7 @@ import './response-page.css';
 import { sectionLabel } from '../documentStructure';
 import AssessmentPanel from '../components/AssessmentPanel';
 import RequirementMatchPanel from '../components/RequirementMatchPanel';
+import DocumentRecallControl from '../components/DocumentRecallControl';
 import RecommendedWording from '../components/RecommendedWording';
 import { generateRecommendedWording } from '../responseAdvice';
 import { matchingSuggestion } from '../responseRecommendation';
@@ -62,16 +63,18 @@ function Notice({ children, warning = false, loading = false }) {
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
 
-export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange,sourceReparse, logEvent = () => {} }) {
+export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange,sourceReparse, logEvent = () => {} }) {
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
   const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
   const routedSourceRow = route?.fileId && requirements.find(row => row.sourceFileId === route.fileId);
   const initialRow = selectResponseEntry({requirements,reviews,state:appState,projectId:project.id,actorRole,actorId,requirementId:focusedRequirementId||route?.requirementId||(!route?.reviewId&&routedSourceRow?.id),reviewId:route?.reviewId});
   const [activeId, setActiveId] = useState(initialRow?.id || null);
+  const [recallByDocument, setRecallByDocument] = useState({});
   const active = requirements.find((r) => r.id === activeId) || requirements[0];
   const databaseBacked = appState.dataSource === 'mysql';
   const [confirmationHistory, setConfirmationHistory] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [form, setForm] = useState(() => toForm(initialRow));
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
@@ -500,6 +503,22 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const sourceSummary=getProjectSourceSummary(appState,project.id);
   const parsingFiles=sourceSummary.files.filter(isSourceParsing);
   const canManageSource=canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id});
+  async function deleteExtractedClause() {
+    if (cardBusyRef.current || !deleteTarget || deleteTarget.id !== active?.id) { return; }
+    cardBusyRef.current = true;
+    setCardBusy(true);
+    try {
+      if (await onDeleteExtractedRequirement(deleteTarget)) {
+        setDeleteTarget(null);
+        setSelected(ids => ids.filter(id => id !== deleteTarget.id));
+        setQuoteDraft(null);
+        setActiveCommentId(null);
+      }
+    } finally {
+      cardBusyRef.current = false;
+      if (aliveRef.current) { setCardBusy(false); }
+    }
+  }
   const retrySources=()=>onFilesChange?.(project.id,(appState.documentsByProject?.[project.id]||[]).map(file=>sourceSummary.files.some(source=>source.id===file.id)&&(sourceSummary.status!=='failed'||file.status==='失败')?{...file,status:'排队中',error:''}:file));
   const detailTabs = <Tabs className="rfq-detail-native-tabs" aria-label="RFQ 详情分区" activeKey={detailTab}
     onChange={changeDetailTab} animated={{ inkBar:true, tabPane:false }}
@@ -516,9 +535,11 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const projectActivity = <ProjectActivityPanel key={project.id} project={project} requirements={requirements}
     reviews={reviews} snapshots={appState.snapshotsByProject?.[project.id] || []} audit={appState.audit || []}
     databaseBacked={appState.dataSource === 'mysql'} accountsById={appState.accountsById}/>;
-  if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':'当前文件正在解析，完成后可在这里处理应答项。'}/>}</div></div></div></div>; }
+  if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':sourceSummary.status==='parsing'?'当前文件正在解析，完成后可在这里处理应答项。':'当前项目暂无可应答条款。'}/>}</div></div></div></div>; }
   const activeSourceAnchor={ ...makeSourceAnchor({ ...active, projectId: project.id }), ...(route?.requirementId === active.id ? { sourceVersion: route.sourceVersion || String(active.sourceVersion || '1'), fileId: route.fileId || active.sourceFileId || active.source || 'manual' } : {}) };
   const reparseFileId=active.sourceFileId;
+  const activeDocument=sourceSummary.files.find(file=>file.id===reparseFileId);
+  const recallIds=recallByDocument[activeDocument?.backendDocumentId] ?? activeDocument?.historyDocumentIds ?? [];
   const canReparseCurrent=!staleSource&&reparseFileId&&sourceReparse?.hasSources(project.id,reparseFileId);
   const reparseBlocked=dirty||reviewForm||candidateDirty.current||cardBusy;
   const reparseAction=canReparseCurrent&&<UiButton className="btn btn-sm" aria-label="重新解析当前文件"
@@ -539,14 +560,22 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 
         {detailTab === 'activity' && projectActivity}
         <div className="detail-clause-content response-clarification" style={{ display: detailTab === 'response' ? 'flex' : 'none' }}>
+          {databaseBacked&&activeDocument?.backendDocumentId&&<DocumentRecallControl key={activeDocument.backendDocumentId}
+            projectId={project.id} document={activeDocument} ids={recallIds}
+            historyDocuments={appState.resourcesByBuId?.[project.buId]?.historyDocuments || []}
+            canEdit={canManageSource&&!staleSource} disabled={!!reparseBlocked} toast={toast}
+            onSaved={ids=>setRecallByDocument(previous=>({...previous,[activeDocument.backendDocumentId]:ids}))}/>}
           <ResponseCardFilters stats={cardStats} filters={cardFilters} draft={cardFilterDraft} disabled={cardBusy} onApply={applyCardFilters}/>
           <div className="response-card-workspace">
           <div className="response-card-deck" aria-busy={cardBusy}>
             {cardVisible ? <article ref={cardRef} className="response-current-card" aria-label="当前应答项"><fieldset disabled={cardBusy}>
 <section className="panel response-editor">
   <div className="response-column-heading">
-    <h2>应答编辑</h2>
     {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
+    {onDeleteExtractedRequirement && canManageSource && !staleSource && active.backendVersion != null &&
+      <UiButton className="text-link" danger disabled={!!reparseBlocked} onClick={() => setDeleteTarget(active)}>
+        删除误提取条款
+      </UiButton>}
     {databaseBacked && <UiButton className="text-link" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
       <History size={15}/>确认历史
     </UiButton>}
@@ -562,7 +591,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   <Description rows={[[ '描述', active.requirementText || active.original ], [ '规格', active.specification ]]}/>
   <div hidden className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
         {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<UiButton className="text-link" onClick={() => goPage('export')}>查看最终审批</UiButton></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<UiButton className="text-link" onClick={() => openInlineReview(openReview.id)}>查看事项</UiButton></Notice>}
-        {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}{databaseBacked ? <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}`} row={active}
+        {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}{databaseBacked ? <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}:${recallIds.join(',')}`} row={active}
           resources={appState.resourcesByBuId?.[project.buId]} canRun={canEdit && !active.needsReview && canPerform(actorRole,'analysis:run')}
           canSetInput={canEdit && !active.needsReview && ['SR','技术','BU管理员'].includes(actorRole)}
           canAdopt={canEdit} actorId={actorId} canCloseDeviation={[project.ownerId,active.confirmationAssigneeId].includes(actorId)}
@@ -644,6 +673,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       </Notice>
       <div className="table-wrap response-batch-table"><BusinessTable className="data-table"><thead><tr><th>条款 / 要求</th><th>状态</th><th>执行结果</th></tr></thead><tbody>{(batchResults || []).map(row => <tr key={row.id}><td>{row.clause} {row.title}</td><td><StatusBadge status={responseStatusLabel(row, reviews)} /></td><td><StatusBadge status={row.result}/><p>{row.message}</p></td></tr>)}</tbody></BusinessTable></div>
     </Modal>}</OverlayPresence>
+    {deleteTarget && <Modal title="删除误提取条款" onClose={() => { if (!cardBusyRef.current) { setDeleteTarget(null); } }} footer={<>
+      <UiButton disabled={cardBusy} onClick={() => setDeleteTarget(null)}>取消</UiButton>
+      <UiButton danger loading={cardBusy} onClick={deleteExtractedClause}>确认删除</UiButton>
+    </>}>
+      <p><strong>{[deleteTarget.clause, deleteTarget.title].filter(Boolean).join(' · ')}</strong></p>
+      <p>此条将从应答、评审和导出范围中移除。客户原件会保留。</p>
+    </Modal>}
     {realAdoption && <Modal title="核对比对建议" onClose={()=>setRealAdoption(null)}
       footer={<><UiButton className="btn" onClick={()=>setRealAdoption(null)}>保留当前应答</UiButton>
         <UiButton className="btn btn-primary" onClick={()=>applyMatch(realAdoption.run,realAdoption.candidate)}>采用到草稿</UiButton></>}>

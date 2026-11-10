@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Alert, Button, Card, Input, Select, Space, Tag} from 'antd';
 import {api} from '../authClient.js';
 import {Modal} from './ui';
+import HistoryRecallPicker from './HistoryRecallPicker';
 
 const labels = {pending:'待核对',active:'已生效',cancelled:'已取消'};
 const path = (projectId, newId) => `/projects/${encodeURIComponent(projectId)}/document-replacements/${encodeURIComponent(newId)}`;
@@ -9,6 +10,8 @@ const path = (projectId, newId) => `/projects/${encodeURIComponent(projectId)}/d
 export default function ProjectReplacementPanel({project, files, actorRole, actorId, onReload, toast}) {
   const [sourceId, setSourceId] = useState('');
   const [file, setFile] = useState(null);
+  const [recallMode, setRecallMode] = useState('default');
+  const [recallIds, setRecallIds] = useState([]);
   const [preview, setPreview] = useState(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,6 +31,9 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
   async function upload() {
     const body = new FormData();
     body.append('file', file);
+    if (recallMode === 'selected') {
+      recallIds.forEach(id => body.append('historyDocumentIds', id));
+    }
     await api.upload(`/projects/${encodeURIComponent(project.id)}/documents/${encodeURIComponent(sourceId)}/replacement`, body);
     setFile(null);
     setSourceId('');
@@ -54,12 +60,19 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
 
   return <Card title={`当前工作版本 V${project.workVersion || 1}`}>
     {error && !preview && <Alert type="error" message={error} showIcon/>}
-    {canEdit && <Space wrap>
+    {canEdit && <><Space wrap>
       <Select aria-label="要替换的原件" placeholder="选择要替换的原件" value={sourceId || undefined}
-        onChange={id=>{setSourceId(id);setFile(null);}} options={activeFiles.map(row => ({value:row.id,label:`${row.name} · ${row.version}`}))} style={{minWidth:260}}/>
+        disabled={busy} onChange={id=>{
+          const ids = activeFiles.find(row=>row.id===id)?.historyDocumentIds || [];
+          setSourceId(id);
+          setFile(null);
+          setRecallIds(ids);
+          setRecallMode(ids.length ? 'selected' : 'default');
+        }} options={activeFiles.map(row => ({value:row.id,label:`${row.name} · ${row.version}`}))} style={{minWidth:260}}/>
       <Input aria-label="新版原件" type="file" accept=".docx,.pdf" key={sourceId} onChange={event => setFile(event.target.files[0] || null)}/>
-      <Button disabled={!sourceId || !file} loading={busy} onClick={() => run(upload)}>登记新版</Button>
-    </Space>}
+      <Button disabled={!sourceId || !file || recallMode === 'selected' && !recallIds.length} loading={busy} onClick={() => run(upload)}>登记新版</Button>
+    </Space>{sourceId && <HistoryRecallPicker projectId={project.id} mode={recallMode} ids={recallIds}
+      onMode={setRecallMode} onIds={setRecallIds} disabled={busy}/>}</>}
     <p>核对完成前，正式评审范围沿用原件。新版解析后可先起草应答。</p>
     {replacements.map(item => {
       const next = files.find(file => file.id === item.newDocumentId);

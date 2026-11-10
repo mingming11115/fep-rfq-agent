@@ -35,6 +35,13 @@ public class DocumentService {
     private final AccessGuard access;
     private final AuditService audit;
     private final SampleRfqBuilder sampleBuilder;
+    private final HistoryRecallScope historyRecall;
+
+    public List<HistoryRecallScope.Choice> historyRecallChoices(CurrentUser user, String projectId) {
+        var project = requireProject(projectId);
+        access.requireProject(user, project);
+        return historyRecall.choices(project);
+    }
 
     public PageView<DocumentView> list(CurrentUser user, String projectId,
             int page,
@@ -57,12 +64,13 @@ public class DocumentService {
 
     @org.springframework.transaction.annotation.Transactional
     public DocumentView upload(CurrentUser user, String projectId,
-            MultipartFile file) throws IOException {
+            MultipartFile file, List<String> historyDocumentIds) throws IOException {
         Project project = projects.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         access.requireSourceManager(user, project.getBuId());
         access.requireActiveProject(project);
+        var recallIds = historyRecall.validate(project, historyDocumentIds);
 
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "请选择要上传的文件");
@@ -96,6 +104,7 @@ public class DocumentService {
         document.setSha256(stored.sha256());
         document.setStatus(CustomerDocument.STATUS_UPLOADED);
         document.setUploadedBy(user.id());
+        document.setHistoryDocumentIds(String.join(",", recallIds));
         insertOriginal(document);
 
         project.setStage("PARSING");

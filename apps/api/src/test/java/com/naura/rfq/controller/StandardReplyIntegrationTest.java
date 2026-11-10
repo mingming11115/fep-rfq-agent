@@ -78,6 +78,35 @@ class StandardReplyIntegrationTest {
                 fixture.bu(), id)).containsEntry("version", 2).containsEntry("operation", "delete");
     }
 
+    @Test void deletesUnpublishedVersionsWithoutReusingTheirVersionNumbers() throws Exception {
+        var fixture = fixture();
+        var file = csv("回复标题,客户要求,标准回复,适用条件\n现场供电,是否支持 380 V,支持 380 V,标准供电配置\n");
+        String result = call(multipart(fixture.path() + "/import").file(file), fixture.author())
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String id = JsonPath.read(result, "$.data.items[0].id");
+        String root = fixture.path() + "/" + id + "/versions/";
+        String original = root + "1";
+        action(original, "submit", fixture.author(), 0, "").andExpect(status().isOk());
+        action(original, "delete", fixture.author(), 1, "").andExpect(status().isConflict());
+        action(original, "publish", fixture.reviewer(), 1, "").andExpect(status().isOk());
+        action(original, "delete", fixture.author(), 2, "").andExpect(status().isConflict());
+        action(original, "revise", fixture.author(), 2, "").andExpect(status().isOk());
+
+        String draft = root + "2";
+        action(draft, "delete", fixture.outsider(), 0, "").andExpect(status().isForbidden());
+        action(draft, "delete", fixture.author(), 1, "").andExpect(status().isConflict());
+        action(draft, "submit", fixture.author(), 0, "").andExpect(status().isOk());
+        action(draft, "return", fixture.reviewer(), 1, "误导入").andExpect(status().isOk());
+        action(draft, "delete", fixture.author(), 2, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已删除"));
+        action(draft, "submit", fixture.author(), 3, "").andExpect(status().isConflict());
+        call(get(fixture.path().replace("/standard-replies", "/resources")), fixture.author())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.knowledge.length()").value(1))
+                .andExpect(jsonPath("$.data.knowledge[0].validity").value("有效"));
+        action(original, "revise", fixture.author(), 2, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.version").value(3));
+    }
+
     @Test void legacyReviewCanBeReturnedButRestrictedRecordsCannotBePublishedToABuDataset() throws Exception {
         var fixture = fixture();
         jdbc.update("insert into `standard-reply-record`(bu_id,id,version,scope,payload) values (?,?,1,?,?)",

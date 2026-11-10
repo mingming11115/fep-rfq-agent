@@ -9,3 +9,16 @@ test('repeated Word clauses use their distinct headings for native navigation',(
   assert.deepEqual(craftClauseTargets(source,rows,'wordcraft').map(t=>t.quote),['P3 Delivery pending\nSame words','C3 Delivery confirmed\nSame words','Unique words']);
   assert.deepEqual(craftClauseTargets(source,rows,'pdfcraft').map(t=>t.quote),['Same words','Same words','Unique words']);
 });
+
+test('Word table targets use native cell text without changing punctuation inside cells',()=>{
+  const source={projectId:'P',fileId:'F',sourceVersion:'1'};
+  const row=(id,original)=>({id,projectId:'P',sourceFileId:'F',original});
+  const rows=[row('table','2：定位精度 Positioning Accuracy：≤ 0.05 mm：B：条件：额定负载'),
+    row('model','4 | 噪声 Noise Level | ≤ 65 dB | C | 条件：正常运行'),
+    row('paragraph','注：保持原文标点'),row('literal','3：供电：220 V')];
+  const blocks=[{type:'table',content:'No | 项目Item | 规格 | Rev | Description\n2 | 定位精度 Positioning Accuracy | ≤ 0.05 mm | B | 条件：额定负载\n3 | 供电 | 220 V\n4 | 噪声 Noise Level | ≤ 65 dB | C | 条件：正常运行'},
+    {type:'paragraph',content:'注：保持原文标点'}, {type:'paragraph',content:'3：供电：220 V'}];
+  assert.deepEqual(craftClauseTargets(source,rows,'wordcraft',blocks).map(t=>t.quote),
+    ['2 定位精度 Positioning Accuracy ≤ 0.05 mm B 条件：额定负载','4 噪声 Noise Level ≤ 65 dB C 条件：正常运行','注：保持原文标点','3：供电：220 V']);
+  assert.deepEqual(craftClauseTargets(source,rows,'pdfcraft',blocks).map(t=>t.quote),rows.map(r=>r.original));
+});

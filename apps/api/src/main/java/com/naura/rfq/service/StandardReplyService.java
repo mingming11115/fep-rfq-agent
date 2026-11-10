@@ -109,6 +109,7 @@ public class StandardReplyService {
             case "return" -> returnForEdit(user, buId, record, reason);
             case "revoke" -> revoke(user, buId, chain, record, reason);
             case "revise" -> revise(user, buId, chain, record);
+            case "delete" -> deleteDraft(user, buId, record);
             default -> throw new BusinessException(404, "未知的标准回复操作");
         };
     }
@@ -121,10 +122,16 @@ public class StandardReplyService {
         return saveAction(user, buId, record, "提交标准回复审核", reason);
     }
 
+    private ObjectNode deleteDraft(CurrentUser user, String buId, Reply record) {
+        requireState(EDITABLE.contains(record.status()), "仅草稿或退回版本可以删除");
+        record.payload().put("status", "已删除").put("validity", "已删除");
+        return saveAction(user, buId, record, "删除标准回复", "");
+    }
+
     private ObjectNode publish(CurrentUser user, String buId, List<Reply> chain, Reply record, String reason) {
         requireIndependentReview(user, record);
         requireState(!record.payload().path("submitterId").asText().isBlank(), "缺少提交人，请退回后重新提交");
-        requireState(chain.get(chain.size() - 1).version() == record.version(), "只能发布最新的待审核版本");
+        requireState(isLatestVisible(chain, record), "只能发布最新的待审核版本");
         validateContent(record);
         requireState("BU共享".equals(record.scope()) && record.projectId() == null
                 && record.payload().path("projectId").asText("").isBlank()
@@ -164,9 +171,9 @@ public class StandardReplyService {
     }
 
     private ObjectNode revise(CurrentUser user, String buId, List<Reply> chain, Reply record) {
-        requireState(chain.get(chain.size() - 1).version() == record.version(), "已经存在较新版本，请打开该版本");
+        requireState(isLatestVisible(chain, record), "已经存在较新版本，请打开该版本");
         requireState(Set.of("已发布", "已撤销").contains(record.status()), "仅已发布或已撤销版本可以修订");
-        int nextVersion = Math.addExact(record.version(), 1);
+        int nextVersion = Math.addExact(chain.get(chain.size() - 1).version(), 1);
         var next = record.payload().deepCopy();
         next.remove(List.of("submitterId", "submitterRole", "submittedAt", "publishedById", "publishedAt",
                 "approver", "supersededByVersion", "history"));
@@ -225,6 +232,10 @@ public class StandardReplyService {
         if (!allowed) {
             throw new BusinessException(409, message);
         }
+    }
+
+    private boolean isLatestVisible(List<Reply> chain, Reply record) {
+        return chain.stream().noneMatch(row -> row.version() > record.version() && !"已删除".equals(row.status()));
     }
 
     private List<Reply> lockChain(String buId, String id) {

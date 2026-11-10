@@ -1,6 +1,7 @@
 package com.naura.rfq.model.entity;
 
 import java.time.Instant;
+import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -40,4 +41,11 @@ public class CustomerDocument {
     private String uploadedBy;
 
     private Instant createdAt = Instant.now();
+
+    private String historyDocumentIds;
+
+    public List<String> historyRecallIds() {
+        return historyDocumentIds == null || historyDocumentIds.isEmpty()
+                ? List.of() : List.of(historyDocumentIds.split(","));
+    }
 }

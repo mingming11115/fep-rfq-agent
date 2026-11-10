@@ -41,6 +41,8 @@ class DatabaseInit {
     private static final String V16_END = "-- RFQ_MIGRATION_V16_END";
     private static final String V17_START = "-- RFQ_MIGRATION_V17\n";
     private static final String V17_END = "-- RFQ_MIGRATION_V17_END";
+    private static final String V18_START = "-- RFQ_MIGRATION_V18\n";
+    private static final String V18_END = "-- RFQ_MIGRATION_V18_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -78,7 +80,10 @@ class DatabaseInit {
         var projectGroups = resource("V17__project_group_binding.sql",
                 sql.substring(sql.indexOf(V17_START) + V17_START.length(), sql.indexOf(V17_END)),
                 "classpath:db/init.sql#V17");
-        var resources = List.of(baseline, standardReplies, history, capability, match, workflow, replacements, projectGroups);
+        var historyRecall = resource("V18__document_history_recall.sql",
+                sql.substring(sql.indexOf(V18_START) + V18_START.length(), sql.indexOf(V18_END)),
+                "classpath:db/init.sql#V18");
+        var resources = List.of(baseline, standardReplies, history, capability, match, workflow, replacements, projectGroups, historyRecall);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {
@@ -114,7 +119,8 @@ class DatabaseInit {
                         Integer.class, IMPORT_MARKER) == 1) {
                 if (hasTable(jdbc, "standard-reply-record") && hasTable(jdbc, "history-rfq-record")
                         && hasTable(jdbc, "standard_reply_index_sync")) {
-                    String version = hasColumn(jdbc, "project", "group_id") ? "17"
+                    String version = hasColumn(jdbc, "customer_document", "history_document_ids") ? "18"
+                            : hasColumn(jdbc, "project", "group_id") ? "17"
                             : hasTable(jdbc, "rfq_document_replacement") ? "16"
                             : hasTable(jdbc, "project_work_version") ? "15"
                             : hasTable(jdbc, "requirement_match_result") ? "14"

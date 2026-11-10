@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface CustomerDocumentMapper {
+    int updateHistoryRecall(CustomerDocument document);
 
     Optional<CustomerDocument> findById(@Param("id") String id);
 

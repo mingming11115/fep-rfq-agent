@@ -75,6 +75,9 @@ public class KnowledgeGroupService {
                 .stream().findFirst().orElseThrow(() -> new BusinessException(404, "知识版本不存在"));
         access.requireScope(user, bu, record.projectId(), record.scope());
         var data = record.payload();
+        if ("reply".equals(kind) && "已删除".equals(data.path("status").asText())) {
+            throw new BusinessException(409, "已删除的标准回复不能修改分组");
+        }
         String origin = KnowledgePublicationAccess.recordProjectId(data);
         if (!origin.isBlank()) {
             access.requireScope(user, bu, origin, "仅当前项目");

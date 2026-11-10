@@ -29,13 +29,22 @@ class MatchEvaluator {
     static final String CAPABILITY = "capability";
     static final List<String> DEFAULT_ORDER = List.of(STANDARD, HISTORY, CAPABILITY);
     private static final int MAX_SEARCH_IDS = 100;
+    // Leave time to save the result inside the 90-second worker lease (8 seconds per search).
+    private static final int MAX_SCOPED_SEARCH_IDS = 8 * MAX_SEARCH_IDS;
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final StandardReplyIndexClient search;
     private final CapabilityMatch capability;
+    private final HistoryRecallScope historyRecall;
     private final MatchTextScorer scorer = new MatchTextScorer();
 
-    record Input(String bu, String project, JsonNode snapshot, List<String> order) {}
+    record Input(String bu, String project, JsonNode snapshot, List<String> order) {
+        List<String> historyDocumentIds() {
+            var ids = new ArrayList<String>();
+            snapshot.path("historyDocumentIds").forEach(item -> ids.add(item.asText()));
+            return ids;
+        }
+    }
     record Evaluation(String state, ObjectNode result, ObjectNode stamp, int retrySeconds) {}
     private record Source(String id, int version, long revision, boolean shared, boolean synced, String syncStamp, JsonNode payload) {}
     private record Scope(Map<String, Source> sources, boolean unknown) {}
@@ -122,13 +131,15 @@ class MatchEvaluator {
     private ObjectNode textStage(Input input, String library, Scope scope) {
         var stage = json.createObjectNode();
         if (scope.unknown()) {
-            return stage.put("status", "blocked").put("reason", "SOURCE_SCOPE_UNVERIFIED");
+            return stage.put("status", "blocked").put("reason", input.historyDocumentIds().isEmpty()
+                    ? "SOURCE_SCOPE_UNVERIFIED" : "HISTORY_FILE_UNAVAILABLE");
         }
         var shared = scope.sources().values().stream().filter(Source::shared).toList();
         if (shared.stream().anyMatch(source -> !source.synced())) {
             return stage.put("status", "blocked").put("reason", "INDEX_NOT_READY");
         }
-        if (scope.sources().size() > MAX_SEARCH_IDS) {
+        int limit = input.historyDocumentIds().isEmpty() ? MAX_SEARCH_IDS : MAX_SCOPED_SEARCH_IDS;
+        if (scope.sources().size() > limit) {
             return stage.put("status", "blocked").put("reason", "SEARCH_SCOPE_TOO_LARGE");
         }
         var ids = new ArrayList<String>();
@@ -137,14 +148,18 @@ class MatchEvaluator {
             if (query.length() > 6000) {
                 return stage.put("status", "blocked").put("reason", "QUERY_TOO_LONG");
             }
-            var response = search.search(input.bu(), HISTORY.equals(library), query, shared.stream().map(Source::id).toList());
-            stage.put("platformRequestId", response.requestId()).put("indexVersion", response.indexVersion());
-            for (var hit : response.hits()) {
-                var source = scope.sources().get(hit.id());
-                if (source == null || hit.version() != source.version()) {
-                    return stage.put("status", "blocked").put("reason", "INDEX_NOT_READY");
+            var sharedIds = shared.stream().map(Source::id).toList();
+            for (int from = 0; from < sharedIds.size(); from += MAX_SEARCH_IDS) {
+                var batch = sharedIds.subList(from, Math.min(from + MAX_SEARCH_IDS, sharedIds.size()));
+                var response = search.search(input.bu(), HISTORY.equals(library), query, batch);
+                stage.put("platformRequestId", response.requestId()).put("indexVersion", response.indexVersion());
+                for (var hit : response.hits()) {
+                    var source = scope.sources().get(hit.id());
+                    if (!batch.contains(hit.id()) || source == null || hit.version() != source.version()) {
+                        return stage.put("status", "blocked").put("reason", "INDEX_NOT_READY");
+                    }
+                    ids.add(hit.id());
                 }
-                ids.add(hit.id());
             }
         }
         // A published project-only history clause stays in this service and uses the same local rule.
@@ -194,6 +209,11 @@ class MatchEvaluator {
 
     private Scope scope(Input input, String library) {
         boolean history = HISTORY.equals(library);
+        var selected = history ? input.historyDocumentIds() : List.<String>of();
+        if (!selected.isEmpty() && !historyRecall.allowed(input.bu(), input.project(), selected)) {
+            return new Scope(Map.of(), true);
+        }
+        String fileFilter = String.join(",", selected);
         String table = history ? "`history-rfq-record`" : "`standard-reply-record`";
         String index = history ? "history_rfq_index_sync" : "standard_reply_index_sync";
         var sources = new LinkedHashMap<String, Source>();
@@ -205,10 +225,11 @@ class MatchEvaluator {
                 from %s r left join %s s on s.bu_id=r.bu_id and s.reply_id=r.id
                 where r.bu_id=? and (r.project_id is null or r.project_id=?)
                   and json_unquote(json_extract(r.payload,'$.status'))='已发布'
+                  and (?='' or find_in_set(r.payload->>'$.documentId',?)>0)
                 order by r.id,r.version
                 """.formatted(table, index), (rs, n) -> new SourceRow(rs.getString("id"), rs.getInt("version"),
                 rs.getLong("revision"), rs.getString("project_id"), rs.getString("scope"), rs.getBoolean("synced"),
-                rs.getString("sync_stamp"), parse(rs.getString("payload"))), input.bu(), input.project())) {
+                rs.getString("sync_stamp"), parse(rs.getString("payload"))), input.bu(), input.project(), fileFilter, fileFilter)) {
             String validity = text(row.payload(), "validity");
             if (List.of("已撤销", "被替代", "已过期", "已失效").contains(validity)) {
                 continue;

@@ -78,8 +78,12 @@ public class BusinessRecordService {
     public Map<String,Object> resources(CurrentUser user,String buId){
         guard.requireBu(user,buId);
         var result=new LinkedHashMap<String,Object>();
-        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document","historyClauses","`history-rfq-record`").entrySet())
-            result.put(entry.getKey(),rows("select payload from "+entry.getValue()+" where bu_id=? order by id,version",buId).stream().filter(row->readable(user,row)).toList());
+        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document","historyClauses","`history-rfq-record`").entrySet()) {
+            boolean hasDeletedVersions = entry.getKey().equals("knowledge") || entry.getKey().equals("historyClauses");
+            result.put(entry.getKey(),rows("select payload from "+entry.getValue()+" where bu_id=? order by id,version",buId).stream()
+                    .filter(row -> !hasDeletedVersions || !"已删除".equals(row.path("status").asText()))
+                    .filter(row->readable(user,row)).toList());
+        }
         var catalog=rows("select payload from knowledge_group_catalog where bu_id=?",buId);
         result.put("catalog",catalog.isEmpty()?json.nullNode():catalog.get(0));
         return result;

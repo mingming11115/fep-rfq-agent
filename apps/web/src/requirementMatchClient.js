@@ -9,6 +9,9 @@ export const MATCH_LIBRARIES = {
 
 export function matchClient(client = api) {
   return {
+    historyOptions: projectId => client.get(`/projects/${encodeURIComponent(projectId)}/history-recall-options`),
+    saveDocumentScope: (id, historyDocumentIds) =>
+      client.put(`/documents/${encodeURIComponent(id)}/match-scope`, {historyDocumentIds}),
     current: id => client.get(`${requirement(id)}/match-result`),
     retry: (id, sourceRequirementVersion, requestId = crypto.randomUUID()) =>
       client.post(`${requirement(id)}/match-runs`, { sourceRequirementVersion, requestId }),

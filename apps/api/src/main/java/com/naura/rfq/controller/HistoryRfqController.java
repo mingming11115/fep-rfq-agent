@@ -105,7 +105,7 @@ public class HistoryRfqController {
         return ApiResponse.success(review.updateDraft(CurrentUserHolder.require(), buId, id, version, request));
     }
 
-    @PostMapping(CLAUSE + "/{action:submit|publish|return|revoke|revise}")
+    @PostMapping(CLAUSE + "/{action:submit|publish|return|revoke|revise|delete}")
     public ApiResponse<ObjectNode> transition(@PathVariable String buId, @PathVariable String id, @PathVariable int version,
             @PathVariable String action, @Valid @RequestBody ReviewRequest request) {
         return ApiResponse.success(review.transition(CurrentUserHolder.require(), buId, id, version, request.revision(),

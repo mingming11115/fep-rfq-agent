@@ -36,6 +36,106 @@ class RequirementMatchIntegrationTest {
     @Autowired com.naura.rfq.service.RequirementMatchService matches;
     @MockitoSpyBean StandardReplyIndexClient index;
 
+    @Test void deletingAnExtractedClauseRemovesItFromTheWorklistAndPreservesTheSource() throws Exception {
+        var f = fixture();
+        String projectPath = "/api/rfq/projects/" + f.project();
+        String document = request(multipart(projectPath + "/documents").file(rfqFile(
+                "1.1 设备应支持自动上料并具备安全联锁。",
+                "1.2 设备应提供独立排气接口。")), f).path("id").asText();
+        String parsePath = "/api/rfq/documents/" + document + "/parse-runs";
+        assertThat(request(post(parsePath), f).path("requirementCount").asInt()).isEqualTo(2);
+        var run = firstRun(f, document);
+        String id = run.path("requirementId").asText();
+        String path = "/api/rfq/requirements/" + id;
+
+        mvc.perform(delete(path).param("version", "1").header("Authorization", f.auth()))
+                .andExpect(status().isConflict());
+        request(delete(path).param("version", "0"), f);
+
+        var remaining = request(get(projectPath + "/requirements"), f);
+        assertThat(remaining.path("total").asInt()).isEqualTo(1);
+        assertThat(remaining.at("/list/0/customerClauseNo").asText()).isEqualTo("1.2");
+        assertThat(request(get(projectPath + "/match-results"), f).at("/list/0/requirementId").asText())
+                .isEqualTo(remaining.at("/list/0/id").asText());
+        assertThat(jdbc.queryForObject("select status from requirement_match_run where id=?",
+                String.class, run.path("runId").asText())).isEqualTo("superseded");
+        assertThat(jdbc.queryForObject("select count(*) from document_block where document_id=?",
+                Integer.class, document)).isPositive();
+        mvc.perform(post(parsePath).header("Authorization", f.auth()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test void uploadScopesTheFirstRecallAndChangingItRequeuesWithoutReparsing() throws Exception {
+        var f = fixture();
+        String a = "HD-A", b = "HD-B";
+        for (String id : List.of(a, b)) {
+            var document = json.createObjectNode().put("id", id).put("name", id)
+                    .put("scope", "BU共享").put("version", "V1");
+            jdbc.update("insert into history_document(bu_id,id,version,scope,payload) values (?,?,1,'BU共享',?)",
+                    f.bu(), id, document.toString());
+        }
+        String options = "/api/rfq/projects/" + f.project() + "/history-recall-options";
+        assertThat(request(get(options), f).at("/0/status").asText()).isEqualTo("unpublished");
+        String id = request(multipart("/api/rfq/projects/" + f.project() + "/documents")
+                .file(rfqFile("1.1 设备应支持自动上料并具备安全联锁。")).param("historyDocumentIds", a), f).path("id").asText();
+        var parse = request(post("/api/rfq/documents/" + id + "/parse-runs"), f);
+        var first = firstRun(f, id);
+        String requirement = first.path("requirementId").asText(), firstId = first.path("runId").asText();
+        String body = jdbc.queryForObject("select requirement_text from requirement where id=?", String.class, requirement);
+        for (String source : List.of(a, b)) {
+            var clause = json.createObjectNode().put("documentId", source).put("status", "已发布")
+                    .put("validity", "有效").put("requirement", body).put("answer", source);
+            jdbc.update("""
+                    insert into `history-rfq-record`(bu_id,id,version,scope,payload) values (?,?,1,'BU共享',?)
+                    """, f.bu(), source + "-CLAUSE", clause.toString());
+        }
+        assertThat(first.path("matchOrder").size()).isEqualTo(1);
+        assertThat(first.path("historyDocumentIds").get(0).asText()).isEqualTo(a);
+        worker.runOnce();
+        assertThat(request(get(options), f).at("/0/status").asText()).isEqualTo("index_pending");
+        assertThat(detail(f, requirement, firstId).at("/stages/history_rfq/reason").asText()).isEqualTo("INDEX_NOT_READY");
+        for (String source : List.of(a, b)) {
+            jdbc.update("""
+                    insert into history_rfq_index_sync(bu_id,reply_id,version,operation,updated_at,synced_at)
+                    values (?,?,1,'upsert',utc_timestamp(6),utc_timestamp(6))
+                    """, f.bu(), source + "-CLAUSE");
+            doReturn(new StandardReplyIndexClient.SearchResult(
+                    List.of(new StandardReplyIndexClient.SearchHit(source + "-CLAUSE", 1)), "req-scope", 1))
+                    .when(index).search(eq(f.bu()), eq(true), anyString(), eq(List.of(source + "-CLAUSE")));
+        }
+        assertThat(request(get(options), f).at("/0/status").asText()).isEqualTo("ready");
+        makeDue(firstId);
+        worker.runOnce();
+        var result = detail(f, requirement, firstId).at("/result/stages/history_rfq/candidates");
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get(0).path("documentId").asText()).isEqualTo(a);
+        verify(index).search(eq(f.bu()), eq(true), anyString(), eq(List.of(a + "-CLAUSE")));
+        verify(index, never()).search(eq(f.bu()), eq(false), anyString(), anyList());
+
+        jdbc.update("insert into user_bu_role(user_id,bu_id,role) values (?,?,'SR')", f.bu() + "-A", f.bu());
+        String response = "/api/rfq/requirements/" + requirement + "/response";
+        request(patch(response).contentType("application/json").content("""
+                {"version":1,"sourceVersion":0,"patch":{"draft":"人工答复","conclusion":"Comply"}}
+                """), f);
+
+        String scope = "/api/rfq/documents/" + id + "/match-scope";
+        mvc.perform(put(scope).header("Authorization", f.auth()).contentType("application/json")
+                .content("{\"historyDocumentIds\":[\"HD-UNKNOWN\"]}")).andExpect(status().isBadRequest());
+        assertThat(firstRun(f, id).path("runId").asText()).isEqualTo(firstId);
+        request(put(scope).contentType("application/json").content("{\"historyDocumentIds\":[\"HD-B\"]}"), f);
+        var second = firstRun(f, id);
+        assertThat(second.path("requirementId").asText()).isEqualTo(requirement);
+        assertThat(second.path("parseRunId").asText()).isEqualTo(parse.path("id").asText());
+        assertThat(detail(f, requirement, firstId).path("status").asText()).isEqualTo("superseded");
+        worker.runOnce();
+        assertThat(detail(f, requirement, second.path("runId").asText())
+                .at("/result/stages/history_rfq/candidates/0/documentId").asText()).isEqualTo(b);
+        assertThat(jdbc.queryForObject("select payload->>'$.draft' from requirement_response where requirement_id=?",
+                String.class, requirement)).isEqualTo("人工答复");
+        request(put(scope).contentType("application/json").content("{\"historyDocumentIds\":[]}"), f);
+        assertThat(firstRun(f, id).path("matchOrder").size()).isEqualTo(3);
+    }
+
     @Test void policyIsVersionedAndRealParsingEnqueuesWithItsSnapshot() throws Exception {
         var f = fixture();
         var policy = "/api/rfq/business-units/" + f.bu() + "/match-policy";
@@ -278,9 +378,11 @@ class RequirementMatchIntegrationTest {
         return id;
     }
 
-    private MockMultipartFile rfqFile(String line) throws Exception {
+    private MockMultipartFile rfqFile(String... lines) throws Exception {
         try (var doc = new XWPFDocument(); var out = new ByteArrayOutputStream()) {
-            doc.createParagraph().createRun().setText(line);
+            for (String line : lines) {
+                doc.createParagraph().createRun().setText(line);
+            }
             doc.write(out);
             return new MockMultipartFile("file", "rfq.docx", "application/octet-stream", out.toByteArray());
         }

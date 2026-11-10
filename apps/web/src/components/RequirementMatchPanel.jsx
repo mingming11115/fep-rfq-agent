@@ -16,6 +16,7 @@ const reasons = {
   MISSING_CAPABILITY_INPUT:'请确认机型、工艺、工况和要求指标',
   CONDITIONS_DIFFER:'适用条件不同或尚未核实',
   SOURCE_SCOPE_UNVERIFIED:'来源可见范围待核对',
+  HISTORY_FILE_UNAVAILABLE:'有指定的历史 RFQ 文件不可用于当前项目，请调整召回范围',
   CAPABILITY_EVIDENCE_UNAVAILABLE:'能力依据待核验',
   SEARCH_SCOPE_TOO_LARGE:'当前知识范围超过查询上限',
   QUERY_TOO_LONG:'条款超出查询长度上限',
@@ -24,7 +25,7 @@ const reasonLabel = reason => reasons[reason] || (reason ? '请核对服务状�
 const conditionLabels = {same:'适用条件一致', different:'适用条件不同', unverified:'适用条件待核对', not_specified:'来源未限定条件'};
 const checkLabels = {supports:'满足', refutes:'不满足', no_candidate:'未找到能力条目', evidence_unavailable:'证据不可用', review:'待核对'};
 
-function Candidate({candidate, action}) {
+function Candidate({candidate, sourceDocument, action}) {
   return <details><summary>{candidate.title || candidate.id} · v{candidate.version}
     {candidate.businessSimilarity != null && ` · 相似度 ${(candidate.businessSimilarity * 100).toFixed(1)}%`}
   </summary>
@@ -32,7 +33,8 @@ function Candidate({candidate, action}) {
     {candidate.answer && <p>参考答复　{candidate.answer}</p>}
     {candidate.conditions && <p>适用条件　{candidate.conditions}</p>}
     {candidate.conditionStatus && <p>{conditionLabels[candidate.conditionStatus]}</p>}
-    {candidate.source && <p>来源　{candidate.source} {candidate.clauseNo}</p>}
+    {(sourceDocument || candidate.source) && <p>来源　{[sourceDocument?.name || candidate.source,
+      sourceDocument?.version, candidate.clauseNo].filter(Boolean).join(' · ')}</p>}
     {candidate.requirementAnchor && <p>条款位置　{candidate.requirementAnchor}</p>}
     {candidate.answerAnchor && <p>答复位置　{candidate.answerAnchor}</p>}
     {candidate.value && <p>能力指标值　{candidate.value}（{candidate.valueType}）</p>}
@@ -143,6 +145,7 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
       <Space><b>{MATCH_LIBRARIES[stage.library]}</b><Tag>{statusLabels[stage.status] || stage.status}</Tag></Space>
       {stage.reason && <p>{reasonLabel(stage.reason)}</p>}
       {stage.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
+        sourceDocument={stage.library === 'history_rfq' ? resources?.historyDocuments?.find(file => file.id === candidate.documentId) : undefined}
         action={canAdopt && <Button size="small" onClick={() => onAdopt(run, candidate)}>核对并采用</Button>}/>)}
       {stage.checks?.map((check, index) => <div key={index}>
         <p>{check.deviceId} · {check.requirement?.metricCode} · {checkLabels[check.assessment] || '待核对'}</p>
@@ -154,6 +157,8 @@ export default function RequirementMatchPanel({row, resources, canRun, canSetInp
       <Button size="small" onClick={() => onAdopt(run, {id:'capability', conclusion:run.result.conclusion,
         conditions:run.result.stages.capability.restrictions?.join('；')})}>核对并采用能力结论</Button>}
     {run?.result?.knowledgeGap && <p>三库均未命中，请人工核对条款。</p>}
+    {run?.historyDocumentIds?.length > 0 && run.result?.stages?.history_rfq?.status === 'miss' &&
+      <p>指定文件内未找到匹配。</p>}
     {deviation && <div>
       <p>知识比对偏离　{deviation.status}</p>
       <ul>{deviation.triggers?.map(item => <li key={`${item.runId}:${item.type}`}>{item.reason}</li>)}</ul>

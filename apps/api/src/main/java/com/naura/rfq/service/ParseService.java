@@ -75,7 +75,7 @@ public class ParseService {
         CustomerDocument document = documents.findByIdForUpdate(documentId)
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
 
-        List<Requirement> previous = requirements.findByDocumentIdForUpdate(documentId);
+        List<Requirement> previous = requirements.findByDocumentIdForReparse(documentId);
         if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
         }

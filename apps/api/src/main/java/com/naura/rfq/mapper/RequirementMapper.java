@@ -20,6 +20,8 @@ public interface RequirementMapper {
     /** Current read after serialization: a prior RR snapshot must not hide a committed human edit. */
     List<Requirement> findByDocumentIdForUpdate(@Param("documentId") String documentId);
 
+    List<Requirement> findByDocumentIdForReparse(@Param("documentId") String documentId);
+
     List<Requirement> findPage(@Param("projectId") String projectId, @Param("q") PageQuery query);
 
     long countByProjectId(@Param("projectId") String projectId);

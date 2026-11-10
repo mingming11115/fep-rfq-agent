@@ -39,7 +39,8 @@ public class DocumentReplacementService {
     public record Activation(String fingerprint, String reason) {}
 
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = IOException.class)
-    public ObjectNode upload(CurrentUser user, String projectId, String oldId, MultipartFile file) throws IOException {
+    public ObjectNode upload(CurrentUser user, String projectId, String oldId, MultipartFile file,
+            List<String> historyDocumentIds) throws IOException {
         var project = locked(user, projectId);
         var source = document(project, oldId);
         if (work.inactiveDocuments(projectId).contains(oldId)) {
@@ -48,7 +49,7 @@ public class DocumentReplacementService {
         if (work.replacements(projectId).stream().anyMatch(row -> row.oldDocumentId().equals(oldId) && "pending".equals(row.status()))) {
             throw new BusinessException(409, "该原件已有待核对的新版");
         }
-        var replacement = originals.upload(user, projectId, file);
+        var replacement = originals.upload(user, projectId, file, historyDocumentIds);
         jdbc.update("""
                 insert into rfq_document_replacement(project_id,old_document_id,new_document_id,status,created_by)
                 values (?,?,?,'pending',?)

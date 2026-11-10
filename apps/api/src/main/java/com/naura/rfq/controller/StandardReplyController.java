@@ -47,7 +47,7 @@ public class StandardReplyController {
         return ApiResponse.success(service.updateDraft(CurrentUserHolder.require(), buId, id, version, request));
     }
 
-    @PostMapping("/{id}/versions/{version}/{action:submit|publish|return|revoke|revise}")
+    @PostMapping("/{id}/versions/{version}/{action:submit|publish|return|revoke|revise|delete}")
     public ApiResponse<ObjectNode> transition(@PathVariable String buId, @PathVariable String id,
             @PathVariable int version, @PathVariable String action, @Valid @RequestBody ReviewRequest request) {
         return ApiResponse.success(service.transition(CurrentUserHolder.require(), buId, id, version,

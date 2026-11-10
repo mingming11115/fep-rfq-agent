@@ -7,6 +7,7 @@ import com.naura.rfq.model.vo.RequirementView;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.RequirementService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,5 +46,11 @@ public class RequirementController {
     public ApiResponse<RequirementView> patch(@PathVariable String id,
             @RequestBody PatchRequirementRequest request) {
         return ApiResponse.success(service.patch(CurrentUserHolder.require(), id, request));
+    }
+
+    @DeleteMapping("/requirements/{id}")
+    public ApiResponse<Void> delete(@PathVariable String id, @RequestParam long version) {
+        service.delete(CurrentUserHolder.require(), id, version);
+        return ApiResponse.success(null);
     }
 }

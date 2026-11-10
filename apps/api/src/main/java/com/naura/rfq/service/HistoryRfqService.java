@@ -361,7 +361,9 @@ public class HistoryRfqService {
                 (row, n) -> (ObjectNode) decode(row.getString("payload")), scope.buId(), fingerprint).stream().findFirst()
                 .map(document -> new Intake(document, jdbc.query("""
                         select payload from `history-rfq-record`
-                        where bu_id=? and json_unquote(json_extract(payload,'$.documentId'))=? order by id,version
+                        where bu_id=? and json_unquote(json_extract(payload,'$.documentId'))=?
+                          and coalesce(payload->>'$.status','')<>'已删除'
+                        order by id,version
                         """ + lock, (row, n) -> (ObjectNode) decode(row.getString("payload")),
                         scope.buId(), document.path("id").asText()), true)).orElse(null);
     }
@@ -379,9 +381,10 @@ public class HistoryRfqService {
     private ObjectNode draft(CurrentUser user, Scope scope, ObjectNode document, ObjectNode source) {
         String id = Ids.next("HR");
         String requirement = source.path("requirement").asText();
-        int titleLength = Math.min(200, requirement.codePointCount(0, requirement.length()));
+        String title = source.path("title").asText(requirement);
+        int titleLength = Math.min(200, title.codePointCount(0, title.length()));
         source.put("id", id).put("documentId", document.path("id").asText()).put("buId", scope.buId())
-                .put("type", "history").put("title", requirement.substring(0, requirement.offsetByCodePoints(0, titleLength)))
+                .put("type", "history").put("title", title.substring(0, title.offsetByCodePoints(0, titleLength)))
                 .put("version", 1).put("revision", 0).put("status", "草稿").put("validity", "待核对")
                 .put("scope", scope.name()).put("source", document.path("name").asText())
                 .put("sourceType", document.path("sourceType").asText()).put("author", user.displayName());

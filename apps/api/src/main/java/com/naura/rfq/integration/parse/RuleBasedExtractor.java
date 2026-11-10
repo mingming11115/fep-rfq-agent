@@ -24,6 +24,9 @@ import org.springframework.stereotype.Component;
 public class RuleBasedExtractor implements RequirementExtractor {
 
     private static final int MAX_REQUIREMENT_CHARS = 4000;
+    private static final Pattern ITEM_HEADER = Pattern.compile("(?iU)(?:项目\\s*item|item\\s*项目|item|项目名称|项目)");
+    private static final Pattern SPECIFICATION_HEADER = Pattern.compile("(?iU)(?:规格(?:\\s*spec(?:ification)?)?|spec(?:ification)?)");
+    private static final Pattern OTHER_TABLE_HEADER = Pattern.compile("(?i)(?:no\\.?|rev\\.?|description)");
 
     /** 1 / 1.1 / 1.1.1 with a separator or at least one space, so years are not mistaken for clauses. */
     private static final Pattern NUMBERING =
@@ -141,7 +144,13 @@ public class RuleBasedExtractor implements RequirementExtractor {
         if (rows.isEmpty()) {
             return results;
         }
-        int start = looksLikeHeader(rows.get(0)) ? 1 : 0;
+        List<String> header = rows.get(0);
+        int itemColumn = tableItemColumn(header);
+        int specificationColumn = headerColumn(header, SPECIFICATION_HEADER);
+        boolean hasHeader = looksLikeHeader(header) || (itemColumn >= 0 && specificationColumn >= 0)
+                || ((itemColumn >= 0 || specificationColumn >= 0) && header.stream()
+                    .map(String::strip).anyMatch(cell -> OTHER_TABLE_HEADER.matcher(cell).matches()));
+        int start = hasHeader ? 1 : 0;
         for (int rowIndex = start; rowIndex < rows.size(); rowIndex++) {
             List<String> cells = rows.get(rowIndex);
             String joined = joinCells(cells);
@@ -155,23 +164,70 @@ public class RuleBasedExtractor implements RequirementExtractor {
                 reasons.add("检测到数值但未识别单位");
             }
             String clauseNo = cellNumber(cells);
+            String item = tableCell(cells, hasHeader ? itemColumn : -1);
+            String specification = tableCell(cells, hasHeader ? specificationColumn : -1);
+            String metricsJson = metricsJson(specification, metrics);
             results.add(new ExtractedRequirement(
                     startOrder + results.size(),
                     block.index(),
                     section,
                     clauseNo,
-                    titleOf(joined),
+                    item.isEmpty() ? titleOf(joined) : item,
                     2,
                     null,
                     joined,
                     joined,
-                    metrics.isEmpty() ? null : writeJson(metrics),
+                    metricsJson,
                     null,
                     obligationOf(joined),
                     ExtractedRequirement.NEEDS_REVIEW,
                     String.join("；", reasons)));
         }
         return results;
+    }
+
+    /** Describe a known customer clause, using a table row with only customer-side cells. */
+    public ExtractedRequirement describeKnownRequirement(int order, RawBlock block, String clauseNo,
+            String item, String description, String specification, String conditions, List<String> reviewReasons) {
+        String original = block.isTable() ? joinCells(block.tableRows().get(0)) : block.text().strip();
+        String body = block.isTable() ? original : description;
+        List<Map<String, String>> metrics = extractMetrics(body);
+        String number = clauseNo.isBlank() ? null : clauseNo;
+        int level = block.isTable() || number == null ? 2 : number.split("\\.").length;
+        return new ExtractedRequirement(order, block.index(), block.sectionPath(), number,
+                item.isBlank() ? titleOf(description) : item, level,
+                number == null || block.isTable() ? null : parentOf(number), original, description,
+                metricsJson(specification, metrics), conditions.isBlank() ? null : conditions, obligationOf(body),
+                reviewReasons.isEmpty() ? ExtractedRequirement.VALID : ExtractedRequirement.NEEDS_REVIEW,
+                reviewReasons.isEmpty() ? null : String.join("；", reviewReasons));
+    }
+
+    private String metricsJson(String specification, List<Map<String, String>> metrics) {
+        if (!specification.isEmpty()) {
+            return writeJson(Map.of("specification", specification, "metrics", metrics));
+        }
+        return metrics.isEmpty() ? null : writeJson(metrics);
+    }
+
+    static int tableItemColumn(List<String> header) {
+        return headerColumn(header, ITEM_HEADER);
+    }
+
+    private static int headerColumn(List<String> header, Pattern pattern) {
+        int column = -1;
+        for (int index = 0; index < header.size(); index++) {
+            if (pattern.matcher(header.get(index).strip()).matches()) {
+                if (column >= 0) {
+                    return -1;
+                }
+                column = index;
+            }
+        }
+        return column;
+    }
+
+    private String tableCell(List<String> cells, int column) {
+        return column >= 0 && column < cells.size() ? cells.get(column).strip() : "";
     }
 
     private String joinCells(List<String> cells) {

@@ -5,6 +5,7 @@ import {FileText,MoreHorizontal,Upload} from './icons';
 import {craftRequest,craftSourceKey,craftDemoAsset,loadCraftDemo,uploadCraftFile,importOfficeReview,assertCraftSource,createCraftSaveQueue,saveCraftReview,downloadCraftFile,downloadCraftBlob,supportsCraft} from '../craftClient';
 import {createCraftProjectEditor} from '../craftEditorBridge';
 import {importDatabaseOriginal} from '../databaseSource.js';
+import {api} from '../authClient.js';
 import CraftResponseAdvice from './CraftResponseAdvice';
 import {AnnotationFilterView} from './annotationFilterView';
 import classicTemplate from '../../../../packages/craft-editors/site/classic.html?raw';
@@ -19,6 +20,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const bindingKey='fep-rfq-craft-source:'+craftSourceKey(source);
   const [reference,setReference]=useState(()=>file?.craft||read(bindingKey));
   const [meta,setMeta]=useState(null),[bytes,setBytes]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
+  const [sourceBlocks,setSourceBlocks]=useState(null);
   const [dirty,setDirty]=useState(false),[saving,setSaving]=useState(false),[expanded,setExpanded]=useState(false),[retry,setRetry]=useState(0);
   const [editorState,setEditorState]=useState({ready:false,source:{status:'waiting'},unlinked:[],conflicts:[]});
   const [locationNotice,setLocationNotice]=useState(null),[locationConfirmation,setLocationConfirmation]=useState(0),[locateRequest,setLocateRequest]=useState(null);
@@ -28,7 +30,8 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   const moreTrigger=useRef(null),saveRequest=useRef(false),downloadRequest=useRef(false);
   const frame=useRef(null),overlay=useRef(null),tools=useRef(null),picker=useRef(null),editor=useRef(null),saveQueue=useRef(null);
   const alive=useRef(true),generation=useRef(0),dirtyRef=useRef(false),pendingSaves=useRef(0),abortLoad=useRef(null);
-  const latest=useRef();latest.current={rows,comments:allComments,people,canEditRow,editDocument:canManage,selectedAnchor,activeCommentId,onProjectCommentsChange,onSelectAnchor,onSelectComment,onUnlinkedComment};
+  const blockScope=JSON.stringify([file?.backendDocumentId,file?.lastRunId,file?.status,user?.id]);
+  const latest=useRef();latest.current={rows,sourceBlocks:sourceBlocks?.scope===blockScope?sourceBlocks.blocks:undefined,comments:allComments,people,canEditRow,editDocument:canManage,selectedAnchor,activeCommentId,onProjectCommentsChange,onSelectAnchor,onSelectComment,onUnlinkedComment};
   const identity=craftSourceKey(source,user?.id);
   function markDirty(){if(!alive.current) { return; } generation.current++;dirtyRef.current=true;setDirty(true);if(window.__rfqOfficeUnsaved?.key===identity) { window.__rfqOfficeUnsaved.dirty=true; }}
   function publish(update){
@@ -82,6 +85,15 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
   },[reference?.id,retry]);
 
   useEffect(()=>{
+    if(meta?.fileType!=='docx'||!file?.backendDocumentId) { return; }
+    let current=true;
+    api.get(`/documents/${encodeURIComponent(file.backendDocumentId)}/blocks`).then(blocks=>{
+      if(current&&Array.isArray(blocks)) { setSourceBlocks({scope:blockScope,blocks}); }
+    }).catch(cause=>{if(current) { console.error('读取 Word 原文定位内容失败', cause); }});
+    return()=>{current=false;};
+  },[blockScope,meta?.fileType]);
+
+  useEffect(()=>{
     if(!bytes||!meta||!reference||!frame.current||!overlay.current||!tools.current) { return; }
     const abort=new AbortController();
     const template=new DOMParser().parseFromString(classicTemplate,'text/html');
@@ -117,7 +129,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     frame.current.src=`${import.meta.env.BASE_URL}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0&author=${encodeURIComponent(user?.name||'RFQ 用户')}${engine==='wordcraft'?'&tools=host':''}`;
     return()=>{abort.abort();queue.dispose();instance.destroy();if(editor.current===instance) { editor.current=null; } if(saveQueue.current===queue) { saveQueue.current=null; }};
   },[bytes,meta?.id,reference?.id,user?.id,frameEpoch]);
-  useEffect(()=>{editor.current?.refresh();},[allComments,rows,selectedAnchor?.requirementId,activeCommentId,canEditRow,canManage]);
+  useEffect(()=>{editor.current?.refresh();},[allComments,rows,sourceBlocks,blockScope,selectedAnchor?.requirementId,activeCommentId,canEditRow,canManage]);
   useEffect(()=>{
     onDocumentOutlineChange?.({sourceKey:craftSourceKey(source),...editorState.documentOutline,
       ready:loading?false:!bytes?true:Boolean(editorState.ready),
