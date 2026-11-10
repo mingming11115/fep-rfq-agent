@@ -44,10 +44,10 @@ export function createKnowledgeLibraryClient(buId, client = api) {
     saveReply:row=>saveText('reply', row),
     saveHistoryClause:row=>saveText('history', row),
     importReplies:file=>client.upload(`${collections.reply}/import`,uploadBody(file)),
-    importHistory({file,responseFile,shareWithBu,projectId,previousDocumentId,revision,changeNote}) {
+    importHistory({file,responseFile,shareWithBu,projectId,previousDocumentId,revision,changeNote}, options) {
       if (Boolean(projectId) === Boolean(shareWithBu)) { throw new Error('请选择 BU 共享或一个项目范围'); }
       return client.upload(`${history}/import`,uploadBody(file,{responseFile,...(shareWithBu ? {shareWithBu:'true'} : {projectId}),
-        previousDocumentId,revision,changeNote}));
+        previousDocumentId,revision,changeNote}),options);
     },
     editHistoryDocument:row=>client.patch(`${history}/documents/${encode(row.id)}`,{...fields(row,['metadata','groupIds']),revision:row.revision||0}),
     deleteHistoryDocument:row=>client.post(`${history}/documents/${encode(row.id)}/delete`,{revision:row.revision??0}),

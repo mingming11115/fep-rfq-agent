@@ -31,6 +31,23 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
   const unwantedClause={...clause,id:'H2',clauseNo:'3.3',requirement:'误识别的历史要求',status:'草稿',revision:2};
   const capability={...draft,id:'C',metric:'实际导入的能力',value:'≤5 μm',conditions:'工况'};
   const originalFetch=globalThis.fetch;
+  const originalXhr=globalThis.XMLHttpRequest;
+  let pendingHistoryUpload, releaseHistoryImport;
+  const historyImportGate=new Promise(resolve=>{releaseHistoryImport=resolve;});
+  globalThis.XMLHttpRequest=class {
+    upload={};
+    headers={};
+    open(method,path){this.method=method;this.path=path;}
+    setRequestHeader(name,value){this.headers[name.toLowerCase()==='authorization'?'Authorization':name]=value;}
+    send(body){this.body=body;pendingHistoryUpload=this;}
+    getAllResponseHeaders(){return 'Content-Type: application/json\r\n';}
+    async finish(){
+      const response=await globalThis.fetch(this.path,{method:this.method,headers:this.headers,body:this.body});
+      this.status=response.status;
+      this.responseText=await response.text();
+      this.onload();
+    }
+  };
   globalThis.fetch=async(path,request={})=>{
     assert.equal(request.headers.Authorization,'Bearer test-token');
     calls.push([path,request.method||'GET',request.body]);
@@ -40,7 +57,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
       case base+'/standard-replies/import':resources.knowledge=[reply,unwantedReply];data={items:[reply,unwantedReply],skippedRows:[4],errors:[{rowNumber:6,message:'缺少答复'}]};break;
       case base+'/standard-replies/R2/versions/1/delete':resources.knowledge=[reply];data={...unwantedReply,status:'已删除',revision:1};break;
       case base+'/standard-replies/R/versions/1/submit':data={...reply,status:'待审核',revision:1};resources.knowledge=[data];break;
-      case base+'/history-rfq/import':resources.historyDocuments=[historyDoc];resources.historyClauses=[clause,unwantedClause];data={document:historyDoc,clauses:[clause,unwantedClause]};break;
+      case base+'/history-rfq/import':await historyImportGate;resources.historyDocuments=[historyDoc];resources.historyClauses=[clause,unwantedClause];data={document:historyDoc,clauses:[clause,unwantedClause]};break;
       case base+'/history-rfq/documents/D/original?part=main':
         return new Response('original bytes',{headers:{'Content-Disposition':"attachment; filename*=UTF-8''source.docx"}});
       case base+'/history-rfq/clauses/H2/versions/1/delete':
@@ -83,7 +100,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     Object.defineProperty(input,'files',{configurable:true,value:[new File(['demo'],name)]});
     await act(async()=>input.dispatchEvent(new window.Event('change',{bubbles:true})));
   }
-  const render=page=>act(async()=>{app.render(React.createElement(Harness,{key:page,page}));await settle();});
+  const render=page=>act(async()=>{app.render(React.createElement(Harness,{page}));await settle();});
   try{
     await render('knowledge');
     await click('批量导入',host);
@@ -109,11 +126,24 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     assert.doesNotMatch(uploadDialog.textContent,/可见范围|配套答复文件/);
     await attach('历史 RFQ 文件','历史.docx');
     await click('上传并开始解析');
+    assert.match(host.textContent,/历史\.docx.*上传中/);
+    assert.ok(pendingHistoryUpload);
+    await act(async()=>pendingHistoryUpload.upload.onprogress({lengthComputable:true,loaded:25,total:100}));
+    assert.match(host.textContent,/上传中.*25%/);
+    await act(async()=>pendingHistoryUpload.upload.onload({lengthComputable:false,loaded:100,total:0}));
+    assert.match(host.textContent,/历史\.docx.*解析中/);
+    await render('knowledge');
+    await render('history');
+    assert.match(host.textContent,/历史\.docx.*解析中/);
+    await act(async()=>{releaseHistoryImport();await pendingHistoryUpload.finish();await settle();});
     const uploadBody=calls.find(([path])=>path.endsWith('/history-rfq/import'))[2];
     assert.equal(uploadBody.get('file').name,'历史.docx');
     assert.equal(uploadBody.get('shareWithBu'),'true');
     assert.equal(uploadBody.has('responseFile'),false);
     assert.match(host.textContent,/后端历史原件.docx/);
+    assert.match(host.textContent,/解析完成/);
+    assert.doesNotMatch(host.textContent,/解析中/);
+    await click('后端历史原件.docx',host);
     assert.doesNotMatch(host.querySelector('.history-metadata-panel').textContent,/可见范围|配套答复文件/);
     const historyRows=host.querySelector('.history-clause-panel tbody');
     await click('查看',historyRows);
@@ -164,8 +194,10 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     assert.equal(calls.filter(([,method])=>method==='POST').length,9);
     assert.deepEqual(Object.keys(localStorage),['fep-rfq-auth']);
   }finally{
+    releaseHistoryImport();
     await act(async()=>app.unmount());
     globalThis.fetch=originalFetch;
+    globalThis.XMLHttpRequest=originalXhr;
     await window.happyDOM.close();
   }
 });

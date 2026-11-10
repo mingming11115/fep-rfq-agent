@@ -10,6 +10,19 @@ import {HISTORY_DOCUMENT_KEY,HISTORY_KNOWLEDGE_KEY,applyHistoryMetadata,mergeHis
 const storedGroups=document=>Array.isArray(document?.groupIds)?document.groupIds:document?.groupId?[document.groupId]:[];
 const jobs=new Map();
 const uploads=new Map();
+const importListeners=new Set();
+let libraryImports=[];
+export const readHistoryImports=()=>libraryImports;
+export function subscribeHistoryImports(listener){
+ importListeners.add(listener);
+ return ()=>importListeners.delete(listener);
+}
+export function setHistoryImport(id,entry){
+ const remaining=libraryImports.filter(item=>item.id!==id);
+ libraryImports=entry?[{...entry,id},...remaining]:remaining;
+ importListeners.forEach(listener=>listener());
+}
+
 const jobKey=(buId,id)=>`${buId}:${id}`;
 const changed=()=>window.dispatchEvent(new CustomEvent('rfq-history-change'));
 const read=(key,fallback)=>{const raw=localStorage.getItem(key);if(!raw) { return fallback; } const value=JSON.parse(raw);if(!Array.isArray(value)) { throw new Error('历史 RFQ 保存数据格式异常，请保留浏览器数据并联系维护人员'); } return value;};

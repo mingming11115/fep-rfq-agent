@@ -9,6 +9,7 @@ export function uploadWithProgress(url, {method='POST',body,headers,signal}={}, 
     new Headers(headers).forEach((value,name)=>xhr.setRequestHeader(name,value));
     xhr.upload.onprogress=event=>onProgress?.({loaded:event.loaded,total:event.lengthComputable?event.total:undefined,
       percent:event.lengthComputable&&event.total>0?Math.min(100,event.loaded/event.total*100):undefined});
+    xhr.upload.onload=event=>onProgress?.({loaded:event.loaded,total:event.lengthComputable?event.total:undefined,percent:100});
     xhr.onload=()=>{
       if(!xhr.status){finish(reject,new TypeError('网络请求未完成'));return;}
       try{
