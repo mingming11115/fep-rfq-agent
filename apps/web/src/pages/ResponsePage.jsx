@@ -19,6 +19,7 @@ import SourceDocumentPane from '../components/SourceDocumentPane';
 import { officeCanLeave } from '../officeClient';
 import SourceProcessingPane from '../components/SourceProcessingPane';
 import {getProjectSourceSummary} from '../projectSelectors';
+import {isSourceParsing} from '../useSourceParsing';
 import RequirementOutline from '../components/RequirementOutline';
 import RfqDirectory from '../components/RfqDirectory';
 import {craftSourceKey} from '../craftClient';
@@ -31,7 +32,7 @@ import {assertCapabilityProcess} from '../modelProcessDomain';
 import {getSourceUploadRoute} from '../navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus } from "../components/icons";
+import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation } from '../domain';
 import './response-page.css';
@@ -54,7 +55,10 @@ const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getI
 const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: row?.draft || '', conditions: row?.conditions || '', reason: row?.reason || '', evidence: row?.evidence || '' });
 const formFields = ['original', 'conclusion', 'draft', 'conditions', 'reason', 'evidence'];
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
-function Notice({ children, warning = false }) { return <div className={`response-notice ${warning ? 'response-notice-warning' : ''}`}><AlertCircle size={15} /><div>{children}</div></div>; }
+function Notice({ children, warning = false, loading = false }) {
+  const Icon = loading ? LoaderCircle : AlertCircle;
+  return <div className={`response-notice ${warning ? 'response-notice-warning' : ''}`} role={loading ? 'status' : undefined}><Icon size={15} /><div>{children}</div></div>;
+}
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
 
@@ -494,6 +498,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const capabilityProcesses=selectReadableResources(read(resourceStorageKey('rfq.reference.processes.v1',project.buId),project.buId==='BU-DEMO'?PROCESSES:[]),capabilityContext,'catalog');
   const capabilityEvidence=selectReadableResources(read(resourceStorageKey('rfq.reference.evidence.v1',project.buId)),capabilityContext,'evidence');
   const sourceSummary=getProjectSourceSummary(appState,project.id);
+  const parsingFiles=sourceSummary.files.filter(isSourceParsing);
   const canManageSource=canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id});
   const retrySources=()=>onFilesChange?.(project.id,(appState.documentsByProject?.[project.id]||[]).map(file=>sourceSummary.files.some(source=>source.id===file.id)&&(sourceSummary.status!=='failed'||file.status==='失败')?{...file,status:'排队中',error:''}:file));
   const detailTabs = <Tabs className="rfq-detail-native-tabs" aria-label="RFQ 详情分区" activeKey={detailTab}
@@ -522,6 +527,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const sourceToolbar={fileAction:reparseAction,fileSelector:<UiSelect className="select rfq-document-file-selector" aria-label="应答来源文件" value={active.sourceFileId || active.source || 'manual'} onChange={e => { const row = requirements.find(r => (r.sourceFileId || r.source || 'manual') === e.target.value); if (row) { chooseRow(row); } }}>{[...new Map(requirements.map(r => [r.sourceFileId || r.source || 'manual', r.source || '人工补录'])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</UiSelect>,actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
   const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id))}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!selectedRows.length || dirty || cardBusy} title={dirty ? '请先保存当前应答修改' : undefined} onClick={batchConfirm}>批量确认 {selectedRows.length || ''}</UiButton></div></RfqDirectory>;
   return <div className="response-page rfq-detail">
+    {parsingFiles.length>0&&<Notice loading>正在解析：{parsingFiles.map(file=>file.name).join('、')}</Notice>}
     {sourceSummary.status==='failed'&&<Notice warning>资料解析失败：{sourceSummary.files.filter(file=>file.status==='失败').map(file=>[file.name,file.error].filter(Boolean).join('：')).join('；')}{canManageSource&&<UiButton className="text-link" onClick={retrySources}>重新解析</UiButton>}</Notice>}
     {staleSource && <Notice warning>当前链接指向旧来源版本，本页只读。<UiButton className="text-link" onClick={() => chooseRow(active)}>打开当前有效来源版本</UiButton></Notice>}
     <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total) { setPaneShare(sizes[0]/total*100); }}}>

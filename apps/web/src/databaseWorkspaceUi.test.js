@@ -17,9 +17,10 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
  localStorage.setItem('fep-rfq-app-v1',JSON.stringify({projects:[{id:'FAKE',name:'不应出现的前端模拟项目'}]}));
  const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',stage:'DRAFT',version:0};
- let parsed=false,parseCalls=0,archived=false,projectVersion=0,allowReparse=false,finishFailed;
+ let parsed=false,parseCalls=0,archived=false,projectVersion=0,allowReparse=false,finishFailed,finishRetry;
  const projectActions=[];
  const failedRequest=new Promise(resolve=>{finishFailed=resolve;});
+ const retryRequest=new Promise(resolve=>{finishRetry=resolve;});
  const source={id:'D',projectId:'P',name:'客户.docx',version:0,status:'PARSING'};
  globalThis.fetch=async (url,options)=>{
   const deleting=options.method==='DELETE'&&url.startsWith('/api/rfq/projects/P?');
@@ -44,6 +45,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
    parseCalls++;
    if(url.includes('/FAILED/')){
     if(parseCalls===2) { await failedRequest; }
+    if(parseCalls===3) { await retryRequest; }
     return new Response(JSON.stringify({code:1,msg:'补充资料解析失败'}),{status:422});
    }
    if(parsed&&!allowReparse) { return new Response(JSON.stringify({code:1,msg:'已有应答，请登记新版原件后再解析'}),{status:409}); }
@@ -91,8 +93,14 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.ok(!node.textContent.includes('RFQ解析'));
   const retry=[...node.querySelectorAll('.rfq-detail button')].find(item=>item.textContent.trim()==='重新解析'&&!item.hasAttribute('aria-label'));
   assert.ok(retry,'failed supplementary uploads remain retryable after requirements exist');
-  await act(async()=>{retry.click();for(let i=0;i<12;i++)await new Promise(resolve=>setTimeout(resolve,0));});
+  await clickControl(retry);
   assert.equal(parseCalls,3,'retry targets the failed file without reparsing successful sources');
+  const pending=[...node.querySelectorAll('[role="status"]')].find(item=>item.textContent.includes('正在解析'));
+  assert.ok(pending?.querySelector('.anticon-spin'),'a pending retry shows a spinner in the workbench');
+  assert.ok(pending.textContent.includes('补充资料.docx'));
+  await act(async()=>{finishRetry();});
+  assert.equal(pending.isConnected,false,'the spinner disappears after the retry fails');
+  assert.ok(node.textContent.includes('补充资料解析失败'));
   assert.ok(node.textContent.includes('客户的真实要求'));
   const workbenchAction=node.querySelector('button[aria-label="重新解析当前文件"]');
   await clickControl(workbenchAction);
