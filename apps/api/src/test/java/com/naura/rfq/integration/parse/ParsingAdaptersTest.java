@@ -42,7 +42,8 @@ class ParsingAdaptersTest {
     List<RawBlock> blocks() { return List.of(RawBlock.paragraph(0, source, "设计", "1.1", "p0")); }
     String answer(int block, String quote) throws Exception {
         return json.writeValueAsString(Map.of("requirements", List.of(Map.of("blockIndex", block,
-            "originalText", quote, "requirementText", "设计压力至少 2 MPa", "title", "设计压力")),
+            "originalText", quote, "item", "设计压力", "description", "设计压力至少 2 MPa",
+            "specification", "≥ 2 MPa")),
             "ignoredBlockIndexes", List.of()));
     }
     HttpServer server(int status, String content, long delay) throws Exception {
@@ -103,11 +104,24 @@ class ParsingAdaptersTest {
         } finally { s.stop(0); }
     }
     @Test void modelOutputKeepsValidatedOriginalSource(CapturedOutput output) throws Exception {
-        var s = server(200, envelope(answer(0, source)), 0);
+        var content = json.readTree(answer(0, source));
+        var requirement = (com.fasterxml.jackson.databind.node.ObjectNode) content.path("requirements").get(0);
+        requirement.put("customerClauseNo", "1.1").put("parentClauseNo", "1").put("level", 2)
+            .put("obligation", "mandatory");
+        var s = server(200, envelope(content.toString()), 0);
         try {
             var result = extractor(settings(url(s), true)).extractWithReport(blocks());
             assertThat(result.extractor()).isEqualTo("llm:test-model");
-            assertThat(result.requirements()).singleElement().satisfies(r -> assertThat(r.originalText()).isEqualTo(source));
+            assertThat(result.requirements()).singleElement().satisfies(r -> {
+                assertThat(r.originalText()).isEqualTo(source);
+                assertThat(r.title()).isEqualTo("设计压力");
+                assertThat(r.requirementText()).isEqualTo("设计压力至少 2 MPa");
+                assertThat(r.metricsJson()).isEqualTo("{\"specification\":\"≥ 2 MPa\"}");
+                assertThat(r.customerClauseNo()).isNull();
+                assertThat(r.parentClauseNo()).isNull();
+                assertThat(r.level()).isEqualTo(1);
+                assertThat(r.obligation()).isEqualTo("unknown");
+            });
             assertThat(result.issues()).isEmpty();
             assertThat(output.getAll()).contains("document.parse.llm.request", "document.parse.llm.accepted",
                 "model=test-model", "acceptedBlockIndexes=[0]", "external.call.request", "external.call.response",
@@ -116,13 +130,16 @@ class ParsingAdaptersTest {
         } finally { s.stop(0); }
     }
     @Test void validModelOutputWithoutFinishReasonIsAccepted() throws Exception {
+        var content = json.readTree(answer(0, source));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) content.path("requirements").get(0)).putNull("specification");
         var response = json.writeValueAsString(Map.of("choices", List.of(
-            Map.of("message", Map.of("content", answer(0, source))))));
+            Map.of("message", Map.of("content", content.toString())))));
         var s = server(200, response, 0);
         try {
             var result = extractor(settings(url(s), true)).extractWithReport(blocks());
             assertThat(result.extractor()).isEqualTo("llm:test-model");
             assertThat(result.issues()).isEmpty();
+            assertThat(result.requirements()).singleElement().satisfies(r -> assertThat(r.metricsJson()).isNull());
         } finally { s.stop(0); }
     }
     @Test void optInLogsModelInputAndOutputWithoutApiKey(CapturedOutput output) throws Exception {
@@ -156,6 +173,20 @@ class ParsingAdaptersTest {
             .anySatisfy(line -> assertThat(line).contains("validationDetail=来源校验失败"))
             .anySatisfy(line -> assertThat(line).contains("validationDetail=模型输出不是有效的 JSON"));
         assertThat(output.getAll()).doesNotContain("伪造的客户原文", "model-private-content", source, "test-key");
+    }
+    @Test void laterBatchStillUsesModelAfterEarlierBatchFails() throws Exception {
+        var input = List.of(RawBlock.paragraph(0, "1.1 设备必须提供独立的安全保护装置。", "设计", "1.1", "p0"),
+            RawBlock.paragraph(1, source, "设计", "1.2", "p1"));
+        // Only the second batch contains the block referenced by the gateway response.
+        var s = server(200, envelope(answer(1, source)), 0);
+        try {
+            var config = settings(url(s), true);
+            config.getLlm().setBatchBlocks(1);
+            var result = extractor(config).extractWithReport(input);
+            assertThat(result.extractor()).isEqualTo("llm:test-model+rule-based-v1");
+            assertThat(result.issues()).singleElement().satisfies(issue -> assertThat(issue).contains("模型批次 0"));
+            assertThat(result.requirements()).extracting(r -> r.blockIndex()).containsExactly(0, 1);
+        } finally { s.stop(0); }
     }
     @Test void errorsAndTimeoutsFallBackWithoutLeakingResponseBody(CapturedOutput output) throws Exception {
         for (int status : List.of(429, 500, 200)) {

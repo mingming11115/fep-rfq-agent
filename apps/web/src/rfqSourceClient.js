@@ -1,5 +1,6 @@
 import {api as defaultApi} from './authClient.js';
 import {ensureBackendProject} from './rfqProjectClient.js';
+import {readRequirementSpecification} from './requirementSpecification.js';
 
 export async function uploadRfqSource(projectId,original,file,api=defaultApi,project,options={}){
  let backendProjectId=projectId;
@@ -30,6 +31,7 @@ async function readParsedRows(projectId,file,run,api){
   for(const row of result.list||[])if(row.documentId===file.backendDocumentId) { rows.push({
    id:row.id,backendDocumentId:row.documentId,clause:row.customerClauseNo||'',title:row.title||'',
    original:row.originalText,requirementText:row.requirementText,sourceOriginal:row.originalText,
+   specification:readRequirementSpecification(row.metricsJson),
    source:file.name,sourceFileId:file.id,sourceVersion:file.version,sectionPath:row.sectionPath?[row.sectionPath]:[],
    category:'技术',status:'待确认',conclusion:'',draft:'',matchLevel:'none',score:0,evidence:'',
    parserNote:row.reviewReasons||'',version:row.version,backendVersion:row.version,

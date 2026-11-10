@@ -1,6 +1,7 @@
 import {api as defaultApi} from './authClient.js';
 import {hydrateSessionPersonnel} from './sessionPersonnel.js';
 import {reconcileTasks} from './taskDomain.js';
+import {readRequirementSpecification} from './requirementSpecification.js';
 
 const roleNames={SR:'SR',TECH:'技术',APPROVER:'技术'};
 async function pages(path,api,filters={}){
@@ -22,6 +23,7 @@ function sectionPath(value){
 export function mapDatabaseRequirement(row,files,owner){
  const file=files.find(file=>file.id===row.documentId);
  return {...row,clause:row.customerClauseNo||'',original:row.originalText||'',sourceOriginal:row.originalText||'',
+  specification:readRequirementSpecification(row.metricsJson),
   source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',activeForApproval:file?.activeForApproval!==false,sectionPath:sectionPath(row.sectionPath),
   category:'未分类',status:'待确认',conclusion:'',draft:'',conditions:row.conditionsText||'',evidence:'',reason:'',
   matchLevel:'none',score:0,backendVersion:row.version,version:Math.max(1,row.version),owner,
@@ -66,6 +68,7 @@ export function mapDatabaseWorkspace({user,projects,archivedProjects=[],director
   state.requirementsByProject[row.id]=(details[row.id]?.requirements||[]).filter(requirement=>!retired.has(requirement.documentId)).map(requirement=>{
    const source=mapDatabaseRequirement(requirement,documents,owner),response=workflow.responses?.find(r=>r.id===requirement.id)||{};
    return {...source,...response,id:source.id,projectId:row.id,title:source.title,clause:source.clause,original:source.original,sourceOriginal:source.sourceOriginal,
+    requirementText:source.requirementText,specification:source.specification,
     source:source.source,sourceFileId:source.sourceFileId,sourceVersion:source.sourceVersion,sectionPath:source.sectionPath,backendVersion:source.backendVersion,
     confirmationAssigneeId:source.confirmationAssigneeId||response.confirmationAssigneeId||null,
     confirmationAssignmentSource:source.confirmationAssignmentSource||response.confirmationAssignmentSource||null};

@@ -48,7 +48,8 @@ class ProviderPipelineIntegrationTest {
                         JsonNode blocks = JSON.readTree(request.path("messages").path(1).path("content").asText());
                         var rows = new java.util.ArrayList<Map<String, Object>>();
                         for (JsonNode block : blocks) rows.add(Map.of("blockIndex", block.path("blockIndex").asInt(),
-                            "originalText", block.path("text").asText(), "requirementText", "Design pressure 2 MPa"));
+                            "originalText", block.path("text").asText(), "item", "Design pressure",
+                            "description", "Design pressure 2 MPa", "specification", "2 MPa"));
                         response = Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content",
                             JSON.writeValueAsString(Map.of("requirements", rows, "ignoredBlockIndexes", List.of()))))));
                     }
