@@ -61,7 +61,7 @@ export function createKnowledgeLibraryClient(buId, client = api) {
     assignGroups:(kind,row,groupIds)=>client.patch(versionPath(`${base}/knowledge-groups/${encode(kind)}`,row),{
       revision:row.groupRevision||0,groupIds,
     }),
-    historyOriginal:(id,part='main')=>client.download(`${history}/documents/${encode(id)}/original?part=${encode(part)}`),
+    historyOriginal:(id,part='main',options)=>client.download(`${history}/documents/${encode(id)}/original?part=${encode(part)}`,options),
     extractHistoryMetrics:row=>client.get(`${versionPath(`${capability}/history`,row)}/metrics`),
     importCapabilities:(file,projectId)=>client.upload(`${collections.capability}/import`,uploadBody(file,scope(projectId))),
     saveCapability(row, existing = false) {
