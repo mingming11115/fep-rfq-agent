@@ -12,6 +12,7 @@ import {historyJobRunning,readHistorySnapshot,retryHistoryParse,startHistoryUplo
 import {historyFiles} from '../historyFiles';
 import './history-knowledge.css';
 import HistoryVersionPanel from '../components/HistoryVersionPanel';
+import HistoryOriginalPreview from '../components/HistoryOriginalPreview';
 import {versionFamily} from '../historyVersions';
 import {ALL_GROUPS} from '../groupResources';
 import {createKnowledgeLibraryClient,libraryPermissions} from '../knowledgeLibraryClient';
@@ -23,9 +24,10 @@ const date=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/S
 const token=row=>`${row.id}:${row.version}`;
 const labels={customer:'客户',projectName:'历史项目',model:'适用机型',config:'默认配置',date:'项目日期'};
 const editableFields=['clauseNo','section','requirement','answer','conditions','modelOverride','configOverride','evidence','feedback','requirementAnchor','answerAnchor'];
+const scrollToSource=anchor=>{if(anchor) { document.getElementById(`history-source-${anchor}`)?.scrollIntoView?.({block:'center',behavior:'smooth'}); }};
 
 function SourceBlocks({sources=[],anchor,onLocate}){
- useEffect(()=>{if(anchor) { document.getElementById(`history-source-${anchor}`)?.scrollIntoView?.({block:'center',behavior:'smooth'}); }},[anchor]);
+ useEffect(()=>scrollToSource(anchor),[anchor]);
  sources=sources.filter(source=>Array.isArray(source.blocks));
  if(!sources.length) { return <Empty description="此记录尚无原件；可手工维护条款内容"/>; }
  return <div className="history-source-blocks">{sources.map(source=><section key={source.prefix}><h3>{source.name}</h3>{source.blocks.map(block=>block.type==='table'?<table className="history-source-table" key={block.anchor}><tbody>{block.tableRows.map((cells,index)=>{const id=`${source.prefix}${block.anchor}/r${index}`;return <tr id={`history-source-${id}`} key={id} className={anchor===id?'history-source-selected':''} onClick={()=>onLocate(id)}>{cells.map((cell,i)=><td key={i}>{cell}</td>)}</tr>;})}</tbody></table>:<div key={block.anchor} id={`history-source-${source.prefix}${block.anchor}`} className={`history-source-block ${anchor===source.prefix+block.anchor?'history-source-selected':''}`} onClick={()=>onLocate(source.prefix+block.anchor)}><small>{block.sectionPath||'正文'} · {block.anchor}</small><p>{block.text||block.issue||'图片待识别'}</p></div>)}</section>)}</div>;
@@ -47,14 +49,17 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const [error,setError]=useState(''),[query,setQuery]=useState(''),[activeId,setActiveId]=useState(null),[filter,setFilter]=useState('all'),[selected,setSelected]=useState([]),[uploading,setUploading]=useState(false),[files,setFiles]=useState({}),[busy,setBusy]=useState(false),[metadata,setMetadata]=useState(null),[editing,setEditing]=useState(null),[anchor,setAnchor]=useState(''),[review,setReview]=useState(null),[reason,setReason]=useState('');
  const [deleteTarget,setDeleteTarget]=useState(null);
  const [deleteDocumentTarget,setDeleteDocumentTarget]=useState(null);
+ const [viewing,setViewing]=useState(null);
  useEffect(()=>{if(databaseBacked) { return; } const refresh=()=>{try{setSnapshot(load());}catch(cause){ console.error('刷新历史知识草稿失败', cause); setError(cause.message);}};refresh();window.addEventListener('rfq-history-change',refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener('rfq-history-change',refresh);window.removeEventListener('storage',refresh);};},[buId,databaseBacked]);
  useEffect(()=>setSelected([]),[query,filter,activeId]);
- useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setError('');},[actorId,actorRole,buId]);
+ useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setViewing(null);setError('');},[actorId,actorRole,buId]);
  const {documents:allDocuments,clauses:readableClauses}=databaseBacked
   ?{documents:buildHistoryDocuments(snapshot.documents,snapshot.clauses),clauses:snapshot.clauses}
   :selectHistoryResources(snapshot,permissionContext);
  const documents=allDocuments.filter(doc=>!groupScope||groupScope.matches('history',doc));
  const active=documents.find(doc=>doc.id===activeId);
+ const viewerIdentity=JSON.stringify([buId,actorId,actorRole]);
+ const viewedDoc=viewing?.identity===viewerIdentity?documents.find(doc=>doc.id===viewing.documentId):null;
  const uploadParent=allDocuments.find(doc=>doc.id===files.previousDocumentId);
  const uploadProjectId=uploadParent?(uploadParent.projectId||uploadParent.sourceProjectId):files.projectId;
  useEffect(()=>{if(activeId&&!active){setEditing(null);setMetadata(null);setActiveId(null);setSelected([]);}},[activeId,!!active]);
@@ -101,6 +106,9 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   }catch(cause){ console.error('保存历史 RFQ 元数据失败', cause); fail(cause);}
  }
  function editClause(row){setEditing({...row});setAnchor(row.requirementAnchor||row.answerAnchor||'');setError('');}
+ function viewOriginal(doc,row){
+  setViewing({identity:viewerIdentity,documentId:doc.id,row,anchor:row?.requirementAnchor||row?.answerAnchor||''});
+ }
  function manual(){
   if(!actor.canEdit) { return; }
   const id=`HK-${crypto.randomUUID()}`;
@@ -242,21 +250,29 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const saving=busy||mutation.busy;
  const panelIndex=editing?rows.findIndex(row=>token(row)===token(editing)):-1;
  const documentColumns=[{title:'文档名称',dataIndex:'name',width:260,render:(value,doc)=><div><Button type="link" onClick={()=>openDoc(doc)}>{value}</Button><small className="history-subtext">{doc.uploadedBy||'历史知识'} · {date(doc.createdAt)}</small></div>},{title:'客户／项目',key:'project',render:(_,doc)=><>{doc.metadata?.customer||'待补充'}<small className="history-subtext">{doc.metadata?.projectName||'—'}</small></>},{title:'机型',render:(_,doc)=>doc.metadata?.model||'—'},{title:'文件版本',dataIndex:'version',width:100},{title:'解析状态',width:130,render:(_,doc)=><Tag color={doc.parseStatus==='failed'?'error':doc.parseStatus==='complete'?'success':'default'}>{doc.parseStatus==='parsing'&&!historyJobRunning(buId,doc.id)?'解析中断':parseLabel[doc.parseStatus]}</Tag>},{title:'条款数',width:90,render:(_,doc)=>latestVersions(clausesForDocument(doc,readableClauses)).length},
-  {title:'操作',width:160,render:(_,doc)=><Space size={0}><Button type="link" onClick={()=>openDoc(doc)}>查看</Button>{documentDeleteButton(doc)}</Space>}];
- const clauseColumns=[{title:'原编号／章节',width:150,render:(_,row)=><><strong>{row.clauseNo||'无编号'}</strong><small className="history-subtext">{row.section||'正文'}</small></>},{title:'客户要求',dataIndex:'requirement',render:value=><p className="history-clause-excerpt">{value||'待补充'}</p>},{title:'历史答复',dataIndex:'answer',render:value=><p className="history-clause-excerpt">{value||<span className="history-missing">未识别到答复</span>}</p>},{title:'状态／核对提示',width:180,render:(_,row)=><><Tag color={row.status==='已发布'?'success':row.status==='待审核'?'processing':'default'}>{row.status} · v{row.version}</Tag>{issues(row).slice(0,2).map(issue=><small className="history-missing" key={issue}>{issue}</small>)}</>},
+  {title:'操作',width:190,render:(_,doc)=><Space size={0}><Button type="link" onClick={()=>viewOriginal(doc)}>查看</Button><Button type="link" onClick={()=>openDoc(doc)}>条款</Button>{documentDeleteButton(doc)}</Space>}];
+ const clauseColumns=[{title:'客户要求',dataIndex:'requirement',render:value=><p className="history-clause-excerpt">{value||'待补充'}</p>},{title:'历史答复',dataIndex:'answer',render:value=><p className="history-clause-excerpt">{value||<span className="history-missing">未识别到答复</span>}</p>},
   {title:'操作',width:180,render:(_,row)=><Space size={0}>
-   <Button type="link" onClick={()=>editClause(row)}>查看／编辑</Button>
+   <Button type="link" onClick={()=>viewOriginal(active,row)}>查看</Button>
+   <Button type="link" onClick={()=>editClause(row)}>条款详情</Button>
    {actor.canEdit&&['草稿','退回'].includes(row.status)&&<Button type="link" danger disabled={saving} onClick={()=>{setError('');setDeleteTarget(row);}}>删除</Button>}
   </Space>}];
  return <div className="history-knowledge-page">
+  <Drawer open={Boolean(viewedDoc)} title={`原文 · ${viewedDoc?.name||''}`} width="min(1100px, 100vw)"
+   onClose={()=>setViewing(null)} afterOpenChange={open=>{if(open) { scrollToSource(viewing?.anchor); }}}
+   footer={<Button onClick={()=>setViewing(null)}>关闭原文</Button>}>
+   {viewedDoc&&(databaseBacked&&viewedDoc.sourceType==='history-upload'
+    ?<HistoryOriginalPreview key={`${viewedDoc.id}:${viewing.row?token(viewing.row):''}`} buId={buId} documentId={viewedDoc.id} row={viewing.row}/>
+    :<SourceBlocks sources={viewedDoc.sources} anchor={viewing.anchor} onLocate={source=>setViewing(current=>current&&({...current,anchor:source}))}/>)}
+  </Drawer>
   <AdminPageHeader title={active?active.name:'历史 RFQ'} description={active?'文档信息统一维护，逐条核对历史要求与答复。':'上传历史 RFQ，提取要求与答复，沉淀可追溯的项目经验。'} actions={<Space wrap>{active?<UiButton onClick={changePage}>返回文档列表</UiButton>:<UiButton disabled={!actor.canEdit} onClick={manual}><Plus size={15}/>手工补录</UiButton>}<UiButton className="btn-primary" disabled={!actor.canEdit} onClick={()=>{setFiles(databaseBacked?{projectId:active?.projectId}:active&&!active.legacy?{previousDocumentId:active.id}:{});setUploading(true);setError('');}}><UploadIcon size={16}/>上传历史 RFQ</UiButton></Space>}/>
   {error&&<Alert type="error" showIcon closable onClose={()=>setError('')} message={error}/>}
   {!active?<section className="panel history-document-panel"><div className="history-toolbar"><Input.Search aria-label="搜索历史文档和条款" placeholder="搜索文档、客户、项目、要求或历史答复" value={query} onChange={event=>setQuery(event.target.value)} allowClear/><span>共 {documents.length} 份文档</span></div><Table columns={documentColumns} dataSource={filterHistoryDocuments(documents,readableClauses,query)} rowKey="id" scroll={{x:1050}} pagination={{pageSize:10,showSizeChanger:true}} locale={{emptyText:<Empty description="暂无历史 RFQ，上传文件后自动解析为条款草稿"/>}}/></section>:<>
    <HistoryVersionPanel key={active.id} active={active} documents={documents} clauses={readableClauses} onLocate={(doc,row)=>{setActiveId(doc.id);setQuery('');setFilter('all');if(row) { editClause(row); } else { setEditing(null); }}}/>
    <section className="panel history-metadata-panel"><div className="history-section-heading"><h2>文档信息</h2><Space>{<Button disabled={!actor.canEdit} onClick={()=>{setMetadata({...structuredClone(active),version:active.version||'V1',groupIds:groupScope?.groups('history',active)||active.groupIds||[]});setError('');}}>编辑文档信息</Button>}{(databaseBacked?active.sourceType==='history-upload':!active.legacy&&!active.manual)&&<Button onClick={download}><Download size={14}/>下载原件</Button>}</Space></div><Descriptions column={{xs:1,sm:2,lg:3}} items={[...Object.entries(labels).map(([key,label])=>({key,label,children:active.metadata?.[key]||'待补充'})),{key:'version',label:'文件版本',children:active.version||'—'}]}/></section>
    {!databaseBacked&&(pending||interrupted||active.parseStatus==='failed')&&<Alert type={pending?'info':'warning'} showIcon message={pending?'正在读取文件并解析条款，可以离开此页面，稍后返回查看。':interrupted?'上次解析未完成，原件已保留，可以重试。':active.error||'解析失败，请重试'} action={!pending&&<Button disabled={!actor.canEdit} onClick={()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重试历史 RFQ 解析失败', error); return fail(error); })}>重试解析</Button>}/>}
-   <div className="history-counts">{[{key:'all',label:'全部条款',count:rows.length},{key:'missing',label:'缺少答复',count:rows.filter(row=>!row.answer?.trim()).length},{key:'review',label:'需核对',count:rows.filter(row=>issues(row).length).length},{key:'待审核',label:'待审核',count:rows.filter(row=>row.status==='待审核').length},{key:'已发布',label:'已发布',count:rows.filter(row=>row.status==='已发布').length}].map(item=><button key={item.key} className={filter===item.key?'active':''} onClick={()=>{setFilter(item.key);setSelected([]);}}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>
    {active.issues?.length>0&&<details className="panel history-issues"><summary>有 {active.issues.length} 处原文需要人工核对</summary><p>{databaseBacked?'未归入条款的内容仍保留在原件中，可下载核对。':'未归入条款的内容仍保留在原文中，可定位后补录。'}</p>{active.issues.map((issue,index)=><div key={index}><span>{issue}</span>{!databaseBacked&&<Button type="link" onClick={()=>{manual();setAnchor(issue.split('：')[0]);}}>定位并补录</Button>}</div>)}</details>}
+   <div className="history-counts">{[{key:'all',label:'全部条款',count:rows.length},{key:'missing',label:'缺少答复',count:rows.filter(row=>!row.answer?.trim()).length},{key:'review',label:'需核对',count:rows.filter(row=>issues(row).length).length},{key:'待审核',label:'待审核',count:rows.filter(row=>row.status==='待审核').length},{key:'已发布',label:'已发布',count:rows.filter(row=>row.status==='已发布').length}].map(item=><button key={item.key} className={filter===item.key?'active':''} onClick={()=>{setFilter(item.key);setSelected([]);}}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>
    <section className="panel history-clause-panel"><div className="history-toolbar"><Input.Search aria-label="搜索文档内条款" placeholder="搜索编号、要求或历史答复" value={query} onChange={event=>setQuery(event.target.value)} allowClear/><Space wrap><Button disabled={!actor.canEdit||saving} onClick={manual}>补录条款</Button>
     {databaseBacked ? active.sourceType==='history-upload'&&!allDocuments.some(doc=>versionFamily(doc)===versionFamily(active)&&doc.versionNumber>active.versionNumber)&&
       <Button disabled={!actor.canEdit||saving} onClick={reparse}>重新解析为新版</Button>

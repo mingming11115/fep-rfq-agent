@@ -7,7 +7,7 @@ import {Window} from 'happy-dom';
 import React,{act,useState} from 'react';
 
 test('MySQL knowledge tabs import through the API and render server-reviewed records',async()=>{
-  const window=new Window({url:'http://localhost'});
+  const window=new Window({url:'http://localhost',settings:{disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
   Object.assign(globalThis,{window,document:window.document,localStorage:window.localStorage,sessionStorage:window.sessionStorage,
     Document:window.Document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,
     ShadowRoot:window.ShadowRoot,getComputedStyle:window.getComputedStyle.bind(window),
@@ -27,7 +27,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
   const reply={...draft,id:'R',type:'standard',title:'实际导入的标准回复',requirement:'定位',answer:'支持',conditions:'工况',source:'RFQ-陌生项目.xlsx'};
   const unwantedReply={...reply,id:'R2',title:'误导入的标准回复'};
   const historyDoc={...draft,id:'D',name:'后端历史原件.docx',sourceType:'history-upload',parseStatus:'complete',sources:[{name:'原件',prefix:'main:'}]};
-  const clause={...draft,id:'H',type:'history',documentId:'D',title:'历史条款',requirement:'定位',answer:'已确认',status:'待审核',submitterId:'someone-else',clauseNo:'3.2'};
+  const clause={...draft,id:'H',type:'history',documentId:'D',title:'历史条款',requirement:'定位',originalText:'3.2 原文定位',requirementAnchor:'main:body/1',answer:'已确认',status:'待审核',submitterId:'someone-else',clauseNo:'3.2'};
   const unwantedClause={...clause,id:'H2',clauseNo:'3.3',requirement:'误识别的历史要求',status:'草稿',revision:2};
   const capability={...draft,id:'C',metric:'实际导入的能力',value:'≤5 μm',conditions:'工况'};
   const originalFetch=globalThis.fetch;
@@ -41,6 +41,8 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
       case base+'/standard-replies/R2/versions/1/delete':resources.knowledge=[reply];data={...unwantedReply,status:'已删除',revision:1};break;
       case base+'/standard-replies/R/versions/1/submit':data={...reply,status:'待审核',revision:1};resources.knowledge=[data];break;
       case base+'/history-rfq/import':resources.historyDocuments=[historyDoc];resources.historyClauses=[clause,unwantedClause];data={document:historyDoc,clauses:[clause,unwantedClause]};break;
+      case base+'/history-rfq/documents/D/original?part=main':
+        return new Response('original bytes',{headers:{'Content-Disposition':"attachment; filename*=UTF-8''source.docx"}});
       case base+'/history-rfq/clauses/H2/versions/1/delete':
         assert.equal(JSON.parse(request.body).revision,2);
         resources.historyClauses=[clause];data={...unwantedClause,status:'已删除',revision:3};break;
@@ -114,6 +116,26 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     assert.match(host.textContent,/后端历史原件.docx/);
     assert.doesNotMatch(host.querySelector('.history-metadata-panel').textContent,/可见范围|配套答复文件/);
     const historyRows=host.querySelector('.history-clause-panel tbody');
+    await click('查看',historyRows);
+    const preview=document.querySelector('iframe[title="历史 RFQ 原文"]');
+    assert.ok(preview?.src.includes('/wordcraft-classic/'));
+    assert.equal(calls.at(-1)[0],base+'/history-rfq/documents/D/original?part=main');
+    const messages=[];
+    const editor={postMessage:message=>messages.push(message)};
+    Object.defineProperty(preview,'contentWindow',{value:editor});
+    const send=data=>window.dispatchEvent(new window.MessageEvent('message',{data,source:editor,origin:window.location.origin}));
+    await act(async()=>{
+      send({type:'wordcraft:ready'});
+      send({type:'wordcraft:reviewState',payload:{document:'source-token',fileName:'source.docx'}});
+    });
+    assert.equal(messages[0]?.type,'wordcraft:open');
+    const command=JSON.parse(messages[1]?.payload||'{}');
+    assert.equal(command.action,'configure');
+    assert.equal(command.params.targets[0].quote,'3.2 原文定位');
+    assert.equal(command.params.selectedId,command.params.targets[0].id);
+    await act(async()=>send({type:'wordcraft:reviewResult',payload:{request:1,ok:true,result:{status:'matched'}}}));
+    assert.doesNotMatch(preview.parentElement.textContent,/正在打开原文并定位/);
+    await click('关闭原文');
     await click('删除',historyRows);
     await click('取消');
     assert.match(historyRows.textContent,/误识别的历史要求/);
@@ -123,7 +145,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     assert.match(host.textContent,/后端历史原件.docx/);
     await act(async()=>{host.querySelector('.history-clause-panel tbody input[type="checkbox"]').click();await settle();});
     await click('批准发布',host);
-    assert.match(host.querySelector('.history-clause-panel tbody').textContent,/已发布/);
+    assert.match(host.querySelector('.history-counts').textContent,/已发布1/);
     resources.historyClauses=[{...clause,status:'已撤销',revision:2}];
     await click('返回文档列表',host);
     await click('删除文档',host);

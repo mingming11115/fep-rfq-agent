@@ -22,8 +22,16 @@ test('history document UI separates metadata, repairs missing answers and enforc
  const render=async(id,role)=>act(async()=>{root.render(React.createElement(Page,{actorId:id,actorRole:role,permissionContext:{state,actorId:id,buId:'A'},toast:message=>messages.push(message)}));await settle();});
  const type=async(label,value)=>act(async()=>{const input=document.querySelector(`textarea[aria-label="${label}"]`);assert.ok(input);Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype,'value').set.call(input,value);input.dispatchEvent(new w.Event('input',{bubbles:true}));await settle();});
  try{
-  await render('sr','SR');assert.match(host.textContent,/客户历史RFQ/);await click('查看');
-  assert.match(host.textContent,/客户A/);assert.match(host.textContent,/缺少历史答复/);await click('查看／编辑');
+  await render('sr','SR');assert.match(host.textContent,/客户历史RFQ/);
+  await click('客户历史RFQ.docx');
+  assert.match(host.textContent,/客户A/);assert.match(host.textContent,/未识别到答复/);
+  assert.deepEqual([...new Set([...host.querySelectorAll('.history-clause-panel th')].map(node=>node.textContent.trim()).filter(Boolean))],
+   ['客户要求','历史答复','操作']);
+  await click('查看');
+  assert.equal(document.querySelector('.history-source-selected')?.id,'history-source-main:body/1');
+  assert.equal(document.querySelector('textarea[aria-label="客户要求"]'),null);
+  await click('关闭原文');
+  await click('条款详情');
   assert.ok(document.querySelector('[aria-label="客户要求"]'));assert.equal(document.querySelector('[aria-label="应答结论"]'),null);
   assert.equal(document.querySelector('[aria-label="条款标题"]').value,'自动上料');
   assert.equal(document.querySelector('[aria-label="客户要求原文"]').value,'3.2 要求支持自动上料');
@@ -37,11 +45,11 @@ test('history document UI separates metadata, repairs missing answers and enforc
   assert.equal(savedDraft.originalText,'3.2 要求支持自动上料');
   await act(async()=>{const checkbox=host.querySelector('tbody input[type="checkbox"]');assert.ok(checkbox);checkbox.click();await settle();});await click('提交审核');
   assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].status,'待审核');
-  await render('bu','BU管理员');await click('查看');await act(async()=>{host.querySelector('tbody input[type="checkbox"]').click();await settle();});await click('批准发布');
+  await render('bu','BU管理员');await click('客户历史RFQ.docx');await act(async()=>{host.querySelector('tbody input[type="checkbox"]').click();await settle();});await click('批准发布');
   assert.equal(JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'))[0].status,'已发布');
-  await click('查看／编辑');await render('sr','SR');
+  await click('条款详情');await render('sr','SR');
   assert.equal(document.querySelector('textarea[aria-label="客户要求"]'),null,'identity changes close an existing editor without relying on a React key');
-  await click('查看');await click('查看／编辑');
+  await click('客户历史RFQ.docx');await click('条款详情');
   const restricted=JSON.parse(localStorage.getItem('rfq.history.documents.v1:A'));restricted[0].scope='仅当前项目';restricted[0].projectId='P1';
   localStorage.setItem('rfq.history.documents.v1:A',JSON.stringify(restricted));
   // Another tab can narrow the parent scope before this tab receives its storage event.
@@ -54,7 +62,7 @@ test('history document UI separates metadata, repairs missing answers and enforc
   localStorage.setItem('rfq.history.documents.v1:A','[]');
   localStorage.setItem('rfq.reference.knowledge.v1:A',JSON.stringify([{id:'OLD',buId:'A',type:'history',version:1,status:'草稿',scope:'仅当前项目',projectId:'P1',source:'历史项目原来源',requirement:'原要求',answer:'原答复'}]));
   await render('sr','SR');await act(async()=>{window.dispatchEvent(new w.CustomEvent('rfq-history-change'));await settle();});
-  await click('查看');await click('查看／编辑');await click('保存草稿');
+  await click('历史项目原来源');await click('条款详情');await click('保存草稿');
   let saved=JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'));
   assert.equal(saved[0].scope,'仅当前项目');assert.equal(saved[0].source,'历史项目原来源');
   assert.equal(JSON.parse(localStorage.getItem('rfq.history.documents.v1:A'))[0].buId,'A');
