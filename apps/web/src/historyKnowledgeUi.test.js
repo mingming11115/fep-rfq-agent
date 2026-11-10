@@ -24,6 +24,8 @@ test('history document UI separates metadata, repairs missing answers and enforc
  try{
   await render('sr','SR');assert.match(host.textContent,/客户历史RFQ/);
   assert.doesNotMatch(host.textContent,/机型A/);
+  const documentActions=host.querySelector('.history-document-panel tbody tr td:last-child');
+  assert.deepEqual([...documentActions.querySelectorAll('button')].map(button=>button.textContent.trim()),['查看','删除文档']);
   await click('客户历史RFQ.docx');
   assert.match(host.textContent,/客户A/);assert.match(host.textContent,/未识别到答复/);
   assert.doesNotMatch(host.textContent,/处原文需要人工核对|适用机型|项目日期|默认配置/);

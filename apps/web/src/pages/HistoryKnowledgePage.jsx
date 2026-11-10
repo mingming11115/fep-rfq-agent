@@ -304,7 +304,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   {title:'条款数',width:90,render:(_,doc)=>doc.importState?'—':latestVersions(clausesForDocument(doc,readableClauses)).length},
   {title:'操作',width:190,render:(_,doc)=>doc.importState
    ? doc.importState==='failed'?<Button type="link" onClick={()=>setHistoryImport(doc.id,null)}>移除记录</Button>:null
-   : <Space size={0}><Button type="link" onClick={()=>viewOriginal(doc)}>查看</Button><Button type="link" onClick={()=>openDoc(doc)}>条款</Button>{documentDeleteButton(doc)}</Space>},
+   : <Space size={0}><Button type="link" onClick={()=>viewOriginal(doc)}>查看</Button>{documentDeleteButton(doc)}</Space>},
  ];
  const clauseColumns=[{title:'客户要求',dataIndex:'requirement',render:value=><p className="history-clause-excerpt">{value||'待补充'}</p>},{title:'历史答复',dataIndex:'answer',render:value=><p className="history-clause-excerpt">{value||<span className="history-missing">未识别到答复</span>}</p>},
   {title:'向量库状态',width:140,render:(_,row)=>{
