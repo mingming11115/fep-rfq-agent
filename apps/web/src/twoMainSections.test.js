@@ -6,6 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import path from 'node:path';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
+import {writeResponse} from './responseClient.js';
 
 async function harness(name){
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
@@ -95,6 +96,75 @@ test('batch confirmation runs from the directory and retains excluded and failed
     await act(async()=>{result.dispatchEvent(new h.window.Event('animationend',{bubbles:true}));});
     assert.equal(Boolean(document.querySelector('.ant-modal')),false,'finishing closes the batch result dialog');
     assert.deepEqual(confirmations,[['R1',1],['R3',1]],'finishing does not repeat any confirmation');
+  }finally{await h.close();}
+});
+
+test('MySQL batch uses current standard matches while preserving unconfirmed suggestions',async t=>{
+  const h=await harness('mysql-batch'),{ResponsePage,node,root,settle,click}=h;
+  const row={id:'R1',projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'V1.0',
+    clause:'1.1',title:'Prefilled clause',original:'Source',conclusion:'',draft:'',conditions:'',evidence:'',
+    status:'待确认',matchLevel:'none',score:0,version:1,backendVersion:0};
+  const saved={...row,clause:'1.2',title:'Saved clause',conclusion:'Comply',draft:'Standard answer',evidence:'S1 · v1'};
+  let requirements=[row,{...saved,id:'R2'},{...saved,id:'R3',clause:'1.3',title:'Unverified conditions',conditions:'Option A'},
+    {...saved,id:'R4',clause:'1.4',title:'Conditional answer',conclusion:'有条件 Comply'},
+    {...saved,id:'R5',clause:'1.5',title:'Open review'},
+    {...saved,id:'R6',clause:'1.6',title:'Already adopted',matchReference:{library:'standard_reply',runId:'RUN-R6',candidateId:'S1',version:1}}];
+  const reviews=[{id:'V1',requirementId:'R5',kind:'review',status:'待处理'}];
+  const props={project:{id:'P',name:'Project',buId:'BU'},reviews,route:{page:'response',projectId:'P',requirementId:'R1',fileId:'F',sourceVersion:'V1.0'},
+    appState:{dataSource:'mysql',accountsById:{},commentsByProject:{},membersByProject:{}},
+    actorRole:'SR',actorId:'actor',canBusinessAction:()=>true,onAppUpdate:()=>{},navigate:()=>{},toast:()=>{}};
+  const writes=[];
+  t.mock.method(globalThis,'fetch',async (url,options)=>{
+    const [,id,action]=url.match(/\/requirements\/(R\d+)\/(match-result|response\/confirm)$/) || [];
+    if(action==='match-result') {
+      const candidate={id:'S1',version:1,businessSimilarity:0.95,answer:'Standard answer',
+        conditions:id==='R3'?'Option A':'',conditionStatus:id==='R3'?'unverified':'not_specified'};
+      return Response.json({code:0,data:{runId:`RUN-${id}`,status:'completed',sourceRequirementVersion:0,
+        result:{matchedLibrary:'standard_reply',conclusion:'待确认',stages:{standard_reply:{status:'hit',candidates:[candidate]}}}}});
+    }
+    if(action==='response/confirm') {
+      const body=JSON.parse(options.body);
+      writes.push({id,...body});
+      const current=requirements.find(item=>item.id===id);
+      return Response.json({code:0,data:{...current,...body.patch,status:'已确认',version:current.version+1}});
+    }
+    return Response.json({code:0,data:null});
+  });
+  function paint(){root.render(React.createElement(ResponsePage,{...props,requirements,onConfirm:async (id,version,patch,choice)=>{
+    const current=requirements.find(item=>item.id===id);
+    assert.equal(version,current.version);
+    const saved=await writeResponse(current,patch,true,undefined,choice);
+    requirements=requirements.map(item=>item.id===id?saved:item);
+    paint();
+    return true;
+  }}));}
+  const batchButton=()=>[...node.querySelectorAll('.detail-outline-footer button')].find(button=>button.textContent.includes('批量确认'));
+  const draft=()=>node.querySelector('textarea[aria-label="对外答复"]').value;
+  const resultRow=(dialog,title)=>[...dialog.querySelectorAll('tbody tr')].find(item=>item.textContent.includes(title));
+  try{
+    await act(async()=>{paint();await settle();});
+    assert.equal(draft(),'Standard answer','the active card has a real unsaved prefill');
+    await click(node.querySelector('[aria-label="展开文档目录"]'));
+    await click(node.querySelector('[aria-label="全选当前筛选条款"]'));
+    assert.equal(batchButton().disabled,false,'prefill must not disable the whole batch');
+    await click(batchButton());
+    assert.deepEqual(writes,[{id:'R2',version:1,sourceVersion:0,matchRunId:'RUN-R2',candidateId:'S1'},
+      {id:'R6',version:1,sourceVersion:0}]);
+    const result=document.querySelector('.ant-modal');
+    assert.match(resultRow(result,'Saved clause').textContent,/已确认.*确认成功/);
+    assert.match(resultRow(result,'Prefilled clause').textContent,/已排除/);
+    assert.match(resultRow(result,'Unverified conditions').textContent,/已排除/);
+    assert.match(resultRow(result,'Conditional answer').textContent,/已排除/);
+    assert.match(resultRow(result,'Open review').textContent,/已排除/);
+    assert.equal(draft(),'Standard answer','excluded draft remains in the editor');
+    await click([...result.querySelectorAll('button')].find(button=>button.textContent.replace(/\s/g,'')==='完成'));
+    await act(async()=>{result.dispatchEvent(new h.window.Event('animationend',{bubbles:true}));});
+    await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
+    await click(batchButton());
+    assert.deepEqual(writes.at(-1),{id:'R1',version:1,sourceVersion:0,matchRunId:'RUN-R1',candidateId:'S1',
+      patch:{original:'Source',conclusion:'Comply',draft:'Standard answer',conditions:'',reason:'',evidence:'S1 · v1'}});
+    assert.equal(writes.length,3,'retry never resubmits previously confirmed clauses');
+    assert.match(resultRow(document.querySelector('.ant-modal'),'Prefilled clause').textContent,/已确认.*确认成功/);
   }finally{await h.close();}
 });
 

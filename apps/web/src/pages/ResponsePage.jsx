@@ -34,7 +34,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
-import { applyRequirementEdit, confirmationValidation } from '../domain';
+import { applyRequirementEdit, confirmationValidation, requirementValidation } from '../domain';
+import { matchClient } from '../requirementMatchClient';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
 import AssessmentPanel from '../components/AssessmentPanel';
@@ -52,6 +53,7 @@ import './rfq-enhancements.css';
 const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5)}`;
 const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { console.error('读取应答页本地数据失败'); return fallback; } };
+const matches = matchClient();
 const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: row?.draft || '', conditions: row?.conditions || '', reason: row?.reason || '', evidence: row?.evidence || '' });
 const formFields = ['original', 'conclusion', 'draft', 'conditions', 'reason', 'evidence'];
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
@@ -119,7 +121,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [confirmNext, setConfirmNext] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const [batchResults, setBatchResults] = useState(null);
-  const [batchSummary, setBatchSummary] = useState({ total: 0, eligible: 0, excluded: 0 });
   const automaticReviews = useRef(new Set());
   const setTransition = transition => transition?.next?.();
   const [adoption, setAdoption] = useState(null);
@@ -210,8 +211,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const selectedDirectoryCount = directoryRows.filter(row => selected.includes(row.id)).length;
   const shown = filtered.slice((page - 1) * 6, page * 6);
   const selectedRows = responseRows.filter((r) => selected.includes(r.id));
-  const batchReasons = (row) => [...(!canBusinessAction('requirement',row.id,'confirm') ? ['当前账号无本条确认权限'] : []), ...(row.status === '已确认' ? ['当前版本已确认'] : []), ...(row.status === '评审中' ? ['存在待处理专业评审'] : []), ...((databaseBacked ? row.matchReference?.library !== 'standard_reply' : row.matchLevel !== 'standard' || row.score <= 80) ? ['不符合标准回复相似度 >80% 的批量条件，请逐条确认'] : []), ...confirmationValidation(row)];
-  const eligibleBatch = selectedRows.filter((r) => batchReasons(r).length === 0);
+  const batchSuccessCount = batchResults?.filter(row => row.result === '确认成功').length || 0;
+  const batchFailureCount = batchResults?.filter(row => row.result === '确认失败').length || 0;
+  const batchExcludedCount = (batchResults?.length || 0) - batchSuccessCount - batchFailureCount;
   const candidates = !databaseBacked && active ? Array.from({ length: showMore ? 5 : 3 }, (_, index) => ({ id: `HIST-${active.clause}-${index + 1}`, project: `历史参考 RFQ-${index === 0 ? '2025-018' : index === 1 ? '2025-011' : `2024-00${index + 1}`}（模拟）`, date: `2025-${String(9 - index).padStart(2, '0')}-18`, model: active.realSource ? 'DEMO-YAG 150 · 模拟历史配置' : index === 0 ? 'DEMO-CUT 300 · V2.1' : 'DEMO-CUT 300 · V2.0', config: index === 0 ? '选配 X / 历史确认配置' : '标准配置 / 工况待比对', original: active.original, answer: suggestion.draft, conditions: suggestion.conditions || '仅适用历史案例记载的材料、厚度、工艺与验收方法；需核对本次条件。', evidence: suggestion.evidence || '模拟历史批准记录 V3，适用性待核对', difference: active.conclusion === '有条件 Comply' ? '本次选配、材料或测试条件尚未全部确认，与历史条件存在差异。' : '设备版本、材料与验收方案需逐项核对；相似要求不代表条件完全一致。', feedback: index === 0 ? '客户已接受（模拟记录）' : '未记录', acceptance: index === 0 ? '未记录' : '未记录', version: `V${3 - Math.min(index, 2)}` })) : [];
 
   useEffect(()=>{localStorage.setItem(`rfq.response.filters.${project.id}`,JSON.stringify({query,status,section}));},[query,status,section]);
@@ -222,7 +224,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
   function hydrate(row) { if (!row) { return; } setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(reviews.find(r => r.requirementId === row.id && !['已关闭', '已取消'].includes(r.status))?.id || null); setInlineReviewAction(null); }
-  function edit(field, value) { if (!canEdit) { return; } setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
+  function edit(field, value) { if (!canEdit || cardBusyRef.current) { return; } setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
   function requestTransition(next) { if (cardBusyRef.current) { return false; } return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
     const officeSource = sourceRow ? makeSourceAnchor({ ...sourceRow, projectId: project.id }) : undefined;
@@ -383,7 +385,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   function goPage(key) { navigate(key); }
   function applyMatch(run, candidate) {
-    if (!canEdit) { return; }
+    if (!canEdit || cardBusyRef.current) { return; }
     setForm(current=>({...current,...(candidate.answer ? {draft:candidate.answer} : {}),
       ...(candidate.conclusion ? {conclusion:candidate.conclusion} : {}),
       conditions:candidate.conditions ?? current.conditions,
@@ -395,7 +397,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   function maybePrefill(run) {
     const candidate=run.result?.stages?.standard_reply?.candidates?.[0];
-    if (!candidate || !canEdit || dirtyRef.current || prefilledRuns.current.has(run.runId) ||
+    if (!candidate || !canEdit || cardBusyRef.current || dirtyRef.current || prefilledRuns.current.has(run.runId) ||
       active.status==='已确认' || active.sourceRequirementVersion != null || active.matchReference || active.draft ||
       active.conclusion && active.conclusion!=='待确认') { return; }
     prefilledRuns.current.add(run.runId);
@@ -412,7 +414,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     clearDirty(); addActivity('保存应答草稿', '草稿已保存，未自动确认'); toast('草稿已保存；最终确认状态仍需单独操作'); return true;
   }
   useEffect(() => { localStorage.setItem(`rfq.response.events.${project.id}`, JSON.stringify(activities)); }, [activities, project.id]);
-  useEffect(() => { if (!dirtyRef.current && active) { setForm(toForm(active)); baseline.current = { id: active.id, version: active.version, status: active.status }; } }, [active?.id, active?.version, active?.status]);
+  useEffect(() => { if (!dirtyRef.current && active) { setForm(toForm(active)); baseline.current = { id: active.id, version: active.version, status: active.status }; } }, [active?.id, active?.version, active?.status, dirty]);
   useEffect(() => { setPage(1); }, [query, status, section, owner, special]);
   useEffect(() => { const index = requirements.findIndex((row) => row.id === focusedRequirementId); if (index >= 0) {setPage(Math.floor(index / 6) + 1);if(focusedRequirementId!==activeId){revealCard(requirements[index]);hydrate(requirements[index]);}} }, [focusedRequirementId]);
   useEffect(() => { setPage((old) => Math.min(old, Math.max(1, Math.ceil(filtered.length / 6)))); }, [filtered.length]);
@@ -446,12 +448,82 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       setForm(expected); clearDirty(); setPendingConfirmation({ id: active.id, expected, nextId });
     } else { finishConfirmation(active, nextId); }
   }
+  async function checkBatchRow(row, draft) {
+    if (!canBusinessAction('requirement', row.id, 'confirm')) { return { exclusion: '当前账号无本条确认权限' }; }
+    if (row.status === '已确认') { return { exclusion: '当前版本已确认' }; }
+    if (row.status === '评审中' || responseStatusLabel(row, reviews) === '评审中' || row.id === active.id && reviewForm) {
+      return { exclusion: '请先处理本条评审、偏离或澄清事项' };
+    }
+    if (row.keyRequirement || row.obligation === 'mandatory' || row.needsReview || row.activeForApproval === false) {
+      return { exclusion: '关键要求或来源待核对，请逐条确认' };
+    }
+    if (draft && (!databaseBacked || !matchChoice || conflicted)) { return { exclusion: '本条有未保存的修改，请先核对草稿' }; }
+    const answer = draft ? { ...row, ...draft } : row;
+    if (answer.conclusion !== 'Comply') { return { exclusion: '仅可批量确认已明确为 Comply 的应答' }; }
+    const issues = databaseBacked ? requirementValidation(answer) : confirmationValidation(answer);
+    if (issues.length) { return { exclusion: issues.join('；') }; }
+
+    const noStandardMatch = '不符合标准回复相似度 >80% 的批量条件，请逐条确认';
+    if (!databaseBacked) { return row.matchLevel === 'standard' && row.score > 80 ? {} : { exclusion: noStandardMatch }; }
+    const reference = row.matchReference;
+    if (row.restrictedMatchReference || reference && reference.library !== 'standard_reply') {
+      return { exclusion: '本条采纳依据不可访问或来自其他知识库，请逐条确认' };
+    }
+    const run = await matches.current(row.id);
+    if (run.deviation && !['已关闭', '已取消'].includes(run.deviation.status)) {
+      return { exclusion: '请先处理本条知识比对偏离' };
+    }
+    const candidate = run.result?.stages?.standard_reply?.candidates?.[0];
+    if (run.status !== 'completed' || run.sourceRequirementVersion !== row.backendVersion ||
+      run.result?.matchedLibrary !== 'standard_reply' || !(candidate?.businessSimilarity > 0.8)) {
+      return { exclusion: noStandardMatch };
+    }
+    if (run.referenceInvalid || reference && (reference.candidateId !== candidate.id || reference.version !== candidate.version) ||
+      draft && (matchChoice.matchRunId !== run.runId || matchChoice.candidateId !== candidate.id)) {
+      return { exclusion: '已采纳的比对依据已变化，请逐条核对' };
+    }
+    if (!['same', 'not_specified'].includes(candidate.conditionStatus) ||
+      (answer.conditions || '').trim() !== (candidate.conditions || '').trim() || answer.draft.trim() !== candidate.answer?.trim()) {
+      return { exclusion: '答复或适用条件与标准回复不一致，或条件尚未核实' };
+    }
+    return reference && !draft ? {} : { choice: { matchRunId: run.runId, candidateId: candidate.id } };
+  }
   async function batchConfirm() {
     if (cardBusyRef.current || !selectedRows.length) { return; }
-    if (dirtyRef.current) { setError('当前条目存在未提交修改，请先确认当前条目再执行批量确认'); return; }
+    const draft = dirtyRef.current ? form : null;
+    cardBusyRef.current = true;
+    setCardBusy(true);
     setError('');
-    const results = []; for (const row of selectedRows) { const result = await (async () => { const exclusions = batchReasons(row); if (exclusions.length) { return { ...row, result: '已排除', message: exclusions.join('；') }; } const ok = await onConfirm(row.id,row.version||1) !== false; return { ...row, result: ok ? '确认成功' : '确认失败', message: ok ? `已绑定 V${row.version || 1}` : '重新校验未通过，请查看当前条目或未关闭评审' }; })(); results.push(result); }
-    setBatchSummary({ total: selectedRows.length, eligible: eligibleBatch.length, excluded: selectedRows.length - eligibleBatch.length }); setBatchResults(results); setSelected((old) => old.filter((id) => !results.some((r) => r.id === id && r.result === '确认成功'))); addActivity('批量确认结果', `明确选择 ${selectedRows.length} 条，成功 ${results.filter((r) => r.result === '确认成功').length} 条`); setModal('batch-result');
+    try {
+      const results = [];
+      const confirmed = new Set();
+      for (const row of selectedRows) {
+        const patch = row.id === active.id ? draft : null;
+        try {
+          const { exclusion, choice } = await checkBatchRow(row, patch);
+          if (exclusion) {
+            results.push({ ...row, result: '已排除', message: exclusion });
+            continue;
+          }
+          const args = [row.id, row.version || 1];
+          if (choice) { args.push(patch || undefined, choice); }
+          if (await onConfirm(...args) === false) { throw new Error('重新校验未通过，请核对条目状态和关联事项后重试'); }
+          confirmed.add(row.id);
+          results.push({ ...row, status: '已确认', result: '确认成功', message: '本条应答已确认' });
+          if (patch) { clearDirty(); }
+        } catch (error) {
+          results.push({ ...row, result: '确认失败', message: error.message || '本条确认失败，请重试' });
+        }
+      }
+      if (!aliveRef.current) { return; }
+      setBatchResults(results);
+      setSelected(old => old.filter(id => !confirmed.has(id)));
+      addActivity('批量确认结果', `明确选择 ${results.length} 条，成功 ${confirmed.size} 条`);
+      setModal('batch-result');
+    } finally {
+      cardBusyRef.current = false;
+      if (aliveRef.current) { setCardBusy(false); }
+    }
   }
   function adoptSuggestion(next, label) {
     if (!canEdit) { return toast('当前身份只读，不能采用或修改应答'); }
@@ -542,7 +614,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     title={reparseBlocked?'请先处理未保存的修改':'重新解析当前文件'} disabled={!!reparseBlocked}
     onClick={()=>sourceReparse.open(project.id,reparseFileId)}><RefreshCw size={14}/><span className="rfq-editor-tools-label">重新解析</span></UiButton>;
   const sourceToolbar={fileAction:reparseAction,fileSelector:<UiSelect className="select rfq-document-file-selector" aria-label="应答来源文件" value={active.sourceFileId || active.source || 'manual'} onChange={e => { const row = requirements.find(r => (r.sourceFileId || r.source || 'manual') === e.target.value); if (row) { chooseRow(row); } }}>{[...new Map(requirements.map(r => [r.sourceFileId || r.source || 'manual', r.source || '人工补录'])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</UiSelect>,actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
-  const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id))}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!selectedRows.length || dirty || cardBusy} title={dirty ? '请先保存当前应答修改' : undefined} onClick={batchConfirm}>批量确认 {selectedRows.length || ''}</UiButton></div></RfqDirectory>;
+  const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id))}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!selectedRows.length || cardBusy} onClick={batchConfirm}>批量确认 {selectedRows.length || ''}</UiButton></div></RfqDirectory>;
   return <div className="response-page rfq-detail">
     {parsingFiles.length>0&&<Notice loading>正在解析：{parsingFiles.map(file=>file.name).join('、')}</Notice>}
     {sourceSummary.status==='failed'&&<Notice warning>资料解析失败：{sourceSummary.files.filter(file=>file.status==='失败').map(file=>[file.name,file.error].filter(Boolean).join('：')).join('；')}{canManageSource&&<UiButton className="text-link" onClick={retrySources}>重新解析</UiButton>}</Notice>}
@@ -658,8 +730,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       onRestore={entry => onRestoreConfirmation(active.id, confirmationHistory.version, entry)}
       onClose={() => setConfirmationHistory(null)}/>}</OverlayPresence>
     <OverlayPresence>{modal === 'batch-result' && <Modal title="批量确认结果" width={820} onClose={() => setModal(null)} footer={<UiButton className="btn" onClick={() => setModal(null)}>完成</UiButton>}>
-      <Notice warning={batchSummary.excluded > 0 || batchResults?.some(row => row.result === '确认失败')}>
-        本次选择 {batchSummary.total} 条；确认成功 {batchResults?.filter(row => row.result === '确认成功').length || 0} 条，确认失败 {batchResults?.filter(row => row.result === '确认失败').length || 0} 条，排除 {batchSummary.excluded} 条。
+      <Notice warning={batchExcludedCount > 0 || batchFailureCount > 0}>
+        本次选择 {batchResults?.length || 0} 条；确认成功 {batchSuccessCount} 条，确认失败 {batchFailureCount} 条，排除 {batchExcludedCount} 条。
       </Notice>
       <div className="table-wrap response-batch-table"><BusinessTable className="data-table"><thead><tr><th>条款 / 要求</th><th>状态</th><th>执行结果</th></tr></thead><tbody>{(batchResults || []).map(row => <tr key={row.id}><td>{row.clause} {row.title}</td><td><StatusBadge status={responseStatusLabel(row, reviews)} /></td><td><StatusBadge status={row.result}/><p>{row.message}</p></td></tr>)}</tbody></BusinessTable></div>
     </Modal>}</OverlayPresence>
