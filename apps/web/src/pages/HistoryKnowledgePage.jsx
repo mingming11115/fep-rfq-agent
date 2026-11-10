@@ -20,6 +20,8 @@ import {useLibraryMutation} from '../useLibraryMutation';
 
 const latestVersions=rows=>[...new Map([...rows].sort((a,b)=>a.version-b.version).map(row=>[row.id,row])).values()];
 const parseLabel={parsing:'解析中',complete:'解析完成',partial:'部分待核对',failed:'解析失败',legacy:'历史记录',manual:'手工补录'};
+const indexWriteTags=new Map([['queued',['processing','待写入']],['retrying',['warning','写入重试中']],['synced',['success','已写入']]]);
+const indexDeleteTags=new Map([['queued',['processing','待移除']],['retrying',['warning','移除重试中']],['synced',['default','已移除']]]);
 const date=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';
 const token=row=>`${row.id}:${row.version}`;
 const labels={customer:'客户',projectName:'历史项目'};
@@ -265,6 +267,19 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const interrupted=active?.parseStatus==='parsing'&&!pending;
  const editReadonly=editing&&(!actor.canEdit||['待审核','已发布','已撤销'].includes(editing.status));
  const saving=busy||mutation.busy;
+ const pendingIndex=databaseBacked&&!saving&&rows.some(row=>row.indexStatus==='queued'||row.indexStatus==='retrying');
+ useEffect(()=>{
+  if(!pendingIndex||!onLibraryRefresh) { return; }
+  let refreshing=false;
+  const timer=setInterval(async()=>{
+   if(refreshing||document.hidden) { return; }
+   refreshing=true;
+   try { await onLibraryRefresh(buId); }
+   catch(error) { console.error('刷新历史 RFQ 向量库状态失败',error); }
+   finally { refreshing=false; }
+  },5000);
+  return ()=>clearInterval(timer);
+ },[activeId,buId,onLibraryRefresh,pendingIndex]);
  const panelIndex=editing?rows.findIndex(row=>token(row)===token(editing)):-1;
  const documentColumns=[
   {title:'文档名称',dataIndex:'name',width:260,render:(value,doc)=><div>
@@ -292,6 +307,11 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    : <Space size={0}><Button type="link" onClick={()=>viewOriginal(doc)}>查看</Button><Button type="link" onClick={()=>openDoc(doc)}>条款</Button>{documentDeleteButton(doc)}</Space>},
  ];
  const clauseColumns=[{title:'客户要求',dataIndex:'requirement',render:value=><p className="history-clause-excerpt">{value||'待补充'}</p>},{title:'历史答复',dataIndex:'answer',render:value=><p className="history-clause-excerpt">{value||<span className="history-missing">未识别到答复</span>}</p>},
+  {title:'向量库状态',width:140,render:(_,row)=>{
+   const tags=row.indexOperation==='delete'?indexDeleteTags:indexWriteTags;
+   const [color,label]=tags.get(row.indexStatus)||['default','未写入'];
+   return <Tag color={color}>{label}</Tag>;
+  }},
   {title:'操作',width:180,render:(_,row)=><Space size={0}>
    <Button type="link" onClick={()=>viewOriginal(active,row)}>查看</Button>
    <Button type="link" onClick={()=>editClause(row)}>条款详情</Button>

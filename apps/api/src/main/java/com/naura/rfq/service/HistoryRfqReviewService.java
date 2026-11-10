@@ -170,12 +170,8 @@ public class HistoryRfqReviewService {
     }
 
     private ObjectNode withIndexStatus(String buId, Clause row) {
-        var status = index.status(Library.HISTORY_RFQ, buId, row.id(), row.version());
-        var result = row.payload().deepCopy().put("revision", row.revision()).put("indexStatus", status.state());
-        if (status.operation() != null) {
-            result.put("indexOperation", status.operation());
-        }
-        return result;
+        return index.status(Library.HISTORY_RFQ, buId, row.id(), row.version())
+                .annotate(row.payload().deepCopy().put("revision", row.revision()));
     }
 
     private void requireReadable(CurrentUser user, String buId, Clause row) {

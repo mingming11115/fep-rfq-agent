@@ -3,6 +3,7 @@ package com.naura.rfq.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Status;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.security.AccessGuard;
@@ -78,19 +79,35 @@ public class BusinessRecordService {
     public Map<String,Object> resources(CurrentUser user,String buId){
         guard.requireBu(user,buId);
         var result=new LinkedHashMap<String,Object>();
-        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document","historyClauses","`history-rfq-record`").entrySet()) {
-            boolean hasDeletedVersions = List.of("knowledge", "historyClauses", "historyDocuments").contains(entry.getKey());
-            String visibleParent = entry.getKey().equals("historyClauses") ? """
-                     and not exists (select 1 from history_document d where d.bu_id=r.bu_id
-                        and d.id=r.payload->>'$.documentId' and d.payload->>'$.status'='已删除')
-                    """ : "";
-            result.put(entry.getKey(),rows("select r.payload from "+entry.getValue()+" r where r.bu_id=?"
-                    +visibleParent+" order by r.id,r.version",buId).stream()
+        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document").entrySet()) {
+            boolean hasDeletedVersions = List.of("knowledge", "historyDocuments").contains(entry.getKey());
+            result.put(entry.getKey(),rows("select r.payload from "+entry.getValue()+" r where r.bu_id=? order by r.id,r.version",buId).stream()
                     .filter(row -> !hasDeletedVersions || !"已删除".equals(row.path("status").asText()))
                     .filter(row->readable(user,row)).toList());
         }
+        result.put("historyClauses", historyClauses(user, buId));
         var catalog=rows("select payload from knowledge_group_catalog where bu_id=?",buId);
         result.put("catalog",catalog.isEmpty()?json.nullNode():catalog.get(0));
         return result;
+    }
+
+    private List<JsonNode> historyClauses(CurrentUser user, String buId) {
+        return jdbc.query("""
+                select r.payload,s.operation,s.synced_at is not null as synced,s.last_error is not null as has_error
+                from `history-rfq-record` r left join history_rfq_index_sync s
+                    on s.bu_id=r.bu_id and s.reply_id=r.id and s.version=r.version
+                where r.bu_id=? and not exists (select 1 from history_document d where d.bu_id=r.bu_id
+                    and d.id=r.payload->>'$.documentId' and d.payload->>'$.status'='已删除')
+                order by r.id,r.version
+                """, (row, number) -> {
+                    var payload = decode(row.getString("payload"));
+                    if (payload instanceof ObjectNode object) {
+                        Status.from(row.getString("operation"), row.getBoolean("synced"), row.getBoolean("has_error"))
+                                .annotate(object);
+                    }
+                    return payload;
+                }, buId).stream()
+                .filter(row -> !"已删除".equals(row.path("status").asText()))
+                .filter(row -> readable(user, row)).toList();
     }
 }

@@ -31,6 +31,7 @@ class HistoryRfqPublicationIntegrationTest {
         jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);
         String author = user(bu, "A"), reviewer = user(bu, "B");
         String path = "/api/rfq/business-units/" + bu + "/history-rfq";
+        String resources = "/api/rfq/business-units/" + bu + "/resources";
         byte[] original = docx();
         var file = new MockMultipartFile("file", "history.docx", "application/octet-stream", original);
         String result = call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
@@ -39,6 +40,8 @@ class HistoryRfqPublicationIntegrationTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String documentId = JsonPath.read(result, "$.data.document.id");
         String id = JsonPath.read(result, "$.data.clauses[0].id");
+        call(get(resources), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("not_queued"));
         call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.duplicate").value(true));
         call(get(path + "/documents/" + documentId + "/original"), reviewer)
@@ -53,6 +56,13 @@ class HistoryRfqPublicationIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("已发布"));
         assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
                 String.class, bu, id)).isEqualTo("upsert");
+        call(get(resources), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("queued"))
+                .andExpect(jsonPath("$.data.historyClauses[0].indexOperation").value("upsert"));
+        jdbc.update("update history_rfq_index_sync set last_error='TEST_RETRY' where bu_id=? and reply_id=?", bu, id);
+        call(get(resources), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("retrying"));
+        jdbc.update("update history_rfq_index_sync set synced_at=utc_timestamp(6),last_error=null where bu_id=? and reply_id=?", bu, id);
         action(version, "delete", author, 2, "").andExpect(status().isConflict());
         action(document, "delete", author, 1, "").andExpect(status().isConflict());
         action(version, "revise", author, 2, "").andExpect(status().isOk());
@@ -63,9 +73,10 @@ class HistoryRfqPublicationIntegrationTest {
         action(draft, "delete", author, 2, "").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已删除"));
         action(draft, "submit", author, 3, "").andExpect(status().isConflict());
-        call(get("/api/rfq/business-units/" + bu + "/resources"), author).andExpect(status().isOk())
+        call(get(resources), author).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.historyDocuments[0].id").value(documentId))
                 .andExpect(jsonPath("$.data.historyClauses.length()").value(1))
+                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("synced"))
                 .andExpect(jsonPath("$.data.historyClauses[0].validity").value("有效"));
         call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.clauses.length()").value(1));
@@ -74,6 +85,10 @@ class HistoryRfqPublicationIntegrationTest {
         action(version, "revoke", reviewer, 2, "撤回失效答复").andExpect(status().isOk());
         assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
                 String.class, bu, id)).isEqualTo("delete");
+        call(get(resources), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("queued"))
+                .andExpect(jsonPath("$.data.historyClauses[0].indexOperation").value("delete"))
+                .andExpect(jsonPath("$.data.historyClauses[1].indexStatus").value("not_queued"));
         action(document, "delete", author, 0, "").andExpect(status().isConflict());
         action(document, "delete", author, 1, "").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已删除"));

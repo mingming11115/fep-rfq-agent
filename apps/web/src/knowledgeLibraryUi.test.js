@@ -63,7 +63,8 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
       case base+'/history-rfq/clauses/H2/versions/1/delete':
         assert.equal(JSON.parse(request.body).revision,2);
         resources.historyClauses=[clause];data={...unwantedClause,status:'已删除',revision:3};break;
-      case base+'/history-rfq/clauses/H/versions/1/publish':data={...clause,status:'已发布',revision:1};resources.historyClauses=[data];break;
+      case base+'/history-rfq/clauses/H/versions/1/publish':
+        data={...clause,status:'已发布',revision:1,indexStatus:'queued',indexOperation:'upsert'};resources.historyClauses=[data];break;
       case base+'/history-rfq/documents/D/delete':
         resources.historyDocuments=[];resources.historyClauses=[];data={...historyDoc,status:'已删除'};break;
       case base+'/capability-library/capabilities/import':resources.capabilities=[capability];data={items:[capability],skippedRows:[],errors:[]};break;
@@ -146,6 +147,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await click('后端历史原件.docx',host);
     assert.doesNotMatch(host.querySelector('.history-metadata-panel').textContent,/可见范围|配套答复文件/);
     const historyRows=host.querySelector('.history-clause-panel tbody');
+    assert.match(historyRows.textContent,/未写入/);
     await click('查看',historyRows);
     const preview=document.querySelector('iframe[title="历史 RFQ 原文"]');
     assert.ok(preview?.src.includes('/wordcraft-classic/'));
@@ -176,6 +178,11 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await act(async()=>{host.querySelector('.history-clause-panel tbody input[type="checkbox"]').click();await settle();});
     await click('批准发布',host);
     assert.match(host.querySelector('.history-counts').textContent,/已发布1/);
+    assert.match(historyRows.textContent,/待写入/);
+    assert.doesNotMatch(historyRows.textContent,/已写入/);
+    resources.historyClauses=resources.historyClauses.map(row=>({...row,indexStatus:'synced'}));
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,5100));});
+    assert.match(historyRows.textContent,/已写入/);
     resources.historyClauses=[{...clause,status:'已撤销',revision:2}];
     await click('返回文档列表',host);
     await click('删除文档',host);

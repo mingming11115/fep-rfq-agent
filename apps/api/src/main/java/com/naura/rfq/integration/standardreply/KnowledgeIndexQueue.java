@@ -1,6 +1,7 @@
 package com.naura.rfq.integration.standardreply;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -35,10 +36,29 @@ public class KnowledgeIndexQueue {
     public Status status(Library library, String buId, String id, int version) {
         return jdbc.query("select operation, synced_at, last_error from " + library.table
                         + " where bu_id=? and reply_id=? and version=?",
-                (row, number) -> new Status(row.getTimestamp("synced_at") != null ? "synced"
-                        : row.getString("last_error") == null ? "queued" : "retrying", row.getString("operation")),
-                buId, id, version).stream().findFirst().orElse(new Status("not_queued", null));
+                (row, number) -> Status.from(row.getString("operation"), row.getTimestamp("synced_at") != null,
+                        row.getString("last_error") != null),
+                buId, id, version).stream().findFirst().orElse(Status.NOT_QUEUED);
     }
 
-    public record Status(String state, String operation) {}
+    public record Status(String state, String operation) {
+        private static final Status NOT_QUEUED = new Status("not_queued", null);
+
+        public static Status from(String operation, boolean synced, boolean hasError) {
+            if (operation == null) {
+                return NOT_QUEUED;
+            }
+            return new Status(synced ? "synced" : hasError ? "retrying" : "queued", operation);
+        }
+
+        public ObjectNode annotate(ObjectNode payload) {
+            payload.put("indexStatus", state);
+            if (operation == null) {
+                payload.remove("indexOperation");
+            } else {
+                payload.put("indexOperation", operation);
+            }
+            return payload;
+        }
+    }
 }

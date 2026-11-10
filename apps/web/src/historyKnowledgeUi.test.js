@@ -35,7 +35,8 @@ test('history document UI separates metadata, repairs missing answers and enforc
   await click('保存文档信息');
   assert.equal(JSON.parse(localStorage.getItem('rfq.history.documents.v1:A'))[0].metadata.model,'机型A');
   assert.deepEqual([...new Set([...host.querySelectorAll('.history-clause-panel th')].map(node=>node.textContent.trim()).filter(Boolean))],
-   ['客户要求','历史答复','操作']);
+   ['客户要求','历史答复','向量库状态','操作']);
+  assert.match(host.querySelector('.history-clause-panel tbody').textContent,/未写入/);
   await click('查看');
   assert.equal(document.querySelector('.history-source-selected')?.id,'history-source-main:body/1');
   assert.equal(document.querySelector('textarea[aria-label="客户要求"]'),null);
