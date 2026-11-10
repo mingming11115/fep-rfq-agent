@@ -60,10 +60,19 @@ public class HybridRequirementExtractor implements RequirementExtractor {
     }
 
     public ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId) {
+        return extractWithReport(blocks, parseRunId, true);
+    }
+
+    /** For callers that already have source-specific rule results. */
+    public ExtractionResult extractModelRequirements(List<RawBlock> blocks) {
+        return extractWithReport(blocks, null, false);
+    }
+
+    private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, boolean fallbackToRules) {
         var config = properties.getLlm();
         if (!config.isEnabled()) {
             log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
-            return new ExtractionResult(rules.extract(blocks), rules.name(), List.of());
+            return new ExtractionResult(fallbackToRules ? rules.extract(blocks) : List.of(), rules.name(), List.of());
         }
         List<ExtractedRequirement> results = new ArrayList<>();
         List<String> issues = new ArrayList<>();
@@ -118,7 +127,9 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                 log.error("document.parse.llm.fallback parseRunId={} model={} firstBlockIndex={} phase={} reason={} validationDetail={} durationMs={}",
                     parseRunId, config.getModel(), firstBlockIndex, phase, reason, detail, (System.nanoTime() - startedAt) / 1_000_000);
                 issues.add("模型批次 " + firstBlockIndex + " 已降级规则抽取：" + reason);
-                results.addAll(rules.extract(batch));
+                if (fallbackToRules) {
+                    results.addAll(rules.extract(batch));
+                }
             }
         }
         Set<Integer> noticeBlocks = new HashSet<>();
