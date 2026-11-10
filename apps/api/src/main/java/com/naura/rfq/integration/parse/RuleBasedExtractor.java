@@ -166,7 +166,8 @@ public class RuleBasedExtractor implements RequirementExtractor {
             String clauseNo = cellNumber(cells);
             String item = tableCell(cells, hasHeader ? itemColumn : -1);
             String specification = tableCell(cells, hasHeader ? specificationColumn : -1);
-            String metricsJson = metricsJson(specification, metrics);
+            String metricsJson = specification.isEmpty() ? (metrics.isEmpty() ? null : writeJson(metrics))
+                    : writeJson(Map.of("specification", specification, "metrics", metrics));
             results.add(new ExtractedRequirement(
                     startOrder + results.size(),
                     block.index(),
@@ -184,29 +185,6 @@ public class RuleBasedExtractor implements RequirementExtractor {
                     String.join("；", reasons)));
         }
         return results;
-    }
-
-    /** Describe a known customer clause, using a table row with only customer-side cells. */
-    public ExtractedRequirement describeKnownRequirement(int order, RawBlock block, String clauseNo,
-            String item, String description, String specification, String conditions, List<String> reviewReasons) {
-        String original = block.isTable() ? joinCells(block.tableRows().get(0)) : block.text().strip();
-        String body = block.isTable() ? original : description;
-        List<Map<String, String>> metrics = extractMetrics(body);
-        String number = clauseNo.isBlank() ? null : clauseNo;
-        int level = block.isTable() || number == null ? 2 : number.split("\\.").length;
-        return new ExtractedRequirement(order, block.index(), block.sectionPath(), number,
-                item.isBlank() ? titleOf(description) : item, level,
-                number == null || block.isTable() ? null : parentOf(number), original, description,
-                metricsJson(specification, metrics), conditions.isBlank() ? null : conditions, obligationOf(body),
-                reviewReasons.isEmpty() ? ExtractedRequirement.VALID : ExtractedRequirement.NEEDS_REVIEW,
-                reviewReasons.isEmpty() ? null : String.join("；", reviewReasons));
-    }
-
-    private String metricsJson(String specification, List<Map<String, String>> metrics) {
-        if (!specification.isEmpty()) {
-            return writeJson(Map.of("specification", specification, "metrics", metrics));
-        }
-        return metrics.isEmpty() ? null : writeJson(metrics);
     }
 
     static int tableItemColumn(List<String> header) {
