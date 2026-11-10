@@ -57,6 +57,30 @@ class ParsingAdaptersTest {
         assertThat(metrics.path("specification").asText()).isEqualTo("220 V / 50 Hz");
         assertThat(metrics.path("metrics").size()).isEqualTo(2);
     }
+    @Test void modelQuoteWithLineBreaksRetainsTheExactSourceText() throws Exception {
+        var table = RawBlock.table(0, List.of(
+            List.of("项目", "描述"),
+            List.of("设计压力", "泵的设计压力 至少 2 MPa"),
+            List.of("测试压力", "出厂前验证")), "技术规格", "body/1");
+        var s = server(200, envelope(answer(0, "设计压力 | 泵的设计压力\r\n至少 2 MPa")), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(List.of(table));
+            assertThat(result.extractor()).isEqualTo("llm:test-model");
+            assertThat(result.requirements()).singleElement().satisfies(row ->
+                assertThat(row.originalText()).isEqualTo("设计压力 | 泵的设计压力 至少 2 MPa"));
+        } finally { s.stop(0); }
+    }
+    @Test void modelQuoteWithLineBreaksCannotSelectBetweenRepeatedMatches() throws Exception {
+        var table = RawBlock.table(0, List.of(
+            List.of("设计压力", "至少 2 MPa"),
+            List.of("设计压力", "至少 2 MPa")), "技术规格", "body/1");
+        var s = server(200, envelope(answer(0, "设计压力 |\n至少 2 MPa")), 0);
+        try {
+            var result = extractor(settings(url(s), true)).extractWithReport(List.of(table));
+            assertThat(result.extractor()).isEqualTo("rule-based-v1");
+            assertThat(result.issues()).hasSize(1);
+        } finally { s.stop(0); }
+    }
     @Test void trailingEllipsisRecoversTheUniqueTableRow() throws Exception {
         var table = RawBlock.table(0, List.of(
             List.of("设计压力", "≥ 2 MPa", "在常温下适用"),

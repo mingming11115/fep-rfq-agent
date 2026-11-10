@@ -4,7 +4,7 @@ const fold=value=>value.trim().replace(/\s+/g,' ');
 export function craftClauseTargets(source,rows,engine,blocks=[]){
   const targets=officeClauseTargets(source,rows);
   if(engine!=='wordcraft') { return targets; }
-  const tableQuotes=new Map(),paragraphs=[];
+  const tableQuotes=new Map(),tableRows=[],paragraphs=[];
   for(const {type,content} of blocks){
     if(!content) { continue; }
     if(type==='paragraph') { paragraphs.push(fold(content)); }
@@ -14,7 +14,9 @@ export function craftClauseTargets(source,rows,engine,blocks=[]){
       if(cells.length<2) { continue; }
       // Extraction uses colons or pipes between cells. WordCraft searches across cells with spaces.
       const native=fold(cells.join(' '));
-      for(const extracted of [fold(cells.join('：')),fold(line)]){
+      const serialized=fold(line);
+      tableRows.push({serialized,native});
+      for(const extracted of [fold(cells.join('：')),serialized]){
         tableQuotes.set(extracted,tableQuotes.has(extracted)&&tableQuotes.get(extracted)!==native?null:native);
       }
     }
@@ -22,7 +24,12 @@ export function craftClauseTargets(source,rows,engine,blocks=[]){
   const counts=new Map(),byId=new Map(rows.map(row=>[row.id,row]));
   for(const target of targets){const quote=fold(target.quote);counts.set(quote,(counts.get(quote)||0)+1);}
   return targets.map(target=>{
-    const quote=fold(target.quote),native=tableQuotes.get(quote);
+    const quote=fold(target.quote);
+    let native=tableQuotes.get(quote);
+    if(native===undefined&&quote.endsWith(' |')){
+      const matches=tableRows.filter(row=>row.serialized.startsWith(quote+' '));
+      if(matches.length===1) { native=matches[0].native; }
+    }
     if(native&&!paragraphs.some(text=>text.includes(quote))) { return {...target,quote:native}; }
     const row=byId.get(target.id);
     if(quote&&row?.title&&row?.clause&&counts.get(quote)>1){
