@@ -33,26 +33,39 @@ public class ParseHttpClient {
     private final ConcurrentHashMap<Duration, HttpClient> clients = new ConcurrentHashMap<>();
 
     public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String parseRunId) throws Exception {
+        byte[] requestBytes = json.writeValueAsBytes(body);
+        var request = postRequest(settings, "application/json; charset=UTF-8", HttpRequest.BodyPublishers.ofByteArray(requestBytes));
+        boolean llm = settings instanceof ParseIntegrationProperties.Llm;
+        boolean logPayload = settings instanceof ParseIntegrationProperties.Llm config && config.isLogPayload();
+        var call = new ExternalCallLog(llm ? "llm" : "ocr", llm ? "chat_completions" : "recognise", request, parseRunId);
+        return send(settings, request, call, logPayload ? requestBytes : null);
+    }
+
+    JsonNode postMineru(ParseIntegrationProperties.Mineru settings, String boundary, HttpRequest.BodyPublisher body) throws Exception {
+        var request = postRequest(settings, "multipart/form-data; boundary=" + boundary, body);
+        return send(settings, request, new ExternalCallLog("mineru", "file_parse", request, null), null);
+    }
+
+    private HttpRequest postRequest(ParseIntegrationProperties.Endpoint settings, String contentType, HttpRequest.BodyPublisher body) {
         URI uri = URI.create(settings.getUrl());
         if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null || uri.getUserInfo() != null) {
             throw new IllegalArgumentException("服务地址未配置或不合法");
         }
-        Duration timeout = positive(settings.getTimeout());
-        HttpClient client = clients.computeIfAbsent(positive(settings.getConnectTimeout()), duration -> HttpClient.newBuilder()
-            .connectTimeout(duration).followRedirects(HttpClient.Redirect.NEVER).build());
-        byte[] requestBytes = json.writeValueAsBytes(body);
-        var builder = HttpRequest.newBuilder(uri).timeout(timeout)
-            .header("Content-Type", "application/json; charset=UTF-8")
-            .POST(HttpRequest.BodyPublishers.ofByteArray(requestBytes));
+        var builder = HttpRequest.newBuilder(uri).timeout(positive(settings.getTimeout()))
+            .header("Content-Type", contentType).POST(body);
         if (settings.getApiKey() != null && !settings.getApiKey().isBlank()) {
             builder.header("Authorization", "Bearer " + settings.getApiKey());
         }
-        var request = builder.build();
-        boolean llm = settings instanceof ParseIntegrationProperties.Llm;
-        boolean logPayload = settings instanceof ParseIntegrationProperties.Llm config && config.isLogPayload();
-        var call = new ExternalCallLog(llm ? "llm" : "ocr", llm ? "chat_completions" : "recognise", request, parseRunId);
-        if (logPayload) {
-            logPayload(call, "request", requestBytes, settings.getApiKey());
+        return builder.build();
+    }
+
+    private JsonNode send(ParseIntegrationProperties.Endpoint settings, HttpRequest request, ExternalCallLog call,
+            byte[] loggedRequest) throws Exception {
+        Duration timeout = request.timeout().orElseThrow();
+        HttpClient client = clients.computeIfAbsent(positive(settings.getConnectTimeout()), duration -> HttpClient.newBuilder()
+            .connectTimeout(duration).followRedirects(HttpClient.Redirect.NEVER).build());
+        if (loggedRequest != null) {
+            logPayload(call, "request", loggedRequest, settings.getApiKey());
         }
 
         CompletableFuture<HttpResponse<byte[]>> pending = null;
@@ -69,7 +82,7 @@ public class ParseHttpClient {
             }
         }
         call.response(response.statusCode(), response.body().length);
-        if (logPayload) {
+        if (loggedRequest != null) {
             logPayload(call, "response", response.body(), settings.getApiKey());
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {

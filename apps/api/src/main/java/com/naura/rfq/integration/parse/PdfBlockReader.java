@@ -1,10 +1,13 @@
 package com.naura.rfq.integration.parse;
 
 import com.naura.rfq.model.parse.RawBlock;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Component;
 public class PdfBlockReader implements DocumentBlockReader {
 
     private final OcrClient ocr;
+    private final MineruPdfReader mineru;
 
     private static final int MAX_PARAGRAPH_CHARS = 1200;
 
@@ -33,12 +37,60 @@ public class PdfBlockReader implements DocumentBlockReader {
 
     @Override
     public List<RawBlock> read(Path file) throws DocumentReadException {
-        return read(file, false);
+        if (!mineru.enabled()) {
+            return read(file, false);
+        }
+        try {
+            return recoverMineruImages(file, mineru.read(file));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new DocumentReadException("PDF 解析已中断", exception);
+        } catch (Exception exception) {
+            String reason = exception instanceof DocumentReadException ? exception.getMessage() : ParseHttpClient.reason(exception);
+            log.warn("document.parse.mineru.fallback reason={}", reason);
+            var blocks = read(file, false);
+            if (!blocks.isEmpty()) {
+                var first = blocks.get(0);
+                String issue = "MinerU 解析失败，已使用现有 PDF 解析：" + reason;
+                if (first.issue() != null) {
+                    issue += "；" + first.issue();
+                }
+                blocks.set(0, new RawBlock(first.index(), first.type(), first.text(), first.tableRows(), first.sectionPath(),
+                    first.clauseNo(), first.anchor(), first.provenance(), issue));
+            }
+            return blocks;
+        }
     }
 
     /** Historical response labels and clause boundaries must retain PDF line breaks. */
     public List<RawBlock> readForHistory(Path file) throws DocumentReadException {
         return read(file, true);
+    }
+
+    private List<RawBlock> recoverMineruImages(Path file, List<RawBlock> blocks) throws IOException {
+        if (!ocr.enabled() || blocks.stream().noneMatch(block -> RawBlock.IMAGE.equals(block.type()))) {
+            return blocks;
+        }
+        Map<String, List<RawBlock>> pages = new LinkedHashMap<>();
+        for (RawBlock block : blocks) {
+            String page = block.anchor().substring(0, block.anchor().indexOf('/'));
+            pages.computeIfAbsent(page, ignored -> new ArrayList<>()).add(block);
+        }
+        try (PDDocument document = Loader.loadPDF(file.toFile())) {
+            List<RawBlock> result = new ArrayList<>();
+            int[] images = {0};
+            for (var page : pages.entrySet()) {
+                for (RawBlock block : page.getValue()) {
+                    result.add(new RawBlock(result.size(), block.type(), block.text(), block.tableRows(), block.sectionPath(),
+                        block.clauseNo(), block.anchor(), block.provenance(), block.issue()));
+                }
+                if (page.getValue().stream().anyMatch(block -> RawBlock.IMAGE.equals(block.type()))) {
+                    int pageIndex = Integer.parseInt(page.getKey().substring("page-".length())) - 1;
+                    readImages(document.getPage(pageIndex), result, images, page.getKey());
+                }
+            }
+            return result;
+        }
     }
 
     private List<RawBlock> read(Path file, boolean historyLines) throws DocumentReadException {
@@ -97,7 +149,7 @@ public class PdfBlockReader implements DocumentBlockReader {
 
     /** Graphics engine visits images actually painted, including inline BI/ID/EI and nested forms. */
     private void readImages(org.apache.pdfbox.pdmodel.PDPage page, List<RawBlock> blocks,
-            int[] count, String anchor) throws Exception {
+            int[] count, String anchor) throws IOException {
         new org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine(page) {
             private java.awt.geom.Point2D point = new java.awt.geom.Point2D.Float();
             @Override public void drawImage(org.apache.pdfbox.pdmodel.graphics.image.PDImage image) {

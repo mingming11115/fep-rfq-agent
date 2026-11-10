@@ -39,6 +39,10 @@ class ParsingAdaptersTest {
     HybridRequirementExtractor extractor(ParseIntegrationProperties p) {
         return new HybridRequirementExtractor(new RuleBasedExtractor(json), p, new ParseHttpClient(json), json);
     }
+    PdfBlockReader pdfReader(ParseIntegrationProperties settings) {
+        var http = new ParseHttpClient(json);
+        return new PdfBlockReader(new OcrClient(settings, http), new MineruPdfReader(settings, http, json));
+    }
     List<RawBlock> blocks() { return List.of(RawBlock.paragraph(0, source, "设计", "1.1", "p0")); }
 
     @Test void wordTableUsesItemColumnForTitleAndRetainsTheSourceRow() throws Exception {
@@ -334,7 +338,7 @@ class ParsingAdaptersTest {
     @Test void ocrDisabledPreservesScanPlaceholder() throws Exception {
         Path pdf = dir.resolve("scan.pdf");
         try (var doc = new PDDocument()) { doc.addPage(new PDPage()); doc.save(pdf.toFile()); }
-        var reader = new PdfBlockReader(new OcrClient(settings("", false), new ParseHttpClient(json)));
+        var reader = pdfReader(settings("", false));
         assertThat(reader.read(pdf)).singleElement().satisfies(b -> {
             assertThat(b.type()).isEqualTo(RawBlock.IMAGE); assertThat(b.issue()).contains("OCR");
         });
@@ -355,7 +359,7 @@ class ParsingAdaptersTest {
             }
             page.setContents(stream); doc.save(pdf.toFile());
         }
-        var reader = new PdfBlockReader(new OcrClient(settings("", false), new ParseHttpClient(json)));
+        var reader = pdfReader(settings("", false));
         assertThat(reader.read(pdf)).hasSize(2).anySatisfy(b -> {
             assertThat(b.type()).isEqualTo(RawBlock.IMAGE); assertThat(b.issue()).isNotBlank();
         });
@@ -365,7 +369,7 @@ class ParsingAdaptersTest {
         try {
             Path pdf = dir.resolve("scan.pdf");
             try (var doc = new PDDocument()) { doc.addPage(new PDPage()); doc.save(pdf.toFile()); }
-            var reader = new PdfBlockReader(new OcrClient(settings(url(s), true), new ParseHttpClient(json)));
+            var reader = pdfReader(settings(url(s), true));
             assertThat(reader.read(pdf)).singleElement().satisfies(b -> {
                 assertThat(b.text()).isEqualTo(source); assertThat(b.provenance()).isEqualTo("ocr");
                 assertThat(b.anchor()).isEqualTo("page-1");

@@ -78,6 +78,13 @@ rfq:
         max-images: ${RFQ_OCR_MAX_IMAGES:100}
         max-image-pixels: ${RFQ_OCR_MAX_IMAGE_PIXELS:20000000}
         max-image-bytes: ${RFQ_OCR_MAX_IMAGE_BYTES:10485760}
+      mineru:
+        enabled: ${RFQ_MINERU_ENABLED:false}
+        url: ${RFQ_MINERU_URL:}
+        api-key: ${RFQ_MINERU_API_KEY:}
+        backend: ${RFQ_MINERU_BACKEND:pipeline}
+        connect-timeout: ${RFQ_MINERU_CONNECT_TIMEOUT:3s}
+        timeout: ${RFQ_MINERU_TIMEOUT:120s}
 
 office:
   public-url: ${ONLYOFFICE_PUBLIC_URL:http://127.0.0.1:8082}

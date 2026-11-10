@@ -3,6 +3,7 @@ package com.naura.rfq.model.parse;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * A readable unit produced by the document readers and shared by every extractor.
@@ -47,8 +48,7 @@ public record RawBlock(
     public static RawBlock table(int index, List<List<String>> rows, String sectionPath, String anchor) {
         String flattened = rows.stream()
                 .map(row -> String.join(" | ", row))
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("");
+                .collect(Collectors.joining("\n"));
         return new RawBlock(index, TABLE, flattened, rows, sectionPath, null, anchor);
     }
 

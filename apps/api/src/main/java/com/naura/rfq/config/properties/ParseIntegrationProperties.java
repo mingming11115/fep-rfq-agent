@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ParseIntegrationProperties {
     private Llm llm = new Llm();
     private Ocr ocr = new Ocr();
+    private Mineru mineru = new Mineru();
 
     @Getter @Setter
     public static class Endpoint {
@@ -32,5 +33,13 @@ public class ParseIntegrationProperties {
         private int maxImages = 100;
         private long maxImagePixels = 20000000;
         private int maxImageBytes = 10485760;
+    }
+    @Getter @Setter
+    public static class Mineru extends Endpoint {
+        private String backend = "pipeline";
+
+        public Mineru() {
+            setTimeout(Duration.ofMinutes(2));
+        }
     }
 }

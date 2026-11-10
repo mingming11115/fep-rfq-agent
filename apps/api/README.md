@@ -133,6 +133,26 @@ OCR 使用本项目定义的轻量 HTTP JSON 协议，可通过适配服务对�
 
 没有填写真实服务地址和凭据时，可完整使用上传与原生文字/规则解析。当前通过本地 HTTP 假服务验证成功、错误、超时和降级，尚未与指定供应商实网联调。
 
+## 项目 PDF 使用 MinerU
+
+在已安装 MinerU 3.4.2 的环境中启动自托管接口：
+
+```powershell
+mineru-api --host 127.0.0.1 --port 8000
+```
+
+在项目根目录打开另一个 PowerShell，设置以下变量并启动 RFQ 后端：
+
+```powershell
+$env:RFQ_MINERU_ENABLED = 'true'
+$env:RFQ_MINERU_URL = 'http://127.0.0.1:8000/file_parse'
+npm run dev:api
+```
+
+使用 Docker Compose 时，可在 `apps/api/.env` 中配置同名变量。URL 应是容器可访问的内网地址，并包含 `/file_parse`。可选设置包括 `RFQ_MINERU_BACKEND`（默认 `pipeline`）、`RFQ_MINERU_CONNECT_TIMEOUT`（默认 `3s`）、`RFQ_MINERU_TIMEOUT`（默认 `120s`）和 `RFQ_MINERU_API_KEY`（内网网关需要时设置）。
+
+开启后，项目 PDF 解析优先读取 MinerU 的结构化内容。表格行列进入现有条款抽取流程，内容块保留 PDF 原件页码，识别文字及表格标记为待核对。已配置的 OCR 会补读含未识别区域的页面中的内嵌图片。接口调用失败、超时或没有可读内容时，后端使用现有 PDFBox/OCR 链路并记录降级。DOCX 和历史 RFQ 解析继续使用各自的原生读取器。
+
 ## 标准回复导入与发布
 
 标准回复按 BU 管理。上传 `.xlsx`、`.xls` 或 UTF-8 `.csv` 文件，表头使用「回复标题、客户要求、标准回复、适用条件」。Excel 使用一个数据工作表，单个文件最多 5 MiB、1,000 条数据。导入返回新增草稿、重复行和错误行。同一 BU 重复导入字节相同的文件会跳过已保存的行。草稿保存文件名、文件 SHA-256 和行号。
