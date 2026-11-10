@@ -69,6 +69,12 @@ public class HistoryRfqController {
 
     public record Reparse(long revision) {}
 
+    @PostMapping(LIBRARY + "/documents/{id}/delete")
+    public ApiResponse<ObjectNode> deleteDocument(@PathVariable String buId, @PathVariable String id,
+            @Valid @RequestBody ReviewRequest request) {
+        return ApiResponse.success(intake.deleteDocument(CurrentUserHolder.require(), buId, id, request.revision()));
+    }
+
     @PostMapping(LIBRARY + "/documents/{id}/reparse")
     public ApiResponse<HistoryRfqService.Intake> reparse(@PathVariable String buId, @PathVariable String id,
             @RequestBody Reparse request) throws IOException {

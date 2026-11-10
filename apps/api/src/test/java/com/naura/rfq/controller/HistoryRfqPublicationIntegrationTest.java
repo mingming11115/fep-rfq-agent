@@ -44,6 +44,7 @@ class HistoryRfqPublicationIntegrationTest {
         call(get(path + "/documents/" + documentId + "/original"), reviewer)
                 .andExpect(status().isOk()).andExpect(content().bytes(original));
         String version = path + "/clauses/" + id + "/versions/1";
+        String document = path + "/documents/" + documentId;
         action(version, "submit", author, 0, "").andExpect(status().isOk());
         action(version, "delete", author, 1, "").andExpect(status().isConflict());
         action(version, "publish", author, 1, "").andExpect(status().isForbidden());
@@ -53,6 +54,7 @@ class HistoryRfqPublicationIntegrationTest {
         assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
                 String.class, bu, id)).isEqualTo("upsert");
         action(version, "delete", author, 2, "").andExpect(status().isConflict());
+        action(document, "delete", author, 1, "").andExpect(status().isConflict());
         action(version, "revise", author, 2, "").andExpect(status().isOk());
         String draft = path + "/clauses/" + id + "/versions/2";
         action(draft, "delete", author, 1, "").andExpect(status().isConflict());
@@ -72,6 +74,15 @@ class HistoryRfqPublicationIntegrationTest {
         action(version, "revoke", reviewer, 2, "撤回失效答复").andExpect(status().isOk());
         assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
                 String.class, bu, id)).isEqualTo("delete");
+        action(document, "delete", author, 0, "").andExpect(status().isConflict());
+        action(document, "delete", author, 1, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已删除"));
+        call(get("/api/rfq/business-units/" + bu + "/resources"), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyDocuments.length()").value(0))
+                .andExpect(jsonPath("$.data.historyClauses.length()").value(0));
+        action(path + "/clauses/" + id + "/versions/3", "submit", author, 0, "").andExpect(status().isConflict());
+        call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.duplicate").value(false));
     }
 
     @Test void approvedSnapshotProducesProjectScopedCandidatesWithoutIndexingThem() throws Exception {
@@ -157,6 +168,9 @@ class HistoryRfqPublicationIntegrationTest {
         call(get(path + "/documents/" + newId + "/original"), actor).andExpect(status().isOk()).andExpect(content().bytes(bytes));
         call(get(path + "/clauses/HK-manual/versions/1"), actor).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.documentId").value(id));
+        action(path + "/documents/" + newId, "delete", actor, 1, "").andExpect(status().isOk());
+        call(post(document + "/reparse").contentType("application/json").content("{\"revision\":2}"), actor)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.document.version").value("V3"));
     }
 
     private ResultActions action(String path, String action, String actor, long revision, String reason) throws Exception {

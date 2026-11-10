@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
@@ -131,14 +132,18 @@ public class HistoryRfqService {
                 var current = sourceDocument(user, scope.buId(), parent).payload();
                 requireRevision(current, revision);
                 String family = current.path("familyId").asText(parent);
-                var newer = jdbc.queryForObject("""
-                        select count(*) from history_document where bu_id=?
-                        and json_unquote(json_extract(payload,'$.previousDocumentId'))=?
-                        """, Integer.class, scope.buId(), parent);
-                if (newer > 0) {
+                int currentNumber = current.path("versionNumber").asInt(1);
+                var versions = jdbc.query("""
+                        select payload from history_document where bu_id=?
+                        and (id=? or payload->>'$.familyId'=?)
+                        """, (row, n) -> decode(row.getString("payload")), scope.buId(), parent, family);
+                if (versions.stream().anyMatch(row -> row.path("versionNumber").asInt(1) > currentNumber
+                        && !"已删除".equals(row.path("status").asText()))) {
                     throw new BusinessException(409, "该版本已有后续版本，请从最新版本继续");
                 }
-                int number = current.path("versionNumber").asInt(1) + 1;
+                int lastNumber = versions.stream().mapToInt(row -> row.path("versionNumber").asInt(1))
+                        .max().orElse(currentNumber);
+                int number = Math.addExact(lastNumber, 1);
                 document.put("familyId", family).put("previousDocumentId", parent).put("versionNumber", number)
                         .put("version", "V" + number).put("changeNote", limited(note, 900, false));
                 if (current.has("groupIds")) {
@@ -171,6 +176,27 @@ public class HistoryRfqService {
             throw new BusinessException(409, "该文档没有可重新解析的独立原件");
         }
         return parseAndStore(user, source.scope(), files, "reparse:" + id + ":" + revision, source, revision, "重新解析原件");
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ObjectNode deleteDocument(CurrentUser user, String bu, String id, long revision) {
+        access.requireWriter(user, bu, false);
+        access.lockBu(bu);
+        var document = sourceDocument(user, bu, id).payload();
+        requireRevision(document, revision);
+        var clauses = jdbc.query("""
+                select payload from `history-rfq-record`
+                where bu_id=? and payload->>'$.documentId'=?
+                order by id,version for update
+                """, (row, n) -> decode(row.getString("payload")), bu, id);
+        if (clauses.stream().anyMatch(clause -> "待审核".equals(clause.path("status").asText())
+                || ("已发布".equals(clause.path("status").asText()) && !"被替代".equals(clause.path("validity").asText())))) {
+            throw new BusinessException(409, "请先退回待审核条款，并撤销当前已发布条款，再删除文档");
+        }
+        document.put("status", "已删除").put("revision", revision + 1);
+        jdbc.update("update history_document set payload=?,fingerprint=null where bu_id=? and id=?", document.toString(), bu, id);
+        audit.successInBu(user.id(), bu, "删除历史 RFQ 文档", "history_document", id, "");
+        return document;
     }
 
     @Transactional
@@ -255,6 +281,9 @@ public class HistoryRfqService {
         String origin = KnowledgePublicationAccess.recordProjectId(source.payload());
         if (!origin.isBlank()) {
             access.requireScope(user, bu, origin, "仅当前项目");
+        }
+        if ("已删除".equals(source.payload().path("status").asText())) {
+            throw new BusinessException(404, "历史 RFQ 文档已删除");
         }
         return source;
     }

@@ -15,7 +15,8 @@ export function buildHistoryDocuments(documents,clauses) {
  return [...documents,...[...groups.entries()].map(([key,rows])=>({id:`legacy:${key}`,buId:rows[0].buId||'BU-DEMO',legacy:true,...(rows.some(r=>Array.isArray(r.groupIds)||r.groupId)?{groupIds:[...new Set(rows.flatMap(r=>Array.isArray(r.groupIds)?r.groupIds:r.groupId?[r.groupId]:[]))]}:{}),legacyIds:[...new Set(rows.map(row=>row.id))],name:rows[0].source||'手工历史知识',metadata:{},version:'—',parseStatus:'legacy',scope:rows[0].scope,projectId:rows[0].sourceProjectId||rows[0].projectId,createdAt:'',issues:[],sources:[]}))];
 }
 export function selectHistoryResources(snapshot,context){
- const documents=selectReadableResources(snapshot.documents.map(document=>({...document,status:'草稿'})),context,'knowledge');
+ const documents=selectReadableResources(snapshot.documents.filter(document=>document.status!=='已删除')
+  .map(document=>({...document,status:'草稿'})),context,'knowledge');
  const ids=new Set(documents.map(document=>document.id));
  const clauses=selectReadableResources(snapshot.clauses,context,'knowledge').filter(row=>row.status!=='已删除'&&(!row.documentId||ids.has(row.documentId)));
  return {documents:buildHistoryDocuments(documents,clauses),clauses};

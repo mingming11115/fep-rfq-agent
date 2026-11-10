@@ -224,6 +224,12 @@ public class HistoryRfqReviewService {
     private Clause checked(CurrentUser user, String buId, List<Clause> chain, int version, long revision) {
         var row = find(chain, version);
         requireReadable(user, buId, row);
+        String documentId = row.payload().path("documentId").asText();
+        if (!documentId.isBlank()) {
+            requireState(jdbc.queryForList("""
+                    select id from history_document where bu_id=? and id=? and payload->>'$.status'='已删除'
+                    """, String.class, buId, documentId).isEmpty(), "历史 RFQ 文档已删除");
+        }
         requireState(row.revision() == revision, "历史条款已变更，请刷新后再操作");
         return row;
     }

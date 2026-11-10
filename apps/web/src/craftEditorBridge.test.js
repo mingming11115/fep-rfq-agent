@@ -24,7 +24,7 @@ test('project editor coordinates native and collaboration comments within one so
   const document=window.document;document.write(await readFile(new URL('../../../packages/craft-editors/site/classic.html',import.meta.url),'utf8'));
   Object.assign(globalThis,{window,document,location:window.location,ResizeObserver:class{observe(){}disconnect(){}},requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}});
   const source={projectId:'P',fileId:'F',sourceVersion:'V1'},user={id:'actor',name:'Alex'};
-  const rows=[{id:'R1',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:1,clause:'1',title:'Safety',original:'Exact source'},
+  const rows=[{id:'R1',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:1,clause:'1',title:'Safety',original:'Exact source',requirementText:'Check the door interlock'},
     {id:'R2',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:2,clause:'2',original:'Other source'}];
   let context={rows,comments:[],people:[user],canEditRow:row=>row.id==='R1',editDocument:false,selectedAnchor:makeSourceAnchor(rows[0])};
   let bridge,notes=[],nextId=10,applied=0,configureFailures=0,outlineVisible=false,editorToolsVisible=false,dirtyCount=0;const calls=[],states=[],errors=[],selected=[],files=[];
@@ -69,6 +69,7 @@ test('project editor coordinates native and collaboration comments within one so
     const configure=calls.filter(c=>c.type==='wordcraft:review').map(c=>JSON.parse(c.payload)).find(c=>c.action==='configure');
     assert.equal(configure.params.targets[0].page,0);assert.equal(configure.params.targets[0].editable,true);assert.equal(configure.params.targets[1].editable,false);
     assert.equal(configure.params.targets[0].title,'Safety');
+    assert.equal(configure.params.targets[0].description,'Check the door interlock');
   });
   await t.test('a separate outline changes viewing state without dirtying or saving the document',async()=>{
     const before=dirtyCount;

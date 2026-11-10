@@ -45,6 +45,8 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
         assert.equal(JSON.parse(request.body).revision,2);
         resources.historyClauses=[clause];data={...unwantedClause,status:'已删除',revision:3};break;
       case base+'/history-rfq/clauses/H/versions/1/publish':data={...clause,status:'已发布',revision:1};resources.historyClauses=[data];break;
+      case base+'/history-rfq/documents/D/delete':
+        resources.historyDocuments=[];resources.historyClauses=[];data={...historyDoc,status:'已删除'};break;
       case base+'/capability-library/capabilities/import':resources.capabilities=[capability];data={items:[capability],skippedRows:[],errors:[]};break;
       case base+'/capability-library/capabilities/C/versions/1/submit':data={...capability,status:'待审核',revision:1};resources.capabilities=[data];break;
       default:throw new Error(`unexpected request: ${path}`);
@@ -101,11 +103,16 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
 
     await render('history');
     await click('上传历史 RFQ',host);
+    const uploadDialog=document.querySelector('[aria-label="历史 RFQ 文件"]').closest('[role="dialog"]');
+    assert.doesNotMatch(uploadDialog.textContent,/可见范围|配套答复文件/);
     await attach('历史 RFQ 文件','历史.docx');
-    await attach('配套答复文件','答复.docx');
-    await act(async()=>{document.querySelector('input[type="radio"][value="bu"]').click();await settle();});
     await click('上传并开始解析');
+    const uploadBody=calls.find(([path])=>path.endsWith('/history-rfq/import'))[2];
+    assert.equal(uploadBody.get('file').name,'历史.docx');
+    assert.equal(uploadBody.get('shareWithBu'),'true');
+    assert.equal(uploadBody.has('responseFile'),false);
     assert.match(host.textContent,/后端历史原件.docx/);
+    assert.doesNotMatch(host.querySelector('.history-metadata-panel').textContent,/可见范围|配套答复文件/);
     const historyRows=host.querySelector('.history-clause-panel tbody');
     await click('删除',historyRows);
     await click('取消');
@@ -117,6 +124,11 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await act(async()=>{host.querySelector('.history-clause-panel tbody input[type="checkbox"]').click();await settle();});
     await click('批准发布',host);
     assert.match(host.querySelector('.history-clause-panel tbody').textContent,/已发布/);
+    resources.historyClauses=[{...clause,status:'已撤销',revision:2}];
+    await click('返回文档列表',host);
+    await click('删除文档',host);
+    await click('确认删除文档');
+    assert.doesNotMatch(host.textContent,/后端历史原件.docx/);
 
     await render('capabilities');
     await click('Excel 上传',host);
@@ -127,8 +139,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await click('提交审核',host);
     await click('确认提交审核');
     assert.match(host.querySelector('.generic-detail-card .ant-table-tbody').textContent,/待审核/);
-    assert.equal(calls.find(([path])=>path.endsWith('/history-rfq/import'))[2].get('responseFile').name,'答复.docx');
-    assert.equal(calls.filter(([,method])=>method==='POST').length,8);
+    assert.equal(calls.filter(([,method])=>method==='POST').length,9);
     assert.deepEqual(Object.keys(localStorage),['fep-rfq-auth']);
   }finally{
     await act(async()=>app.unmount());

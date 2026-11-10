@@ -79,8 +79,13 @@ public class BusinessRecordService {
         guard.requireBu(user,buId);
         var result=new LinkedHashMap<String,Object>();
         for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document","historyClauses","`history-rfq-record`").entrySet()) {
-            boolean hasDeletedVersions = entry.getKey().equals("knowledge") || entry.getKey().equals("historyClauses");
-            result.put(entry.getKey(),rows("select payload from "+entry.getValue()+" where bu_id=? order by id,version",buId).stream()
+            boolean hasDeletedVersions = List.of("knowledge", "historyClauses", "historyDocuments").contains(entry.getKey());
+            String visibleParent = entry.getKey().equals("historyClauses") ? """
+                     and not exists (select 1 from history_document d where d.bu_id=r.bu_id
+                        and d.id=r.payload->>'$.documentId' and d.payload->>'$.status'='已删除')
+                    """ : "";
+            result.put(entry.getKey(),rows("select r.payload from "+entry.getValue()+" r where r.bu_id=?"
+                    +visibleParent+" order by r.id,r.version",buId).stream()
                     .filter(row -> !hasDeletedVersions || !"已删除".equals(row.path("status").asText()))
                     .filter(row->readable(user,row)).toList());
         }

@@ -562,17 +562,17 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
             {cardVisible ? <article ref={cardRef} className="response-current-card" aria-label="当前应答项"><fieldset disabled={cardBusy}>
 <section className="panel response-editor">
   <div className="response-column-heading">
-    {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
+    <div className="response-confirmation-meta">
+      <StatusBadge status={responseStatusLabel(active, reviews)}/>
+      {databaseBacked && confirmationVersion && <Tag color="blue">{active.status === '已确认' ? '确认' : '最近确认'} V{confirmationVersion}</Tag>}
+      {active.restoredFromVersion && <Tag>恢复自 V{active.restoredFromVersion}</Tag>}
+      {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
+    </div>
     {databaseBacked && <UiButton className="text-link" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
       <History size={15}/>确认历史
     </UiButton>}
   </div>
   <div className="response-editor-body"><div className="response-active-title">
-    <div className="response-confirmation-meta">
-      <StatusBadge status={responseStatusLabel(active, reviews)}/>
-      {databaseBacked && confirmationVersion && <Tag color="blue">{active.status === '已确认' ? '确认' : '最近确认'} V{confirmationVersion}</Tag>}
-      {active.restoredFromVersion && <Tag>恢复自 V{active.restoredFromVersion}</Tag>}
-    </div>
     <div className="response-card-title-row"><h2>{active.title}</h2><span className="response-confirmation-owner">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')||'未指派'}</span></div>
   </div>
   <Description rows={[[ '描述', active.requirementText || active.original ], [ '规格', active.specification ]]}/>

@@ -61,7 +61,12 @@ test('history document UI separates metadata, repairs missing answers and enforc
   await click('补录条款');await type('客户要求','新增补录要求');await type('历史答复','补录原答复');await click('保存草稿');
   saved=JSON.parse(localStorage.getItem('rfq.reference.knowledge.v1:A'));assert.equal(saved.length,2);
   assert.equal(saved[1].documentId,saved[0].documentId);assert.match(host.textContent,/新增补录要求/);
+  await click('编辑文档信息');
+  assert.equal(document.querySelector('[aria-label="可见范围"]'),null);
+  await click('保存文档信息');
   const versionDocs=JSON.parse(localStorage.getItem('rfq.history.documents.v1:A')),first=versionDocs[0];
+  assert.equal(first.scope,'仅当前项目');
+  assert.equal(first.projectId,'P1');
   versionDocs.push({...first,id:'D2',familyId:first.id,previousDocumentId:first.id,revision:2,version:'V2',name:'修订版.docx',parseStatus:'complete'});
   saved.push({...saved[0],id:'K2',documentId:'D2',requirement:'原要求提高到180℃',answer:'待重新核实'});
   localStorage.setItem('rfq.history.documents.v1:A',JSON.stringify(versionDocs));localStorage.setItem('rfq.reference.knowledge.v1:A',JSON.stringify(saved));
@@ -69,5 +74,7 @@ test('history document UI separates metadata, repairs missing answers and enforc
   await click('版本比对');assert.ok(document.querySelector('[aria-label="比对基准版"]'));assert.match(document.body.textContent,/新增条款/);assert.match(document.body.textContent,/需确认答复/);
   await act(async()=>{document.querySelector('.ant-modal-close').click();await settle();});
   await click('上传历史RFQ');assert.ok(document.querySelector('[aria-label="上传方式"]'));assert.ok(document.querySelector('[aria-label="关联历史 RFQ"]'));assert.ok(document.querySelector('[aria-label="客户版本标识"]'));
+  const uploadDialog=document.querySelector('[aria-label="历史 RFQ 文件"]').closest('[role="dialog"]');
+  assert.doesNotMatch(uploadDialog.textContent,/可见范围|配套答复文件/);
  }finally{await act(async()=>root.unmount());await w.happyDOM.cancelAsync();globalThis.MessageChannel=channel;}
 });

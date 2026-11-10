@@ -852,10 +852,11 @@ diff --git a/crates/ui-egui/src/panes/host_project.rs b/crates/ui-egui/src/panes
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project.rs
-@@ -0,0 +1,359 @@
+@@ -0,0 +1,430 @@
 +//! RFQ clause navigation and bidirectional comment writes; host metadata stays outside DOCX.
 +use super::*;
-+use std::collections::BTreeMap;
++use std::collections::{BTreeMap, BTreeSet};
++use wordcraft_doc::{Cell, Document, Path, StoryRef};
 +
 +#[derive(Default)]
 +pub(crate) struct Project {
@@ -876,6 +877,66 @@ new file mode 100644
 +}
 +pub(super) fn key(id: u32) -> String {
 +    format!("word-comment:{id}")
++}
++
++fn cell_text(cell: &Cell) -> String {
++    let text = cell.blocks.iter().filter_map(|block| block.as_para())
++        .map(|para| para.text.as_str()).collect::<Vec<_>>().join(" ");
++    text.replace(wordcraft_doc::para::OBJ, "").split_whitespace().collect::<Vec<_>>().join(" ")
++}
++
++fn cell_range(path: &Path, row: usize, column: usize, cell: &Cell) -> Option<(Pos, Pos)> {
++    let mut paragraphs = cell.blocks.iter().enumerate()
++        .filter_map(|(index, block)| block.as_para().map(|para| (index, para)));
++    let first = paragraphs.next()?;
++    let last = paragraphs.next_back().unwrap_or(first);
++    let position = |index: usize, off| {
++        let mut path = path.clone();
++        path.0.extend([row as u32, column as u32, index as u32]);
++        Pos { story: StoryRef::Body, path, off }
++    };
++    Some((position(first.0, 0), position(last.0, last.1.text.len())))
++}
++
++fn table_field_matches(doc: &Document, item: &str, description: &str) -> Vec<(Pos, Pos)> {
++    let item = item.split_whitespace().collect::<Vec<_>>().join(" ");
++    if item.is_empty() {
++        return Vec::new();
++    }
++    let description = description.split_whitespace().collect::<Vec<_>>().join(" ");
++    let tables: BTreeSet<_> = doc.para_paths(StoryRef::Body).into_iter()
++        .filter_map(|path| path.cell().map(|(table, _, _)| table)).collect();
++    let mut item_matches = Vec::new();
++    let mut pair_matches = Vec::new();
++    for path in tables {
++        let Some(table) = doc.table(StoryRef::Body, &path) else { continue };
++        let Some(header) = table.rows.first() else { continue };
++        let headers: Vec<_> = header.cells.iter().map(|cell| cell_text(cell).to_lowercase().replace(' ', "")).collect();
++        let Some(item_col) = headers.iter().position(|h|
++            matches!(h.as_str(), "item" | "项目" | "项目名称" | "项目item" | "item项目")) else { continue };
++        let description_col = headers.iter().position(|h| matches!(h.as_str(),
++            "description" | "描述" | "描述description" | "description描述" | "要求描述" | "要求说明"));
++        for (row_index, row) in table.rows.iter().enumerate().skip(1) {
++            let Some(cell) = row.cells.get(item_col) else { continue };
++            if cell_text(cell) != item {
++                continue;
++            }
++            let Some(range) = cell_range(&path, row_index, item_col, cell) else { continue };
++            if !description.is_empty() && pair_matches.len() < 2 {
++                if let Some(col) = description_col {
++                    if let Some(cell) = row.cells.get(col).filter(|cell| cell_text(cell) == description) {
++                        if let Some(other) = cell_range(&path, row_index, col, cell) {
++                            pair_matches.push((range.0.clone().min(other.0), range.1.clone().max(other.1)));
++                        }
++                    }
++                }
++            }
++            if item_matches.len() < 2 {
++                item_matches.push(range);
++            }
++        }
++    }
++    if pair_matches.len() == 1 { pair_matches } else { item_matches }
 +}
 +
 +impl WordApp {
@@ -1010,7 +1071,17 @@ new file mode 100644
 +    pub(super) fn locate_host_clause(&mut self, id: &str) -> Result<Value, String> {
 +        self.sync_host_project();
 +        let target = self.comment_drafts.project.targets.iter().find(|t| t.get("id").and_then(Value::as_str) == Some(id)).ok_or("unknown clause")?;
-+        let result = self.session.host_quote_matches(target.get("quote").and_then(Value::as_str).unwrap_or(""));
++        let mut result = self.session.host_quote_matches(target.get("quote").and_then(Value::as_str).unwrap_or(""));
++        if !matches!(&result, Ok(matches) if matches.len() == 1) {
++            let fallback = table_field_matches(
++                &self.session.doc,
++                target.get("title").and_then(Value::as_str).unwrap_or(""),
++                target.get("description").and_then(Value::as_str).unwrap_or(""),
++            );
++            if !fallback.is_empty() {
++                result = Ok(fallback);
++            }
++        }
 +        let status = match result {
 +            Ok(matches) if matches.len() == 1 => {
 +                if let Some((a, b)) = matches.first() {
@@ -1216,7 +1287,7 @@ diff --git a/crates/ui-egui/src/panes/host_project_tests.rs b/crates/ui-egui/src
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project_tests.rs
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,180 @@
 +use super::*;
 +
 +#[test]
@@ -1276,6 +1347,37 @@ new file mode 100644
 +    at.off = 2;
 +    a.session.sel = wordcraft_engine::Selection::caret(at);
 +    assert_eq!(a.host_review_snapshot(1.0)["source"]["selectedId"], "c1");
++}
++#[test]
++fn project_word_locate_falls_back_to_fields_in_the_same_table_row() {
++    use wordcraft_doc::{Block, Cell, StoryRef, Table};
++    let mut a = app("Exact source");
++    let mut table = Table::new(4, 2, 200.0);
++    for (row, (item, description)) in table.rows.iter_mut().zip([
++        ("项目 Item", "描述 Description"),
++        ("Pump", "Check pressure"),
++        ("Pump", "Check flow"),
++        ("Valve", "Check seals"),
++    ]) {
++        row.cells = vec![Cell::with_text(item), Cell::with_text(description)];
++    }
++    a.session.doc.body.push(std::sync::Arc::new(Block::Table(table)));
++    command(&mut a, "configure", json!({"targets":[
++        {"id":"exact","quote":"Exact source","title":"Pump","description":"Check flow"},
++        {"id":"pair","quote":"Missing","title":"Pump","description":"Check flow"},
++        {"id":"item","quote":"Missing","title":"Valve","description":"Paraphrase"},
++        {"id":"ambiguous","quote":"Missing","title":"Pump","description":"Paraphrase"},
++        {"id":"cross","quote":"Missing","title":"Pump","description":"Check seals"}
++    ]})).unwrap();
++    for (id, row) in [("exact", None), ("pair", Some(2)), ("item", Some(3))] {
++        assert_eq!(command(&mut a, "locate", json!({"id":id})).unwrap()["status"], "matched", "{id}");
++        let (start, _) = a.session.sel.ordered();
++        assert_eq!(start.story, StoryRef::Body);
++        assert_eq!(start.path.cell().map(|(_, row, _)| row), row, "{id}");
++    }
++    for id in ["ambiguous", "cross"] {
++        assert_eq!(command(&mut a, "locate", json!({"id":id})).unwrap()["status"], "ambiguous");
++    }
 +}
 +#[test]
 +fn project_word_upsert_roundtrip_keeps_author_replies_and_identity_without_duplicates() {

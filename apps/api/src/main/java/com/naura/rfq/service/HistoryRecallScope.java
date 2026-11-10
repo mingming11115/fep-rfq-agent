@@ -86,6 +86,9 @@ public class HistoryRecallScope {
     }
 
     private boolean visible(JsonNode payload, String project) {
+        if ("已删除".equals(payload.path("status").asText())) {
+            return false;
+        }
         String origin = KnowledgePublicationAccess.recordProjectId(payload);
         return origin.isEmpty() || origin.equals(project);
     }

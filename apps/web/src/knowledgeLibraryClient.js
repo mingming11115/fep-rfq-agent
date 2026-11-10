@@ -50,6 +50,7 @@ export function createKnowledgeLibraryClient(buId, client = api) {
         previousDocumentId,revision,changeNote}));
     },
     editHistoryDocument:row=>client.patch(`${history}/documents/${encode(row.id)}`,{...fields(row,['metadata','groupIds']),revision:row.revision||0}),
+    deleteHistoryDocument:row=>client.post(`${history}/documents/${encode(row.id)}/delete`,{revision:row.revision??0}),
     addHistoryClause:row=>client.post(`${history}/documents/${encode(row.documentId)}/clauses`,
       fields(row,['id','title','clauseNo','section','requirement','answer','conditions'])),
     createHistoryDocument:(row,projectId)=>client.post(`${history}/documents/manual`,{
