@@ -139,6 +139,8 @@ test('switching history statistics filters reloads the BU resources and shows up
  await render('bu','BU管理员',props);
  await click('历史RFQ.docx',host);
  const counts=host.querySelector('.history-counts');
+ assert.deepEqual([...counts.querySelectorAll('button')].map(button=>button.textContent),
+  ['全部条款1','缺少答复0','待审核1','已发布0']);
  await click('已发布0',counts);
  assert.deepEqual(requests,[[resourcePath,'GET']]);
  await render('bu','BU管理员',props);
