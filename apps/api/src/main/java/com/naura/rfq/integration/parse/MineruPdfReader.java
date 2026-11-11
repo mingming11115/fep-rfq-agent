@@ -88,13 +88,16 @@ class MineruPdfReader {
 
     private static void addTable(List<RawBlock> blocks, JsonNode entry, String section, int page) throws IOException {
         addTextList(blocks, entry.path("table_caption"), section, page);
-        var rows = MineruTableRows.read(entry.path("table_body").asText());
-        if (rows.isEmpty()) {
+        String html = entry.path("table_body").asText();
+        var parsed = MineruTableRows.read(html);
+        if (parsed.rows().isEmpty()) {
             addBlock(blocks, RawBlock.IMAGE, "（表格，待核对）", List.of(), section, page,
                 "MinerU 未识别到表格内容，请对照原件");
         } else {
-            var table = RawBlock.table(blocks.size(), rows, section, anchor(page, blocks.size()));
-            addBlock(blocks, table.type(), table.text(), rows, section, page, REVIEW);
+            var table = RawBlock.table(blocks.size(), parsed.rows(), section, anchor(page, blocks.size()));
+            var source = new RawBlock.MineruTable(html, page - 1, parsed.sourceRows(), parsed.sourceCells());
+            blocks.add(new RawBlock(table.index(), table.type(), table.text(), table.tableRows(), section, null,
+                table.anchor(), PROVENANCE, REVIEW, null, source));
         }
         addTextList(blocks, entry.path("table_footnote"), section, page);
     }

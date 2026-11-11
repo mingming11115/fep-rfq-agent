@@ -123,6 +123,88 @@ class HistoryExtractorTest {
         assertThat(clause.path("answerAnchor").asText()).isEqualTo("main:body/1/r1");
     }
 
+    @Test void modelSelectsHistoricalAnswerCellsWithoutRewritingTheirContent() {
+        properties.getLlm().setEnabled(true);
+        properties.getLlm().setModel("test-model");
+        var requirement = "上料模块须支持 300 mm 硅晶圆，并兼容标准 FOUP。";
+        var table = RawBlock.table(0, List.of(List.of("No", "项目Item", "规格", "Description", "Rev"),
+                List.of("1", "晶圆尺寸 Wafer Size", "300 mm", requirement, "Comply\n使用模块 S。"),
+                List.of("2", "供电", "220 V", "控制柜应支持单相 AC 输入。", "R2"),
+                List.of("3", "报警", "", "设备应记录报警。", "Not Comply，需选配。")), "技术规格", "body/1");
+        var unusualHeader = RawBlock.table(1, List.of(List.of("No", "Description", "Factory"),
+                List.of("4", "设备应提供搬运模块。", "Included with module T.")), "技术规格", "body/2");
+        var parser = withClient(new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) throws Exception {
+                var messages = json.valueToTree(body).path("messages");
+                if (!messages.get(0).path("content").asText().contains("历史答复")) {
+                    return modelResponse("""
+                            {"requirements":[],"ignoredBlockIndexes":[0,1,2,3]}
+                            """);
+                }
+                var rows = json.readTree(messages.get(1).path("content").asText());
+                assertThat(rows).hasSize(3);
+                assertThat(rows.at("/0/requirement").asText()).isEqualTo(requirement);
+                assertThat(rows.at("/0/candidates/0/header").asText()).isEqualTo("Rev");
+                assertThat(rows.at("/0/candidates/0/text").asText()).isEqualTo("Comply\n使用模块 S。");
+                return modelResponse("""
+                        {"answers":[{"anchor":"main:body/1/r1","columnIndex":4},
+                          {"anchor":"main:body/1/r3","columnIndex":4},{"anchor":"main:body/2/r1","columnIndex":2}]}
+                        """);
+            }
+        });
+
+        var clauses = parser.extract(List.of(table, unusualHeader), List.of()).clauses();
+
+        assertThat(clauses).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
+                .containsExactly(tuple("1", "Comply\n使用模块 S。", "main:body/1/r1"), tuple("2", "", ""),
+                        tuple("3", "Not Comply，需选配。", "main:body/1/r3"),
+                        tuple("4", "Included with module T.", "main:body/2/r1"));
+        assertThat(clauses.get(0).requirement()).isEqualTo(requirement);
+        assertThat(clauses.get(0).issues()).doesNotContain("缺少历史答复");
+        assertThat(clauses.get(1).customerRequirement().originalText()).contains("R2");
+    }
+
+    @Test void rejectsModelSelectionsOutsideEligibleCellsAndRetainsKnownAnswers() {
+        properties.getLlm().setEnabled(true);
+        properties.getLlm().setModel("test-model");
+        var ambiguous = RawBlock.table(0, List.of(List.of("No", "Description", "Rev"),
+                List.of("1", "设备应支持晶圆。", "Comply")), "", "body/1");
+        var explicit = RawBlock.table(1, List.of(List.of("No", "Description", "应答结论"),
+                List.of("2", "设备应记录报警。", "Not Comply")), "", "body/2");
+        var parser = withClient(new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) {
+                var prompt = json.valueToTree(body).at("/messages/0/content").asText();
+                return modelResponse(prompt.contains("历史答复")
+                        ? """
+                          {"answers":[{"anchor":"main:body/1/r1","columnIndex":1}]}
+                          """
+                        : """
+                          {"requirements":[],"ignoredBlockIndexes":[0,1]}
+                          """);
+            }
+        });
+
+        var result = parser.extract(List.of(ambiguous, explicit), List.of());
+
+        assertThat(result.clauses()).extracting(HistoryClause::answer).containsExactly("", "Not Comply");
+        assertThat(result.issues()).anyMatch(issue -> issue.contains("历史答复模型批次"));
+    }
+
+    private JsonNode modelResponse(String content) {
+        var response = json.createObjectNode();
+        response.putArray("choices").addObject().putObject("message").put("content", content);
+        return response;
+    }
+
+    @Test void givesTheExplicitAnswerColumnPriorityOverRev() {
+        var table = RawBlock.table(0, List.of(List.of("No", "Description", "Rev", "应答结论"),
+                List.of("1", "设备应支持晶圆。", "Comply", "Not Comply"),
+                List.of("2", "设备应记录报警。", "Comply", "")), "", "body/1");
+
+        assertThat(history.extract(List.of(table), List.of()).clauses()).extracting(HistoryClause::answer)
+                .containsExactly("Not Comply", "");
+    }
+
     @Test void preservesNumberedParagraphSourceAndCompanionAnswer() {
         var original = "2.1 设备应支持 300 mm 晶圆。";
         var primary = RawBlock.paragraph(0, original, "技术规格", null, "p0");

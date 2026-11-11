@@ -17,7 +17,9 @@ final class MineruTableRows extends HTMLEditorKit.ParserCallback {
     private List<Cell> row;
     private Cell cell;
 
-    static List<List<String>> read(String html) throws IOException {
+    record Parsed(List<List<String>> rows, List<Integer> sourceRows, List<List<String>> sourceCells) { }
+
+    static Parsed read(String html) throws IOException {
         var parser = new MineruTableRows();
         new ParserDelegator().parse(new StringReader(html), parser, true);
         return parser.grid();
@@ -57,7 +59,7 @@ final class MineruTableRows extends HTMLEditorKit.ParserCallback {
         }
     }
 
-    private List<List<String>> grid() throws IOException {
+    private Parsed grid() throws IOException {
         List<List<String>> grid = new ArrayList<>();
         rows.forEach(ignored -> grid.add(new ArrayList<>()));
         long cells = 0;
@@ -74,7 +76,7 @@ final class MineruTableRows extends HTMLEditorKit.ParserCallback {
                 if (endColumn > MAX_COLUMNS || cells > MAX_CELLS) {
                     throw new IOException("MinerU 表格超出可处理范围");
                 }
-                String value = entry.text().toString().replace('\u00a0', ' ').strip();
+                String value = entry.value();
                 for (int r = y; r < y + height; r++) {
                     List<String> target = grid.get(r);
                     while (target.size() < endColumn) {
@@ -90,8 +92,17 @@ final class MineruTableRows extends HTMLEditorKit.ParserCallback {
                 x = endColumn;
             }
         }
-        return grid.stream().filter(values -> values.stream().anyMatch(value -> value != null && !value.isBlank()))
-            .map(values -> values.stream().map(value -> value == null ? "" : value).toList()).toList();
+        List<List<String>> nonblankRows = new ArrayList<>();
+        List<Integer> sourceRows = new ArrayList<>();
+        for (int rowIndex = 0; rowIndex < grid.size(); rowIndex++) {
+            var values = grid.get(rowIndex);
+            if (values.stream().anyMatch(value -> value != null && !value.isBlank())) {
+                nonblankRows.add(values.stream().map(value -> value == null ? "" : value).toList());
+                sourceRows.add(rowIndex);
+            }
+        }
+        var sourceCells = rows.stream().map(cellsInRow -> cellsInRow.stream().map(Cell::value).toList()).toList();
+        return new Parsed(nonblankRows, sourceRows, sourceCells);
     }
 
     private static int span(MutableAttributeSet attributes, HTML.Attribute key) {
@@ -106,5 +117,9 @@ final class MineruTableRows extends HTMLEditorKit.ParserCallback {
         }
     }
 
-    private record Cell(int rows, int columns, StringBuilder text) { }
+    private record Cell(int rows, int columns, StringBuilder text) {
+        String value() {
+            return text.toString().replace('\u00a0', ' ').strip();
+        }
+    }
 }

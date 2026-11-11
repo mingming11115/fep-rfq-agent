@@ -1,6 +1,9 @@
 package com.naura.rfq.integration.history;
 
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
+import com.naura.rfq.integration.parse.HybridRequirementExtractor.HistoryAnswerTarget;
+import com.naura.rfq.integration.parse.HybridRequirementExtractor.WordAnswerCell;
+import com.naura.rfq.integration.parse.HybridRequirementExtractor.WordAnswerTarget;
 import com.naura.rfq.integration.parse.RuleBasedExtractor;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.RawBlock;
@@ -24,6 +27,8 @@ public class HistoryExtractor {
     private static final Map<String, String> META = Map.of("客户", "customer", "客户名称", "customer", "项目", "projectName", "项目名称", "projectName", "机型", "model", "设备型号", "model", "配置", "config", "日期", "date", "版本", "fileVersion");
     private static final List<String> CUSTOMER_COLUMNS =
             List.of("number", "item", "specification", "revision", "requirement", "customerConditions");
+    private static final Pattern REVISION_VALUE = Pattern.compile(
+            "(?i)(?:rev(?:ision)?[\\s.:-]*)?(?:[a-z](?:\\d+(?:[._-]\\d+)*)?|\\d+(?:[._-]\\d+)*[a-z]?)");
 
     private final RuleBasedExtractor requirements;
     private final HybridRequirementExtractor model;
@@ -32,9 +37,10 @@ public class HistoryExtractor {
         Map<String, String> metadata = new LinkedHashMap<>();
         List<String> issues = new ArrayList<>();
         Map<String, RawBlock> customerSources = new LinkedHashMap<>();
-        List<HistoryClause> clauses = read(primary, "main:", false, metadata, issues, customerSources);
+        Map<String, WordAnswerTarget> wordSources = new LinkedHashMap<>();
+        List<HistoryClause> clauses = read(primary, "main:", false, metadata, issues, customerSources, wordSources);
         clauses = applyModel(clauses, customerSources, issues);
-        List<HistoryClause> answers = read(companion, "answer:", true, new LinkedHashMap<>(), issues, new LinkedHashMap<>());
+        List<HistoryClause> answers = read(companion, "answer:", true, new LinkedHashMap<>(), issues, new LinkedHashMap<>(), Map.of());
         Map<String, List<HistoryClause>> requirementsByNumber = group(clauses), answersByNumber = group(answers);
         List<HistoryClause> matched = new ArrayList<>();
         for (HistoryClause clause : clauses) {
@@ -58,7 +64,41 @@ public class HistoryExtractor {
             }
         }
         var answered = AlignedHistoryAnswers.apply(primary, matched, issues);
+        answered = applyTableAnswers(primary, answered, wordSources, issues);
         return new Result(metadata, answered.stream().map(this::flagMissingFields).toList(), issues);
+    }
+
+    private List<HistoryClause> applyTableAnswers(List<RawBlock> blocks, List<HistoryClause> clauses,
+            Map<String, WordAnswerTarget> wordSources, List<String> issues) {
+        Map<String, HistoryClause> missing = new LinkedHashMap<>();
+        for (var clause : clauses) {
+            if (clause.answer().isBlank() && !clause.requirement().isBlank()) {
+                missing.put(clause.key(), clause);
+            }
+        }
+        Map<String, String> answers = new LinkedHashMap<>();
+        var wordTargets = wordSources.values().stream().filter(target -> missing.containsKey(target.anchor())).toList();
+        answers.putAll(model.extractWordHistoryAnswers(wordTargets, issues));
+        for (var block : blocks) {
+            var table = block.mineruTable();
+            if (table == null) {
+                continue;
+            }
+            List<HistoryAnswerTarget> targets = new ArrayList<>();
+            for (int row = 0; row < table.sourceRows().size(); row++) {
+                var clause = missing.get("main:" + block.anchor() + "/r" + row);
+                if (clause != null) {
+                    targets.add(new HistoryAnswerTarget(clause.key(), table.sourceRows().get(row), clause.requirement()));
+                }
+            }
+            answers.putAll(model.extractMineruHistoryAnswers(block, targets, issues));
+        }
+        return clauses.stream().map(clause -> {
+            String answer = answers.get(clause.key());
+            return answer == null ? clause : new HistoryClause(clause.key(), clause.clauseNo(), clause.section(),
+                clause.requirement(), answer, clause.conditions(), clause.evidence(), clause.feedback(),
+                clause.requirementAnchor(), clause.requirementAnchor(), clause.issues(), clause.customerRequirement());
+        }).toList();
     }
     private HistoryClause flagMissingFields(HistoryClause clause) {
         List<String> reasons = new ArrayList<>(clause.issues());
@@ -121,15 +161,17 @@ public class HistoryExtractor {
     }
 
     private List<HistoryClause> read(List<RawBlock> blocks, String prefix, boolean companion, Map<String, String> metadata,
-            List<String> issues, Map<String, RawBlock> customerSources) {
+            List<String> issues, Map<String, RawBlock> customerSources, Map<String, WordAnswerTarget> wordSources) {
         List<HistoryClause> clauses = new ArrayList<>();
         for (RawBlock block : blocks) {
             String anchor = prefix + block.anchor(), section = value(block.sectionPath());
             if (RawBlock.IMAGE.equals(block.type()) || block.issue() != null) {
                 issues.add(anchor + "：" + (block.issue() == null ? "图片待识别／核对" : block.issue()));
-                continue;
+                if (RawBlock.IMAGE.equals(block.type()) || !"mineru".equals(block.provenance())) {
+                    continue;
+                }
             }
-            if (block.isTable()) { readTable(block, prefix, companion, clauses, issues, customerSources); continue; }
+            if (block.isTable()) { readTable(block, prefix, companion, clauses, issues, customerSources, wordSources); continue; }
             String text = value(block.text());
             if (text.isBlank()) {
                 continue;
@@ -188,10 +230,11 @@ public class HistoryExtractor {
         return clauses;
     }
     private void readTable(RawBlock block, String prefix, boolean companion, List<HistoryClause> clauses, List<String> issues,
-            Map<String, RawBlock> customerSources) {
+            Map<String, RawBlock> customerSources, Map<String, WordAnswerTarget> wordSources) {
         Map<String, List<Integer>> columns = new LinkedHashMap<>();
         List<Integer> customerColumns = List.of();
         List<String> customerHeader = List.of();
+        List<String> tableHeader = List.of();
         boolean header = false;
         for (int r = 0; r < block.tableRows().size(); r++) {
             var row = block.tableRows().get(r);
@@ -211,6 +254,7 @@ public class HistoryExtractor {
                 customerColumns = detected.entrySet().stream().filter(entry -> CUSTOMER_COLUMNS.contains(entry.getKey()))
                         .flatMap(entry -> entry.getValue().stream()).sorted().toList();
                 customerHeader = customerColumns.stream().map(row::get).toList();
+                tableHeader = row;
                 header = true;
                 continue;
             }
@@ -231,9 +275,15 @@ public class HistoryExtractor {
             String clauseNo = cells(row, columns.get("number"));
             String section = value(block.sectionPath());
             var customerRow = customerColumns.stream().map(index -> index < row.size() ? row.get(index) : "").toList();
-            if (!companion && !requirement.isBlank()) {
+            if (!companion && !requirement.isBlank() && block.mineruTable() == null) {
                 customerSources.put(anchor, RawBlock.table(customerSources.size(),
                         List.of(customerHeader, customerRow), section, anchor));
+                if (block.anchor().startsWith("body/") && !columns.containsKey("answer")) {
+                    var candidates = wordAnswerCells(tableHeader, row);
+                    if (!candidates.isEmpty()) {
+                        wordSources.put(anchor, new WordAnswerTarget(anchor, requirement, candidates));
+                    }
+                }
             }
             var customer = companion ? null : requirements.describeKnownRequirement(clauses.size(),
                     RawBlock.table(block.index(), List.of(customerRow), section, anchor),
@@ -251,6 +301,18 @@ public class HistoryExtractor {
             String anchor = prefix + block.anchor();
             customerSources.put(anchor, RawBlock.table(customerSources.size(), block.tableRows(), block.sectionPath(), anchor));
         }
+    }
+
+    private List<WordAnswerCell> wordAnswerCells(List<String> header, List<String> row) {
+        List<WordAnswerCell> candidates = new ArrayList<>();
+        for (int column = 0; column < Math.min(header.size(), row.size()); column++) {
+            String text = row.get(column);
+            String kind = headerKind(header.get(column));
+            if (!text.isBlank() && (kind == null || "revision".equals(kind) && !REVISION_VALUE.matcher(text.strip()).matches())) {
+                candidates.add(new WordAnswerCell(column, header.get(column), text));
+            }
+        }
+        return candidates;
     }
     private String headerKind(String input) {
         String text = value(input).toLowerCase().replaceAll("[\\s:：/（）()_-]", "");

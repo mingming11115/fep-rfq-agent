@@ -1,7 +1,9 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
+import com.naura.rfq.integration.history.HistoryExtractor;
 import com.naura.rfq.model.parse.RawBlock;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -10,6 +12,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -74,6 +77,79 @@ class MineruPdfReaderTest {
             assertThat(context.getBean(PdfBlockReader.class).read(file)).singleElement().satisfies(block ->
                 assertThat(block.tableRows()).containsExactly(List.of("条件", "规格", ""),
                     List.of("额定负载", "≥ 20", "L/min"), List.of("额定负载", "≤ 1.6", "MPa")))));
+    }
+
+    @Test
+    void historyUsesTheWholeMineruTableToFindTheAnswerAndValidatesItsRow() throws Exception {
+        String requirement = "上料模块须支持 300 mm 硅晶圆，并兼容标准 FOUP。";
+        String html = "<table><tr><th>No</th><th>Description</th><th>Rev</th></tr>"
+            + "<tr><td></td><td></td><td></td></tr>"
+            + "<tr><td>1</td><td>" + requirement + "</td><td>Comply</td></tr>"
+            + "<tr><td>2</td><td>设备应记录报警。</td><td>R2</td></tr></table>";
+        String content = JSON.writeValueAsString(List.of(Map.of("type", "table", "page_idx", 0, "table_body", html)));
+        Path file = pdf();
+        withMineru(true, 200, content, mineru -> mineru.context().run(context -> {
+            var requests = new ArrayList<JsonNode>();
+            var history = historyWithModel(requests, """
+                {"answers":[{"clauseId":"main:page-1/mineru-0/r1","source":
+                    {"blockIndex":0,"rowIndex":2,"cellIndex":2,"quote":"Comply"}},
+                  {"clauseId":"main:page-1/mineru-0/r2","source":
+                    {"blockIndex":0,"rowIndex":2,"cellIndex":2,"quote":"Comply"}}]}
+                """);
+            var blocks = context.getBean(PdfBlockReader.class).readForHistory(file);
+            var result = history.extract(blocks, List.of());
+
+            assertThat(result.clauses()).hasSize(2);
+            assertThat(result.clauses().get(0).requirement()).isEqualTo(requirement);
+            assertThat(result.clauses().get(0).answer()).isEqualTo("Comply");
+            assertThat(result.clauses().get(0).answerAnchor()).isEqualTo("main:page-1/mineru-0/r1");
+            assertThat(result.clauses().get(1).answer()).isEmpty();
+            assertThat(requests).singleElement().satisfies(request -> {
+                assertThat(request.at("/messages/0/content").asText()).contains("历史答复");
+                var payload = JSON.readTree(request.at("/messages/1/content").asText());
+                assertThat(payload.path("table_body").asText()).isEqualTo(html);
+            });
+        }));
+    }
+
+    @Test
+    void historyUsesTheOriginalRequirementPromptAfterMineruFails() throws Exception {
+        Path file = pdf();
+        withMineru(true, 503, "[]", mineru -> mineru.context().run(context -> {
+            var requests = new ArrayList<JsonNode>();
+            var history = historyWithModel(requests, """
+                {"requirements":[],"ignoredBlockIndexes":[0]}
+                """);
+            var blocks = context.getBean(PdfBlockReader.class).readForHistory(file);
+            var result = history.extract(blocks, List.of());
+
+            assertThat(mineru.request().get()).isNotNull();
+            assertThat(result.clauses()).singleElement().satisfies(clause -> {
+                assertThat(clause.requirement()).isEqualTo(NATIVE_TEXT);
+                assertThat(clause.requirementAnchor()).isEqualTo("main:page-1/line-0");
+                assertThat(clause.answer()).isEmpty();
+            });
+            assertThat(requests).singleElement().satisfies(request -> {
+                assertThat(request.at("/messages/0/content").asText()).contains("ignoredBlockIndexes");
+                assertThat(request.at("/messages/1/content").asText()).contains(NATIVE_TEXT);
+            });
+        }));
+    }
+
+    private HistoryExtractor historyWithModel(List<JsonNode> requests, String response) {
+        var settings = new ParseIntegrationProperties();
+        settings.getLlm().setEnabled(true);
+        settings.getLlm().setModel("test-model");
+        var rules = new RuleBasedExtractor(JSON);
+        var client = new ParseHttpClient(JSON) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint endpoint, Object body, String runId) {
+                requests.add(JSON.valueToTree(body));
+                var reply = JSON.createObjectNode();
+                reply.putArray("choices").addObject().putObject("message").put("content", response);
+                return reply;
+            }
+        };
+        return new HistoryExtractor(rules, new HybridRequirementExtractor(rules, settings, client, JSON));
     }
 
     @Test

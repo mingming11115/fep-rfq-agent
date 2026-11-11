@@ -19,9 +19,17 @@ public record RawBlock(
         String anchor,
         String provenance,
         String issue,
-        @JsonIgnore ParagraphLayout paragraphLayout) {
+        @JsonIgnore ParagraphLayout paragraphLayout,
+        @JsonIgnore MineruTable mineruTable) {
 
     public record ParagraphLayout(int textStartTwips, int headingLevel, BigInteger listId, int listLevel) { }
+    public record MineruTable(String html, int pageIndex, List<Integer> sourceRows, List<List<String>> sourceCells) { }
+
+    public RawBlock(int index, String type, String text, List<List<String>> tableRows,
+            String sectionPath, String clauseNo, String anchor, String provenance, String issue,
+            ParagraphLayout paragraphLayout) {
+        this(index, type, text, tableRows, sectionPath, clauseNo, anchor, provenance, issue, paragraphLayout, null);
+    }
 
     public RawBlock(int index, String type, String text, List<List<String>> tableRows,
             String sectionPath, String clauseNo, String anchor, String provenance, String issue) {

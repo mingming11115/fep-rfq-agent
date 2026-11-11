@@ -37,19 +37,32 @@ public class PdfBlockReader implements DocumentBlockReader {
 
     @Override
     public List<RawBlock> read(Path file) throws DocumentReadException {
+        return readWithMineru(file, false);
+    }
+
+    /** Native fallback retains line boundaries for historical clauses and replies. */
+    public List<RawBlock> readForHistory(Path file) throws DocumentReadException {
+        return readWithMineru(file, true);
+    }
+
+    private List<RawBlock> readWithMineru(Path file, boolean historyLines) throws DocumentReadException {
         if (!mineru.enabled()) {
-            return read(file, false);
+            return read(file, historyLines);
         }
         try {
-            return recoverMineruImages(file, mineru.read(file));
+            var blocks = mineru.read(file);
+            if (historyLines && blocks.stream().noneMatch(block -> block.mineruTable() != null)) {
+                throw new DocumentReadException("MinerU 未返回可读取的历史表格");
+            }
+            return recoverMineruImages(file, blocks);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new DocumentReadException("PDF 解析已中断", exception);
         } catch (Exception exception) {
             String reason = exception instanceof DocumentReadException ? exception.getMessage() : ParseHttpClient.reason(exception);
             log.warn("document.parse.mineru.fallback reason={}", reason);
-            var blocks = read(file, false);
-            if (!blocks.isEmpty()) {
+            var blocks = read(file, historyLines);
+            if (!historyLines && !blocks.isEmpty()) {
                 var first = blocks.get(0);
                 String issue = "MinerU 解析失败，已使用现有 PDF 解析：" + reason;
                 if (first.issue() != null) {
@@ -60,11 +73,6 @@ public class PdfBlockReader implements DocumentBlockReader {
             }
             return blocks;
         }
-    }
-
-    /** Historical response labels and clause boundaries must retain PDF line breaks. */
-    public List<RawBlock> readForHistory(Path file) throws DocumentReadException {
-        return read(file, true);
     }
 
     private List<RawBlock> recoverMineruImages(Path file, List<RawBlock> blocks) throws IOException {
@@ -82,7 +90,8 @@ public class PdfBlockReader implements DocumentBlockReader {
             for (var page : pages.entrySet()) {
                 for (RawBlock block : page.getValue()) {
                     result.add(new RawBlock(result.size(), block.type(), block.text(), block.tableRows(), block.sectionPath(),
-                        block.clauseNo(), block.anchor(), block.provenance(), block.issue()));
+                        block.clauseNo(), block.anchor(), block.provenance(), block.issue(), block.paragraphLayout(),
+                        block.mineruTable()));
                 }
                 if (page.getValue().stream().anyMatch(block -> RawBlock.IMAGE.equals(block.type()))) {
                     int pageIndex = Integer.parseInt(page.getKey().substring("page-".length())) - 1;
