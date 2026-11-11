@@ -17,6 +17,7 @@ export async function parseRfqSource(projectId,file,api=defaultApi,historyDocume
  if((file.sourceProjectId||file.backendProjectId)&&(file.sourceProjectId||file.backendProjectId)!==projectId) { throw new Error('文件所属项目不一致'); }
  const scope=historyDocumentIds===undefined?undefined:{historyDocumentIds};
  const run=await api.post(`/documents/${encodeURIComponent(file.backendDocumentId)}/parse-runs`,scope);
+ if(run.status==='failed') { throw Object.assign(new Error(run.message||'解析失败，请重试'),{run}); }
  if(!['completed','partial'].includes(run.status)) { throw new Error(run.message||'解析未完成，请重试'); }
  try {
   return {run,rows:await readParsedRows(projectId,file,run,api)};

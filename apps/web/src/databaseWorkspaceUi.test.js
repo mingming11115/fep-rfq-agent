@@ -13,11 +13,12 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  Object.assign(globalThis,{window,document:window.document,localStorage:window.localStorage,sessionStorage:window.sessionStorage,location:window.location,history:window.history,
   Document:window.Document,Node:window.Node,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,
   getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:window.ResizeObserver,requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
- const user={id:'sr',displayName:'数据库用户',roles:[{buId:'BU',role:'SR'}],bus:[{id:'BU',name:'事业部'}]};
+ let user={id:'sr',displayName:'数据库用户',roles:[{buId:'BU',role:'SR'}],bus:[{id:'BU',name:'事业部'}]};
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
  localStorage.setItem('fep-rfq-app-v1',JSON.stringify({projects:[{id:'FAKE',name:'不应出现的前端模拟项目'}]}));
  const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',groupId:'GROUP-A',stage:'DRAFT',version:0};
  let parsed=false,parseCalls=0,archived=false,projectVersion=0,allowReparse=false,finishFailed,finishRetry;
+ let failedOnly=false,failedSourceStatus='UPLOADED',adminRetries=0;
  const projectActions=[],parseBodies=[];
  const failedRequest=new Promise(resolve=>{finishFailed=resolve;});
  const retryRequest=new Promise(resolve=>{finishRetry=resolve;});
@@ -47,7 +48,12 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
    if(url.includes('/FAILED/')){
     if(parseCalls===2) { await failedRequest; }
     if(parseCalls===3) { await retryRequest; }
-    return new Response(JSON.stringify({code:1,msg:'补充资料解析失败'}),{status:422});
+    if(failedOnly&&user.id==='bu-admin'&&++adminRetries===2){
+     failedSourceStatus='PARSED';
+     return new Response(JSON.stringify({code:0,data:{id:'RUN-'+parseCalls,status:'completed',requirementCount:1}}));
+    }
+    failedSourceStatus='FAILED';
+    return new Response(JSON.stringify({code:0,data:{id:'RUN-'+parseCalls,status:'failed',requirementCount:0,message:'补充资料解析失败'}}));
    }
    if(parsed&&!allowReparse) { return new Response(JSON.stringify({code:1,msg:'已有应答，请登记新版原件后再解析'}),{status:409}); }
    parsed=true;
@@ -56,8 +62,10 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   const requirement={id:allowReparse?'R2':'R',projectId:'P',documentId:'D',originalText:allowReparse?'重新抽取的要求':'客户的真实要求',title:'真实条款',version:0,extractionStatus:'VALID'};
   const otherFile={...source,id:'OTHER',name:'另一份原件.docx',status:'PARSED'};
   const otherRequirement={...requirement,id:'R-OTHER',documentId:'OTHER',originalText:'另一份原件的要求'};
-  const requirements=allowReparse?[otherRequirement,requirement]:parsed?[requirement,otherRequirement]:[];
-  const value=url.endsWith('/auth/me')?user:url.includes('/members')?[{userId:'sr',displayName:'数据库用户',roles:['SR'],enabled:true,canConfirm:true}]:url.includes('/documents?')?{list:[{...source,status:parsed?'PARSED':'PARSING'},{...source,id:'FAILED',name:'补充资料.docx',status:'FAILED'},otherFile],total:3}:url.includes('/requirements?')?{list:requirements,total:requirements.length}:{list:[project],total:1};
+  const failedSource={...source,id:'FAILED',name:'补充资料.docx',status:failedSourceStatus};
+  const documents=failedOnly?[failedSource]:[{...source,status:parsed?'PARSED':'PARSING'},failedSource,otherFile];
+  const requirements=failedOnly?(failedSourceStatus==='PARSED'?[{...requirement,id:'R-RECOVERED',documentId:'FAILED',originalText:'重试解析生成的条款'}]:[]):allowReparse?[otherRequirement,requirement]:parsed?[requirement,otherRequirement]:[];
+  const value=url.endsWith('/auth/me')?user:url.includes('/members')?[{userId:user.id,displayName:user.displayName,roles:[user.roles[0].role],enabled:true,canConfirm:true}]:url.includes('/documents?')?{list:documents,total:documents.length}:url.includes('/requirements?')?{list:requirements,total:requirements.length}:{list:[project],total:1};
   return new Response(JSON.stringify({code:0,data:value}));};
  const folder=fileURLToPath(new URL('../.test-build/',import.meta.url));await mkdir(folder,{recursive:true});const output=path.join(folder,'database-workspace.mjs');
  await build({entryPoints:[fileURLToPath(new URL('./DatabaseWorkspace.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'},define:{'import.meta.env':'{"BASE_URL":"/","VITE_RFQ_DATA_MODE":"mysql"}'},plugins:[{name:'preview',setup(builder){builder.onResolve({filter:/SourceDocumentPane$/},()=>({path:'preview',namespace:'preview'}));builder.onLoad({filter:/.*/,namespace:'preview'},()=>({contents:'export default function Preview({toolbar}){return toolbar.fileAction}',loader:'js'}));}},{name:'raw',setup(builder){builder.onResolve({filter:/\.html\?raw$/},args=>({path:path.resolve(args.resolveDir,args.path.slice(0,-4)),namespace:'raw'}));builder.onLoad({filter:/.*/,namespace:'raw'},async args=>({contents:await readFile(args.path,'utf8'),loader:'text'}));}}]});
@@ -146,5 +154,34 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.ok(!node.textContent.includes('从数据库读取的项目'),'a restored project leaves the archive');
   await click('全部','[role="tab"]');
   assert.ok(node.textContent.includes('从数据库读取的项目'),'restored project returns to the active list');
+
+  failedOnly=true;
+  user={...user,id:'bu-admin',roles:[{buId:'BU',role:'BU_ADMIN'}]};
+  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
+  await act(async()=>{
+   window.location.hash='#/documents?projectId=P';
+   root.render(React.createElement(AntApp,null,React.createElement(Workspace,{key:'bu-admin'})));
+   await settle();
+  });
+  assert.ok(node.textContent.includes('RFQ 解析需要处理'));
+  await clickControl(button('重新解析',node));
+  assert.equal(adminRetries,1,'the BU administrator can retry the failed original from RFQ details');
+  assert.ok(node.textContent.includes('补充资料解析失败'));
+  await clickControl(button('重新解析',node));
+  assert.equal(adminRetries,2,'a second failure still leaves the original retryable');
+  assert.ok(node.textContent.includes('重试解析生成的条款'));
+
+  failedSourceStatus='UPLOADED';
+  user={...user,id:'sr',roles:[{buId:'BU',role:'SR'}]};
+  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
+  await act(async()=>{
+   root.render(React.createElement(AntApp,null,React.createElement(Workspace,{key:'original-preview'})));
+   await settle();
+  });
+  await clickControl(button('重新解析',node));
+  await clickControl(button('确认重新解析'));
+  await clickControl(button('取消'));
+  assert.ok(node.textContent.includes('补充资料解析失败'),'a failed parse remains visible in the original preview');
+  assert.ok(button('重新解析',node),'the original preview keeps its reparse action');
  }finally{await act(async()=>root.unmount());await window.happyDOM.cancelAsync();globalThis.MessageChannel=previousChannel;globalThis.fetch=previousFetch;}
 });

@@ -46,17 +46,18 @@ export function useSourceParsing({state,stateRef,update,onReload,toast}){
    }
   }catch(error){
    console.error('解析项目原件失败', error);
-   if(error.run&&current()&&stateRef.current.dataSource==='mysql'&&onReload){
+   const failedRun=error.run?.status==='failed';
+   if(error.run&&!failedRun&&current()&&stateRef.current.dataSource==='mysql'&&onReload){
     needsReload.current=true;
     onReparsed?.(file);
     toast(error.message,'warning');
     return;
    }
-   if(manual) { throw error; }
-   if(current()){
+   if(current()&&(!manual||failedRun)){
     update(s=>patch(s,{status:'失败',error:error.message}));
-    toast(error.message,'error');
+    if(!manual) { toast(error.message,'error'); }
    }
+   if(manual) { throw error; }
   }finally{
    running.current.delete(key);
    if(alive.current&&!running.current.size&&needsReload.current){
@@ -75,9 +76,15 @@ export function useSourceParsing({state,stateRef,update,onReload,toast}){
    }
   }
  },[state.documentsByProject,state.actorId,state.actorRole]);
- return (projectId,fileId,historyDocumentIds,onReparsed)=>{
+ function reparse(projectId,fileId,historyDocumentIds,onReparsed){
   const file=getReparseSources(stateRef.current,projectId).find(row=>row.id===fileId);
   if(!file||isSourceParsing(file)) { throw new Error('该文件当前不可重新解析，请刷新后重试'); }
   return runSource(projectId,file,{manual:true,historyDocumentIds,onReparsed});
- };
+ }
+ function retry(projectId,fileIds){
+  for(const file of getReparseSources(stateRef.current,projectId)){
+   if(fileIds.includes(file.id)&&!isSourceParsing(file)) { void runSource(projectId,file); }
+  }
+ }
+ return {reparse,retry};
 }

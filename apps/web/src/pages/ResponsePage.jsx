@@ -66,7 +66,7 @@ function Notice({ children, warning = false, loading = false }) {
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
 
-export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onAddSelection, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange,sourceReparse, logEvent = () => {} }) {
+export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onAddSelection, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,sourceReparse, logEvent = () => {} }) {
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
   const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
@@ -622,7 +622,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       if (aliveRef.current) { setCardBusy(false); }
     }
   }
-  const retrySources=()=>onFilesChange?.(project.id,(appState.documentsByProject?.[project.id]||[]).map(file=>sourceSummary.files.some(source=>source.id===file.id)&&(sourceSummary.status!=='failed'||file.status==='失败')?{...file,status:'排队中',error:''}:file));
+  const failedFiles=sourceSummary.files.filter(file=>file.status==='失败');
+  const retryFiles=(failedFiles.length?failedFiles:sourceSummary.files)
+    .filter(file=>!isSourceParsing(file)&&sourceReparse?.hasSources(project.id,file.id));
+  const retrySources=retryFiles.length?()=>guardedDetail(()=>sourceReparse.retry(project.id,retryFiles.map(file=>file.id))):undefined;
   const detailTabs = <Tabs className="rfq-detail-native-tabs" aria-label="RFQ 详情分区" activeKey={detailTab}
     onChange={changeDetailTab} animated={{ inkBar:true, tabPane:false }}
     items={[{key:'response',label:<span className="rfq-response-tab-label">应答</span>},{key:'activity',label:'操作记录'}]}
@@ -640,6 +643,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     databaseBacked={appState.dataSource === 'mysql'} accountsById={appState.accountsById}/>;
   if (emptySource) {
     return <div className="response-page rfq-detail">
+      {emptySource.status==='失败'&&<Notice warning>资料解析失败：{emptySource.error||emptySource.name}</Notice>}
       <div className="detail-layout">
         <div className="detail-document-column">
           <SourceDocumentPane file={emptySource} rows={[]} canManageOffice={canManageSource}
@@ -658,7 +662,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       {selectionDialog}
     </div>;
   }
-  if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':sourceSummary.status==='parsing'?'当前文件正在解析，完成后可在这里处理应答项。':'当前项目暂无可应答条款。'}/>}</div></div></div></div>; }
+  if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={retrySources}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':sourceSummary.status==='parsing'?'当前文件正在解析，完成后可在这里处理应答项。':'当前项目暂无可应答条款。'}/>}</div></div></div></div>; }
   const activeSourceAnchor={ ...makeSourceAnchor({ ...active, projectId: project.id }), ...(route?.requirementId === active.id ? { sourceVersion: route.sourceVersion || String(active.sourceVersion || '1'), fileId: route.fileId || active.sourceFileId || active.source || 'manual' } : {}) };
   const activeFile=(appState?.documentsByProject?.[project.id] ?? read(`fep-rfq-documents:${project.id}`, null)?.files ?? makeDocumentDemo(project.id, requirements).files)
     .find(file=>file.id===active.sourceFileId);
@@ -673,7 +677,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   return <div className="response-page rfq-detail">
     {selectionDialog}
     {parsingFiles.length>0&&<Notice loading>正在解析：{parsingFiles.map(file=>file.name).join('、')}</Notice>}
-    {sourceSummary.status==='failed'&&<Notice warning>资料解析失败：{sourceSummary.files.filter(file=>file.status==='失败').map(file=>[file.name,file.error].filter(Boolean).join('：')).join('；')}{canManageSource&&<UiButton className="text-link" onClick={retrySources}>重新解析</UiButton>}</Notice>}
+    {failedFiles.length>0&&<Notice warning>资料解析失败：{failedFiles.map(file=>[file.name,file.error].filter(Boolean).join('：')).join('；')}{retrySources&&<UiButton className="text-link" onClick={retrySources}>重新解析</UiButton>}</Notice>}
     {staleSource && <Notice warning>当前链接指向旧来源版本，本页只读。<UiButton className="text-link" onClick={() => chooseRow(active)}>打开当前有效来源版本</UiButton></Notice>}
     <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total) { setPaneShare(sizes[0]/total*100); }}}>
       <Splitter.Panel size={paneShare+'%'} min={narrowWorkbench?280:320}><div className="detail-document-column">
