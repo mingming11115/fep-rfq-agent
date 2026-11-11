@@ -1,22 +1,36 @@
 package com.naura.rfq.config.properties;
 
 import java.time.Duration;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "rfq.parse.integrations")
 public class ParseIntegrationProperties {
+    @Getter(AccessLevel.NONE)
+    private final boolean llmEnabled;
     private Llm llm = new Llm();
     private Ocr ocr = new Ocr();
     private Mineru mineru = new Mineru();
     private History history = new History();
     private WordMarkdown wordMarkdown = new WordMarkdown();
 
+    @Autowired
+    public ParseIntegrationProperties(@Value("${rfq.llm.enabled:false}") Boolean llmEnabled) {
+        this.llmEnabled = Boolean.TRUE.equals(llmEnabled);
+    }
+
+    public boolean llmEnabled() {
+        return llmEnabled;
+    }
+
     public boolean historyLlmEnabled() {
-        return history.llmEnabled == null ? llm.isEnabled() : history.llmEnabled;
+        return history.llmEnabled == null ? llmEnabled : history.llmEnabled;
     }
 
     @Getter @Setter
@@ -34,7 +48,6 @@ public class ParseIntegrationProperties {
 
     @Getter @Setter
     public static class Endpoint {
-        private boolean enabled;
         private String url = "";
         private String apiKey = "";
         private Duration connectTimeout = Duration.ofSeconds(3);
@@ -49,12 +62,14 @@ public class ParseIntegrationProperties {
     }
     @Getter @Setter
     public static class Ocr extends Endpoint {
+        private boolean enabled;
         private int maxImages = 100;
         private long maxImagePixels = 20000000;
         private int maxImageBytes = 10485760;
     }
     @Getter @Setter
     public static class Mineru extends Endpoint {
+        private boolean enabled;
         private String backend = "pipeline";
 
         public Mineru() {

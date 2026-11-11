@@ -31,8 +31,8 @@ class ParsingAdaptersTest {
     @TempDir Path dir;
 
     ParseIntegrationProperties settings(String url, boolean enabled) {
-        var p = new ParseIntegrationProperties();
-        p.getLlm().setEnabled(enabled); p.getLlm().setUrl(url); p.getLlm().setModel("test-model");
+        var p = new ParseIntegrationProperties(enabled);
+        p.getLlm().setUrl(url); p.getLlm().setModel("test-model");
         p.getLlm().setApiKey("test-key"); p.getLlm().setTimeout(Duration.ofMillis(500));
         p.getOcr().setEnabled(enabled); p.getOcr().setUrl(url);
         return p;

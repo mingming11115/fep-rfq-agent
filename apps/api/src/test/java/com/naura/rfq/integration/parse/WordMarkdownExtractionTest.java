@@ -42,7 +42,7 @@ class WordMarkdownExtractionTest {
                 RawBlock.paragraph(1, "设备必须自动上料", "", null, "body/1"),
                 RawBlock.paragraph(2, "限标准工况", "", null, "body/2"),
                 RawBlock.paragraph(3, "必须记录运行时间", "", null, "body/3")));
-        var config = new ParseIntegrationProperties();
+        var config = new ParseIntegrationProperties(false);
         config.getLlm().setModel("test");
         config.getLlm().setBatchBlocks(2);
         if (limit.equals("local-limit")) {
@@ -134,7 +134,7 @@ class WordMarkdownExtractionTest {
                 RawBlock.table(3, List.of(List.of("丙", "30")), "", "body/0/r3"),
                 RawBlock.table(4, List.of(List.of("丁", "40")), "", "body/0/r4"));
         var content = new WordMarkdownReader.Content(markdown, blocks, java.util.Set.of(0, 1, 2, 3, 4), List.of());
-        var config = new ParseIntegrationProperties();
+        var config = new ParseIntegrationProperties(false);
         config.getLlm().setModel("test");
         config.getLlm().setUrl("http://unused.invalid/model");
         config.getLlm().setBatchBlocks(2);
@@ -172,7 +172,7 @@ class WordMarkdownExtractionTest {
                   {"title":"待核对","requirementText":"核对运行工况","sourceRefs":["S2","S999"]}
                 ],"ignoredSourceRefs":[]}
                 """);
-        var extractor = new WordMarkdownExtractor(new ParseIntegrationProperties(), new ParseHttpClient(json),
+        var extractor = new WordMarkdownExtractor(new ParseIntegrationProperties(false), new ParseHttpClient(json),
                 new RuleBasedExtractor(json));
         var result = extractor.validate(output, content, "markitdown+llm:test");
         assertThat(result.requirements()).hasSize(2);
@@ -212,9 +212,8 @@ class WordMarkdownExtractionTest {
             doc.write(output);
         }
         byte[] original = Files.readAllBytes(path);
-        var config = new ParseIntegrationProperties();
+        var config = new ParseIntegrationProperties(true);
         config.getWordMarkdown().setPython(System.getenv("RFQ_MARKITDOWN_PYTHON"));
-        config.getLlm().setEnabled(true);
         config.getLlm().setModel("test");
         var http = new ParseHttpClient(json);
         var reader = new WordMarkdownReader(config, new DocxBlockReader(new OcrClient(config, http)));

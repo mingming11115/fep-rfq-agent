@@ -65,7 +65,7 @@ class ProviderPipelineIntegrationTest {
     }
     @AfterAll static void stop() { SERVER.stop(0); }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r) {
-        r.add("rfq.parse.integrations.llm.enabled", () -> true);
+        r.add("rfq.llm.enabled", () -> true);
         r.add("rfq.parse.integrations.llm.model", () -> "pipeline-test");
         r.add("rfq.parse.integrations.llm.url", () -> "http://127.0.0.1:" + SERVER.getAddress().getPort() + "/llm");
         r.add("rfq.parse.integrations.ocr.enabled", () -> true);

@@ -101,7 +101,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
     public ExtractionResult extractWordWithReport(List<RawBlock> blocks, String parseRunId) {
         var extracted = new ArrayList<>(rules.extractWord(blocks));
         var config = properties.getLlm();
-        if (!config.isEnabled() || extracted.isEmpty()) {
+        if (!properties.llmEnabled() || extracted.isEmpty()) {
             return new ExtractionResult(extracted, rules.name(), List.of());
         }
 
@@ -344,7 +344,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, boolean fallbackToRules) {
         var config = properties.getLlm();
-        if (!(fallbackToRules ? config.isEnabled() : properties.historyLlmEnabled())) {
+        if (!(fallbackToRules ? properties.llmEnabled() : properties.historyLlmEnabled())) {
             log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
             return new ExtractionResult(fallbackToRules ? rules.extract(blocks) : List.of(), rules.name(), List.of());
         }

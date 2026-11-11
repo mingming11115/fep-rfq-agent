@@ -28,19 +28,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HistoryExtractorTest {
     private final ObjectMapper json = new ObjectMapper();
     private final RuleBasedExtractor rules = new RuleBasedExtractor(json);
-    private final ParseIntegrationProperties properties = new ParseIntegrationProperties();
+    private final ParseIntegrationProperties properties = new ParseIntegrationProperties(false);
     private final HistoryExtractor history = withClient(new ParseHttpClient(json));
 
     private HistoryExtractor withClient(ParseHttpClient client) {
+        return withClient(properties, client);
+    }
+
+    private HistoryExtractor withClient(ParseIntegrationProperties properties, ParseHttpClient client) {
         var model = new HybridRequirementExtractor(rules, properties, client, json);
         return new HistoryExtractor(rules, model, properties, new HistoryModelExtractor(properties, client, model, json));
     }
 
     @Test void historyRulesCanRunWithTheSharedModelEnabledButHistoryModelDisabled() {
-        historySettings(true, false);
-        properties.getLlm().setEnabled(true);
+        var properties = new ParseIntegrationProperties(true);
+        properties.getHistory().setLlmEnabled(false);
         properties.getLlm().setModel("shared-test");
-        var parser = withClient(new ParseHttpClient(json) {
+        var parser = withClient(properties, new ParseHttpClient(json) {
             @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) {
                 throw new AssertionError("History must not call the disabled LLM");
             }
@@ -219,7 +223,7 @@ class HistoryExtractorTest {
     }
 
     @Test void modelSelectsHistoricalAnswerCellsWithoutRewritingTheirContent() {
-        properties.getLlm().setEnabled(true);
+        properties.getHistory().setLlmEnabled(true);
         properties.getLlm().setModel("test-model");
         var requirement = "上料模块须支持 300 mm 硅晶圆，并兼容标准 FOUP。";
         var table = RawBlock.table(0, List.of(List.of("No", "项目Item", "规格", "Description", "Rev"),
@@ -260,7 +264,7 @@ class HistoryExtractorTest {
     }
 
     @Test void rejectsModelSelectionsOutsideEligibleCellsAndRetainsKnownAnswers() {
-        properties.getLlm().setEnabled(true);
+        properties.getHistory().setLlmEnabled(true);
         properties.getLlm().setModel("test-model");
         var ambiguous = RawBlock.table(0, List.of(List.of("No", "Description", "Rev"),
                 List.of("1", "设备应支持晶圆。", "Comply")), "", "body/1");
@@ -314,7 +318,7 @@ class HistoryExtractorTest {
     }
 
     @Test void modelFailureKeepsTheRuleResultAndCompanionAnswer() {
-        properties.getLlm().setEnabled(true);
+        properties.getHistory().setLlmEnabled(true);
         properties.getLlm().setModel("test-model");
         var parser = withClient(new ParseHttpClient(json) {
             @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) {

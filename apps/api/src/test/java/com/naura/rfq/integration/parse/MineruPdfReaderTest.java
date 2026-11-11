@@ -137,8 +137,7 @@ class MineruPdfReaderTest {
     }
 
     private HistoryExtractor historyWithModel(List<JsonNode> requests, String response) {
-        var settings = new ParseIntegrationProperties();
-        settings.getLlm().setEnabled(true);
+        var settings = new ParseIntegrationProperties(true);
         settings.getLlm().setModel("test-model");
         var rules = new RuleBasedExtractor(JSON);
         var client = new ParseHttpClient(JSON) {

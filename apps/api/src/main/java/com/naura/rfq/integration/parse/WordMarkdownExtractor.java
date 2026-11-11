@@ -41,7 +41,7 @@ public class WordMarkdownExtractor {
     private final RuleBasedExtractor rules;
 
     public boolean enabled() {
-        return properties.getLlm().isEnabled();
+        return properties.llmEnabled();
     }
 
     public ExtractionResult extract(WordMarkdownReader.Content content, String runId) throws DocumentReadException {

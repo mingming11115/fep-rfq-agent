@@ -61,13 +61,12 @@ rfq:
     integrations:
       history:
         rules-enabled: ${RFQ_HISTORY_RULES_ENABLED:true}
-        llm-enabled: ${RFQ_HISTORY_LLM_ENABLED:${rfq.parse.integrations.llm.enabled}}
+        llm-enabled: ${RFQ_HISTORY_LLM_ENABLED:}
       word-markdown:
         python: ${RFQ_MARKITDOWN_PYTHON:python}
         timeout: ${RFQ_MARKITDOWN_TIMEOUT:60s}
         max-chars: ${RFQ_WORD_MARKDOWN_MAX_CHARS:0}
       llm:
-        enabled: ${RFQ_LLM_ENABLED:false}
         url: ${RFQ_LLM_URL:}
         api-key: ${RFQ_LLM_API_KEY:}
         model: ${RFQ_LLM_MODEL:}
