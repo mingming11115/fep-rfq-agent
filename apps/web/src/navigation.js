@@ -8,7 +8,7 @@ export function getWorkspaceContentKey({actorId,actorRole,buId,projectId,page}){
 export function getProjectEntryPage(state,projectId,destination='response') {
  return destination==='documents'?'response':destination;
 }
-const pages=['dashboard','tasks','projects','analysis',...PROJECT_PAGES,...ADMIN_PAGES];
+const pages=['dashboard','tasks','projects',...PROJECT_PAGES,...ADMIN_PAGES];
 const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload','buId','modelId','groupId'];
 export function parseWorkRoute(hash='') {
  const [path,query='']=hash.replace(/^#\/?/,'').split('?');const route={page:path==='documents'?'response':pages.includes(path)?path:'dashboard'};

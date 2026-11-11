@@ -718,10 +718,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
               addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`);
               toast('推荐话术已带入应答草稿，提交或确认后保存');
             }}/>}
-          {databaseBacked && form.conclusion !== 'Comply' && <Field label="对外答复" wide>
-            <UiTextArea aria-label="对外答复" autoSize={{ minRows: 3, maxRows: 6 }} value={form.draft} readOnly={!canEdit}
-              onChange={event=>edit('draft',event.target.value)}/>
-          </Field>}
         </div>
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openInlineReview(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>

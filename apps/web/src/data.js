@@ -5,7 +5,6 @@ import { snapshotFingerprint,getFinalReviewScope } from './snapshotDomain.js';
 // BHEL customer requirements are sourced; other projects and all supplier claims / people are synthetic.
 export const NAV_ITEMS = [
   { key: 'tasks', label: '任务中心', section: '全局' },
-  { key: 'analysis', label: 'AI分析记录', section: '全局' },
   { key: 'dashboard', label: '个人工作台与待办', section: '全局' },
   { key: 'projects', label: '项目列表', section: '全局' },
   { key: 'capabilities', label: '分组与能力配置', section: '全局' },
@@ -17,7 +16,7 @@ export const NAV_ITEMS = [
   { key: 'audit', label: '审计记录', section: '管理' },
   { key: 'admin', label: '系统配置与运维', section: '管理' },
 ];
-export const PRIMARY_NAV=[{key:'dashboard',label:'工作台'},{key:'projects',label:'我的 RFQ'},{key:'tasks',label:'任务中心'},{key:'analysis',label:'AI 分析记录'},{key:'admin',label:'管理后台'}];
+export const PRIMARY_NAV=[{key:'dashboard',label:'工作台'},{key:'projects',label:'我的 RFQ'},{key:'tasks',label:'任务中心'},{key:'admin',label:'管理后台'}];
 
 const REQUIREMENT_TEMPLATES = [
   {

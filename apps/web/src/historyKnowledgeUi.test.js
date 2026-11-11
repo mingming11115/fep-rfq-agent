@@ -41,6 +41,9 @@ test('history document UI separates metadata, repairs missing answers and enforc
  try{
   await render('sr','SR');assert.match(host.textContent,/客户历史RFQ/);
   assert.doesNotMatch(host.textContent,/机型A/);
+  const headerActions=[...host.querySelectorAll('.admin-page-actions button')].map(button=>button.textContent.trim());
+  assert.ok(headerActions.includes('上传历史 RFQ'));
+  assert.ok(!headerActions.includes('手工补录'),'the history RFQ list should have no manual entry button');
   const documentActions=host.querySelector('.history-document-panel tbody tr td:last-child');
   assert.deepEqual([...documentActions.querySelectorAll('button')].map(button=>button.textContent.trim()),['删除文档']);
   await click('客户历史RFQ.docx');

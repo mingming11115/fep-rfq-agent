@@ -89,16 +89,16 @@ export function canAccessPage(role, page,context) {
     }
     return ['dashboard','projects','bu-admin','knowledge','history','capabilities','audit'].includes(page)&&(!context||modernCan(role,'bu:manage',context));
    }
-   return [...sharedPages,'analysis'].includes(page)&&(!context||modernCan(role,'analysis:view',context));
+   return sharedPages.includes(page)&&(!context||modernCan(role,'analysis:view',context));
   }
   if (!roles.includes(role)) { return false; }
   if (sharedPages.includes(page)) { return true; }
-  return page === 'analysis' ? canPerform(role,'analysis:view') : page === 'audit' ? canPerform(role,'audit:view') : false;
+  return page === 'audit' && canPerform(role,'audit:view');
 }
 export function getRoleNavigation(role,context) {
   if(modernRoles.includes(role)){
    const base=[{key:'dashboard',page:'dashboard',label:role==='BU管理员'?'BU看板':'工作台'}];
-   const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'knowledge',page:'knowledge',label:'知识库'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'projects',page:'projects',label:'BU RFQ'},{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'analysis',page:'analysis',label:'AI 分析记录'},{key:'admin',page:'knowledge',label:'知识库'}];
+   const items=role==='后台管理'?[{key:'admin',page:'admin',label:'系统配置与运维'},{key:'knowledge',page:'knowledge',label:'知识库'},{key:'audit',page:'audit',label:'技术审计'}]:role==='BU管理员'?[{key:'projects',page:'projects',label:'BU RFQ'},{key:'bu-admin',page:'bu-admin',label:'BU管理'},{key:'admin',page:'knowledge',label:'知识管理'},{key:'audit',page:'audit',label:'审计记录'}]:[{key:'projects',page:'projects',label:'我的 RFQ'},{key:'tasks',page:'tasks',label:'任务中心'},{key:'admin',page:'knowledge',label:'知识库'}];
    return [...base,...items].filter(n=>canAccessPage(role,n.page,context));
   }
   if (!roles.includes(role)) { return []; }
@@ -106,7 +106,6 @@ export function getRoleNavigation(role,context) {
     {key:'dashboard',page:'dashboard',label:'工作台'},
     {key:'projects',page:'projects',label:'我的 RFQ'},
     {key:'tasks',page:'tasks',label:'任务中心'},
-    {key:'analysis',page:'analysis',label:'AI 分析记录'},
     {key:'admin',page:'knowledge',label: role === technical ? '知识库维护' : role === approver ? '知识库审核' : '知识库'},
   ];
   return items.filter(item => canAccessPage(role,item.page));
