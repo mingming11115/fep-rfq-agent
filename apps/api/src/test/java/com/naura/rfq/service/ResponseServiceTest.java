@@ -41,6 +41,26 @@ class ResponseServiceTest {
         verify(jdbc).update(contains("insert into requirement_response"),eq("R"),eq("P"),anyString());
         verify(audit).successInBu(eq("sr"),eq("BU"),anyString(),eq("requirement"),eq("R"),anyString());
     }
+    @Test void legacyConditionsArePreservedInTheDraftWithoutASeparateField() {
+        response("""
+                {"id":"R","version":3,"conclusion":"有条件 Comply","draft":"支持该配置","conditions":"限选配 X"}
+                """);
+        var row = service.write(sr, "R", 3L, 0L, null, false);
+        assertThat(row.path("draft").asText()).isEqualTo("支持该配置\n适用条件：限选配 X");
+        assertThat(row.has("conditions")).isFalse();
+    }
+    @Test void savedRemarksUseTheNewKeyAndPreserveLegacyValues() {
+        response("""
+                {"id":"R","version":3,"conclusion":"不适用","reason":"已有备注"}
+                """);
+        var saved = service.write(sr, "R", 3L, 0L, null, false);
+        assertThat(saved.path("remark").asText()).isEqualTo("已有备注");
+        assertThat(saved.has("reason")).isFalse();
+        var edited = service.write(sr, "R", 3L, 0L,
+                json.createObjectNode().put("remark", "").put("reason", "旧客户端的值"), false);
+        assertThat(edited.path("remark").asText()).isEmpty();
+        assertThat(edited.has("reason")).isFalse();
+    }
     @Test void missingVersionCannotWrite(){assertThatThrownBy(()->service.write(sr,"R",null,0L,null,true)).hasMessageContaining("版本");}
     @Test void staleResponseCannotWrite(){assertThatThrownBy(()->service.write(sr,"R",9L,0L,null,true)).hasMessageContaining("版本");}
     @Test void staleSourceCannotWrite(){assertThatThrownBy(()->service.write(sr,"R",1L,9L,null,true)).hasMessageContaining("来源");}

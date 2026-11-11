@@ -10,7 +10,8 @@ import {snapshotFingerprint,latestSnapshot,checkSnapshotValidity,currentProjectS
 import React, { useEffect, useRef, useState } from 'react';
 import { FileText, AlertCircle, ArrowRight, Download } from "../components/icons";
 import { Modal, Drawer } from '../components/ui';
-import { getExportIssues, makeSnapshot } from '../domain';
+import { getExportIssues, makeSnapshot, mergeAnswerConditions } from '../domain';
+import { answerRemark, normalizeResponseRemark } from '../responseFields';
 import { api } from '../authClient';
 import { downloadCraftBlob } from '../craftClient';
 import {getUnconfirmedComplyRows} from '../responseRecommendation';
@@ -21,7 +22,6 @@ const uid = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().to
 const now = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const isPendingReview = (review) => ['待审批', '待批准'].includes(review?.status);
 const isClosed = (review) => ['已关闭', '已完成', '批准关闭'].includes(review.status);
-const asText = (value) => Array.isArray(value) ? value.map((v) => typeof v === 'string' ? v : v.name || v.title || v.id).filter(Boolean).join('；') : String(value ?? '');
 const tone = (status) => /失败|退回|逾期|不满足|失效/.test(status || '') ? 'danger' : /已确认|完成|已关闭|已批准|通过/.test(status || '') ? 'success' : /处理中|待|审批|队列|排队/.test(status || '') ? 'warning' : 'neutral';
 function Badge({ value }) { return <UiTag className={`badge ${tone(value)}`}>{value || '未设置'}</UiTag>; }
 function Notice({ children, type = 'info' }) { return <div className={`flow-notice flow-notice-${type}`}><AlertCircle size={16} /><div>{children}</div></div>; }
@@ -55,7 +55,7 @@ export function ReviewsPage({project,requirements=[],reviews=[],onUpdateReview,o
 const exportColumns = [
   { key: 'clause', label: '条款编号' }, { key: 'original', label: '客户要求' },
   { key: 'conclusion', label: '应答结论' }, { key: 'draft', label: '对外答复' },
-  { key: 'conditions', label: '适用条件' }, { key: 'status', label: '确认状态' },
+  { key: 'status', label: '确认状态' },
 ];
 const defaultMapping = Object.fromEntries(exportColumns.map(({key}) => [key, key]));
 const defaultTemplate = { id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' };
@@ -96,9 +96,9 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
   const exportIssues = getExportIssues(requirements, reviews, project.id);
   const issues = [...exportIssues, ...documentIssues, ...approvalConfigIssues];
   const unconfirmedComply=getUnconfirmedComplyRows(requirements,project.id);
-  const approvalScope={...(databaseBacked?{format:'mysql-business-v1',...(project.workVersion>1?{workVersion:project.workVersion}:{})}:{}),rows:requirements,sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval,personnel:getFinalReviewScope(appState,project.id)},template:activeTemplate,mapping,attachments:[]};
+  const approvalScope={...(databaseBacked?{format:'mysql-business-v1',...(project.workVersion>1?{workVersion:project.workVersion}:{})}:{}),rows:requirements.map(normalizeResponseRemark),sourceVersions:(documentState?.files||[]).filter(f=>f.purpose==='要求来源').map(f=>`${f.id}:${f.version}`),configuration:{equipment:project.equipment,approvalConfig:effectiveApproval,personnel:getFinalReviewScope(appState,project.id)},template:activeTemplate,mapping,attachments:[]};
   useEffect(()=>{onExportScope?.(approvalScope);},[JSON.stringify(approvalScope)]);
-  const signature = (rows) => JSON.stringify(rows.map((r) => ({ id: r.id, version: r.version, status: r.status, original: r.original, conclusion: r.conclusion, draft: r.draft, conditions: r.conditions, evidence: r.evidence, reason: r.reason, owner: r.owner })).sort((a, b) => a.id.localeCompare(b.id)));
+  const signature = (rows) => JSON.stringify(rows.map((r) => ({ id: r.id, version: r.version, status: r.status, original: r.original, conclusion: r.conclusion, draft: mergeAnswerConditions(r.draft, r.conditions), evidence: r.evidence, remark: answerRemark(r), owner: r.owner })).sort((a, b) => a.id.localeCompare(b.id)));
   function validity(snapshot) {
     if (!snapshot) { return { valid: false, message: '未选择批准快照' }; }
     if (approvalConfigIssues.length) { return { valid: false, message: approvalConfigIssues[0].message }; }
@@ -168,7 +168,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
       setExporting(false);
     }
   }
-  function snapshotTable(snapshot) { const priority=new Set(snapshot.unconfirmedComplyIds||[]),rows=[...(snapshot.rows||[])].sort((a,b)=>Number(priority.has(b.id))-Number(priority.has(a.id)));return <div className="table-wrap flow-snapshot-table"><BusinessTable className="data-table"><thead><tr><th>条款</th><th>客户要求</th><th>最终结论</th><th>冻结答复</th><th>必要条件</th><th>人工确认</th><th>版本</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td>{r.clause}</td><td>{r.original}</td><td><Badge value={r.conclusion} /></td><td>{r.draft}</td><td>{asText(r.conditions) || '—'}</td><td>{priority.has(r.id)?'未人工确认 · 系统推荐Comply':r.status==='已确认'?'已人工确认':r.status}</td><td>V{r.version || 1}</td></tr>)}</tbody></BusinessTable></div>; }
+  function snapshotTable(snapshot) { const priority=new Set(snapshot.unconfirmedComplyIds||[]),rows=[...(snapshot.rows||[])].sort((a,b)=>Number(priority.has(b.id))-Number(priority.has(a.id)));return <div className="table-wrap flow-snapshot-table"><BusinessTable className="data-table"><thead><tr><th>条款</th><th>客户要求</th><th>最终结论</th><th>冻结答复</th><th>人工确认</th><th>版本</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td>{r.clause}</td><td>{r.original}</td><td><Badge value={r.conclusion} /></td><td>{mergeAnswerConditions(r.draft, r.conditions)}</td><td>{priority.has(r.id)?'未人工确认 · 系统推荐Comply':r.status==='已确认'?'已人工确认':r.status}</td><td>V{r.version || 1}</td></tr>)}</tbody></BusinessTable></div>; }
 
   const actionDialog = action && <Modal
     title={{ submit: '发起最终评审', approve: '通过本方最终评审', reject: '退回应答快照' }[action]}
@@ -226,8 +226,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
             <td>{row.clause || '—'}</td>
             <td className="flow-preview-requirement">{row.original}</td>
             <td><Badge value={row.conclusion}/></td>
-            <td className="flow-preview-reply">{row.draft || '—'}</td>
-            <td>{asText(row.conditions) || '—'}</td>
+            <td className="flow-preview-reply">{mergeAnswerConditions(row.draft, row.conditions) || '—'}</td>
             <td>{row.status && <Badge value={exportCheck.valid && latest.unconfirmedComplyIds?.includes(row.id) ? '最终评审已通过（未逐条人工确认）' : row.status}/>}</td>
           </tr>)}</tbody>
         </BusinessTable></div>

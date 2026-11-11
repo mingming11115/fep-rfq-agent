@@ -27,13 +27,16 @@ class ResponsePersistenceTest {
         // Establish a controlled response within this rollback-only transaction.
         jdbc.update("insert into requirement_response(requirement_id,project_id,payload) values(?,?,?) on duplicate key update payload=values(payload)",id,pid,"{\"id\":\""+id+"\",\"version\":1}");
         long source=((Number)c.get("version")).longValue();
-        var saved=service.write(user,id,1L,source,json.createObjectNode().put("conclusion","Comply").put("draft","回滚验证答复"),false);
+        var saved=service.write(user,id,1L,source,json.createObjectNode().put("conclusion","Comply")
+                .put("draft","回滚验证答复").put("remark","回滚验证备注"),false);
         assertThat(saved.path("version").asLong()).isEqualTo(2);
         service.write(user,id,2L,source,null,true);
         var reloaded=json.valueToTree(records.workflow(user,pid)).path("responses");
         var found=java.util.stream.StreamSupport.stream(reloaded.spliterator(),false).filter(r->r.path("id").asText().equals(id)).findFirst().orElseThrow();
         assertThat(found.path("status").asText()).isEqualTo("已确认");
         assertThat(found.path("draft").asText()).isEqualTo("回滚验证答复");
+        assertThat(found.path("remark").asText()).isEqualTo("回滚验证备注");
+        assertThat(found.has("reason")).isFalse();
         assertThat(found.path("version").asLong()).isEqualTo(3);
         assertThatThrownBy(()->service.write(user,id,2L,source,null,true)).hasMessageContaining("版本");
     }

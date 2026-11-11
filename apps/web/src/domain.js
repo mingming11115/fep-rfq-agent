@@ -1,8 +1,17 @@
 import { canReviewWithoutManualConfirmation, captureSystemRecommendation, getUnconfirmedComplyRows } from './responseRecommendation.js';
+import { answerRemark, normalizeResponseRemark } from './responseFields.js';
 
 const FINAL_CONCLUSIONS = new Set(['Comply', '有条件 Comply', '不满足', '不适用']);
-const MATERIAL_FIELDS = ['original', 'conclusion', 'draft', 'conditions', 'evidence', 'reason', 'owner'];
+const MATERIAL_FIELDS = ['original', 'conclusion', 'evidence', 'owner'];
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
+
+export function mergeAnswerConditions(draft = '', conditions = '') {
+  const text = String(draft ?? '');
+  const condition = String(conditions ?? '').trim();
+  if (!condition) { return text; }
+  const line = `适用条件：${condition}`;
+  return text.includes(line) ? text : [text, line].filter(Boolean).join('\n');
+}
 
 export function importParsedRequirements(existing, parsed) {
   const rows = new Map(existing.map((row) => [row.id, row]));
@@ -42,17 +51,22 @@ export function confirmationValidation(row) {
 export function requirementValidation(row) {
   const issues = confirmationValidation(row);
   if (row.conclusion === 'Comply') { return issues; }
-  if (!hasText(row.draft)) { issues.push('请填写对外答复'); }
+  if (!hasText(mergeAnswerConditions(row.draft, row.conditions))) { issues.push('请填写对外答复'); }
   if (row.conclusion === '有条件 Comply') {
-    if (!hasText(row.conditions)) { issues.push('有条件 Comply 必须填写适用条件'); }
     if (!hasText(row.evidence)) { issues.push('有条件 Comply 必须关联有效证据'); }
   }
   return issues;
 }
 
 export function applyRequirementEdit(row, patch) {
-  const updated = { ...row, ...patch };
-  const materialChange = MATERIAL_FIELDS.some((field) => row[field] !== updated[field]);
+  const updated = { ...normalizeResponseRemark(row), ...normalizeResponseRemark(patch) };
+  if (Object.hasOwn(patch, 'draft') || Object.hasOwn(patch, 'conditions')) {
+    updated.draft = mergeAnswerConditions(updated.draft, patch.conditions);
+    delete updated.conditions;
+  }
+  const materialChange = MATERIAL_FIELDS.some((field) => row[field] !== updated[field]) ||
+    answerRemark(row) !== answerRemark(updated) ||
+    mergeAnswerConditions(row.draft, row.conditions) !== mergeAnswerConditions(updated.draft, updated.conditions);
   updated.version = materialChange ? (row.version || 1) + 1 : row.version;
   if (materialChange && row.status === '已确认') {
     updated.status = '待确认';
@@ -88,7 +102,7 @@ export function makeSnapshot(projectId, requirements, actorRole) {
   return {
     id: `SNAP-${id}`, projectId, status: '审批中',
     createdAt: new Date().toISOString(), createdBy: actorRole,
-    rows: structuredClone(requirements),
+    rows: structuredClone(requirements.map(normalizeResponseRemark)),
     unconfirmedComplyIds: getUnconfirmedComplyRows(requirements,projectId).map(row=>row.id),
   };
 }
@@ -101,7 +115,7 @@ function csvCell(value) {
 }
 
 export function toCsv(rows) {
-  const fields = ['clause', 'original', 'conclusion', 'draft', 'conditions', 'status'];
-  const header = '条款,客户要求,应答结论,对外答复,适用条件,确认状态';
-  return [header, ...rows.map((row) => fields.map((field) => csvCell(row[field])).join(','))].join('\r\n');
+  const header = '条款,客户要求,应答结论,对外答复,确认状态';
+  return [header, ...rows.map((row) => [row.clause, row.original, row.conclusion,
+    mergeAnswerConditions(row.draft, row.conditions), row.status].map(csvCell).join(','))].join('\r\n');
 }

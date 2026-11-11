@@ -269,8 +269,8 @@ class MatchEvaluator {
     }
 
     private String query(JsonNode snapshot) {
-        String title = text(snapshot, "title"), body = text(snapshot, "text"), verified = text(snapshot.path("context"), "verifiedConditions");
-        return String.join("\n", List.of(title, body, verified).stream().filter(value -> !value.isBlank()).distinct().toList());
+        String title = text(snapshot, "title"), body = text(snapshot, "text");
+        return String.join("\n", List.of(title, body).stream().filter(value -> !value.isBlank()).distinct().toList());
     }
 
     private boolean incompatible(String known, String candidate) {

@@ -60,6 +60,14 @@ public class RuleBasedExtractor implements RequirementExtractor {
 
     @Override
     public List<ExtractedRequirement> extract(List<RawBlock> blocks) {
+        return extract(blocks, false);
+    }
+
+    List<ExtractedRequirement> extractWord(List<RawBlock> blocks) {
+        return extract(blocks, true);
+    }
+
+    private List<ExtractedRequirement> extract(List<RawBlock> blocks, boolean word) {
         List<ExtractedRequirement> results = new ArrayList<>();
         String inheritedSection = "";
         for (RawBlock block : blocks) {
@@ -71,7 +79,7 @@ public class RuleBasedExtractor implements RequirementExtractor {
             }
             String section = inheritedSection;
             if (block.isTable()) {
-                results.addAll(fromTable(block, section, results.size()));
+                results.addAll(fromTable(block, section, results.size(), word));
                 continue;
             }
             if (RawBlock.IMAGE.equals(block.type())) {
@@ -138,7 +146,7 @@ public class RuleBasedExtractor implements RequirementExtractor {
                 reasons.isEmpty() ? null : String.join("；", reasons));
     }
 
-    private List<ExtractedRequirement> fromTable(RawBlock block, String section, int startOrder) {
+    private List<ExtractedRequirement> fromTable(RawBlock block, String section, int startOrder, boolean word) {
         List<ExtractedRequirement> results = new ArrayList<>();
         List<List<String>> rows = block.tableRows();
         if (rows.isEmpty()) {
@@ -147,14 +155,19 @@ public class RuleBasedExtractor implements RequirementExtractor {
         List<String> header = rows.get(0);
         int itemColumn = tableItemColumn(header);
         int specificationColumn = headerColumn(header, SPECIFICATION_HEADER);
-        boolean hasHeader = looksLikeHeader(header) || (itemColumn >= 0 && specificationColumn >= 0)
+        boolean hasHeader = (word && itemColumn >= 0)
+                || looksLikeHeader(header) || (itemColumn >= 0 && specificationColumn >= 0)
                 || ((itemColumn >= 0 || specificationColumn >= 0) && header.stream()
                     .map(String::strip).anyMatch(cell -> OTHER_TABLE_HEADER.matcher(cell).matches()));
         int start = hasHeader ? 1 : 0;
         for (int rowIndex = start; rowIndex < rows.size(); rowIndex++) {
             List<String> cells = rows.get(rowIndex);
+            if (word && hasHeader && cells.equals(header)) {
+                continue;
+            }
             String joined = joinCells(cells);
-            if (joined.length() < 6 || isDocumentNotice(joined)) {
+            String item = tableCell(cells, hasHeader ? itemColumn : -1);
+            if ((!word || item.isEmpty()) && (joined.length() < 6 || isDocumentNotice(joined))) {
                 continue;
             }
             List<Map<String, String>> metrics = extractMetrics(joined);
@@ -164,7 +177,6 @@ public class RuleBasedExtractor implements RequirementExtractor {
                 reasons.add("检测到数值但未识别单位");
             }
             String clauseNo = cellNumber(cells);
-            String item = tableCell(cells, hasHeader ? itemColumn : -1);
             String specification = tableCell(cells, hasHeader ? specificationColumn : -1);
             String metricsJson = metricsJson(specification, metrics);
             results.add(new ExtractedRequirement(

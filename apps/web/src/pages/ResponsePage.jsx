@@ -34,7 +34,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
-import { applyRequirementEdit, confirmationValidation } from '../domain';
+import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions } from '../domain';
+import { answerRemark } from '../responseFields';
 import { matchClient } from '../requirementMatchClient';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
@@ -54,8 +55,8 @@ const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Ma
 const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { console.error('读取应答页本地数据失败'); return fallback; } };
 const matches = matchClient();
-const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: row?.draft || '', conditions: row?.conditions || '', reason: row?.reason || '', evidence: row?.evidence || '' });
-const formFields = ['original', 'conclusion', 'draft', 'conditions', 'reason', 'evidence'];
+const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: mergeAnswerConditions(row?.draft, row?.conditions), remark: answerRemark(row), evidence: row?.evidence || '' });
+const formFields = ['original', 'conclusion', 'draft', 'remark', 'evidence'];
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
 function Notice({ children, warning = false, loading = false }) {
   const Icon = loading ? LoaderCircle : AlertCircle;
@@ -386,9 +387,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   function goPage(key) { navigate(key); }
   function applyMatch(run, candidate) {
     if (!canEdit || cardBusyRef.current) { return; }
-    setForm(current=>({...current,...(candidate.answer ? {draft:candidate.answer} : {}),
+    setForm(current=>({...current,draft:mergeAnswerConditions(candidate.answer || current.draft,candidate.conditions),
       ...(candidate.conclusion ? {conclusion:candidate.conclusion} : {}),
-      conditions:candidate.conditions ?? current.conditions,
       evidence:current.evidence || (candidate.version ? `${candidate.id} · v${candidate.version}` : `能力比对 ${run.runId}`)}));
     setMatchChoice({matchRunId:run.runId,candidateId:candidate.id});
     dirtyRef.current=true;
@@ -403,10 +403,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     prefilledRuns.current.add(run.runId);
     applyMatch(run,candidate);
   }
-  async function saveDraft(reasonOverride, choiceOverride) {
+  async function saveDraft(remarkOverride, choiceOverride) {
     if (!active || !canEdit) { toast('当前身份不能修改应答草稿'); return false; }
     if (conflicted) { setError('条目版本已变化，请保留当前输入并返回核对最新版本，不能覆盖保存。'); setModal('conflict'); return false; }
-    const patch = { ...form, ...(reasonOverride ? { reason: reasonOverride } : {}) };
+    const patch = { ...form, ...(remarkOverride ? { remark: remarkOverride } : {}) };
     if(cardBusyRef.current) { return false; }
     cardBusyRef.current=true;setCardBusy(true);
     try { if (await onUpdateRequirement(active.id, patch,baseline.current.version||1,choiceOverride ?? matchChoice) === false) { return false; } }
@@ -422,7 +422,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   useEffect(() => {
     if (!pendingConfirmation) { return; }
     const current = requirements.find((r) => r.id === pendingConfirmation.id);
-    if (!current || !formFields.every((field) => current[field] === pendingConfirmation.expected[field])) { return; }
+    const currentForm = toForm(current);
+    if (!current || !formFields.every((field) => currentForm[field] === pendingConfirmation.expected[field])) { return; }
     setPendingConfirmation(null);
     finishConfirmation(current, pendingConfirmation.nextId);
   }, [requirements, pendingConfirmation]);
@@ -482,10 +483,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       draft && (matchChoice.matchRunId !== run.runId || matchChoice.candidateId !== candidate.id)) {
       return { exclusion: '已采纳的比对依据已变化，请逐条核对' };
     }
-    const conditions = answer.conditions?.trim();
-    const wording = answer.draft?.trim();
+    const wording = mergeAnswerConditions(answer.draft,answer.conditions).trim();
+    const candidateWording = mergeAnswerConditions(candidate.answer,candidate.conditions).trim();
     if (!['same', 'not_specified'].includes(candidate.conditionStatus) ||
-      (conditions && conditions !== (candidate.conditions || '').trim()) || (wording && wording !== candidate.answer?.trim())) {
+      (wording && wording !== candidateWording)) {
       return { exclusion: '答复或适用条件与标准回复不一致，或条件尚未核实' };
     }
     return reference && !draft ? {} : { choice: { matchRunId: run.runId, candidateId: candidate.id } };
@@ -529,7 +530,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   function adoptSuggestion(next, label) {
     if (!canEdit) { return toast('当前身份只读，不能采用或修改应答'); }
-    const proposal = { ...form, conclusion: next.conclusion || suggestion.conclusion, draft: next.answer || next.draft, conditions: next.conditions || '', evidence: next.evidence || '', reason: form.reason };
+    const proposal = { ...form, conclusion: next.conclusion || suggestion.conclusion,
+      draft: mergeAnswerConditions(next.answer || next.draft,next.conditions), evidence: next.evidence || '', remark: form.remark };
     if (form.draft.trim() || dirty) { setAdoption({ proposal, label }); return; }
     applyAdoption(proposal, label);
   }
@@ -556,7 +558,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   function openCapability() {
     if(!canPerform(actorRole,'resource:edit',capabilityContext)) { return; }
     if(!capabilityModels.length) { return toast('本BU尚无可用机型，请先由BU管理员配置机型与工艺。','error'); }
-    setCapabilityForm({buId:project.buId,projectId:project.id,modelId:'',processId:'',modelContext:project.equipment,config:'',metric:active.title,value:'',valueType:'保证值',conditions:form.conditions,limits:'',evidence:'',sourceLocation:`${project.id} / ${active.id} / ${active.source} 第 ${active.sourcePage} 页`,approver:'BU管理员'}); candidateDirty.current = true; setError('');
+    setCapabilityForm({buId:project.buId,projectId:project.id,modelId:'',processId:'',modelContext:project.equipment,config:'',metric:active.title,value:'',valueType:'保证值',conditions:'',limits:'',evidence:'',sourceLocation:`${project.id} / ${active.id} / ${active.source} 第 ${active.sourcePage} 页`,approver:'BU管理员'}); candidateDirty.current = true; setError('');
   }
   function saveCapability() {
     if(!canPerform(actorRole,'resource:edit',capabilityContext)) { return false; }
@@ -660,10 +662,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
           onDeviation={item=>onDeviation?.(project.id,item)} toast={toast}/>
           : <AssessmentPanel sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}/>}
-        <div className="form-grid response-form"><div className="field response-wide"><span><i className="response-required">*</i>人工最终结论</span><Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit} onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/></div>{form.conclusion === '不适用' && <Field label="备注" wide><UiTextArea className="input" aria-label="备注" value={form.reason} readOnly={!canEdit} onChange={(e) => edit('reason', e.target.value)} placeholder="填写备注（选填）" /></Field>}</div>
+        <div className="form-grid response-form"><div className="field response-wide"><span><i className="response-required">*</i>人工最终结论</span><Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit} onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/></div>{form.conclusion === '不适用' && <Field label="备注" wide><UiTextArea className="input" aria-label="备注" value={form.remark} readOnly={!canEdit} onChange={(e) => edit('remark', e.target.value)} placeholder="填写备注（选填）" /></Field>}</div>
         {databaseBacked && form.conclusion !== 'Comply' && <div className="form-grid response-form">
           <Field label="对外答复" wide><UiTextArea className="input" aria-label="对外答复" value={form.draft} readOnly={!canEdit} onChange={event=>edit('draft',event.target.value)}/></Field>
-          <Field label="适用条件" wide><UiTextArea className="input" aria-label="适用条件" value={form.conditions} readOnly={!canEdit} onChange={event=>edit('conditions',event.target.value)}/></Field>
           <Field label="应答依据" wide><UiInput className="input" aria-label="应答依据" value={form.evidence} readOnly={!canEdit} onChange={event=>edit('evidence',event.target.value)}/></Field>
         </div>}
         {form.conclusion !== 'Comply' && recommendedWording && <RecommendedWording key={`${active.id}:${recommendedWording}`} recommendation={recommendedWording} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => { if (!canEdit) { return; } edit('draft', wording); addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`); toast('推荐话术已带入应答草稿，提交或确认后保存'); }}/>}
@@ -719,10 +720,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     </div>
 
     {modal === 'confirmation-validation' && <Modal title="暂无法确认本条" centered width={480} onClose={closeConfirmationValidation} footer={<UiButton type="button" className="btn btn-primary" onClick={closeConfirmationValidation}>返回修改</UiButton>}><p role="alert">{error}</p></Modal>}
-    {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason)) { setModal(null); }}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal)) { setModal(null); }}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><small>{active.conditions}</small><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{active.pendingReviewProposal.proposal.draft}</p><small>{active.pendingReviewProposal.proposal.conditions}</small><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
+    {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason)) { setModal(null); }}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal)) { setModal(null); }}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{mergeAnswerConditions(active.pendingReviewProposal.proposal.draft, active.pendingReviewProposal.proposal.conditions)}</p><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
     {modal === 'confirm' && <Modal title={dirty ? '修改后确认当前条目' : '确认当前条目应答'} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={!canConfirm || !!pendingConfirmation} onClick={confirmOne}>{pendingConfirmation ? '保存后确认中…' : '确认本条'}</UiButton></>}>
       <div className="response-modal-title"><span>条款 {active.clause}{!databaseBacked && ` · V${active.version || 1}`}</span><h3>{active.title}</h3></div>
-      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.reason]] : []), ...(form.conclusion !== 'Comply' ? [['推荐话术', form.draft]] : [])]}/>
+      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.remark]] : []), ...(form.conclusion !== 'Comply' ? [['推荐话术', form.draft]] : [])]}/>
       <Notice>确认会记录当前应答和来源。请先完成未关闭的评审，并填写明确结论。</Notice>
       <label className="response-checkbox"><UiCheckbox type="checkbox" checked={confirmNext} onChange={(e) => setConfirmNext(e.target.checked)} />确认后跳转下一未完成条目</label>{error && <p className="response-error" role="alert">{error}</p>}
     </Modal>}
@@ -750,13 +751,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       <Description rows={[['当前答复',form.draft],['候选答复',realAdoption.candidate.answer],
         ['候选结论',realAdoption.candidate.conclusion],['候选条件',realAdoption.candidate.conditions]]}/>
     </Modal>}
-    {adoption && <Modal title="采用建议前核对应答差异" onClose={() => setAdoption(null)} width={760} footer={<><UiButton className="btn" onClick={() => setAdoption(null)}>保留当前编辑</UiButton><UiButton className="btn btn-primary" onClick={() => applyAdoption(adoption.proposal, adoption.label)}>采用建议并保留来源条件</UiButton></>}><Notice>当前应答已有内容。采用将替换答复、结论、条件和证据；仍需人工保存与确认。</Notice><div className="response-diff-grid"><div><h4>当前人工答复</h4><p>{form.draft}</p><small>条件：{form.conditions || '未填写'}</small></div><div><h4>{adoption.label}</h4><p>{adoption.proposal.draft}</p><small>条件：{adoption.proposal.conditions || '未填写'}</small></div></div></Modal>}
+    {adoption && <Modal title="采用建议前核对应答差异" onClose={() => setAdoption(null)} width={760} footer={<><UiButton className="btn" onClick={() => setAdoption(null)}>保留当前编辑</UiButton><UiButton className="btn btn-primary" onClick={() => applyAdoption(adoption.proposal, adoption.label)}>采用建议并保留来源条件</UiButton></>}><Notice>当前应答已有内容。采用将替换答复、结论和证据；仍需人工保存与确认。</Notice><div className="response-diff-grid"><div><h4>当前人工答复</h4><p>{form.draft}</p></div><div><h4>{adoption.label}</h4><p>{adoption.proposal.draft}</p></div></div></Modal>}
 
     {capabilityForm && <Drawer title="补充机型能力边界 · 候选草稿" width={650} onClose={() => { setTransition({ next: () => { setCapabilityForm(null); candidateDirty.current = false; } }); }} footer={<><UiButton className="btn" onClick={() => { setTransition({ next: () => { setCapabilityForm(null); candidateDirty.current = false; } }); }}>取消</UiButton><UiButton className="btn btn-primary" onClick={saveCapability}>保存能力候选</UiButton></>}><Notice>保存为未发布候选，不覆盖当前应答，不自动改变 Comply 结论。请在能力维护页核对条件、证据并独立批准。</Notice><div className="form-grid response-spaced"><Field label="关联机型" required><UiSelect className="select" aria-label="补充能力关联机型" value={capabilityForm.modelId} onChange={e=>{const chosen=[...capabilityModels].sort((a,b)=>b.version-a.version).find(m=>m.id===e.target.value);setCapabilityForm({...capabilityForm,modelId:e.target.value,processId:'',config:chosen?.config||''});}}><option value="">请选择本BU的机型及硬件版本</option>{[...new Set(capabilityModels.map(m=>m.id))].map(id=>{const m=[...capabilityModels].filter(m=>m.id===id).sort((a,b)=>b.version-a.version)[0];return <option key={id} value={id}>{m.name} {m.revision} · {m.code}</option>;})}</UiSelect></Field><Field label="关联工艺" required><UiSelect className="select" aria-label="补充能力关联工艺" value={capabilityForm.processId} onChange={e=>setCapabilityForm({...capabilityForm,processId:e.target.value})}><option value="">请选择机型下的工艺</option>{capabilityProcesses.filter(p=>p.modelId===capabilityForm.modelId&&p.enabled!==false).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</UiSelect></Field><Field label="配置 / 项目基线" required><UiInput className="input" value={capabilityForm.config} onChange={(e) => setCapabilityForm({ ...capabilityForm, config: e.target.value })} /></Field><Field label="能力指标" required><UiInput className="input" value={capabilityForm.metric} onChange={(e) => setCapabilityForm({ ...capabilityForm, metric: e.target.value })} /></Field><Field label="实际能力值 / 范围" required><UiInput className="input" value={capabilityForm.value} onChange={(e) => setCapabilityForm({ ...capabilityForm, value: e.target.value })} /></Field><Field label="值类型"><UiSelect className="select" value={capabilityForm.valueType} onChange={(e) => setCapabilityForm({ ...capabilityForm, valueType: e.target.value })}>{['保证值', '典型值', '范围值', '描述值'].map((v) => <option key={v}>{v}</option>)}</UiSelect></Field><Field label="来源"><UiInput className="input" readOnly value="手动补充" /></Field><Field label="适用条件" required wide><UiTextArea className="input response-conditions" value={capabilityForm.conditions} onChange={(e) => setCapabilityForm({ ...capabilityForm, conditions: e.target.value })} placeholder="材料、厚度、工艺、测试方法与工况" /></Field><Field label="限制" wide><UiTextArea className="input" value={capabilityForm.limits} onChange={(e) => setCapabilityForm({ ...capabilityForm, limits: e.target.value })} /></Field><Field label="证据与版本" wide><UiInput className="input" value={capabilityForm.evidence} onChange={(e) => setCapabilityForm({ ...capabilityForm, evidence: e.target.value })} list="response-evidence-options" placeholder="可在能力维护页补齐有效证据" /><datalist id="response-evidence-options">{capabilityEvidence.filter((r) => r.status === '有效').map((r) => <option key={r.id} value={`${r.id} v${r.version}，${r.location || '请补充页码'}`}>{r.name}</option>)}</datalist></Field><Field label="来源定位" wide><UiTextArea className="input" readOnly value={capabilityForm.sourceLocation} /></Field></div>{error && <p className="response-error">{error}</p>}</Drawer>}
     <OverlayPresence>{historyDetail && <Drawer title="历史候选详情 · 模拟参考" width={720} onClose={() => setHistoryDetail(null)} footer={<><UiButton className="btn" onClick={() => { startReview('review', historyDetail); setHistoryDetail(null); }}>发起专家评审</UiButton><UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => { adoptSuggestion({ ...historyDetail, conclusion: suggestion.conclusion }, `${historyDetail.project} ${historyDetail.version}`); setHistoryDetail(null); }}>修改后复用</UiButton></>}><h3>{historyDetail.project}</h3><Description rows={[["时间 / 配置", `${historyDetail.date} · ${historyDetail.model} · ${historyDetail.config}`], ['来源版本', `${historyDetail.id} · ${historyDetail.version}`], ['历史要求', historyDetail.original], ['已审核答复', historyDetail.answer], ['审核状态', '已批准（模拟记录）'], ['与本次条件差异', historyDetail.difference], ['历史方案 / 适用条件', historyDetail.conditions], ['候选证据', historyDetail.evidence], ['客户沟通结果', historyDetail.feedback], ['实际验收结果', historyDetail.acceptance], ['建议动作', '核对配置、材料与验收条件后修改复用；不明确时发起评审']]} /><Notice warning>历史客户接受与实际验收分开记录。未知结果显示未记录，不推断为验收通过。</Notice></Drawer>}</OverlayPresence>
     {modal === 'original' && <Drawer title="客户原文与来源修订" width={650} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>关闭</UiButton><UiButton className="btn btn-primary" disabled={!canEdit} onClick={() => { setModal(null); toast('原文修订保留在当前草稿中，请保存并重新核对匹配结果'); }}>带入当前草稿</UiButton></>}><Description rows={[["来源文件", active.source], ['页码 / 条款', `第 ${active.sourcePage || 1} 页 / ${active.clause}`], ['当前版本', `V${active.version || 1}`]]} /><Field label="客户要求原文" required wide><UiTextArea className="input response-reply" value={form.original} readOnly={!canEdit||!canPerform(actorRole,'source:manage')} onChange={(e) => {if(canPerform(actorRole,'source:manage')) { edit('original', e.target.value); }}} /></Field><Notice warning>原文修订会影响当前建议及确认有效性。保存后须重新核对，不自动沿用旧版批准。</Notice></Drawer>}
     {modal === 'rematch' && <Modal title="重新执行三级匹配" onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" onClick={rematch}>开始重新匹配</UiButton></>}><Notice>按“标准回复库 → 历史 RFQ → 能力边界”依次执行；只刷新模拟检索结果与建议，保留当前人工答复和编辑内容。</Notice><Field label="原型场景"><UiSelect className="select" value={retrievalMode} onChange={(e) => setRetrievalMode(e.target.value)}><option value="normal">正常分级匹配</option><option value="failed">模拟标准检索失败</option><option value="denied">模拟检索来源无权限</option></UiSelect></Field></Modal>}
-    {modal === 'conflict' && <Modal title="条目版本已变化，无法覆盖保存" width={750} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>保留我的输入</UiButton><UiButton className="btn btn-primary" onClick={() => { hydrate(active); setModal(null); }}>放弃本次编辑并载入最新版本</UiButton></>}><Notice warning>当前输入与最新版本并排展示，请核对后基于最新版本重新提交；不能强制覆盖确认。</Notice><div className="response-diff-grid"><div><h4>我的输入 · V{baseline.current.version}</h4><p>{form.draft}</p><small>{form.conditions}</small></div><div><h4>最新版本 · V{active.version}</h4><p>{active.draft}</p><small>{active.conditions}</small></div></div></Modal>}
+    {modal === 'conflict' && <Modal title="条目版本已变化，无法覆盖保存" width={750} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>保留我的输入</UiButton><UiButton className="btn btn-primary" onClick={() => { hydrate(active); setModal(null); }}>放弃本次编辑并载入最新版本</UiButton></>}><Notice warning>当前输入与最新版本并排展示，请核对后基于最新版本重新提交；不能强制覆盖确认。</Notice><div className="response-diff-grid"><div><h4>我的输入 · V{baseline.current.version}</h4><p>{form.draft}</p></div><div><h4>最新版本 · V{active.version}</h4><p>{active.draft}</p></div></div></Modal>}
   </div>;
 }
 

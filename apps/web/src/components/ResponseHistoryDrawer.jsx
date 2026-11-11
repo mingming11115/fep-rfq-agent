@@ -3,14 +3,16 @@ import { Alert, List, Skeleton, Tag, Tooltip } from 'antd';
 import { UiButton } from './AntContent';
 import { Drawer, EmptyState, Modal } from './ui';
 import { loadResponseHistory } from '../responseClient';
+import { normalizeResponseRemark } from '../responseFields';
 import './response-history.css';
 
 const fields = [
   ['conclusion', '最终结论'], ['draft', '应答正文'], ['conditions', '适用条件'],
-  ['reason', '备注'], ['evidence', '证据'],
+  ['remark', '备注'], ['evidence', '证据'],
 ];
 
 function versionEntry(item, kind) {
+  item = normalizeResponseRemark(item);
   const historyVersion = kind === 'confirmation' ? item.confirmationVersion : item.checkpointVersion;
   return { item, kind, historyVersion, key: `${kind}:${historyVersion}`, label: kind === 'confirmation' ? `V${historyVersion}` : `检查点 R${historyVersion}` };
 }
@@ -55,8 +57,7 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
   const sourceChanged = selectedSource && (
     selectedSource.sourceDocumentId && selectedSource.sourceDocumentId !== requirement.sourceFileId ||
     selectedSource.original != null && selectedSource.original !== requirement.original ||
-    selectedSource.sourceRequirementText != null && selectedSource.sourceRequirementText !== requirement.requirementText ||
-    selectedSource.sourceConditions != null && selectedSource.sourceConditions !== requirement.conditionsText
+    selectedSource.sourceRequirementText != null && selectedSource.sourceRequirementText !== requirement.requirementText
   );
 
   async function restore() {

@@ -135,7 +135,7 @@ public class DocumentReplacementService {
     private ObjectNode impact(Project project, ProjectWorkScope.Replacement replacement) {
         var old = document(project, replacement.oldDocumentId());
         var next = document(project, replacement.newDocumentId());
-        var rows = requirements.findByProjectIdOrderBySortOrder(project.getId());
+        var rows = requirements.findByProjectIdOrderBySource(project.getId());
         var before = rows.stream().filter(row -> old.getId().equals(row.getDocumentId())).toList();
         var after = rows.stream().filter(row -> next.getId().equals(row.getDocumentId())).toList();
         var result = json.createObjectNode().put("oldDocumentId", old.getId()).put("oldName", old.getName())

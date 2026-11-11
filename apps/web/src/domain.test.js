@@ -21,7 +21,7 @@ const validRow = (patch = {}) => ({
   original: '按双方确认的样品方案测试。', conclusion: 'Comply',
   draft: '按确认后的样品方案执行。', status: '待确认', owner: '技术确认人',
   source: '客户 RFQ（模拟）.pdf', sourcePage: 3, matchLevel: 'standard', score: 92,
-  conditions: '', reason: '', evidence: '模拟测试方案 V1，第 3 页', version: 1,
+  conditions: '', remark: '', evidence: '模拟测试方案 V1，第 3 页', version: 1,
   ...patch,
 });
 
@@ -66,10 +66,13 @@ test('extraction corrections reject incomplete fields and unchanged saves do not
   assert.equal(call('correctParsedRequirement', original, { title: original.title }, ''), original);
 });
 
-test('a conditional reply still needs explicit conditions before formal export', () => {
-  const row = validRow({ conclusion: '有条件 Comply', conditions: '  ' });
-  assert.ok(call('getExportIssues', [{ ...row, status: '已确认' }], []).some(issue => /适用条件/.test(issue.message)));
-  const confirmed = call('confirmRequirement', { ...row, conditions: '选配 X 已确认，按约定材料测试。' });
+test('conditional replies keep legacy conditions in the draft before formal export', () => {
+  const row = validRow({ conclusion: '有条件 Comply' });
+  const updated = call('applyRequirementEdit', row, { conditions: '选配 X 已确认，按约定材料测试。' });
+  assert.match(updated.draft, /\n适用条件：选配 X 已确认，按约定材料测试。/);
+  assert.equal(Object.hasOwn(updated, 'conditions'), false);
+  const confirmed = call('confirmRequirement', updated);
+  assert.deepEqual(call('getExportIssues', [confirmed], []), []);
   assert.equal(confirmed.status, '已确认');
   assert.ok(Number.isFinite(Date.parse(confirmed.confirmedAt)));
   assert.equal(row.status, '待确认');
@@ -116,7 +119,6 @@ test('formal export still checks response completeness after clause confirmation
   const confirmed = call('confirmRequirement', validRow({ conclusion: '有条件 Comply', draft: '', conditions: '', evidence: '' }));
   const issues = call('getExportIssues', [confirmed], []);
   assert.ok(issues.some(issue => /对外答复/.test(issue.message)));
-  assert.ok(issues.some(issue => /适用条件/.test(issue.message)));
   assert.ok(issues.some(issue => /证据/.test(issue.message)));
 });
 
@@ -149,7 +151,8 @@ test('changing confirmed requirements invalidates confirmation without mutating 
 test('saving identical values preserves the confirmed version', () => {
   const row = validRow({ status: '已确认', version: 3, confirmedAt: '2026-10-20T08:00:00.000Z' });
   const updated = call('applyRequirementEdit', row, { draft: row.draft, conclusion: row.conclusion });
-  assert.deepEqual(updated, row);
+  const { conditions: _legacyConditions, ...expected } = row;
+  assert.deepEqual(updated, expected);
   assert.notEqual(updated, row);
 });
 
@@ -162,12 +165,12 @@ test('an empty or partly unconfirmed response is blocked from submission', () =>
 });
 
 test('invalid confirmed rows and every open review block submission', () => {
-  const issues = call('getExportIssues', [validRow({ status: '已确认', conclusion: '有条件 Comply' })], [
+  const issues = call('getExportIssues', [validRow({ status: '已确认', conclusion: '有条件 Comply', evidence: '' })], [
     { id: 'review-1', title: '样品验证', status: '处理中' },
     { id: 'review-2', title: '商务批准', status: '待审批' },
     { id: 'review-3', title: '已补齐附件', status: '已关闭' },
   ]);
-  assert.ok(issues.some((issue) => issue.id === 'req-test' && /适用条件/.test(issue.message)));
+  assert.ok(issues.some((issue) => issue.id === 'req-test' && /证据/.test(issue.message)));
   assert.ok(issues.some((issue) => issue.id === 'review-1'));
   assert.ok(issues.some((issue) => issue.id === 'review-2'));
   assert.ok(!issues.some((issue) => issue.id === 'review-3'));
@@ -192,7 +195,7 @@ test('a snapshot starts in approval and remains unchanged when source data is ed
 
 test('CSV preserves commas, quotes and line breaks and excludes internal evidence', () => {
   const csv = call('toCsv', [validRow({ original: '材料 A, 材料 B', draft: '答复 "A"\n第二行' })]);
-  assert.equal(csv, '条款,客户要求,应答结论,对外答复,适用条件,确认状态\r\n2.1,"材料 A, 材料 B",Comply,"答复 ""A""\n第二行",,待确认');
+  assert.equal(csv, '条款,客户要求,应答结论,对外答复,确认状态\r\n2.1,"材料 A, 材料 B",Comply,"答复 ""A""\n第二行",待确认');
   assert.ok(!csv.includes('模拟测试方案'));
 });
 
@@ -202,8 +205,8 @@ test('CSV neutralizes formula-leading values without changing ordinary content',
     draft: '@SUM(A1:A2)', conditions: '  =HYPERLINK("x")', status: '普通文本',
   })]);
   const line = csv.split('\r\n')[1];
-  assert.equal(line, "'=1+1,'+SUM(A1:A2),'-1+2,'@SUM(A1:A2),\"'  =HYPERLINK(\"\"x\"\")\",普通文本");
-  assert.equal(call('toCsv', []), '条款,客户要求,应答结论,对外答复,适用条件,确认状态');
+  assert.equal(line, "'=1+1,'+SUM(A1:A2),'-1+2,\"'@SUM(A1:A2)\n适用条件：=HYPERLINK(\"\"x\"\")\",普通文本");
+  assert.equal(call('toCsv', []), '条款,客户要求,应答结论,对外答复,确认状态');
 });
 
 test('CSV preserves ordinary leading whitespace and line breaks', () => {

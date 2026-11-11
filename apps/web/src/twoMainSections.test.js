@@ -165,12 +165,13 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
     for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="有条件 Comply"]'));
-    for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(field(label),`${label} is available for conditional Comply`); }
+    for (const label of ['对外答复','应答依据']) { assert.ok(field(label),`${label} is available for conditional Comply`); }
+    assert.equal(field('适用条件'), null, 'conditions belong in the answer text');
     assert.equal(draft(),'Standard answer','switching conclusions preserves the prefilled answer');
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
     await click(batchButton());
     assert.deepEqual(writes.at(-1),{id:'R1',version:1,sourceVersion:0,matchRunId:'RUN-R1',candidateId:'S1',
-      patch:{original:'Source',conclusion:'Comply',draft:'Standard answer',conditions:'',reason:'',evidence:'S1 · v1'}});
+      patch:{original:'Source',conclusion:'Comply',draft:'Standard answer',remark:'',evidence:'S1 · v1'}});
     assert.equal(writes.length,4,'retry never resubmits previously confirmed clauses');
     assert.match(resultRow(document.querySelector('.ant-modal'),'Prefilled clause').textContent,/已确认.*确认成功/);
   }finally{await h.close();}

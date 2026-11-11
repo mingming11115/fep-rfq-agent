@@ -121,7 +121,7 @@ export function makeRequirements(projectId) {
     conclusion: template.conclusion, draft: template.draft, status: template.status,
     owner: template.owner, source: '客户 RFQ（模拟）.pdf', sourcePage: template.sourcePage,
     matchLevel: template.matchLevel, score: template.score, conditions: template.conditions || '',
-    reason: template.reason || '', evidence: template.evidence || '', version: 1,
+    remark: template.reason || '', evidence: template.evidence || '', version: 1,
     ...(template.status === '已确认' ? { confirmedAt: '2026-10-20T06:30:00.000Z' } : {}),
   }));
 }

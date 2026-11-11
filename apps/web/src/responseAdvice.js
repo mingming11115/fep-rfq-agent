@@ -1,4 +1,5 @@
 import {compareParameter} from './rfqWorkflow.js';
+import {answerRemark} from './responseFields.js';
 
 const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','待确认':'待确认'};
 export const SOURCE_ANNOTATION_CONCLUSIONS=Object.keys(conclusionLabels);
@@ -27,8 +28,8 @@ export function generateRecommendedWording(row = {}) {
   if (!['有条件 Comply', '不满足', '不适用'].includes(conclusion)) { return ''; }
   const text = (value) => String(value || '').trim().replace(/[。；;]+$/, '');
   const subject = `针对${row.clause ? `条款 ${row.clause} ` : ''}${row.title ? `“${row.title}”` : '本项要求'}`;
-  const conditions = text(row.conditions), reason = text(row.reason);
-  const context = [conditions && `适用条件：${conditions}。`, reason && `说明：${reason}。`];
+  const conditions = text(row.conditions), remark = text(answerRemark(row));
+  const context = [conditions && `适用条件：${conditions}。`, remark && `说明：${remark}。`];
   if (conclusion === '有条件 Comply') { return [
     `${subject}，本项按有条件响应处理。`,
     ...context,
@@ -42,7 +43,7 @@ export function generateRecommendedWording(row = {}) {
   ].filter(Boolean).join('\n'); }
   if (conclusion === '不适用') { return [
     `${subject}，本项拟按不适用处理。`,
-    reason ? `不适用依据：${reason}。` : '具体不适用范围及依据尚待确认。',
+    remark ? `不适用依据：${remark}。` : '具体不适用范围及依据尚待确认。',
     conditions && `适用范围说明：${conditions}。`,
     '如项目范围调整，需重新核对本项要求。',
   ].filter(Boolean).join('\n'); }
@@ -56,7 +57,7 @@ export function buildResponseAdvice(row={},suggestion={}, {check=null,retrieval=
   if(retrieval==='failed') { return pending('本次检索未完成',['重新匹配后核对参考答复']); }
   if(retrieval==='denied') { return pending('暂无可访问的参考资料',['由具备资料访问权限的人员核对本条要求']); }
   const source={standard:Number(row.score)>80?'标准回复':null,history:'历史应答',capability:'机型能力'}[row.matchLevel];
-  if(!source) { return pending('暂无可用参考依据',[row.reason?.trim()||`补充“${row.title||'本条要求'}”的能力证据或专业评审结论`]); }
+  if(!source) { return pending('暂无可用参考依据',[answerRemark(row).trim()||`补充“${row.title||'本条要求'}”的能力证据或专业评审结论`]); }
   const checks=[];
   if(check){
     const comparison=compareParameter(check);

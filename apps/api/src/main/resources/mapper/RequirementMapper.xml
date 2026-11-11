@@ -2,54 +2,47 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.naura.rfq.mapper.RequirementMapper">
 
-    <sql id="columns">id, project_id, document_id, parse_run_id, block_id, section_path,
-        customer_clause_no, title, level, parent_id, original_text, requirement_text, metrics_json,
-        conditions_text, obligation, extraction_status, review_reasons, sort_order, version, created_at,
-        confirmation_assignee_id, confirmation_assigned_by, confirmation_assigned_at, confirmation_assignment_reason</sql>
-
     <select id="findById" resultType="com.naura.rfq.model.entity.Requirement">
-        select <include refid="columns"/>
+        select *
         from requirement
         where id = #{id} and extraction_status &lt;&gt; 'EXCLUDED'
     </select>
 
     <select id="findByIdForUpdate" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
-        select <include refid="columns"/> from requirement
+        select * from requirement
         where id = #{id} and extraction_status &lt;&gt; 'EXCLUDED' for update
     </select>
 
-    <select id="findByProjectIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
-        select <include refid="columns"/>
-        from requirement
-        where project_id = #{projectId} and extraction_status &lt;&gt; 'EXCLUDED'
-        order by sort_order asc
+    <select id="findByProjectIdOrderBySource" resultType="com.naura.rfq.model.entity.Requirement">
+        select r.* from requirement r left join document_block source on source.id = r.block_id
+        where r.project_id = #{projectId} and r.extraction_status &lt;&gt; 'EXCLUDED'
+        order by coalesce(source.block_index, 2147483647), r.document_id, r.id
     </select>
 
-    <select id="findByDocumentIdOrderBySortOrder" resultType="com.naura.rfq.model.entity.Requirement">
-        select <include refid="columns"/>
-        from requirement
-        where document_id = #{documentId} and extraction_status &lt;&gt; 'EXCLUDED'
-        order by sort_order asc
+    <select id="findByDocumentIdOrderBySource" resultType="com.naura.rfq.model.entity.Requirement">
+        select r.* from requirement r left join document_block source on source.id = r.block_id
+        where r.document_id = #{documentId} and r.extraction_status &lt;&gt; 'EXCLUDED'
+        order by coalesce(source.block_index, 2147483647), r.id
     </select>
 
     <select id="findPage" resultType="com.naura.rfq.model.entity.Requirement">
-        select <include refid="columns"/>
-        from requirement
-        where project_id = #{projectId} and extraction_status &lt;&gt; 'EXCLUDED'
-        order by ${q.orderBy}
+        select r.*, coalesce(source.block_index, 2147483647) as source_order
+        from requirement r left join document_block source on source.id = r.block_id
+        where r.project_id = #{projectId} and r.extraction_status &lt;&gt; 'EXCLUDED'
+        order by ${q.orderBy}, r.document_id, r.id
         limit #{q.size} offset #{q.offset}
     </select>
 
     <select id="findByDocumentIdForUpdate" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
-        select <include refid="columns"/> from requirement
+        select * from requirement
         where document_id=#{documentId} and extraction_status &lt;&gt; 'EXCLUDED'
-        order by sort_order asc, id for update
+        order by id for update
     </select>
 
     <!-- Include excluded rows so re-parsing sees the human correction and preserves it. -->
     <select id="findByDocumentIdForReparse" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
-        select <include refid="columns"/> from requirement
-        where document_id=#{documentId} order by sort_order asc, id for update
+        select * from requirement
+        where document_id=#{documentId} order by id for update
     </select>
 
     <select id="countByProjectId" resultType="long">
@@ -68,13 +61,11 @@
 
     <insert id="insert">
         insert into requirement (id, project_id, document_id, parse_run_id, block_id, section_path,
-                                 customer_clause_no, title, level, parent_id, original_text,
-                                 requirement_text, metrics_json, conditions_text, obligation,
-                                 extraction_status, review_reasons, sort_order, version, created_at)
+                                 customer_clause_no, title, original_text, requirement_text, metrics_json,
+                                 extraction_status, review_reasons, version, created_at)
         values (#{id}, #{projectId}, #{documentId}, #{parseRunId}, #{blockId}, #{sectionPath},
-                #{customerClauseNo}, #{title}, #{level}, #{parentId}, #{originalText},
-                #{requirementText}, #{metricsJson}, #{conditionsText}, #{obligation},
-                #{extractionStatus}, #{reviewReasons}, #{sortOrder}, coalesce(#{version}, 0),
+                #{customerClauseNo}, #{title}, #{originalText}, #{requirementText}, #{metricsJson},
+                #{extractionStatus}, #{reviewReasons}, coalesce(#{version}, 0),
                 #{createdAt})
     </insert>
 
@@ -83,7 +74,6 @@
         update requirement
         set customer_clause_no = #{customerClauseNo},
             title              = #{title},
-            level              = #{level},
             requirement_text   = #{requirementText},
             review_reasons     = #{reviewReasons},
             extraction_status  = #{extractionStatus},
@@ -99,9 +89,4 @@
         where id=#{id} and version=#{version}
     </update>
 
-    <update id="updateParentId">
-        update requirement
-        set parent_id = #{parentId}
-        where id = #{id}
-    </update>
 </mapper>

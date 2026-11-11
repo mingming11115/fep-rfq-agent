@@ -3,6 +3,8 @@ export function getFinalReviewScope(state,projectId){const p=state.projects?.fin
 function stable(value){if(Array.isArray(value)) { return value.map(stable); } if(value&&typeof value==='object') { return Object.fromEntries(Object.keys(value).sort().filter(k=>value[k]!==undefined).map(k=>[k,stable(value[k])])); } return value;}
 export function latestSnapshot(snapshots=[]){return snapshots.filter(s=>!snapshots.some(next=>next.revisionOf===s.id)).sort((a,b)=>(Date.parse(b.createdAt)||0)-(Date.parse(a.createdAt)||0))[0];}
 export function snapshotFingerprint(scope){
+ // Older approval fingerprints encode the response remark under the original key.
+ scope={...scope,rows:(scope.rows||[]).map(({remark,...row})=>remark==null?row:{...row,reason:remark})};
  if(scope.format==='mysql-business-v1'){
   // Freeze business content and source bindings, independent of transport metadata and labels.
   const fields=['id','version','clause','title','original','category','conclusion','draft','conditions','reason','evidence','status','sourceFileId','sourceVersion','confirmationAssigneeId','confirmedAt','confirmedBy'];

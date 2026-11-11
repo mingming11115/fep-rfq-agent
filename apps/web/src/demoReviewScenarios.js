@@ -49,7 +49,7 @@ export function addReviewScenarioDemos(state,{at=new Date().toISOString()}={}) {
     const rows=clauses.map((clause,index)=>{
       const pending=scenario.kind==='partial-review'&&index>=2;
       return {...clause,id:`${id}-REQ-${index+1}`,clause:`${index+1}`,category:index===3?'商务':'技术',source:file.name,sourceFileId:file.id,sourceVersion:file.version,sourcePage:1,sourceOrder:index,sourceOriginal:clause.original,sectionPath:['模拟要求'],
-        version:1,status:pending?'评审中':'已确认',needsReview:pending,readyForConfirmation:!pending,matchLevel:'none',score:0,reason:'【模拟】仅用于评审流程演示，不作为真实能力或对外承诺。',
+        version:1,status:pending?'评审中':'已确认',needsReview:pending,readyForConfirmation:!pending,matchLevel:'none',score:0,remark:'【模拟】仅用于评审流程演示，不作为真实能力或对外承诺。',
         owner:personName(next,pending?technicalIds[(index-2)%technicalIds.length]:owner.userId),deadline,sample:true,
         ...(!pending?{confirmedAt:at,confirmedBy:personName(next,owner.userId),confirmedById:owner.userId}:{}),
       };
@@ -59,7 +59,7 @@ export function addReviewScenarioDemos(state,{at=new Date().toISOString()}={}) {
       return {id:`row-review-${row.id}`,requirementId:row.id,title:`【模拟评审】${row.title}`,kind:'review',type:'应答评审',source:'演示场景',status:'待处理',version:1,round:1,requirementVersion:1,
         ownerId:reviewerId,owner:personName(next,reviewerId),reviewerIds:[reviewerId],confirmations:{},deadline,
         description:'【模拟】核对本条客户要求、证据及应答，完成本人评审。',plan:'【模拟】核对演示依据与应答内容。',
-        proposedDraft:row.draft,proposedConclusion:row.conclusion,conditions:row.conditions,evidence:row.evidence,reason:row.reason,sample:true,
+        proposedDraft:row.draft,proposedConclusion:row.conclusion,conditions:row.conditions,evidence:row.evidence,reason:row.remark,sample:true,
         history:[{action:'创建模拟评审',actor:'系统演示',time:at,reason:'用于部分条款待评审演示'}]};
     });
     next.requirementsByProject[id]=rows;next.reviewsByProject[id]=reviews;next.snapshotsByProject[id]=[];next.documentsByProject[id]=[file];next.commentsByProject[id]=[];

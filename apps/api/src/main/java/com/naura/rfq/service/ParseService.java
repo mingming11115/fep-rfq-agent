@@ -3,6 +3,7 @@ package com.naura.rfq.service;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
 import com.naura.rfq.config.properties.ParseProperties;
+import com.naura.rfq.integration.parse.DocxBlockReader;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
 import com.naura.rfq.integration.parse.DocumentReadException;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
@@ -20,7 +21,6 @@ import com.naura.rfq.model.parse.ExtractionResult;
 import com.naura.rfq.model.parse.RawBlock;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.storage.DocumentStorage;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -115,7 +115,8 @@ public class ParseService {
         List<String> issues = new ArrayList<>();
         String phase = "read";
         try {
-            rawBlocks = readBlocks(document);
+            DocumentBlockReader reader = readerFor(document);
+            rawBlocks = readBlocks(document, reader);
             if (rawBlocks.isEmpty()) {
                 throw new DocumentReadException("文档没有可读取内容");
             }
@@ -129,7 +130,9 @@ public class ParseService {
                 }
             }
             phase = "extract";
-            ExtractionResult result = extractor.extractWithReport(rawBlocks, run.getId());
+            ExtractionResult result = reader instanceof DocxBlockReader
+                    ? extractor.extractWordWithReport(rawBlocks, run.getId())
+                    : extractor.extractWithReport(rawBlocks, run.getId());
             run.setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
             phase = "source_review";
@@ -155,9 +158,8 @@ public class ParseService {
 
         requirements.deleteByDocumentId(documentId);
         blocks.deleteByDocumentId(documentId);
-        Map<Integer, String> blockIds = persistBlocks(documentId, rawBlocks);
-        List<Saved> saved = persistRequirements(document, run.getId(), extracted, blockIds);
-        linkParents(saved);
+        Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, rawBlocks);
+        List<Requirement> saved = persistRequirements(document, run.getId(), extracted, sourceBlocks);
 
         long reviewCount = extracted.stream().filter(ExtractedRequirement::needsReview).count();
         int issueCount = (int) reviewCount + issues.size();
@@ -188,7 +190,7 @@ public class ParseService {
             document.setHistoryDocumentIds(String.join(",", recallIds));
             documents.updateHistoryRecall(document);
         }
-        matches.parsed(project, document, saved.stream().map(Saved::requirement).toList());
+        matches.parsed(project, document, saved);
         audit.successInBu(actorId, project.getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
         log.info("document.parse.result parseRunId={} documentId={} projectId={} status={} blocks={} requirements={} issues={} durationMs={}",
@@ -214,20 +216,22 @@ public class ParseService {
         return reviewed;
     }
 
-    private List<RawBlock> readBlocks(CustomerDocument document) throws Exception {
-        try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
-        Path file = lease.path();
-        DocumentBlockReader reader = readers.stream()
+    private DocumentBlockReader readerFor(CustomerDocument document) throws DocumentReadException {
+        return readers.stream()
                 .filter(candidate -> candidate.supports(document.getName(), document.getContentType()))
                 .findFirst()
                 .orElseThrow(() -> new DocumentReadException(
                         "暂不支持该文件格式：" + document.getName() + "（当前支持 DOCX / PDF）"));
-        return reader.read(file);
+    }
+
+    private List<RawBlock> readBlocks(CustomerDocument document, DocumentBlockReader reader) throws Exception {
+        try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
+            return reader.read(lease.path());
         }
     }
 
-    private Map<Integer, String> persistBlocks(String documentId, List<RawBlock> rawBlocks) {
-        Map<Integer, String> blockIds = new HashMap<>();
+    private Map<Integer, DocumentBlock> persistBlocks(String documentId, List<RawBlock> rawBlocks) {
+        Map<Integer, DocumentBlock> sourceBlocks = new HashMap<>();
         for (RawBlock raw : rawBlocks) {
             DocumentBlock block = new DocumentBlock();
             block.setId(Ids.next("BLK"));
@@ -241,58 +245,48 @@ public class ParseService {
             block.setProvenance(raw.provenance());
             block.setProcessingStatus(raw.issue() != null ? "NEEDS_REVIEW" : raw.isTable() ? "TABLE" : "READ");
             blocks.insert(block);
-            blockIds.put(raw.index(), block.getId());
+            sourceBlocks.put(raw.index(), block);
         }
-        return blockIds;
+        return sourceBlocks;
     }
 
-    private List<Saved> persistRequirements(CustomerDocument document, String runId,
-            List<ExtractedRequirement> extracted, Map<Integer, String> blockIds) {
-        List<Saved> saved = new ArrayList<>();
+    private List<Requirement> persistRequirements(CustomerDocument document, String runId,
+            List<ExtractedRequirement> extracted, Map<Integer, DocumentBlock> sourceBlocks) {
+        List<Requirement> saved = new ArrayList<>();
         for (ExtractedRequirement candidate : extracted) {
+            DocumentBlock source = sourceBlocks.get(candidate.blockIndex());
+            DocumentBlock excerpt = new DocumentBlock();
+            excerpt.setId(Ids.next("BLK"));
+            excerpt.setDocumentId(document.getId());
+            excerpt.setBlockIndex(candidate.order());
+            excerpt.setParentBlockId(source.getId());
+            excerpt.setType(source.getType());
+            excerpt.setSectionPath(source.getSectionPath());
+            excerpt.setCustomerClauseNo(truncate(candidate.customerClauseNo(), 60));
+            excerpt.setContent(candidate.originalText());
+            excerpt.setSourceAnchor(source.getSourceAnchor());
+            excerpt.setProvenance(source.getProvenance());
+            excerpt.setProcessingStatus(source.getProcessingStatus());
+            blocks.insert(excerpt);
+
             Requirement requirement = new Requirement();
             requirement.setId(Ids.next("REQ"));
             requirement.setProjectId(document.getProjectId());
             requirement.setDocumentId(document.getId());
             requirement.setParseRunId(runId);
-            requirement.setBlockId(blockIds.get(candidate.blockIndex()));
+            requirement.setBlockId(excerpt.getId());
             requirement.setSectionPath(truncate(candidate.sectionPath(), 480));
             requirement.setCustomerClauseNo(truncate(candidate.customerClauseNo(), 60));
             requirement.setTitle(truncate(candidate.title(), 280));
-            requirement.setLevel(Math.max(1, candidate.level()));
             requirement.setOriginalText(candidate.originalText());
             requirement.setRequirementText(candidate.requirementText());
             requirement.setMetricsJson(candidate.metricsJson());
-            requirement.setConditionsText(truncate(candidate.conditionsText(), 900));
-            requirement.setObligation(candidate.obligation());
             requirement.setExtractionStatus(candidate.extractionStatus());
             requirement.setReviewReasons(truncate(candidate.reviewReasons(), 900));
-            requirement.setSortOrder(candidate.order());
             requirements.insert(requirement);
-            saved.add(new Saved(requirement, candidate.parentClauseNo()));
+            saved.add(requirement);
         }
         return saved;
-    }
-
-    /** Second pass: parent ids only exist after every requirement has been inserted. */
-    private void linkParents(List<Saved> saved) {
-        Map<String, String> byClause = new HashMap<>();
-        for (Saved entry : saved) {
-            if (entry.requirement().getCustomerClauseNo() != null) {
-                byClause.putIfAbsent(entry.requirement().getCustomerClauseNo(), entry.requirement().getId());
-            }
-        }
-        for (Saved entry : saved) {
-            String parentClause = entry.parentClauseNo();
-            if (parentClause == null) {
-                continue;
-            }
-            String parentId = byClause.get(parentClause);
-            if (parentId != null && !parentId.equals(entry.requirement().getId())) {
-                entry.requirement().setParentId(parentId);
-                requirements.updateParentId(entry.requirement().getId(), parentId);
-            }
-        }
     }
 
     private ParseRunView view(ParseRun run) {
@@ -315,6 +309,4 @@ public class ParseService {
         return value.length() > max ? value.substring(0, max) : value;
     }
 
-    private record Saved(Requirement requirement, String parentClauseNo) {
-    }
 }

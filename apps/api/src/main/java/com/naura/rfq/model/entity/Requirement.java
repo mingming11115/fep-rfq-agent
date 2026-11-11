@@ -30,20 +30,11 @@ public class Requirement {
 
     private String title;
 
-    private Integer level = 1;
-
-    private String parentId;
-
     private String originalText;
 
     private String requirementText;
 
     private String metricsJson;
-
-    private String conditionsText;
-
-    /** mandatory | recommended | unknown */
-    private String obligation;
 
     private String extractionStatus = "VALID";
 
@@ -53,8 +44,6 @@ public class Requirement {
     private String confirmationAssignedBy;
     private Instant confirmationAssignedAt;
     private String confirmationAssignmentReason;
-
-    private Integer sortOrder = 0;
 
     /** 乐观锁版本号，insert 置 0，更新时由 updateWithVersion 原子自增。 */
     private Long version = 0L;

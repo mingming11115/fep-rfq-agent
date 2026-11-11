@@ -37,8 +37,10 @@ public class RequirementService {
             String sort) {
         Project project = projects.findById(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
-        PageQuery query = PageQuery.of(page, size, sort,
-                List.of("sortOrder", "createdAt"), "sortOrder,asc");
+        String sortField = sort != null && sort.trim().matches("sortOrder(?:\\s*,.*)?")
+                ? sort.trim().replaceFirst("sortOrder", "sourceOrder") : sort;
+        PageQuery query = PageQuery.of(page, size, sortField,
+                List.of("sourceOrder", "createdAt"), "sourceOrder,asc");
         List<Requirement> data = requirements.findPage(projectId, query);
         long total = requirements.countByProjectId(projectId);
         return PageView.of(data.stream().map(RequirementView::of).toList(),
@@ -55,9 +57,6 @@ public class RequirementService {
         }
         if (request.title() != null) {
             requirement.setTitle(request.title());
-        }
-        if (request.level() != null) {
-            requirement.setLevel(Math.max(1, request.level()));
         }
         if (request.requirementText() != null) {
             requirement.setRequirementText(request.requirementText());

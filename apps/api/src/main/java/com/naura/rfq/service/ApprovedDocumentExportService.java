@@ -113,7 +113,7 @@ public class ApprovedDocumentExportService {
         var sourceFiles = documents.findByProjectIdOrderByCreatedAtDesc(projectId).stream()
                 .filter(file -> !excluded.contains(file.getId()))
                 .collect(Collectors.toMap(CustomerDocument::getId, Function.identity()));
-        var sourceRows = requirements.findByProjectIdOrderBySortOrder(projectId).stream()
+        var sourceRows = requirements.findByProjectIdOrderBySource(projectId).stream()
                 .filter(row -> sourceFiles.containsKey(row.getDocumentId()))
                 .collect(Collectors.toMap(Requirement::getId, Function.identity()));
         if (payloads("select payload from response_review where project_id=?", projectId).stream()
@@ -179,10 +179,9 @@ public class ApprovedDocumentExportService {
         if ("Comply".equals(conclusion)) {
             return;
         }
-        if (!Set.of("有条件 Comply", "不满足", "不适用").contains(conclusion) || response.path("draft").asText().isBlank()
-                || "有条件 Comply".equals(conclusion) && (response.path("conditions").asText().isBlank()
-                        || response.path("evidence").asText().isBlank())) {
-            throw new BusinessException(409, "定稿需要完整答复、适用条件和应答依据");
+        if (!Set.of("有条件 Comply", "不满足", "不适用").contains(conclusion) || ResponseService.answerDraft(response).isBlank()
+                || "有条件 Comply".equals(conclusion) && response.path("evidence").asText().isBlank()) {
+            throw new BusinessException(409, "定稿需要完整答复，有条件应答还须提供依据");
         }
     }
 
@@ -295,8 +294,10 @@ public class ApprovedDocumentExportService {
         if (!assignee.equals(row.path("confirmationAssigneeId").asText(""))) {
             return false;
         }
-        return List.of("conclusion", "draft", "conditions", "evidence", "reason", "status", "confirmedAt", "confirmedBy")
-                .stream().allMatch(field -> fieldValue(row.path(field)).equals(fieldValue(response.path(field))));
+        return ResponseService.answerDraft(row).equals(ResponseService.answerDraft(response))
+                && ResponseService.answerRemark(row).equals(ResponseService.answerRemark(response))
+                && List.of("conclusion", "evidence", "status", "confirmedAt", "confirmedBy")
+                        .stream().allMatch(field -> fieldValue(row.path(field)).equals(fieldValue(response.path(field))));
     }
 
     private static String fieldValue(JsonNode field) {
@@ -307,10 +308,9 @@ public class ApprovedDocumentExportService {
 
     private static String answerText(JsonNode row) {
         String clause = row.path("clause").asText("");
-        String draft = row.path("draft").asText("");
-        String conditions = row.path("conditions").asText("");
+        String draft = ResponseService.answerDraft(row);
         return (clause.isBlank() ? "" : "条款 " + clause + "\n") + "结论：" + row.path("conclusion").asText()
-                + (draft.isBlank() ? "" : "\n答复：" + draft) + (conditions.isBlank() ? "" : "\n适用条件：" + conditions);
+                + (draft.isBlank() ? "" : "\n答复：" + draft);
     }
 
     private ExportFile exportDocument(CurrentUser user, String sourceId, List<Note> notes, boolean wordInBody) throws IOException {

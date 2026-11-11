@@ -218,10 +218,12 @@ public class RequirementMatchService {
             throw new BusinessException(404, "项目原件不存在");
         }
         int safePage = Math.max(1, page), safeSize = Math.min(100, Math.max(1, size));
-        String filter = " from requirement where project_id=? and extraction_status <> 'EXCLUDED'"
-                + " and (? is null or document_id=?) and (? is null or parse_run_id=?)";
-        long count = jdbc.queryForObject("select count(*)" + filter, Long.class, projectId, documentId, documentId, parseRunId, parseRunId);
-        var items = jdbc.query("select id" + filter + " order by document_id,sort_order,id limit ? offset ?",
+        String filter = " where r.project_id=? and r.extraction_status <> 'EXCLUDED'"
+                + " and (? is null or r.document_id=?) and (? is null or r.parse_run_id=?)";
+        long count = jdbc.queryForObject("select count(*) from requirement r" + filter,
+                Long.class, projectId, documentId, documentId, parseRunId, parseRunId);
+        var items = jdbc.query("select r.id from requirement r left join document_block source on source.id = r.block_id"
+                        + filter + " order by r.document_id, coalesce(source.block_index, 2147483647), r.id limit ? offset ?",
                 (rs, n) -> rs.getString("id"), projectId, documentId, documentId, parseRunId, parseRunId,
                 safeSize, (long) (safePage - 1) * safeSize).stream().map(id -> {
                     return currentView(project, requirement(id), false);
@@ -326,7 +328,7 @@ public class RequirementMatchService {
         }
         var safe = row.deepCopy().put("status", "待复核").put("confirmationReason", "采纳依据已不可访问，请重新核对")
                 .put("restrictedMatchReference", true);
-        safe.put("draft", "").put("conditions", "").put("evidence", "");
+        safe.put("draft", "").put("evidence", "").remove("conditions");
         safe.remove(List.of("matchReference", "confirmedAt", "confirmedBy", "confirmedById"));
         return safe;
     }
@@ -661,7 +663,7 @@ public class RequirementMatchService {
 
     private ObjectNode baseInput(Requirement requirement) {
         return json.createObjectNode().put("title", requirement.getTitle()).put("text", text(requirement))
-                .put("rawConditions", requirement.getConditionsText()).put("extractedMetrics", requirement.getMetricsJson());
+                .putNull("rawConditions").put("extractedMetrics", requirement.getMetricsJson());
     }
 
     private String text(Requirement requirement) {

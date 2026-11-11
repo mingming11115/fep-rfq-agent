@@ -38,7 +38,7 @@ export function updateProjectSettings(state,{projectId,patch,invalidateTechnical
  const rows=state.requirementsByProject?.[projectId]||[];
  const invalidate=invalidateTechnical&&patch.equipment!==undefined&&patch.equipment!==project.equipment&&rows.some(row=>row.category==='技术');
  return {...next,projects:next.projects.map(p=>p.id===projectId?{...p,...patch,ownerId,owner:personName(next,ownerId),version:(p.version||1)+(invalidate?1:0)}:p),
-  ...(invalidate?{requirementsByProject:{...next.requirementsByProject,[projectId]:rows.map(row=>row.category==='技术'?{...row,status:'待确认',version:(row.version||1)+1,reason:`设备配置基线变化：${patch.reason}`,confirmedAt:undefined,confirmedBy:undefined}:row)}}:{}),
+  ...(invalidate?{requirementsByProject:{...next.requirementsByProject,[projectId]:rows.map(row=>row.category==='技术'?{...row,status:'待确认',version:(row.version||1)+1,remark:`设备配置基线变化：${patch.reason}`,confirmedAt:undefined,confirmedBy:undefined}:row)}}:{}),
  };
 }
 

@@ -20,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ResponseService {
     private static final String CONFIRMATION = "confirmation";
     private static final String CHECKPOINT = "checkpoint";
-    private static final List<String> ANSWER_FIELDS = List.of("conclusion", "draft", "conditions", "reason", "evidence");
-    private static final List<String> SOURCE_FIELDS = List.of("original", "sourceDocumentId", "sourceRequirementText", "sourceConditions");
+    private static final List<String> ANSWER_FIELDS = List.of("conclusion", "draft", "remark", "evidence");
+    private static final List<String> SOURCE_FIELDS = List.of("original", "sourceDocumentId", "sourceRequirementText");
     private static final List<String> RESTORE_FIELDS = List.of("restoredFromVersion", "restoredBy", "restoredById", "restoredAt");
 
     public record History(List<JsonNode> versions, List<JsonNode> checkpoints) {}
@@ -61,8 +61,10 @@ public class ResponseService {
             versions = rows("select payload from requirement_response where requirement_id=? and project_id=?", id, projectId)
                     .stream().findFirst().flatMap(row -> legacyConfirmation(row, requirement)).stream().toList();
         }
-        return new History(versions.stream().map(row -> row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row).toList(),
-                historyRows(id, projectId, CHECKPOINT).stream().map(row -> row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row).toList());
+        return new History(versions.stream().map(ResponseService::withRemark)
+                        .map(row -> row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row).toList(),
+                historyRows(id, projectId, CHECKPOINT).stream().map(ResponseService::withRemark)
+                        .map(row -> row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row).toList());
     }
 
     @Transactional
@@ -99,6 +101,8 @@ public class ResponseService {
         if(version==null||version!=row.path("version").asLong(1)) {
             throw new BusinessException(409,"应答版本已变化，请刷新后重试");
         }
+        foldConditions(row);
+        foldRemark(row);
         boolean sr=user.roles().stream().anyMatch(r->r.buId().equals(project.getBuId())&&r.role().equals("SR"));
         boolean tech=user.roles().stream().anyMatch(r->r.buId().equals(project.getBuId())&&Set.of("TECH","APPROVER").contains(r.role()));
         var profile=profiles.findByBuIdAndUserId(project.getBuId(),user.id());
@@ -144,6 +148,8 @@ public class ResponseService {
                 throw new BusinessException(403, "历史应答的采纳依据已不可访问");
             }
             for (String field : ANSWER_FIELDS) row.put(field, saved.path(field).asText(""));
+            row.put("draft", answerDraft(saved));
+            row.put("remark", answerRemark(saved));
             copyFields(saved, row, List.of("matchReference"));
             row.remove("matchReferenceInvalidatedAt");
             row.remove(RESTORE_FIELDS);
@@ -160,18 +166,27 @@ public class ResponseService {
             var fields=patch.fields();
             while(fields.hasNext()){
                 var field=fields.next();
-                if((!"original".equals(field.getKey())&&!ANSWER_FIELDS.contains(field.getKey()))||!field.getValue().isTextual()) {
+                String key = field.getKey();
+                if ("reason".equals(key)) {
+                    if (patch.has("remark")) {
+                        continue;
+                    }
+                    key = "remark";
+                }
+                if((!"original".equals(key)&&!"conditions".equals(key)
+                        &&!ANSWER_FIELDS.contains(key))||!field.getValue().isTextual()) {
                     throw new BusinessException(400,"不允许修改该应答字段");
                 }
-                if(field.getKey().equals("original")){
+                if(key.equals("original")){
                     if(!field.getValue().asText().equals(requirement.getOriginalText())) {
                         throw new BusinessException(400,"客户原文请通过来源修正功能修改");
                     }
                 }else {
-                    row.set(field.getKey(),field.getValue());
+                    row.set(key,field.getValue());
                 }
             }
-            if (isConfirmed(row) && !sameFields(records.get(0), row, ANSWER_FIELDS)) {
+            foldConditions(row);
+            if (isConfirmed(row) && !sameAnswerFields(records.get(0), row)) {
                 row.remove(RESTORE_FIELDS);
             }
         }
@@ -209,7 +224,7 @@ public class ResponseService {
             row.put("status","已确认").put("confirmedBy",user.displayName()).put("confirmedById",user.id()).put("confirmedAt",Instant.now().toString()).put("needsReview",false).put("sourceRevision",false).put("sourceCorrected",false);
             var snapshot = row.deepCopy();
             bindSource(snapshot, requirement);
-            if (previous.filter(saved -> sameFields(saved, snapshot, ANSWER_FIELDS) && sameFields(saved, snapshot, SOURCE_FIELDS)
+            if (previous.filter(saved -> sameAnswerFields(saved, snapshot) && sameFields(saved, snapshot, SOURCE_FIELDS)
                     && saved.path("matchReference").equals(snapshot.path("matchReference"))).isEmpty()) {
                 long next = row.path("confirmationVersion").asLong(0) + 1;
                 row.put("confirmationVersion", next);
@@ -273,7 +288,50 @@ public class ResponseService {
 
     private static void bindSource(ObjectNode snapshot, Requirement requirement) {
         snapshot.put("original", requirement.getOriginalText()).put("sourceDocumentId", requirement.getDocumentId())
-                .put("sourceRequirementText", requirement.getRequirementText()).put("sourceConditions", requirement.getConditionsText());
+                .put("sourceRequirementText", requirement.getRequirementText());
+    }
+
+    static String answerDraft(JsonNode response) {
+        String draft = response.path("draft").asText("");
+        String conditions = response.path("conditions").asText("").trim();
+        if (conditions.isEmpty()) {
+            return draft;
+        }
+        String line = "适用条件：" + conditions;
+        return draft.contains(line) ? draft : draft.isEmpty() ? line : draft + "\n" + line;
+    }
+
+    private static void foldConditions(ObjectNode row) {
+        if (row.has("conditions")) {
+            row.put("draft", answerDraft(row));
+            row.remove("conditions");
+        }
+    }
+
+    private static boolean sameAnswerFields(JsonNode left, JsonNode right) {
+        return answerDraft(left).equals(answerDraft(right))
+                && answerRemark(left).equals(answerRemark(right))
+                && sameFields(left, right, List.of("conclusion", "evidence"));
+    }
+
+    static String answerRemark(JsonNode response) {
+        return response.path("remark").asText(response.path("reason").asText(""));
+    }
+
+    private static JsonNode withRemark(JsonNode response) {
+        if (response instanceof ObjectNode && response.has("reason")) {
+            ObjectNode copy = response.deepCopy();
+            foldRemark(copy);
+            return copy;
+        }
+        return response;
+    }
+
+    private static void foldRemark(ObjectNode response) {
+        if (response.has("reason")) {
+            response.put("remark", answerRemark(response));
+            response.remove("reason");
+        }
     }
 
     private static boolean sameFields(JsonNode left, JsonNode right, List<String> fields) {

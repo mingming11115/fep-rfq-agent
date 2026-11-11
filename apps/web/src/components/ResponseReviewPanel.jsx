@@ -7,7 +7,7 @@ import {getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../c
 import {getEligiblePersonnel,personName} from '../personnelDomain';
 import './response-review.css';
 
-const fieldsFor=(review,row)=>({plan:review.plan||'',impact:review.impact||'',proposedDraft:row.draft||'',proposedConclusion:row.conclusion||'待确认',conditions:row.conditions||'',evidence:row.evidence||'',reason:row.reason||''});
+const fieldsFor=(review,row)=>({plan:review.plan||'',impact:review.impact||'',proposedDraft:row.draft||'',proposedConclusion:row.conclusion||'待确认',conditions:row.conditions||'',evidence:row.evidence||'',reason:row.remark??row.reason??''});
 export default function ResponseReviewPanel({review,row,project,state,actorId,onUpdateReview,onAdoptReview,canEdit=true,onClose,Surface,registerGuard,initialAction}){
  const [form,setForm]=useState(()=>fieldsFor(review,row)),[dirty,setDirty]=useState(false),[error,setError]=useState(''),[note,setNote]=useState(''),[editPeople,setEditPeople]=useState(initialAction==='reopen'?'reopen':null),[selected,setSelected]=useState(()=>getReviewActorIds(review)),[reason,setReason]=useState(''),[deadline,setDeadline]=useState(review.deadline||project.deadline||''),[leave,setLeave]=useState(null);
  const [communication,setCommunication]=useState(()=>({customerCommunication:review.customerCommunication||'未沟通',acceptanceResult:review.acceptanceResult||'未验收'})),[communicationDirty,setCommunicationDirty]=useState(false),[keepReason,setKeepReason]=useState('');

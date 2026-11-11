@@ -1,5 +1,6 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.RawBlock;
@@ -61,6 +62,74 @@ class ParsingAdaptersTest {
         assertThat(metrics.path("specification").asText()).isEqualTo("220 V / 50 Hz");
         assertThat(metrics.path("metrics").size()).isEqualTo(2);
     }
+
+    @Test void wordRulesKeepShortItemsEvenInAnItemOnlyTable() {
+        var table = RawBlock.table(0, List.of(List.of("Item"), List.of("压力"), List.of("Item"), List.of("噪声")),
+                "", "body/0");
+
+        var result = extractor(settings("", false)).extractWordWithReport(List.of(table), "RUN-WORD");
+
+        assertThat(result.requirements()).extracting(row -> row.title()).containsExactly("压力", "噪声");
+    }
+
+    @Test void wordModelOmittingRowsKeepsEveryItemFromTheRules() throws Exception {
+        var config = settings("", true);
+        var reader = new DocxBlockReader(new OcrClient(config, new ParseHttpClient(json)));
+        var table = reader.read(Path.of("..", "..", "RFQ-中英文表格解析样例.docx")).stream()
+                .filter(RawBlock::isTable).findFirst().orElseThrow();
+        String summary = "上料模块须支持 300 mm 硅晶圆，并兼容标准 FOUP。";
+        String response = envelope(json.writeValueAsString(Map.of("summaries", List.of(Map.of("id", 0, "summary", summary)))));
+        var http = new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint endpoint, Object request, String runId) throws Exception {
+                var submitted = json.valueToTree(request).path("messages").path(1).path("content").asText();
+                assertThat(json.readTree(submitted)).hasSize(5);
+                return json.readTree(response);
+            }
+        };
+
+        var result = new HybridRequirementExtractor(new RuleBasedExtractor(json), config, http, json)
+                .extractWordWithReport(List.of(table), "RUN-WORD");
+
+        assertThat(result.extractor()).isEqualTo("rule-based-v1+llm:test-model");
+        assertThat(result.requirements()).extracting(row -> row.title()).containsExactly(
+                "晶圆尺寸 Wafer Size", "定位精度 Positioning Accuracy", "供电 Power Supply",
+                "噪声 Noise Level", "安全互锁 Safety Interlock");
+        var summarized = result.requirements().get(0);
+        assertThat(summarized.requirementText()).isEqualTo(summary);
+        assertThat(summarized.blockIndex()).isEqualTo(table.index());
+        assertThat(summarized.customerClauseNo()).isEqualTo("1");
+        assertThat(summarized.originalText()).contains("300 mm", "Comply");
+        assertThat(json.readTree(summarized.metricsJson()).path("specification").asText()).isEqualTo("300 mm");
+        var missed = result.requirements().get(1);
+        assertThat(missed.requirementText()).isEqualTo(missed.originalText());
+        assertThat(result.issues()).hasSize(1);
+    }
+
+    @Test void wordSummaryFailurePreservesRuleTextAndContinuesWithLaterBatches() throws Exception {
+        var table = RawBlock.table(0, List.of(List.of("Item", "Spec"), List.of("压力", "2 MPa"),
+                List.of("噪声", "65 dB")), "", "body/0");
+        var config = settings("", true);
+        config.getLlm().setBatchBlocks(1);
+        var http = new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint endpoint, Object request, String runId) throws Exception {
+                var submitted = json.valueToTree(request).path("messages").path(1).path("content").asText();
+                int id = json.readTree(submitted).path(0).path("id").asInt();
+                if (id == 0) {
+                    throw new java.net.http.HttpTimeoutException("test timeout");
+                }
+                return json.readTree(envelope("""
+                        {"summaries":[{"id":1,"summary":"噪声为 65 dB"}]}
+                        """));
+            }
+        };
+
+        var result = new HybridRequirementExtractor(new RuleBasedExtractor(json), config, http, json)
+                .extractWordWithReport(List.of(table), "RUN-WORD");
+
+        assertThat(result.requirements()).extracting(row -> row.requirementText()).containsExactly("压力：2 MPa", "噪声为 65 dB");
+        assertThat(result.issues()).singleElement().asString().contains("已降级");
+    }
+
     @Test void modelQuoteWithLineBreaksRetainsTheExactSourceText() throws Exception {
         var table = RawBlock.table(0, List.of(
             List.of("项目", "描述"),

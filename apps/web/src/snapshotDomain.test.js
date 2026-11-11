@@ -1,4 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {snapshotFingerprint,checkSnapshotValidity,invalidatePendingSnapshots} from './snapshotDomain.js';import {reconcileTasks,selectMyTasks} from './taskDomain.js';
+
+test('renaming the saved response remark preserves the approval fingerprint', () => {
+ const oldScope = {format:'mysql-business-v1', rows:[{id:'R1',reason:'历史备注'}]};
+ const current = {format:'mysql-business-v1', rows:[{id:'R1',remark:'历史备注'}]};
+ assert.equal(snapshotFingerprint(current), snapshotFingerprint(oldScope));
+ assert.notEqual(snapshotFingerprint({...current,rows:[{id:'R1',remark:''}]}), snapshotFingerprint(oldScope));
+});
 const scope={rows:[{id:'R',version:1,draft:'已确认'}],sourceVersions:['F:v1'],configuration:{equipment:'A'},template:{id:'T',version:1},mapping:{answer:'draft'},attachments:[]};
 test('database approval scope ignores transport metadata while detecting business and source changes',()=>{
  const frozen={...scope,format:'mysql-business-v1'};

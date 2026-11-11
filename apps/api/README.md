@@ -80,7 +80,9 @@ Java 17 / Spring Boot / MyBatis / MySQL，包含业务鉴权、客户文档上�
 
 ## 模型与 OCR 配置
 
-两者默认关闭、独立开关、独立配置。模型关闭时使用现有规则抽取。模型已开启时，遇到连接失败、超时、HTTP 错误、JSON 错误、引用不存在、原文引用不匹配或内容块遗漏，只对失败的批次使用规则抽取并记录降级，后续批次仍尝试调用模型。
+两者默认关闭、独立开关、独立配置。项目 DOCX 先按规则生成条款。识别到 `Item` 或 `项目` 表头时，每个有项目名的数据行生成一条。启用模型后按条款总结，只填充 `requirementText` 并添加人工核对标记。模型漏回总结或批次失败时保留对应条款的规则文本。
+
+项目 PDF 启用模型时按内容块抽取。遇到连接失败、超时、HTTP 错误、JSON 错误、引用不存在、原文引用不匹配或内容块遗漏，失败批次使用规则抽取并记录降级。模型关闭时使用规则抽取。
 
 OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续解析；不会生成虚构图片文字。纯扫描件没有可读内容时返回 `partial` 和明确人工核对提示。OCR 识别成功的文字同样需要人工核对数值及单位。模型输出均标记人工核对；程序校验来源摘录不能替代语义审核。
 
@@ -92,7 +94,7 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 | RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |
 | RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后在 `external.call.payload` 中记录 LLM 请求和响应正文，包含 RFQ 原文。 |
 | RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 30s | 连接及整次请求超时 |
-| RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 每批最多原文字符/块数；超大单块退回规则 |
+| RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 每批字符数与条目数上限，DOCX 按条款计数，PDF 按内容块计数 |
 | RFQ_OCR_ENABLED | false | OCR 开关 |
 | RFQ_OCR_URL / RFQ_OCR_API_KEY | 空 | 完整 OCR 地址、可选 Bearer 密钥 |
 | RFQ_OCR_CONNECT_TIMEOUT / RFQ_OCR_TIMEOUT | 3s / 30s | OCR 连接及整次请求超时 |

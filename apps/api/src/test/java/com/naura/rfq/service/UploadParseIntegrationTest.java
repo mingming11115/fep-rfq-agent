@@ -7,6 +7,7 @@ import com.naura.rfq.storage.DocumentStorage;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -64,8 +65,25 @@ class UploadParseIntegrationTest {
         JsonNode stored = data(mvc.perform(get("/api/rfq/parse-runs/" + result.path("id").asText())
             .header("Authorization", "Bearer " + token)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(stored.path("extractor").asText()).isEqualTo("rule-based-v1");
+        JsonNode sourceBlocks = data(mvc.perform(get("/api/rfq/documents/" + id + "/blocks")
+            .header("Authorization", "Bearer " + token)).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString());
+        assertThat(sourceBlocks.size()).isEqualTo(result.path("totalBlocks").asInt());
+        JsonNode listed = data(mvc.perform(get("/api/rfq/projects/RFQ-001/requirements").param("size", "100")
+            .header("Authorization", "Bearer " + token)).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString()).path("list");
+        var current = java.util.stream.StreamSupport.stream(listed.spliterator(), false)
+            .filter(row -> id.equals(row.path("documentId").asText())).toList();
+        assertThat(current).extracting(row -> row.path("id").asText())
+            .containsExactlyElementsOf(requirements.findByDocumentIdOrderBySource(id).stream()
+                .map(com.naura.rfq.model.entity.Requirement::getId).toList());
+        assertThat(current).allSatisfy(row -> {
+            for (String removed : List.of("parentId", "level", "conditionsText", "obligation", "sortOrder")) {
+                assertThat(row.has(removed)).isFalse();
+            }
+        });
         assertThat(parse(id, token).path("requirementCount").asInt()).isEqualTo(result.path("requirementCount").asInt());
-        var requirement = requirements.findByDocumentIdOrderBySortOrder(id).get(0);
+        var requirement = requirements.findByDocumentIdOrderBySource(id).get(0);
         mvc.perform(patch("/api/rfq/requirements/" + requirement.getId()).header("Authorization", "Bearer " + token)
             .contentType("application/json").content("{\"version\":0,\"requirementText\":\"人工保留内容\"}"))
             .andExpect(status().isOk());
@@ -91,10 +109,10 @@ class UploadParseIntegrationTest {
     @Test void corruptRetryPreservesPreviousRequirements() throws Exception {
         String token = token("sr01"), id = sample(token);
         parse(id, token);
-        var saved = requirements.findByDocumentIdOrderBySortOrder(id);
+        var saved = requirements.findByDocumentIdOrderBySource(id);
         Files.writeString(storage.resolve(id + "/source.docx"), "corrupt");
         assertThat(parse(id, token).path("status").asText()).isEqualTo("failed");
-        assertThat(requirements.findByDocumentIdOrderBySortOrder(id)).extracting("id").containsExactlyElementsOf(saved.stream().map(r -> r.getId()).toList());
+        assertThat(requirements.findByDocumentIdOrderBySource(id)).extracting("id").containsExactlyElementsOf(saved.stream().map(r -> r.getId()).toList());
     }
     @Test void invalidFileDoesNotPersistAndTechnicalUserCannotUpload() throws Exception {
         String token = token("sr01");

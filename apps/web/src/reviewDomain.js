@@ -57,7 +57,7 @@ export function updateResponseReview(state,{projectId,reviewId,patch={},expected
  }
  const allowed=['plan','impact','evidence','conditions','proposedConclusion','proposedDraft','reason'];
  const safe=Object.fromEntries(allowed.filter(key=>Object.hasOwn(patch,key)).map(key=>[key,patch[key]]));
- const responsePatch={};for(const [key,field]of [['proposedDraft','draft'],['proposedConclusion','conclusion'],['evidence','evidence'],['conditions','conditions'],['reason','reason']])if(Object.hasOwn(safe,key)) { responsePatch[field]=safe[key]; }
+ const responsePatch={};for(const [key,field]of [['proposedDraft','draft'],['proposedConclusion','conclusion'],['evidence','evidence'],['conditions','conditions'],['reason','remark']])if(Object.hasOwn(safe,key)) { responsePatch[field]=safe[key]; }
  const after=applyRequirementEdit(row,responsePatch),changed=allowed.some(key=>Object.hasOwn(safe,key)&&safe[key]!==review[key]);
  let next={...review,...safe};
  if(changed){next={...next,version:(review.version||1)+1,confirmations:{},confirmationHistory:voteArchive(review,row),status:'处理中',requirementVersion:after.version||1};}

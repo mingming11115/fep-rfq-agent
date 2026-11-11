@@ -14,9 +14,9 @@ public interface RequirementMapper {
 
     Optional<Requirement> findByIdForUpdate(@Param("id") String id);
 
-    List<Requirement> findByProjectIdOrderBySortOrder(@Param("projectId") String projectId);
+    List<Requirement> findByProjectIdOrderBySource(@Param("projectId") String projectId);
 
-    List<Requirement> findByDocumentIdOrderBySortOrder(@Param("documentId") String documentId);
+    List<Requirement> findByDocumentIdOrderBySource(@Param("documentId") String documentId);
     /** Current read after serialization: a prior RR snapshot must not hide a committed human edit. */
     List<Requirement> findByDocumentIdForUpdate(@Param("documentId") String documentId);
 
@@ -37,6 +37,4 @@ public interface RequirementMapper {
 
     int assignConfirmation(Requirement requirement);
 
-    /** 解析时回填父子关系，属内部写，不参与乐观锁。 */
-    int updateParentId(@Param("id") String id, @Param("parentId") String parentId);
 }

@@ -372,9 +372,9 @@ export function makeBhelRequirements() {
     parserNote: '人工核对的真实PDF摘录；中文为演示译文；仅覆盖选取条款，非全文自动解析。',
     conclusion: '待确认', draft: `【演示草稿】${original} 供应商须补齐配置、证据或商务审批后确认。`,
     status: '待确认', owner: `${category === '技术' ? '技术' : category === '质量' ? '质量' : category === '商务' ? '商务' : '服务'}确认人`,
-    matchLevel: 'none', score: 0, evidence: '', conditions: '', reason: '', version: 1,
+    matchLevel: 'none', score: 0, evidence: '', conditions: '', remark: '', version: 1,
     ...(section === 'Table-1' && clause === '8' ? { conclusion: '有条件 Comply', matchLevel: 'history', score: 87, conditions: '演示设定：须以1.2 mm硅晶圆完成≤50 μm切缝验证，测试通过后方可承诺。', evidence: '模拟历史试切记录 DEMO-YAG-050；非真实能力证据', draft: '【演示草稿】可安排1.2 mm硅晶圆试切；≤50 μm保证值待样品验证及技术批准。' } : {}),
-    ...(section === 'RFQ' && clause === '6' ? { conclusion: '不满足', matchLevel: 'capability', score: 72, reason: '演示排产为16周，超过真实客户要求12周；起算点均为BHEL采购订单日期。', evidence: '模拟排产基线 DEMO-SCH-016；非真实交付承诺', draft: '【演示草稿】当前模拟交期为采购订单后16周，较要求偏离4周；请确认是否可接受。' } : {}),
+    ...(section === 'RFQ' && clause === '6' ? { conclusion: '不满足', matchLevel: 'capability', score: 72, remark: '演示排产为16周，超过真实客户要求12周；起算点均为BHEL采购订单日期。', evidence: '模拟排产基线 DEMO-SCH-016；非真实交付承诺', draft: '【演示草稿】当前模拟交期为采购订单后16周，较要求偏离4周；请确认是否可接受。' } : {}),
     ...(section === 'RFQ' && clause === '1' ? { conclusion: 'Comply', matchLevel: 'standard', score: 94, evidence: '模拟投标检查表 DEMO-BID-01；仅展示标准答复流程', draft: '【演示草稿】技术商务标与价格标分开编制；无价格副本随技术标提交。' } : {}),
   }));
 }

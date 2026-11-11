@@ -99,8 +99,11 @@ class ApprovedDocumentExportServiceTest {
             var bytes = new ByteArrayOutputStream();
             try (var word = new XWPFDocument()) {
                 word.createParagraph().createRun().setText("客户原件");
+                Map<String, Integer> sourceOrder = new HashMap<>();
+                rows(sql, "document_block").forEach(row ->
+                        sourceOrder.put(row.get("id"), Integer.parseInt(row.get("block_index"))));
                 var clauses = rows(sql, "requirement").stream().filter(row -> projectId.equals(row.get("project_id")))
-                        .sorted(java.util.Comparator.comparingInt(row -> Integer.parseInt(row.get("sort_order")))).toList();
+                        .sorted(java.util.Comparator.comparingInt(row -> sourceOrder.get(row.get("block_id")))).toList();
                 for (var source : clauses) {
                     int index = sourceRows.size() + 1;
                     var row = new Requirement();
@@ -119,7 +122,7 @@ class ApprovedDocumentExportServiceTest {
                 }
                 word.write(bytes);
             }
-            when(requirements.findByProjectIdOrderBySortOrder(projectId)).thenReturn(sourceRows);
+            when(requirements.findByProjectIdOrderBySource(projectId)).thenReturn(sourceRows);
             when(blocks.findByDocumentIdOrderByBlockIndex(documentId)).thenReturn(sourceBlocks);
             var responses = rows(sql, "requirement_response").stream()
                     .filter(row -> projectId.equals(row.get("project_id")))

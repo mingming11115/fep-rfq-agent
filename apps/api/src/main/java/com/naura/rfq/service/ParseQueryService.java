@@ -50,6 +50,7 @@ public class ParseQueryService {
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
         return blocks.findByDocumentIdOrderByBlockIndex(documentId).stream()
+                .filter(block -> block.getParentBlockId() == null)
                 .map(BlockView::of).toList();
     }
 

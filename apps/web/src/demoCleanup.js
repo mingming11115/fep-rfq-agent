@@ -85,7 +85,7 @@ export function tidyDemoState(previous) {
         id, clause: `${prefix}${index + 1}`, title: `${base.title}（${label}示例）`, category: base.category,
         original: base.original, sourceOriginal: base.original, conclusion, draft: base.draft,
         conditions: base.conditions || (conclusion === '有条件 Comply' ? '以双方确认的配置、材料及验收方案为准。' : ''),
-        reason: base.reason || '', evidence: base.evidence || '', version: 1,
+        remark: base.remark ?? base.reason ?? '', evidence: base.evidence || '', version: 1,
         source: '应答状态与结论矩阵示例.docx', sourceFileId: matrixFileId, sourceVersion: 'V1.0',
         sourcePage: 1, sourceOrder: selected.length, sourceAnchor: `matrix-${processingStatus}-${index + 1}`, sectionPath: [label],
         status: processingStatus === 'confirmed' ? '已确认' : processingStatus === 'waiting' ? '评审中' : '待确认',
@@ -104,7 +104,7 @@ export function tidyDemoState(previous) {
         ownerId: reviewerId || null, owner: reviewerId ? personName(state, reviewerId) : '待分派', reviewerIds: reviewerId ? [reviewerId] : [],
         confirmations: {}, deadline: project.deadline, description: '模拟评审事项，用于演示评审中状态下的本种应答结论。',
         plan: '核对客户要求、结论和应答内容，再完成本人评审。', proposedDraft: row.draft, proposedConclusion: conclusion,
-        conditions: row.conditions, evidence: row.evidence, reason: row.reason, sample: true,
+        conditions: row.conditions, evidence: row.evidence, reason: row.remark, sample: true,
         history: [{time: at, actor: '系统演示', action: '创建状态与结论矩阵示例'}],
       }); }
       selected.push(row);
