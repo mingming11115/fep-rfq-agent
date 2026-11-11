@@ -239,7 +239,7 @@ ONLYOFFICE 使用 `.env.example` 中的 `ONLYOFFICE_*` 配置和 `docker compose
 
 `POST /api/rfq/projects/{projectId}/snapshots/{snapshotId}/history-rfq` 从数据库内指定的已批准定稿快照生成历史候选，保存快照与来源文件版本。候选默认仅当前项目可见，具备发布资格的本 BU 管理员可传 `shareWithBu=true` 生成 BU 共享候选。该接口独立于 RFQ 正式导出。
 
-历史条款提交后，由另一位具备 `knowledge-publish` 资格的本 BU 管理员审核。BU 共享条款发布后由 `history_rfq_index_sync` 异步同步，撤销后登记索引删除。项目范围条款按项目权限读取，不进入 BU 数据集。历史数据集与标准回复数据集分开配置，例如 `rfq.standard-reply-index.history-datasets[BU-FEP]=rfq.fep.history-clause`。索引连接复用上面的服务地址和密钥，缺少历史数据集配置时同步任务保留在队列中。
+历史条款提交后，由另一位具备 `knowledge-publish` 资格的本 BU 管理员审核。BU 共享和仅当前项目的条款发布后，都由 `history_rfq_index_sync` 异步同步条款标题和要求文本供向量化，撤销后登记索引删除。项目范围条款仍按项目权限读取。历史数据集与标准回复数据集分开配置，例如 `rfq.standard-reply-index.history-datasets[BU-FEP]=rfq.fep.history-clause`。索引连接复用上面的服务地址和密钥，缺少历史数据集配置时同步任务保留在队列中。
 
 现有前端解析页仍调用 `POST /api/rfq/history/parse`。服务端入库、审核与快照候选目前通过上述接口触发。
 

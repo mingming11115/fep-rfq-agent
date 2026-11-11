@@ -106,12 +106,10 @@ public class HistoryRfqReviewService {
         }
         row.payload().put("status", "已发布").put("validity", "有效").put("publishedById", user.id())
                 .put("publishedAt", Instant.now().toString());
-        if (row.buShared()) {
-            var projection = json.createObjectNode().put("title", row.payload().path("title").asText())
-                    .put("requirement_text", row.payload().path("requirement").asText())
-                    .put("bu_id", buId).put("record_version", row.version());
-            index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
-        }
+        var projection = json.createObjectNode().put("title", row.payload().path("title").asText())
+                .put("requirement_text", row.payload().path("requirement").asText())
+                .put("bu_id", buId).put("record_version", row.version());
+        index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
         return save(user, buId, row, "批准发布历史 RFQ", reason);
     }
 
@@ -126,9 +124,7 @@ public class HistoryRfqReviewService {
         int active = chain.stream().filter(Clause::active).mapToInt(Clause::version).max().orElse(0);
         requireState(active == row.version(), "仅当前发布版本可以撤销");
         row.payload().put("status", "已撤销").put("validity", "已撤销");
-        if (row.buShared()) {
-            index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), null);
-        }
+        index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), null);
         return save(user, buId, row, "撤销历史 RFQ 条款", reason);
     }
 

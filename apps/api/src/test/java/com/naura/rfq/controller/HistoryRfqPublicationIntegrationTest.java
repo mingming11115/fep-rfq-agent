@@ -113,7 +113,7 @@ class HistoryRfqPublicationIntegrationTest {
         worker.runOnce();
     }
 
-    @Test void approvedSnapshotProducesProjectScopedCandidatesWithoutIndexingThem() throws Exception {
+    @Test void projectScopedSnapshotClauseIsIndexedAfterPublicationAndRemovedOnRevocation() throws Exception {
         String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
         jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);
         String author = user(bu, "A"), reviewer = user(bu, "B");
@@ -146,14 +146,25 @@ class HistoryRfqPublicationIntegrationTest {
         String version = "/api/rfq/business-units/" + bu + "/history-rfq/clauses/" + id + "/versions/1";
         call(get(version), outsider).andExpect(status().isForbidden());
         action(version, "submit", author, 0, "").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select count(*) from history_rfq_index_sync where bu_id=?", Integer.class, bu)).isZero();
         action(version, "publish", reviewer, 1, "").andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("已发布"));
+                .andExpect(jsonPath("$.data.status").value("已发布"))
+                .andExpect(jsonPath("$.data.indexStatus").value("queued"))
+                .andExpect(jsonPath("$.data.indexOperation").value("upsert"));
+        assertThat(jdbc.queryForObject("""
+                select payload->>'$.requirement_text' from history_rfq_index_sync
+                where bu_id=? and reply_id=? and version=1 and operation='upsert'
+                """, String.class, bu, id)).isEqualTo("支持自动上料");
+        call(get(version), outsider).andExpect(status().isForbidden());
         call(post(version + "/revoke").contentType("application/json").content("{\"revision\":2}"), reviewer)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已撤销"))
+                .andExpect(jsonPath("$.data.indexStatus").value("queued"))
+                .andExpect(jsonPath("$.data.indexOperation").value("delete"))
                 .andExpect(jsonPath("$.data.history[-1].action").value("撤销历史 RFQ 条款"))
                 .andExpect(jsonPath("$.data.history[-1].reason").value(""));
-        assertThat(jdbc.queryForObject("select count(*) from history_rfq_index_sync where bu_id=?", Integer.class, bu)).isZero();
+        assertThat(jdbc.queryForObject("select operation from history_rfq_index_sync where bu_id=? and reply_id=?",
+                String.class, bu, id)).isEqualTo("delete");
     }
 
     @Test void savesGroupsAndMetadataThenReparsesWithoutChangingOriginalDrafts() throws Exception {
