@@ -6,7 +6,7 @@ import {UiButton} from '../components/AntContent';
 import {Download,FileText,Plus,Upload as UploadIcon} from '../components/icons';
 import {canPerform} from '../permissions';
 import {personName} from '../personnelDomain';
-import {applyHistoryMetadata,buildHistoryDocuments,clausesForDocument,filterHistoryDocuments,materializeHistoryDocument,selectHistoryResources,syncHistoryRequirement,transitionHistoryClauses} from '../historyKnowledge';
+import {applyHistoryMetadata,buildHistoryDocuments,clausesForDocument,filterHistoryDocuments,HISTORY_DRAFT_STATUSES,materializeHistoryDocument,selectHistoryResources,syncHistoryRequirement,transitionHistoryClauses} from '../historyKnowledge';
 import {readRequirementSpecification} from '../requirementSpecification';
 import {historyJobRunning,readHistoryImports,readHistorySnapshot,retryHistoryParse,setHistoryImport,startHistoryUpload,subscribeHistoryImports,writeHistorySnapshot} from '../historyClient';
 import {historyFiles} from '../historyFiles';
@@ -24,6 +24,7 @@ const indexWriteTags=new Map([['queued',['processing','待写入']],['retrying',
 const indexDeleteTags=new Map([['queued',['processing','待移除']],['retrying',['warning','移除重试中']],['synced',['default','已移除']]]);
 const date=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';
 const token=row=>`${row.id}:${row.version}`;
+const transitionStatuses={submit:HISTORY_DRAFT_STATUSES,approve:[...HISTORY_DRAFT_STATUSES,'待审核'],return:['待审核'],revoke:['已发布']};
 const containsImportedDocument=(documents,imported)=>documents.some(doc=>doc.id===imported.id&&(doc.revision??0)>=(imported.revision??0));
 const labels={customer:'客户',projectName:'历史项目'};
 const editableFields=['clauseNo','section','requirement','answer','conditions','modelOverride','configOverride','evidence','feedback','requirementAnchor','answerAnchor'];
@@ -87,6 +88,12 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const uploadProjectId=uploadParent?(uploadParent.projectId||uploadParent.sourceProjectId):files.projectId;
  useEffect(()=>{if(activeId&&!active){setEditing(null);setMetadata(null);setActiveId(null);setSelected([]);}},[activeId,!!active]);
  const rows=active?latestVersions(clausesForDocument(active,readableClauses)):[];
+ const selectedRows=selected.map(id=>rows.find(row=>token(row)===id));
+ const canTransition=action=>selectedRows.length>0&&selectedRows.every(row=>
+  row&&transitionStatuses[action].includes(row.status)&&row.validity!=='被替代');
+ const hasDraft=selectedRows.some(row=>HISTORY_DRAFT_STATUSES.includes(row?.status));
+ const hasPendingReview=selectedRows.some(row=>row?.status==='待审核');
+ const publishLabel=hasDraft&&!hasPendingReview?'直接发布':hasPendingReview&&!hasDraft?'批准发布':'发布条款';
  const filteredRows=rows.filter(row=>(filter==='all'||filter==='missing'&&!row.answer?.trim()||row.status===filter)&&[row.clauseNo,row.section,row.requirement,row.answer,row.conditions].join(' ').toLowerCase().includes(query.toLowerCase()));
  const notify=message=>{toast?.(message);logEvent?.(message);};
  const fail=cause=>{setError(cause.message);toast?.(cause.message,'error');};
@@ -199,15 +206,13 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   }catch(cause){ console.error('保存历史 RFQ 条款失败', cause); fail(cause);}
  }
  function transition(action,reviewReason=''){
+  if(!canTransition(action)) { return fail(new Error('请选择符合该操作状态的条款')); }
   if(databaseBacked){
-   const rows=selected.map(id=>readableClauses.find(row=>token(row)===id));
-   const allowed=action==='submit'?['草稿','退回']:action==='revoke'?['已发布']:['待审核'];
-   if(!rows.length||rows.some(row=>!row||!allowed.includes(row.status)||row.validity==='被替代')) { return fail(new Error('请选择符合该操作状态的条款')); }
    if(action==='return'&&!reviewReason.trim()) { return fail(new Error('请填写操作原因')); }
    setError('');
    return mutation.run(async()=>{
     const succeeded=[],errors=[];
-    for(const row of rows){
+    for(const row of selectedRows){
      try{await library.transition('history',row,action==='approve'?'publish':action,reviewReason);succeeded.push(token(row));}
      catch(cause){ console.error('更新历史条款审核状态失败', cause); errors.push(`${row.clauseNo||row.id} · ${cause.message}`);}
     }
@@ -218,7 +223,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
     else{setReview(null);setReason('');notify(`已处理 ${succeeded.length} 条历史条款`);}
    },fail);
   }
-  try{const fresh=load(),readable=new Set(selectHistoryResources(fresh,permissionContext).clauses.map(token));if(selected.some(id=>!readable.has(id))) { throw new Error('所选条款已变化或无权访问'); } persist({...fresh,clauses:transitionHistoryClauses(fresh.clauses,selected,action,actor,reviewReason)});setSelected([]);setReview(null);setReason('');notify(action==='submit'?'所选条款已提交审核':action==='approve'?'所选条款已批准发布':'所选条款已退回');}catch(cause){ console.error('提交历史条款审核操作失败', cause); fail(cause);}
+  try{const fresh=load(),readable=new Set(selectHistoryResources(fresh,permissionContext).clauses.map(token));if(selected.some(id=>!readable.has(id))) { throw new Error('所选条款已变化或无权访问'); } persist({...fresh,clauses:transitionHistoryClauses(fresh.clauses,selected,action,actor,reviewReason)});setSelected([]);setReview(null);setReason('');notify(action==='submit'?'所选条款已提交审核':action==='approve'?'所选条款已发布':'所选条款已退回');}catch(cause){ console.error('提交历史条款审核操作失败', cause); fail(cause);}
  }
  function reviseClause(){
   if(!databaseBacked){
@@ -369,7 +374,10 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
     {databaseBacked ? active.sourceType==='history-upload'&&!pending&&active.parseStatus!=='failed'&&!allDocuments.some(doc=>versionFamily(doc)===versionFamily(active)&&doc.versionNumber>active.versionNumber)&&
       <Button disabled={!actor.canEdit||saving} onClick={reparse}>重新解析为新版</Button>
       : !active.legacy&&!active.manual&&<Button disabled={!actor.canEdit||pending} onClick={()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重新解析历史 RFQ 失败', error); return fail(error); })}>重新解析</Button>}
-   </Space></div><div className="history-batch-bar"><span>已选择 {selected.length} 条</span><Space wrap><Button type="primary" disabled={saving||!selected.length||!actor.canEdit} onClick={()=>transition('submit')}>提交审核</Button>{actor.canApprove&&<><Button disabled={saving||!selected.length} onClick={()=>transition('approve')}>批准发布</Button><Button disabled={saving||!selected.length} onClick={()=>{setReview('return');setReason('');}}>退回</Button>{databaseBacked&&<Button danger disabled={saving||!selected.length} onClick={()=>{setReview('revoke');setReason('');}}>撤销发布</Button>}</>}</Space></div><Table columns={clauseColumns} dataSource={filteredRows} rowKey={token} rowSelection={{selectedRowKeys:selected,onChange:setSelected,preserveSelectedRowKeys:false}} scroll={{x:1000}} pagination={{pageSize:20,showSizeChanger:true}} locale={{emptyText:<Empty description={pending?'正在解析，完成后条款将显示在这里':'当前没有符合条件的条款'}/>}}/></section>
+   </Space></div><div className="history-batch-bar"><span>已选择 {selected.length} 条</span><Space wrap>
+    <Button type="primary" disabled={saving||!selected.length||!actor.canEdit} onClick={()=>transition('submit')}>提交审核</Button>
+    {actor.canApprove&&<><Button disabled={saving||!canTransition('approve')} onClick={()=>transition('approve')}>{publishLabel}</Button><Button disabled={saving||!selected.length} onClick={()=>{setReview('return');setReason('');}}>退回</Button>{databaseBacked&&<Button danger disabled={saving||!selected.length} onClick={()=>{setReview('revoke');setReason('');}}>撤销发布</Button>}</>}
+   </Space></div><Table columns={clauseColumns} dataSource={filteredRows} rowKey={token} rowSelection={{selectedRowKeys:selected,onChange:setSelected,preserveSelectedRowKeys:false}} scroll={{x:1000}} pagination={{pageSize:20,showSizeChanger:true}} locale={{emptyText:<Empty description={pending?'正在解析，完成后条款将显示在这里':'当前没有符合条件的条款'}/>}}/></section>
   </>}
   <Modal open={uploading} title="上传历史 RFQ" onCancel={()=>{if(!saving){setUploading(false);setFiles({});}}} footer={<><Button disabled={saving} onClick={()=>setUploading(false)}>取消</Button><Button type="primary" loading={saving} disabled={!files.file} onClick={upload}>上传并开始解析</Button></>}>
    {databaseBacked?<Space direction="vertical" style={{width:'100%'}}>

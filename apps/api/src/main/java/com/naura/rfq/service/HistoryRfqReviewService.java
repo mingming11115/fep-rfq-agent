@@ -84,9 +84,13 @@ public class HistoryRfqReviewService {
     }
 
     private ObjectNode publish(CurrentUser user, String buId, List<Clause> chain, Clause row, String reason) {
-        requireIndependentReview(user, row);
-        requireState(!row.payload().path("submitterId").asText().isBlank(), "缺少提交人，请退回后重新提交");
-        requireState(isLatestVisible(chain, row), "只能发布最新的待审核版本");
+        boolean directPublish = EDITABLE.contains(row.status());
+        requireState(directPublish || "待审核".equals(row.status()), "仅草稿、退回或待审核的历史条款可以发布");
+        if (!directPublish) {
+            requireIndependentReviewer(user, row);
+            requireState(!row.payload().path("submitterId").asText().isBlank(), "缺少提交人，请退回后重新提交");
+        }
+        requireState(isLatestVisible(chain, row), "只能发布最新版本");
         requireContent(row);
         requireState(row.buShared() || "仅当前项目".equals(row.scope()) && row.projectId() != null,
                 "请通过历史 RFQ 导入入口确认共享范围后再发布");
@@ -110,11 +114,12 @@ public class HistoryRfqReviewService {
                 .put("requirement_text", row.payload().path("requirement").asText())
                 .put("bu_id", buId).put("record_version", row.version());
         index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
-        return save(user, buId, row, "批准发布历史 RFQ", reason);
+        return save(user, buId, row, directPublish ? "直接发布历史 RFQ" : "批准发布历史 RFQ", reason);
     }
 
     private ObjectNode returnForEdit(CurrentUser user, String buId, Clause row, String reason) {
-        requireIndependentReview(user, row);
+        requireState("待审核".equals(row.status()), "仅待审核的历史条款可以审核");
+        requireIndependentReviewer(user, row);
         requireReason(reason);
         row.payload().put("status", "退回");
         return save(user, buId, row, "退回历史 RFQ 条款", reason);
@@ -177,8 +182,7 @@ public class HistoryRfqReviewService {
         access.requireScope(user, buId, project, row.scope());
     }
 
-    private void requireIndependentReview(CurrentUser user, Clause row) {
-        requireState("待审核".equals(row.status()), "仅待审核的历史条款可以审核");
+    private void requireIndependentReviewer(CurrentUser user, Clause row) {
         if (user.id().equals(row.payload().path("submitterId").asText())) {
             throw new BusinessException(403, "同一版本不得自审");
         }

@@ -5,6 +5,7 @@ const now=()=>new Date().toISOString();
 const uid=()=>`HK-${crypto.randomUUID()}`;
 export const HISTORY_DOCUMENT_KEY='rfq.history.documents.v1';
 export const HISTORY_KNOWLEDGE_KEY='rfq.reference.knowledge.v1';
+export const HISTORY_DRAFT_STATUSES=['草稿','退回'];
 
 export function clausesForDocument(document,clauses) {
  return clauses.filter(clause=>clause.type==='history'&&(document.legacy?document.legacyIds.includes(clause.id):clause.documentId===document.id));
@@ -63,12 +64,15 @@ export function transitionHistoryClauses(clauses,ids,action,actor,reason='') {
  if(!selected.length) { throw new Error('请先选择条款'); }
  if(['submit','delete'].includes(action)?!actor.canEdit:!actor.canApprove) { throw new Error('当前身份无此操作权限'); }
  for(const row of selected){
-  if(action==='submit'){
-   if(!['草稿','退回'].includes(row.status)) { throw new Error('仅草稿或退回条款可以提交'); }
-   if(!text(row.requirement)||!text(row.answer)) { throw new Error('请补齐客户要求和历史答复后提交'); }
-   if(row.sourceMissing) { throw new Error('原文变化的条款需核对来源后提交'); }
+  const editable=HISTORY_DRAFT_STATUSES.includes(row.status);
+  const directPublish=action==='approve'&&editable;
+  if(action==='submit'||directPublish){
+   if(!editable) { throw new Error('仅草稿或退回条款可以提交'); }
+   const operation=directPublish?'发布':'提交';
+   if(!text(row.requirement)||!text(row.answer)) { throw new Error(`请补齐客户要求和历史答复后${operation}`); }
+   if(row.sourceMissing) { throw new Error(`原文变化的条款需核对来源后${operation}`); }
   }else if(action==='delete'){
-   if(!['草稿','退回'].includes(row.status)) { throw new Error('仅草稿或退回条款可以删除'); }
+   if(!editable) { throw new Error('仅草稿或退回条款可以删除'); }
   }else if(action==='approve'||action==='return'){
    if(row.status!=='待审核') { throw new Error('仅待审核条款可以审核'); }
    if(row.submitterId===actor.id) { throw new Error('同一版本不得自审，请由其他 BU 审核人员处理'); }
@@ -79,5 +83,10 @@ export function transitionHistoryClauses(clauses,ids,action,actor,reason='') {
  if(!states[action]) { throw new Error('无效的条款操作'); }
  const selectedKeys=new Set(selected.map(row=>`${row.id}:${row.version}`));
  const validity={approve:'有效',delete:'已删除'}[action]||'待核对';
- return clauses.map(row=>selectedKeys.has(`${row.id}:${row.version}`)?{...row,status:states[action],validity,...(action==='submit'?{submitterId:actor.id,submitterRole:actor.role}:{}),history:[...(row.history||[]),{date:now(),text:`${actor.name||actor.id} ${states[action]}${reason?`：${reason}`:''}`}]}:row);
+ return clauses.map(row=>{
+  if(!selectedKeys.has(`${row.id}:${row.version}`)) { return row; }
+  const operation=action==='approve'&&HISTORY_DRAFT_STATUSES.includes(row.status)?'直接发布':states[action];
+  return {...row,status:states[action],validity,...(action==='submit'?{submitterId:actor.id,submitterRole:actor.role}:{}),
+   history:[...(row.history||[]),{date:now(),text:`${actor.name||actor.id} ${operation}${reason?`：${reason}`:''}`}]};
+ });
 }

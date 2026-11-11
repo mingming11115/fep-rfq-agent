@@ -154,6 +154,32 @@ test('switching history statistics filters reloads the BU resources and shows up
  assert.doesNotMatch(host.querySelector('.history-clause-panel tbody').textContent,/要求支持自动上料/);
 });
 
+test('a BU publisher can publish a draft from the history clause list',async t=>{
+ const {host,state,settle,click,render,cleanup}=await setupHistoryPage();
+ t.after(cleanup);
+ const clause={id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:2,status:'草稿',
+  requirement:'要求支持自动上料',answer:'需配置上料模块 S'};
+ const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:[clause]};
+ Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
+ localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test-token',user:{id:'bu'}}));
+ const requests=[];
+ const originalFetch=globalThis.fetch;
+ globalThis.fetch=async(path,request)=>{
+  requests.push([path,JSON.parse(request.body)]);
+  const updated={...clause,status:'已发布',validity:'有效',revision:3};
+  resources.historyClauses=[updated];
+  return new Response(JSON.stringify({code:0,data:updated}));
+ };
+ t.after(()=>{globalThis.fetch=originalFetch;});
+ const select=()=>act(async()=>{host.querySelector('tbody input[type="checkbox"]').click();await settle();});
+ await render('sr','SR');await click('历史RFQ.docx',host);await select();
+ assert.doesNotMatch(host.querySelector('.history-batch-bar').textContent,/发布/);
+ await render('bu','BU管理员');await click('历史RFQ.docx',host);await select();
+ await click('直接发布',host);
+ assert.deepEqual(requests,[['/api/rfq/business-units/A/history-rfq/clauses/K1/versions/1/publish',{revision:2,reason:''}]]);
+ assert.match(host.querySelector('.history-counts').textContent,/待审核0已发布1/);
+});
+
 test('a published history clause can be revoked with the reason left empty',async t=>{
  const {host,state,settle,click,render,cleanup}=await setupHistoryPage();
  t.after(cleanup);

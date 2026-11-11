@@ -28,6 +28,45 @@ class HistoryRfqPublicationIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired HistoryParseWorker worker;
 
+    @Test void publishesUnsubmittedDraftsWithTheExistingBuPublicationPermission() throws Exception {
+        String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);
+        String admin = user(bu, "A"), reviewer = user(bu, "B"), unqualified = user(bu, "C");
+        jdbc.update("update bu_member_profile set resource_qualifications='' where user_id=? and bu_id=?", unqualified, bu);
+        String path = "/api/rfq/business-units/" + bu + "/history-rfq";
+        call(post(path + "/documents/manual").contentType("application/json").content("""
+                {"name":"历史 RFQ","shareWithBu":true,"clause":{
+                 "id":"HK-direct","title":"上料","requirement":"支持自动上料","answer":""}}
+                """), admin).andExpect(status().isOk());
+        String draft = path + "/clauses/HK-direct/versions/1";
+        action(draft, "publish", unqualified, 0, "").andExpect(status().isForbidden());
+        action(draft, "publish", admin, 0, "").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(422));
+        call(patch(draft).contentType("application/json").content("""
+                {"revision":0,"title":"上料","requirement":"支持自动上料","answer":"需配置模块 S"}
+                """), admin).andExpect(status().isOk());
+        action(draft, "publish", admin, 0, "").andExpect(status().isConflict());
+        action(draft, "publish", admin, 1, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已发布"))
+                .andExpect(jsonPath("$.data.validity").value("有效"))
+                .andExpect(jsonPath("$.data.publishedById").value(admin))
+                .andExpect(jsonPath("$.data.submittedAt").doesNotExist())
+                .andExpect(jsonPath("$.data.history[-1].action").value("直接发布历史 RFQ"))
+                .andExpect(jsonPath("$.data.indexOperation").value("upsert"));
+        action(draft, "publish", admin, 2, "").andExpect(status().isConflict());
+
+        action(draft, "revise", admin, 2, "").andExpect(status().isOk());
+        String revision = path + "/clauses/HK-direct/versions/2";
+        action(revision, "submit", admin, 0, "").andExpect(status().isOk());
+        action(revision, "publish", admin, 1, "").andExpect(status().isForbidden());
+        action(revision, "return", reviewer, 1, "补充条件").andExpect(status().isOk());
+        action(revision, "publish", admin, 2, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已发布"))
+                .andExpect(jsonPath("$.data.history[-1].action").value("直接发布历史 RFQ"));
+        call(get(draft), admin).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.validity").value("被替代"));
+    }
+
     @Test void persistsOriginalAndDraftAndIndexesOnlyAnIndependentlyApprovedVersion() throws Exception {
         String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
         jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);

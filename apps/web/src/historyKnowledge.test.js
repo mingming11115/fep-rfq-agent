@@ -27,6 +27,17 @@ test('missing answers block the entire submit batch; independent approval is req
  assert.throws(()=>history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,id:'tech'}),/权限/);
  assert.equal(history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,id:'bu',canApprove:true})[0].status,'已发布');
 });
+test('a BU publisher can publish complete drafts and returned clauses directly',()=>{
+ const publisher={id:'bu',role:'BU管理员',canEdit:true,canApprove:true};
+ const draft={id:'K1',version:1,status:'草稿',requirement:'要求',answer:'答复',submitterId:publisher.id};
+ const returned={...draft,id:'K2',status:'退回'};
+ assert.throws(()=>history.transitionHistoryClauses([draft],['K1'],'approve',actor),/权限/);
+ assert.throws(()=>history.transitionHistoryClauses([{...draft,answer:''}],['K1'],'approve',publisher),/答复/);
+ assert.throws(()=>history.transitionHistoryClauses([{...draft,sourceMissing:true}],['K1'],'approve',publisher),/来源/);
+ const published=history.transitionHistoryClauses([draft,returned],['K1','K2'],'approve',publisher);
+ assert.deepEqual(published.map(row=>[row.status,row.validity]),[['已发布','有效'],['已发布','有效']]);
+ assert.ok(published.every(row=>row.history.at(-1).text.includes('直接发布')));
+});
 test('deleting a draft version preserves the published version and its source document',()=>{
  const {clauses:[parsed]}=history.mergeHistoryParse(doc,[],result,actor);
  const published={...parsed,status:'已发布',validity:'有效'};
