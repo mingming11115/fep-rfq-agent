@@ -26,13 +26,14 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
   const draft={buId:'BU',scope:'BU共享',version:1,revision:0,status:'草稿'};
   const reply={...draft,id:'R',type:'standard',title:'实际导入的标准回复',requirement:'定位',answer:'支持',conditions:'工况',source:'RFQ-陌生项目.xlsx'};
   const unwantedReply={...reply,id:'R2',title:'误导入的标准回复'};
-  const historyDoc={...draft,id:'D',name:'后端历史原件.docx',sourceType:'history-upload',parseStatus:'complete',sources:[{name:'原件',prefix:'main:'}]};
+  const historyDoc={...draft,id:'D',name:'后端历史原件.docx',sourceType:'history-upload',createdAt:'2026-11-11T09:00:00Z',parseStatus:'complete',sources:[{name:'原件',prefix:'main:'}]};
+  const oldHistory={...historyDoc,id:'A',name:'较早的历史 RFQ.docx',createdAt:'2026-11-10T09:00:00Z'};
   const clause={...draft,id:'H',type:'history',documentId:'D',title:'历史条款',requirement:'定位',originalText:'3.2 原文定位',requirementAnchor:'main:body/1',answer:'已确认',status:'待审核',submitterId:'someone-else',clauseNo:'3.2'};
   const unwantedClause={...clause,id:'H2',clauseNo:'3.3',requirement:'误识别的历史要求',status:'草稿',revision:2};
   const capability={...draft,id:'C',metric:'实际导入的能力',value:'≤5 μm',conditions:'工况'};
   const originalFetch=globalThis.fetch;
   const originalXhr=globalThis.XMLHttpRequest;
-  let pendingHistoryUpload, releaseHistoryImport;
+  let pendingHistoryUpload, releaseHistoryImport, historyParseOutcome, failHistoryRefresh=false;
   const historyImportGate=new Promise(resolve=>{releaseHistoryImport=resolve;});
   globalThis.XMLHttpRequest=class {
     upload={};
@@ -53,11 +54,32 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     calls.push([path,request.method||'GET',request.body]);
     let data;
     switch(path){
-      case base+'/resources':data=resources;break;
+      case base+'/resources':
+        if(failHistoryRefresh){
+          failHistoryRefresh=false;
+          return new Response(JSON.stringify({code:503,msg:'列表暂时不可用'}),{status:503});
+        }
+        if(historyParseOutcome){
+          const pending=resources.historyDocuments.find(doc=>doc.id===historyDoc.id);
+          const result={...historyDoc,revision:pending.revision+1,parseStatus:historyParseOutcome};
+          if(historyParseOutcome==='failed'){result.error='解析服务暂时不可用';}
+          else{resources.historyClauses=[clause,unwantedClause];}
+          resources.historyDocuments=[oldHistory,result];historyParseOutcome=null;
+        }
+        data=resources;break;
       case base+'/standard-replies/import':resources.knowledge=[reply,unwantedReply];data={items:[reply,unwantedReply],skippedRows:[4],errors:[{rowNumber:6,message:'缺少答复'}]};break;
       case base+'/standard-replies/R2/versions/1/delete':resources.knowledge=[reply];data={...unwantedReply,status:'已删除',revision:1};break;
       case base+'/standard-replies/R/versions/1/submit':data={...reply,status:'待审核',revision:1};resources.knowledge=[data];break;
-      case base+'/history-rfq/import':await historyImportGate;resources.historyDocuments=[historyDoc];resources.historyClauses=[clause,unwantedClause];data={document:historyDoc,clauses:[clause,unwantedClause]};break;
+      case base+'/history-rfq/import':
+        await historyImportGate;
+        data={document:{...historyDoc,parseStatus:'parsing'},clauses:[]};
+        failHistoryRefresh=true;
+        resources.historyDocuments=[oldHistory,data.document];break;
+      case base+'/history-rfq/documents/D/reparse':
+        assert.equal(JSON.parse(request.body).revision,1);
+        data={document:{...historyDoc,revision:2,parseStatus:'parsing'},clauses:[]};
+        failHistoryRefresh=true;
+        resources.historyDocuments=[oldHistory,data.document];break;
       case base+'/history-rfq/documents/D/original?part=main':
         return new Response('original bytes',{headers:{'Content-Disposition':"attachment; filename*=UTF-8''source.docx"}});
       case base+'/history-rfq/clauses/H2/versions/1/delete':
@@ -132,16 +154,31 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await act(async()=>pendingHistoryUpload.upload.onprogress({lengthComputable:true,loaded:25,total:100}));
     assert.match(host.textContent,/上传中.*25%/);
     await act(async()=>pendingHistoryUpload.upload.onload({lengthComputable:false,loaded:100,total:0}));
-    assert.match(host.textContent,/历史\.docx.*解析中/);
+    assert.match(host.textContent,/历史\.docx.*入库中/);
     await render('knowledge');
     await render('history');
-    assert.match(host.textContent,/历史\.docx.*解析中/);
+    assert.match(host.textContent,/历史\.docx.*入库中/);
     await act(async()=>{releaseHistoryImport();await pendingHistoryUpload.finish();await settle();});
     const uploadBody=calls.find(([path])=>path.endsWith('/history-rfq/import'))[2];
     assert.equal(uploadBody.get('file').name,'历史.docx');
     assert.equal(uploadBody.get('shareWithBu'),'true');
     assert.equal(uploadBody.has('responseFile'),false);
-    assert.match(host.textContent,/后端历史原件.docx/);
+    assert.match(host.textContent,/后端历史原件\.docx.*解析中/,'a failed list refresh keeps the saved upload visible');
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,3300));});
+    assert.match(host.querySelector('.history-document-panel tr[data-row-key]').textContent,/后端历史原件\.docx.*解析中/);
+    await click('后端历史原件.docx',host);
+    assert.match(host.textContent,/正在解析/);
+    await click('返回文档列表',host);
+    historyParseOutcome='failed';
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,3300));});
+    assert.match(host.querySelector('.history-document-panel tr[data-row-key="D"]').textContent,/解析失败/);
+    await click('后端历史原件.docx',host);
+    await click('重试解析',host);
+    assert.match(host.textContent,/正在解析/,'retry uses the committed revision even when its first list refresh fails');
+    await click('返回文档列表',host);
+    assert.equal(host.querySelectorAll('.history-document-panel tr[data-row-key="D"]').length,1);
+    historyParseOutcome='complete';
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,3300));});
     assert.match(host.textContent,/解析完成/);
     assert.doesNotMatch(host.textContent,/解析中/);
     await click('后端历史原件.docx',host);
@@ -198,7 +235,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await click('提交审核',host);
     await click('确认提交审核');
     assert.match(host.querySelector('.generic-detail-card .ant-table-tbody').textContent,/待审核/);
-    assert.equal(calls.filter(([,method])=>method==='POST').length,9);
+    assert.equal(calls.filter(([,method])=>method==='POST').length,10);
     assert.deepEqual(Object.keys(localStorage),['fep-rfq-auth']);
   }finally{
     releaseHistoryImport();

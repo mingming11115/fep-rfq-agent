@@ -422,6 +422,13 @@ set payload = json_remove(
 where json_contains_path(payload, 'one', '$.reason');
 -- RFQ_MIGRATION_V20_END
 
+-- RFQ_MIGRATION_V21
+alter table history_document
+    add column parse_due_at datetime(6) null,
+    add column parse_token varchar(36) null,
+    add index idx_history_parse_due (parse_due_at);
+-- RFQ_MIGRATION_V21_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

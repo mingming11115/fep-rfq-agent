@@ -24,6 +24,7 @@ const indexWriteTags=new Map([['queued',['processing','待写入']],['retrying',
 const indexDeleteTags=new Map([['queued',['processing','待移除']],['retrying',['warning','移除重试中']],['synced',['default','已移除']]]);
 const date=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';
 const token=row=>`${row.id}:${row.version}`;
+const containsImportedDocument=(documents,imported)=>documents.some(doc=>doc.id===imported.id&&(doc.revision??0)>=(imported.revision??0));
 const labels={customer:'客户',projectName:'历史项目'};
 const editableFields=['clauseNo','section','requirement','answer','conditions','modelOverride','configOverride','evidence','feedback','requirementAnchor','answerAnchor'];
 const scrollToSource=anchor=>{if(anchor) { document.getElementById(`history-source-${anchor}`)?.scrollIntoView?.({block:'center',behavior:'smooth'}); }};
@@ -52,18 +53,35 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const [deleteTarget,setDeleteTarget]=useState(null);
  const [deleteDocumentTarget,setDeleteDocumentTarget]=useState(null);
  const [viewing,setViewing]=useState(null);
+ const [documentPage,setDocumentPage]=useState(1);
  useEffect(()=>{if(databaseBacked) { return; } const refresh=()=>{try{setSnapshot(load());}catch(cause){ console.error('刷新历史知识草稿失败', cause); setError(cause.message);}};refresh();window.addEventListener('rfq-history-change',refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener('rfq-history-change',refresh);window.removeEventListener('storage',refresh);};},[buId,databaseBacked]);
  useEffect(()=>setSelected([]),[query,filter,activeId]);
- useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setViewing(null);setError('');},[actorId,actorRole,buId]);
- const {documents:allDocuments,clauses:readableClauses}=databaseBacked
+ useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setDocumentPage(1);setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setViewing(null);setError('');},[actorId,actorRole,buId]);
+ const {documents:storedDocuments,clauses:readableClauses}=databaseBacked
   ?{documents:buildHistoryDocuments(snapshot.documents,snapshot.clauses),clauses:snapshot.clauses}
   :selectHistoryResources(snapshot,permissionContext);
- const documents=allDocuments.filter(doc=>!groupScope||groupScope.matches('history',doc));
- const active=documents.find(doc=>doc.id===activeId);
  const viewerIdentity=JSON.stringify([buId,actorId,actorRole]);
  const imports=useSyncExternalStore(subscribeHistoryImports,readHistoryImports);
- const listDocuments=databaseBacked?[...imports.filter(job=>job.identity===viewerIdentity
-  &&!allDocuments.some(doc=>doc.id===job.savedId)),...documents]:documents;
+ const viewerImports=databaseBacked?imports.filter(job=>job.identity===viewerIdentity):[];
+ const committedImports=viewerImports.filter(job=>job.document&&!containsImportedDocument(storedDocuments,job.document));
+ const importedDocuments=new Map();
+ for(const {document} of committedImports){
+  const previous=importedDocuments.get(document.id);
+  if(!previous||(document.revision??0)>(previous.revision??0)) { importedDocuments.set(document.id,document); }
+ }
+ const allDocuments=[...importedDocuments.values(),...storedDocuments.filter(doc=>!importedDocuments.has(doc.id))];
+ const documents=allDocuments.filter(doc=>!groupScope||groupScope.matches('history',doc))
+  .sort((a,b)=>(Date.parse(b.createdAt)||0)-(Date.parse(a.createdAt)||0));
+ const active=documents.find(doc=>doc.id===activeId);
+ const listDocuments=[...viewerImports.filter(job=>!job.document),...documents];
+ useEffect(()=>{
+  if(!databaseBacked) { return; }
+  for(const job of imports){
+   if(job.identity===viewerIdentity&&job.document&&containsImportedDocument(snapshot.documents,job.document)) {
+    setHistoryImport(job.id,null);
+   }
+  }
+ },[databaseBacked,imports,snapshot.documents,viewerIdentity]);
  const viewedDoc=viewing?.identity===viewerIdentity?documents.find(doc=>doc.id===viewing.documentId):null;
  const uploadParent=allDocuments.find(doc=>doc.id===files.previousDocumentId);
  const uploadProjectId=uploadParent?(uploadParent.projectId||uploadParent.sourceProjectId):files.projectId;
@@ -75,7 +93,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const fail=cause=>{setError(cause.message);toast?.(cause.message,'error');};
  const persist=next=>{writeHistorySnapshot(buId,next);setSnapshot(next);};
  const openDoc=doc=>{const match=query&&latestVersions(clausesForDocument(doc,readableClauses)).find(row=>[row.clauseNo,row.requirement,row.answer].join(' ').toLowerCase().includes(query.toLowerCase()));setActiveId(doc.id);setQuery('');setFilter('all');setSelected([]);setError('');if(match) { editClause(match); }};
- function changePage(){setActiveId(null);setSelected([]);setFilter('all');setQuery('');}
+ function changePage(){setActiveId(null);setSelected([]);setFilter('all');setQuery('');setDocumentPage(1);}
  async function upload(){
   if(databaseBacked){
    setError('');
@@ -85,16 +103,17 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    return mutation.run(async()=>{
     setHistoryImport(id,entry);
     setUploading(false);setFiles({});changePage();
-    if(groupScope&&!groupScope.matches('history',uploadParent||{})) { groupScope.selectGroup(ALL_GROUPS); }
+    if(groupScope&&groupScope.groupId!==ALL_GROUPS&&(!uploadParent||!groupScope.matches('history',uploadParent))) {
+     groupScope.selectGroup(ALL_GROUPS);
+    }
     const result=await library.importHistory({...files,shareWithBu:!uploadProjectId,projectId:uploadProjectId,
      revision:uploadParent?.revision??(uploadParent?0:undefined)},{onUploadProgress:({percent})=>{
-     setHistoryImport(id,{...entry,percent,importState:percent===100?'parsing':'uploading'});
+     setHistoryImport(id,{...entry,percent,importState:percent===100?'storing':'uploading'});
     }});
-    setHistoryImport(id,{...entry,savedId:result.document.id,importState:'parsing'});
+    setHistoryImport(id,{identity:viewerIdentity,document:result.document});
     return result;
    },result=>{
-    setHistoryImport(id,null);
-    notify(result.duplicate?'已上传相同文件，列表显示原有文档':'原件已入库，条款草稿已生成');
+    notify(result.duplicate?'已上传相同文件，列表显示原有文档':'原件已入库，正在解析条款');
    },cause=>{
     setHistoryImport(id,{...entry,importState:'failed',error:cause.message});
     fail(cause);
@@ -175,7 +194,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    const rows=selected.map(id=>readableClauses.find(row=>token(row)===id));
    const allowed=action==='submit'?['草稿','退回']:action==='revoke'?['已发布']:['待审核'];
    if(!rows.length||rows.some(row=>!row||!allowed.includes(row.status)||row.validity==='被替代')) { return fail(new Error('请选择符合该操作状态的条款')); }
-   if(['return','revoke'].includes(action)&&!reviewReason.trim()) { return fail(new Error('请填写操作原因')); }
+   if(action==='return'&&!reviewReason.trim()) { return fail(new Error('请填写操作原因')); }
    setError('');
    return mutation.run(async()=>{
     const succeeded=[],errors=[];
@@ -259,27 +278,32 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   }if(!selectHistoryResources(load(),permissionContext).documents.some(doc=>doc.id===active.id)) { throw new Error('文档范围已变化或无权访问'); } const originals=await historyFiles.get(buId,active.id);if(!originals?.file) { throw new Error('此记录没有可下载的原件'); } for(const file of [originals.file,originals.responseFile].filter(Boolean)){const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=file.name||active.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}catch(cause){ console.error('下载历史 RFQ 原件失败', cause); fail(cause);}}
  function reparse(){
   setError('');
-  return mutation.run(()=>library.reparseHistory(active),saved=>{
-   openDoc(saved.document);notify('重新解析已生成新文档版本和条款草稿');
+  return mutation.run(async()=>{
+   const saved=await library.reparseHistory(active);
+   setHistoryImport(`history-parse:${saved.document.id}`,{identity:viewerIdentity,document:saved.document});
+   return saved;
+  },saved=>{
+   openDoc(saved.document);notify(saved.document.id===active.id?'已重新开始解析':'新版本已入库，正在解析条款');
   },fail);
  }
- const pending=active?.parseStatus==='parsing'&&historyJobRunning(buId,active.id);
+ const pending=active?.parseStatus==='parsing'&&(databaseBacked||historyJobRunning(buId,active.id));
  const interrupted=active?.parseStatus==='parsing'&&!pending;
  const editReadonly=editing&&(!actor.canEdit||['待审核','已发布','已撤销'].includes(editing.status));
  const saving=busy||mutation.busy;
  const pendingIndex=databaseBacked&&!saving&&rows.some(row=>row.indexStatus==='queued'||row.indexStatus==='retrying');
+ const pendingParse=databaseBacked&&(committedImports.length>0||documents.some(doc=>doc.parseStatus==='parsing'));
  useEffect(()=>{
-  if(!pendingIndex||!onLibraryRefresh) { return; }
+  if((!pendingParse&&!pendingIndex)||!onLibraryRefresh) { return; }
   let refreshing=false;
   const timer=setInterval(async()=>{
    if(refreshing||document.hidden) { return; }
    refreshing=true;
    try { await onLibraryRefresh(buId); }
-   catch(error) { console.error('刷新历史 RFQ 向量库状态失败',error); }
+   catch(error) { console.error('刷新历史 RFQ 状态失败',error); }
    finally { refreshing=false; }
-  },5000);
+  },pendingParse?3000:5000);
   return ()=>clearInterval(timer);
- },[activeId,buId,onLibraryRefresh,pendingIndex]);
+ },[activeId,buId,onLibraryRefresh,pendingIndex,pendingParse]);
  const panelIndex=editing?rows.findIndex(row=>token(row)===token(editing)):-1;
  const documentColumns=[
   {title:'文档名称',dataIndex:'name',width:260,render:(value,doc)=><div>
@@ -292,14 +316,15 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    if(doc.importState==='failed'){
     return <><Tag color="error">导入失败</Tag><small className="history-missing">{doc.error}</small></>;
    }
-   const parsing=doc.importState==='parsing'||doc.parseStatus==='parsing'&&historyJobRunning(buId,doc.id);
+   if(doc.importState==='storing') { return <Space size={6} role="status"><Spin size="small"/>入库中</Space>; }
+   const parsing=doc.parseStatus==='parsing'&&(databaseBacked||historyJobRunning(buId,doc.id));
    if(doc.importState==='uploading'||parsing){
     const progress=doc.percent==null?'':` ${Math.floor(doc.percent)}%`;
     return <Space size={6} role="status"><Spin size="small"/>{parsing?'解析中':`上传中${progress}`}</Space>;
    }
-   return <Tag color={doc.parseStatus==='failed'?'error':doc.parseStatus==='complete'?'success':'default'}>
+   return <><Tag color={doc.parseStatus==='failed'?'error':doc.parseStatus==='complete'?'success':'default'}>
     {doc.parseStatus==='parsing'?'解析中断':parseLabel[doc.parseStatus]}
-   </Tag>;
+   </Tag>{doc.parseStatus==='failed'&&doc.error&&<small className="history-missing">{doc.error}</small>}</>;
   }},
   {title:'条款数',width:90,render:(_,doc)=>doc.importState?'—':latestVersions(clausesForDocument(doc,readableClauses)).length},
   {title:'操作',width:190,render:(_,doc)=>doc.importState
@@ -326,13 +351,13 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   </Drawer>
   <AdminPageHeader title={active?active.name:'历史 RFQ'} description={active?'文档信息统一维护，逐条核对历史要求与答复。':'上传历史 RFQ，提取要求与答复，沉淀可追溯的项目经验。'} actions={<Space wrap>{active?<UiButton onClick={changePage}>返回文档列表</UiButton>:<UiButton disabled={!actor.canEdit} onClick={manual}><Plus size={15}/>手工补录</UiButton>}<UiButton className="btn-primary" disabled={!actor.canEdit} onClick={()=>{setFiles(databaseBacked?{projectId:active?.projectId}:active&&!active.legacy?{previousDocumentId:active.id}:{});setUploading(true);setError('');}}><UploadIcon size={16}/>上传历史 RFQ</UiButton></Space>}/>
   {error&&<Alert type="error" showIcon closable onClose={()=>setError('')} message={error}/>}
-  {!active?<section className="panel history-document-panel"><div className="history-toolbar"><Input.Search aria-label="搜索历史文档和条款" placeholder="搜索文档、客户、项目、要求或历史答复" value={query} onChange={event=>setQuery(event.target.value)} allowClear/><span>共 {listDocuments.length} 份文档</span></div><Table columns={documentColumns} dataSource={filterHistoryDocuments(listDocuments,readableClauses,query)} rowKey="id" scroll={{x:1050}} pagination={{pageSize:10,showSizeChanger:true}} locale={{emptyText:<Empty description="暂无历史 RFQ，上传文件后自动解析为条款草稿"/>}}/></section>:<>
+  {!active?<section className="panel history-document-panel"><div className="history-toolbar"><Input.Search aria-label="搜索历史文档和条款" placeholder="搜索文档、客户、项目、要求或历史答复" value={query} onChange={event=>{setQuery(event.target.value);setDocumentPage(1);}} allowClear/><span>共 {listDocuments.length} 份文档</span></div><Table columns={documentColumns} dataSource={filterHistoryDocuments(listDocuments,readableClauses,query)} rowKey="id" scroll={{x:1050}} pagination={{current:documentPage,onChange:setDocumentPage,defaultPageSize:10,showSizeChanger:true}} locale={{emptyText:<Empty description="暂无历史 RFQ，上传文件后自动解析为条款草稿"/>}}/></section>:<>
    <HistoryVersionPanel key={active.id} active={active} documents={documents} clauses={readableClauses} onLocate={(doc,row)=>{setActiveId(doc.id);setQuery('');setFilter('all');if(row) { editClause(row); } else { setEditing(null); }}}/>
    <section className="panel history-metadata-panel"><div className="history-section-heading"><h2>文档信息</h2><Space>{<Button disabled={!actor.canEdit} onClick={()=>{setMetadata({...structuredClone(active),version:active.version||'V1',groupIds:groupScope?.groups('history',active)||active.groupIds||[]});setError('');}}>编辑文档信息</Button>}{(databaseBacked?active.sourceType==='history-upload':!active.legacy&&!active.manual)&&<Button onClick={download}><Download size={14}/>下载原件</Button>}</Space></div><Descriptions column={{xs:1,sm:2,lg:3}} items={[...Object.entries(labels).map(([key,label])=>({key,label,children:active.metadata?.[key]||'待补充'})),{key:'version',label:'文件版本',children:active.version||'—'}]}/></section>
-   {!databaseBacked&&(pending||interrupted||active.parseStatus==='failed')&&<Alert type={pending?'info':'warning'} showIcon message={pending?'正在读取文件并解析条款，可以离开此页面，稍后返回查看。':interrupted?'上次解析未完成，原件已保留，可以重试。':active.error||'解析失败，请重试'} action={!pending&&<Button disabled={!actor.canEdit} onClick={()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重试历史 RFQ 解析失败', error); return fail(error); })}>重试解析</Button>}/>}
+   {(pending||interrupted||active.parseStatus==='failed')&&<Alert type={pending?'info':'warning'} showIcon message={pending?'原件已保存，正在解析条款。':interrupted?'上次解析未完成，原件已保留，可以重试。':active.error||'解析失败，原件已保留'} action={!pending&&<Button disabled={!actor.canEdit||saving} onClick={databaseBacked?reparse:()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重试历史 RFQ 解析失败', error); return fail(error); })}>重试解析</Button>}/>}
    <div className="history-counts">{[{key:'all',label:'全部条款',count:rows.length},{key:'missing',label:'缺少答复',count:rows.filter(row=>!row.answer?.trim()).length},{key:'review',label:'需核对',count:rows.filter(row=>issues(row).length).length},{key:'待审核',label:'待审核',count:rows.filter(row=>row.status==='待审核').length},{key:'已发布',label:'已发布',count:rows.filter(row=>row.status==='已发布').length}].map(item=><button key={item.key} className={filter===item.key?'active':''} onClick={()=>{setFilter(item.key);setSelected([]);}}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>
    <section className="panel history-clause-panel"><div className="history-toolbar"><Input.Search aria-label="搜索文档内条款" placeholder="搜索编号、要求或历史答复" value={query} onChange={event=>setQuery(event.target.value)} allowClear/><Space wrap><Button disabled={!actor.canEdit||saving} onClick={manual}>补录条款</Button>
-    {databaseBacked ? active.sourceType==='history-upload'&&!allDocuments.some(doc=>versionFamily(doc)===versionFamily(active)&&doc.versionNumber>active.versionNumber)&&
+    {databaseBacked ? active.sourceType==='history-upload'&&!pending&&active.parseStatus!=='failed'&&!allDocuments.some(doc=>versionFamily(doc)===versionFamily(active)&&doc.versionNumber>active.versionNumber)&&
       <Button disabled={!actor.canEdit||saving} onClick={reparse}>重新解析为新版</Button>
       : !active.legacy&&!active.manual&&<Button disabled={!actor.canEdit||pending} onClick={()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重新解析历史 RFQ 失败', error); return fail(error); })}>重新解析</Button>}
    </Space></div><div className="history-batch-bar"><span>已选择 {selected.length} 条</span><Space wrap><Button type="primary" disabled={saving||!selected.length||!actor.canEdit} onClick={()=>transition('submit')}>提交审核</Button>{actor.canApprove&&<><Button disabled={saving||!selected.length} onClick={()=>transition('approve')}>批准发布</Button><Button disabled={saving||!selected.length} onClick={()=>{setReview('return');setReason('');}}>退回</Button>{databaseBacked&&<Button danger disabled={saving||!selected.length} onClick={()=>{setReview('revoke');setReason('');}}>撤销发布</Button>}</>}</Space></div><Table columns={clauseColumns} dataSource={filteredRows} rowKey={token} rowSelection={{selectedRowKeys:selected,onChange:setSelected,preserveSelectedRowKeys:false}} scroll={{x:1000}} pagination={{pageSize:20,showSizeChanger:true}} locale={{emptyText:<Empty description={pending?'正在解析，完成后条款将显示在这里':'当前没有符合条件的条款'}/>}}/></section>
@@ -340,7 +365,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   <Modal open={uploading} title="上传历史 RFQ" onCancel={()=>{if(!saving){setUploading(false);setFiles({});}}} footer={<><Button disabled={saving} onClick={()=>setUploading(false)}>取消</Button><Button type="primary" loading={saving} disabled={!files.file} onClick={upload}>上传并开始解析</Button></>}>
    {databaseBacked?<Space direction="vertical" style={{width:'100%'}}>
     <label>关联上一版（可选）</label><Select aria-label="关联上一版" allowClear style={{width:'100%'}} value={files.previousDocumentId}
-      options={allDocuments.filter(doc=>!allDocuments.some(newer=>newer.previousDocumentId===doc.id))
+      options={allDocuments.filter(doc=>doc.parseStatus!=='parsing'&&!allDocuments.some(newer=>newer.previousDocumentId===doc.id))
        .map(doc=>({value:doc.id,label:`${doc.name} · ${doc.version}`}))}
       onChange={previousDocumentId=>setFiles(current=>({...current,previousDocumentId}))}/>
     {uploadParent&&<Input.TextArea aria-label="变更说明" value={files.changeNote||''} onChange={event=>setFiles(current=>({...current,changeNote:event.target.value}))}/>}
@@ -401,6 +426,9 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    {deleteDocumentTarget&&<p>「{deleteDocumentTarget.name}」和该文档版本下的条款将从历史 RFQ 库移除。</p>}
    {error&&<Alert type="error" message={error}/>}
   </Modal>
-  <Modal open={!!review} title={review==='revoke'?'撤销所选条款':'退回所选条款'} confirmLoading={saving} onCancel={()=>{if(!saving) { setReview(null); }}} onOk={()=>transition(review,reason)} okText="确认"><Input.TextArea aria-label={review==='revoke'?'撤销原因':'退回原因'} placeholder="填写需要补充或修正的内容" value={reason} onChange={event=>setReason(event.target.value)}/>{error&&<Alert type="error" message={error}/>}</Modal>
+  <Modal open={!!review} title={review==='revoke'?'撤销所选条款':'退回所选条款'} confirmLoading={saving} onCancel={()=>{if(!saving) { setReview(null); }}} onOk={()=>transition(review,reason)} okText="确认">
+   <Input.TextArea aria-label={review==='revoke'?'撤销原因':'退回原因'} placeholder={review==='revoke'?'撤销原因（选填）':'填写需要补充或修正的内容'} value={reason} onChange={event=>setReason(event.target.value)}/>
+   {error&&<Alert type="error" message={error}/>}
+  </Modal>
  </div>;
 }

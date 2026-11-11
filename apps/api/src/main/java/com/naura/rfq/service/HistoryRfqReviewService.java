@@ -125,7 +125,6 @@ public class HistoryRfqReviewService {
     private ObjectNode revoke(CurrentUser user, String buId, List<Clause> chain, Clause row, String reason) {
         int active = chain.stream().filter(Clause::active).mapToInt(Clause::version).max().orElse(0);
         requireState(active == row.version(), "仅当前发布版本可以撤销");
-        requireReason(reason);
         row.payload().put("status", "已撤销").put("validity", "已撤销");
         if (row.buShared()) {
             index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), null);

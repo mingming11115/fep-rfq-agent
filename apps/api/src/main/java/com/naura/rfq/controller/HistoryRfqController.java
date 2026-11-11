@@ -77,7 +77,7 @@ public class HistoryRfqController {
 
     @PostMapping(LIBRARY + "/documents/{id}/reparse")
     public ApiResponse<HistoryRfqService.Intake> reparse(@PathVariable String buId, @PathVariable String id,
-            @RequestBody Reparse request) throws IOException {
+            @RequestBody Reparse request) {
         return ApiResponse.success(intake.reparse(CurrentUserHolder.require(), buId, id, request.revision()));
     }
 

@@ -1,6 +1,7 @@
 package com.naura.rfq.controller;
 
 import com.jayway.jsonpath.JsonPath;
+import com.naura.rfq.service.HistoryParseWorker;
 import com.naura.rfq.service.JwtService;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -19,12 +20,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = "rfq.demo-data.enabled=false")
+@SpringBootTest(properties = {"rfq.demo-data.enabled=false", "rfq.history-parse.worker-enabled=false"})
 @AutoConfigureMockMvc(printOnlyOnFailure = false)
 class HistoryRfqPublicationIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired JwtService jwt;
     @Autowired JdbcTemplate jdbc;
+    @Autowired HistoryParseWorker worker;
 
     @Test void persistsOriginalAndDraftAndIndexesOnlyAnIndependentlyApprovedVersion() throws Exception {
         String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
@@ -35,17 +37,27 @@ class HistoryRfqPublicationIntegrationTest {
         byte[] original = docx();
         var file = new MockMultipartFile("file", "history.docx", "application/octet-stream", original);
         String result = call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.clauses[0].status").value("草稿"))
-                .andExpect(jsonPath("$.data.clauses[0].answer").value("需配置模块 S"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.document.parseStatus").value("parsing"))
+                .andExpect(jsonPath("$.data.clauses").isEmpty())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String documentId = JsonPath.read(result, "$.data.document.id");
-        String id = JsonPath.read(result, "$.data.clauses[0].id");
         call(get(resources), author).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("not_queued"));
+                .andExpect(jsonPath("$.data.historyDocuments[0].id").value(documentId))
+                .andExpect(jsonPath("$.data.historyDocuments[0].parseStatus").value("parsing"))
+                .andExpect(jsonPath("$.data.historyClauses").isEmpty());
         call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.duplicate").value(true));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.duplicate").value(true))
+                .andExpect(jsonPath("$.data.document.id").value(documentId));
         call(get(path + "/documents/" + documentId + "/original"), reviewer)
                 .andExpect(status().isOk()).andExpect(content().bytes(original));
+        worker.runOnce();
+        String parsed = call(get(resources), author).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyDocuments[0].parseStatus").value("complete"))
+                .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("not_queued"))
+                .andExpect(jsonPath("$.data.historyClauses[0].status").value("草稿"))
+                .andExpect(jsonPath("$.data.historyClauses[0].answer").value("需配置模块 S"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String id = JsonPath.read(parsed, "$.data.historyClauses[0].id");
         String version = path + "/clauses/" + id + "/versions/1";
         String document = path + "/documents/" + documentId;
         action(version, "submit", author, 0, "").andExpect(status().isOk());
@@ -64,7 +76,7 @@ class HistoryRfqPublicationIntegrationTest {
                 .andExpect(jsonPath("$.data.historyClauses[0].indexStatus").value("retrying"));
         jdbc.update("update history_rfq_index_sync set synced_at=utc_timestamp(6),last_error=null where bu_id=? and reply_id=?", bu, id);
         action(version, "delete", author, 2, "").andExpect(status().isConflict());
-        action(document, "delete", author, 1, "").andExpect(status().isConflict());
+        action(document, "delete", author, 2, "").andExpect(status().isConflict());
         action(version, "revise", author, 2, "").andExpect(status().isOk());
         String draft = path + "/clauses/" + id + "/versions/2";
         action(draft, "delete", author, 1, "").andExpect(status().isConflict());
@@ -90,7 +102,7 @@ class HistoryRfqPublicationIntegrationTest {
                 .andExpect(jsonPath("$.data.historyClauses[0].indexOperation").value("delete"))
                 .andExpect(jsonPath("$.data.historyClauses[1].indexStatus").value("not_queued"));
         action(document, "delete", author, 0, "").andExpect(status().isConflict());
-        action(document, "delete", author, 1, "").andExpect(status().isOk())
+        action(document, "delete", author, 2, "").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已删除"));
         call(get("/api/rfq/business-units/" + bu + "/resources"), author).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.historyDocuments.length()").value(0))
@@ -98,6 +110,7 @@ class HistoryRfqPublicationIntegrationTest {
         action(path + "/clauses/" + id + "/versions/3", "submit", author, 0, "").andExpect(status().isConflict());
         call(multipart(path + "/import").file(file).param("shareWithBu", "true"), author)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.duplicate").value(false));
+        worker.runOnce();
     }
 
     @Test void approvedSnapshotProducesProjectScopedCandidatesWithoutIndexingThem() throws Exception {
@@ -135,6 +148,11 @@ class HistoryRfqPublicationIntegrationTest {
         action(version, "submit", author, 0, "").andExpect(status().isOk());
         action(version, "publish", reviewer, 1, "").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已发布"));
+        call(post(version + "/revoke").contentType("application/json").content("{\"revision\":2}"), reviewer)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已撤销"))
+                .andExpect(jsonPath("$.data.history[-1].action").value("撤销历史 RFQ 条款"))
+                .andExpect(jsonPath("$.data.history[-1].reason").value(""));
         assertThat(jdbc.queryForObject("select count(*) from history_rfq_index_sync where bu_id=?", Integer.class, bu)).isZero();
     }
 
@@ -155,13 +173,17 @@ class HistoryRfqPublicationIntegrationTest {
         String content = call(multipart(path + "/import").file(new MockMultipartFile("file", "history.docx",
                 "application/octet-stream", bytes)).param("shareWithBu", "true"), actor)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.clauses[0].title").value("上料"))
-                .andExpect(jsonPath("$.data.clauses[0].originalText").value("3.2：上料：300 mm：支持自动上料"))
-                .andExpect(jsonPath("$.data.clauses[0].requirementText").value("支持自动上料"))
-                .andExpect(jsonPath("$.data.clauses[0].answer").value("需配置模块 S"))
+                .andExpect(jsonPath("$.data.document.parseStatus").value("parsing"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String id = JsonPath.read(content, "$.data.document.id");
-        String clauseId = JsonPath.read(content, "$.data.clauses[0].id");
+        worker.runOnce();
+        String parsed = call(get(base + "/resources"), actor).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyClauses[0].title").value("上料"))
+                .andExpect(jsonPath("$.data.historyClauses[0].originalText").value("3.2：上料：300 mm：支持自动上料"))
+                .andExpect(jsonPath("$.data.historyClauses[0].requirementText").value("支持自动上料"))
+                .andExpect(jsonPath("$.data.historyClauses[0].answer").value("需配置模块 S"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String clauseId = JsonPath.read(parsed, "$.data.historyClauses[0].id");
         call(patch(path + "/clauses/" + clauseId + "/versions/1").contentType("application/json").content("""
                 {"revision":0,"title":"上料","requirement":"支持自动上料和对准","answer":"需配置模块 S","conditions":"硅材料"}
                 """), actor).andExpect(status().isOk())
@@ -169,12 +191,12 @@ class HistoryRfqPublicationIntegrationTest {
                 .andExpect(jsonPath("$.data.originalText").value("3.2：上料：300 mm：支持自动上料"));
         String document = path + "/documents/" + id;
         call(patch(document).contentType("application/json").content("""
-                {"revision":1,"metadata":{"customer":"客户A"},"groupIds":["group1"]}
-                """), actor).andExpect(status().isOk()).andExpect(jsonPath("$.data.revision").value(2));
+                {"revision":2,"metadata":{"customer":"客户A"},"groupIds":["group1"]}
+                """), actor).andExpect(status().isOk()).andExpect(jsonPath("$.data.revision").value(3));
         call(post(document + "/clauses").contentType("application/json").content("""
                 {"id":"HK-manual","clauseNo":"M","title":"人工补录","requirement":"要求","answer":"答复"}
                 """), actor).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("草稿"));
-        String result = call(post(document + "/reparse").contentType("application/json").content("{\"revision\":2}"), actor)
+        String result = call(post(document + "/reparse").contentType("application/json").content("{\"revision\":3}"), actor)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.document.previousDocumentId").value(id))
                 .andExpect(jsonPath("$.data.document.version").value("V2"))
                 .andExpect(jsonPath("$.data.document.groupIds[0]").value("group1"))
@@ -184,8 +206,47 @@ class HistoryRfqPublicationIntegrationTest {
         call(get(path + "/clauses/HK-manual/versions/1"), actor).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.documentId").value(id));
         action(path + "/documents/" + newId, "delete", actor, 1, "").andExpect(status().isOk());
-        call(post(document + "/reparse").contentType("application/json").content("{\"revision\":2}"), actor)
+        call(post(document + "/reparse").contentType("application/json").content("{\"revision\":3}"), actor)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.document.version").value("V3"));
+        worker.runOnce();
+    }
+
+    @Test void keepsTheOriginalAndRetriesTheSameDocumentAfterAParseFailure() throws Exception {
+        String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);
+        String actor = user(bu, "A");
+        String base = "/api/rfq/business-units/" + bu;
+        byte[] bytes = docx();
+        String response = call(multipart(base + "/history-rfq/import")
+                .file(new MockMultipartFile("file", "retry.docx", "application/octet-stream", bytes))
+                .param("shareWithBu", "true"), actor).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String id = JsonPath.read(response, "$.data.document.id");
+        String originals = jdbc.queryForObject("select originals from history_document where bu_id=? and id=?", String.class, bu, id);
+        jdbc.update("""
+                update history_document set originals=json_set(originals,'$[0].sha256',?),
+                    parse_due_at=timestampadd(second,-1,utc_timestamp(6)),parse_token='interrupted-worker'
+                where bu_id=? and id=?
+                """, "0".repeat(64), bu, id);
+        worker.runOnce();
+        call(get(base + "/resources"), actor).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyDocuments[0].id").value(id))
+                .andExpect(jsonPath("$.data.historyDocuments[0].parseStatus").value("failed"))
+                .andExpect(jsonPath("$.data.historyDocuments[0].error").isNotEmpty())
+                .andExpect(jsonPath("$.data.historyClauses").isEmpty());
+
+        jdbc.update("update history_document set originals=? where bu_id=? and id=?", originals, bu, id);
+        String document = base + "/history-rfq/documents/" + id;
+        call(get(document + "/original"), actor).andExpect(status().isOk()).andExpect(content().bytes(bytes));
+        call(post(document + "/reparse").contentType("application/json").content("{\"revision\":2}"), actor)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.document.id").value(id))
+                .andExpect(jsonPath("$.data.document.parseStatus").value("parsing"))
+                .andExpect(jsonPath("$.data.document.error").doesNotExist());
+        worker.runOnce();
+        call(get(base + "/resources"), actor).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.historyDocuments.length()").value(1))
+                .andExpect(jsonPath("$.data.historyDocuments[0].parseStatus").value("complete"))
+                .andExpect(jsonPath("$.data.historyClauses.length()").value(1));
     }
 
     private ResultActions action(String path, String action, String actor, long revision, String reason) throws Exception {
