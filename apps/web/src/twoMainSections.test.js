@@ -140,12 +140,10 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
     return true;
   }}));}
   const batchButton=()=>[...node.querySelectorAll('.detail-outline-footer button')].find(button=>button.textContent.includes('批量确认'));
-  const draft=()=>node.querySelector('textarea[aria-label="对外答复"]').value;
   const field=label=>node.querySelector(`.response-form [aria-label="${label}"]`);
   const resultRow=(dialog,title)=>[...dialog.querySelectorAll('tbody tr')].find(item=>item.textContent.includes(title));
   try{
     await act(async()=>{paint();await settle();});
-    assert.equal(draft(),'Standard answer','the active card has a real unsaved prefill');
     await click(node.querySelector('[aria-label="展开文档目录"]'));
     await click(node.querySelector('[aria-label="全选当前筛选条款"]'));
     assert.equal(batchButton().disabled,false,'prefill must not disable the whole batch');
@@ -159,21 +157,17 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
     assert.match(resultRow(result,'Unverified conditions').textContent,/已排除/);
     assert.match(resultRow(result,'Conditional answer').textContent,/已排除/);
     assert.match(resultRow(result,'Open review').textContent,/已排除/);
-    assert.equal(draft(),'Standard answer','excluded draft remains in the editor');
     await click([...result.querySelectorAll('button')].find(button=>button.textContent.replace(/\s/g,'')==='完成'));
     await act(async()=>{result.dispatchEvent(new h.window.Event('animationend',{bubbles:true}));});
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
     for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="有条件 Comply"]'));
     const wording = node.querySelector('section[aria-label="AI 推荐话术"]');
-    const externalReply = field('对外答复');
-    assert.ok(wording && externalReply, 'conditional Comply shows wording and the external reply');
-    assert.ok(wording.compareDocumentPosition(externalReply) & h.window.Node.DOCUMENT_POSITION_FOLLOWING,
-      'AI wording precedes the external reply');
+    assert.ok(wording, 'conditional Comply shows editable recommended wording');
+    assert.equal(field('对外答复'), null, 'the response card has no separate external reply field');
     assert.equal(node.querySelector('.response-current-card [aria-label="应答依据"]'), null,
       'the response card has no manual evidence input');
     assert.equal(field('适用条件'), null, 'conditions belong in the answer text');
-    assert.equal(draft(),'Standard answer','switching conclusions preserves the prefilled answer');
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
     await click(batchButton());
     assert.deepEqual(writes.at(-1),{id:'R1',version:1,sourceVersion:0,matchRunId:'RUN-R1',candidateId:'S1',
