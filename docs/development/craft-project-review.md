@@ -27,7 +27,7 @@ java -jar apps/api/runtime/rfq-service.jar --server.port=48083 --office.storage-
 docker build -t rfq-craft-service:local rfq-service
 docker run -d --name rfq-craft-service-local \
   -p 127.0.0.1:48083:48083 \
-  -e SERVER_PORT=48083 -e SPRING_PROFILES_ACTIVE=local \
+  -e SERVER_PORT=48083 \
   -e ONLYOFFICE_STORAGE_DIR=/app/data/craft \
   -v rfq-craft-documents:/app/data rfq-craft-service:local
 ```
