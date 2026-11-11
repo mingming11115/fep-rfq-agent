@@ -3,7 +3,7 @@ import AdminPageHeader from '../components/AdminPageHeader';
 import React,{useEffect,useState,useSyncExternalStore} from 'react';
 import {Alert,Button,Descriptions,Drawer,Empty,Input,Modal,Select,Space,Spin,Table,Tag} from 'antd';
 import {UiButton} from '../components/AntContent';
-import {Download,FileText,Plus,Upload as UploadIcon} from '../components/icons';
+import {Download,FileText,Upload as UploadIcon} from '../components/icons';
 import {canPerform} from '../permissions';
 import {personName} from '../personnelDomain';
 import {applyHistoryMetadata,buildHistoryDocuments,clausesForDocument,filterHistoryDocuments,HISTORY_DRAFT_STATUSES,materializeHistoryDocument,selectHistoryResources,syncHistoryRequirement,transitionHistoryClauses} from '../historyKnowledge';
@@ -363,7 +363,10 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
     ?<HistoryOriginalPreview key={`${viewedDoc.id}:${viewing.row?token(viewing.row):''}`} buId={buId} documentId={viewedDoc.id} row={viewing.row}/>
     :<SourceBlocks sources={viewedDoc.sources} anchor={viewing.anchor} onLocate={source=>setViewing(current=>current&&({...current,anchor:source}))}/>)}
   </Drawer>
-  <AdminPageHeader title={active?active.name:'历史 RFQ'} description={active?'文档信息统一维护，逐条核对历史要求与答复。':'上传历史 RFQ，提取要求与答复，沉淀可追溯的项目经验。'} actions={<Space wrap>{active?<UiButton onClick={changePage}>返回文档列表</UiButton>:<UiButton disabled={!actor.canEdit} onClick={manual}><Plus size={15}/>手工补录</UiButton>}<UiButton className="btn-primary" disabled={!actor.canEdit} onClick={()=>{setFiles(databaseBacked?{projectId:active?.projectId}:active&&!active.legacy?{previousDocumentId:active.id}:{});setUploading(true);setError('');}}><UploadIcon size={16}/>上传历史 RFQ</UiButton></Space>}/>
+  <AdminPageHeader title={active?active.name:'历史 RFQ'} description={active?'文档信息统一维护，逐条核对历史要求与答复。':'上传历史 RFQ，提取要求与答复，沉淀可追溯的项目经验。'} actions={<Space wrap>
+   {active&&<UiButton onClick={changePage}>返回文档列表</UiButton>}
+   <UiButton className="btn-primary" disabled={!actor.canEdit} onClick={()=>{setFiles(databaseBacked?{projectId:active?.projectId}:active&&!active.legacy?{previousDocumentId:active.id}:{});setUploading(true);setError('');}}><UploadIcon size={16}/>上传历史 RFQ</UiButton>
+  </Space>}/>
   {error&&<Alert type="error" showIcon closable onClose={()=>setError('')} message={error}/>}
   {!active?<section className="panel history-document-panel"><div className="history-toolbar"><Input.Search aria-label="搜索历史文档和条款" placeholder="搜索文档、客户、项目、要求或历史答复" value={query} onChange={event=>{setQuery(event.target.value);setDocumentPage(1);}} allowClear/><span>共 {listDocuments.length} 份文档</span></div><Table columns={documentColumns} dataSource={filterHistoryDocuments(listDocuments,readableClauses,query)} rowKey="id" scroll={{x:1050}} pagination={{current:documentPage,onChange:setDocumentPage,defaultPageSize:10,showSizeChanger:true}} locale={{emptyText:<Empty description="暂无历史 RFQ，上传文件后自动解析为条款草稿"/>}}/></section>:<>
    <HistoryVersionPanel key={active.id} active={active} documents={documents} clauses={readableClauses} onLocate={(doc,row)=>{setActiveId(doc.id);setQuery('');setFilter('all');if(row) { editClause(row); } else { setEditing(null); }}}/>
