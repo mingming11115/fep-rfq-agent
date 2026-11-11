@@ -165,7 +165,13 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
     for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="有条件 Comply"]'));
-    for (const label of ['对外答复','应答依据']) { assert.ok(field(label),`${label} is available for conditional Comply`); }
+    const wording = node.querySelector('section[aria-label="AI 推荐话术"]');
+    const externalReply = field('对外答复');
+    assert.ok(wording && externalReply, 'conditional Comply shows wording and the external reply');
+    assert.ok(wording.compareDocumentPosition(externalReply) & h.window.Node.DOCUMENT_POSITION_FOLLOWING,
+      'AI wording precedes the external reply');
+    assert.equal(node.querySelector('.response-current-card [aria-label="应答依据"]'), null,
+      'the response card has no manual evidence input');
     assert.equal(field('适用条件'), null, 'conditions belong in the answer text');
     assert.equal(draft(),'Standard answer','switching conclusions preserves the prefilled answer');
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));

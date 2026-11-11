@@ -11,7 +11,7 @@ import ResponseAssignmentControl from '../components/ResponseAssignmentControl';
 import ResponseHistoryDrawer from '../components/ResponseHistoryDrawer';
 import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../confirmationPolicy';
 import {personName,canAccessProject} from '../personnelDomain';
-import { ConfigProvider, Grid, Radio, Splitter, Tabs, Tag } from 'antd';
+import { Card, ConfigProvider, Descriptions, Grid, Radio, Splitter, Tabs, Tag } from 'antd';
 import {resizePanelShare} from '../antdAdapters';
 import ProjectActivityPanel from '../components/ProjectActivityPanel';
 import './rfq-detail.css';
@@ -636,22 +636,28 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           <div className="response-card-workspace">
           <div className="response-card-deck" aria-busy={cardBusy}>
             {cardVisible ? <article ref={cardRef} className="response-current-card" aria-label="当前应答项"><fieldset disabled={cardBusy}>
-<section className="panel response-editor">
-  <div className="response-column-heading">
-    <div className="response-confirmation-meta">
-      <StatusBadge status={responseStatusLabel(active, reviews)}/>
-      {databaseBacked && confirmationVersion && <Tag color="blue">{active.status === '已确认' ? '确认' : '最近确认'} V{confirmationVersion}</Tag>}
-      {active.restoredFromVersion && <Tag>恢复自 V{active.restoredFromVersion}</Tag>}
-      {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
+<Card className="response-editor" size="small" variant="borderless" classNames={{ body: 'response-editor-body' }}
+  title={<>
+    <div className="response-card-title-row">
+      <h2>{active.title}</h2>
+      <Tag className="response-confirmation-owner" color="blue">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')||'未指派'}</Tag>
     </div>
-    {databaseBacked && <UiButton className="text-link" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
-      <History size={15}/>确认历史
-    </UiButton>}
-  </div>
-  <div className="response-editor-body"><div className="response-active-title">
-    <div className="response-card-title-row"><h2>{active.title}</h2><span className="response-confirmation-owner">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')||'未指派'}</span></div>
-  </div>
-  <Description rows={[[ '描述', active.requirementText || active.original ], [ '规格', active.specification ]]}/>
+    <div className="response-card-meta-row">
+      <div className="response-confirmation-meta">
+        <StatusBadge status={responseStatusLabel(active, reviews)}/>
+        {databaseBacked && confirmationVersion && <Tag color="blue">{active.status === '已确认' ? '确认' : '最近确认'} V{confirmationVersion}</Tag>}
+        {active.restoredFromVersion && <Tag>恢复自 V{active.restoredFromVersion}</Tag>}
+        {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
+      </div>
+      {databaseBacked && <UiButton className="text-link" size="small" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
+        <History size={15}/>确认历史
+      </UiButton>}
+    </div>
+  </>}>
+  <Descriptions className="response-requirement-details" size="small" column={1} colon={false} items={[
+    { key: 'description', label: '描述', children: active.requirementText || active.original || '—' },
+    { key: 'specification', label: '规格', children: active.specification || '—' },
+  ]}/>
   <div hidden className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
         {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<UiButton className="text-link" onClick={() => goPage('export')}>查看最终审批</UiButton></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<UiButton className="text-link" onClick={() => openInlineReview(openReview.id)}>查看事项</UiButton></Notice>}
         {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}{databaseBacked ? <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}`} row={active}
@@ -662,12 +668,27 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
           onDeviation={item=>onDeviation?.(project.id,item)} toast={toast}/>
           : <AssessmentPanel sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}/>}
-        <div className="form-grid response-form"><div className="field response-wide"><span><i className="response-required">*</i>人工最终结论</span><Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit} onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/></div>{form.conclusion === '不适用' && <Field label="备注" wide><UiTextArea className="input" aria-label="备注" value={form.remark} readOnly={!canEdit} onChange={(e) => edit('remark', e.target.value)} placeholder="填写备注（选填）" /></Field>}</div>
-        {databaseBacked && form.conclusion !== 'Comply' && <div className="form-grid response-form">
-          <Field label="对外答复" wide><UiTextArea className="input" aria-label="对外答复" value={form.draft} readOnly={!canEdit} onChange={event=>edit('draft',event.target.value)}/></Field>
-          <Field label="应答依据" wide><UiInput className="input" aria-label="应答依据" value={form.evidence} readOnly={!canEdit} onChange={event=>edit('evidence',event.target.value)}/></Field>
-        </div>}
-        {form.conclusion !== 'Comply' && recommendedWording && <RecommendedWording key={`${active.id}:${recommendedWording}`} recommendation={recommendedWording} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => { if (!canEdit) { return; } edit('draft', wording); addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`); toast('推荐话术已带入应答草稿，提交或确认后保存'); }}/>}
+        <div className="form-grid response-form response-answer-fields">
+          <div className="field response-wide">
+            <span><i className="response-required">*</i>人工最终结论</span>
+            <Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit}
+              onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/>
+          </div>
+          {form.conclusion === '不适用' && <Field label="备注" wide>
+            <UiTextArea aria-label="备注" value={form.remark} readOnly={!canEdit} onChange={event=>edit('remark',event.target.value)} placeholder="填写备注（选填）"/>
+          </Field>}
+          {recommendedWording && <RecommendedWording key={`${active.id}:${recommendedWording}`} recommendation={recommendedWording}
+            currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => {
+              if (!canEdit) { return; }
+              edit('draft', wording);
+              addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`);
+              toast('推荐话术已带入应答草稿，提交或确认后保存');
+            }}/>}
+          {databaseBacked && form.conclusion !== 'Comply' && <Field label="对外答复" wide>
+            <UiTextArea aria-label="对外答复" autoSize={{ minRows: 3, maxRows: 6 }} value={form.draft} readOnly={!canEdit}
+              onChange={event=>edit('draft',event.target.value)}/>
+          </Field>}
+        </div>
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openInlineReview(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>
         {!!linkedReviews.length && <div className="rfq-linked-reviews"><div className="rfq-section-title"><strong>问题处理记录</strong><span>{linkedReviews.length} 项</span></div>{linkedReviews.map((review) => <button key={review.id} className="rfq-review-link" onClick={() => openInlineReview(review.id)}><span><b>{review.title}</b><small>{review.owner} · 截止 {review.deadline || '未设置'}</small></span><StatusBadge status={review.status}/><ChevronRight size={14}/></button>)}</div>}
@@ -688,7 +709,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       </div>
       {error && <p className="response-error">{error}</p>}
     </InlineReviewSurface>}
-        </div></section>
+        </Card>
       </fieldset></article> : <div className="response-card-empty"><CheckCircle2 size={30}/><h3>{cardRows.length ? '本轮处理完成' : '没有符合条件的应答项'}</h3><p>{cardRows.length ? `还有 ${responseRows.filter(row => row.status !== '已确认').length} 条未完成，可通过统计筛选继续处理。` : '调整搜索或筛选条件后重试。'}</p><UiButton className="btn btn-primary" onClick={() => applyCardFilters(EMPTY_CARD_FILTERS, false)}>查看全部应答项</UiButton></div>}
           </div>
           </div>

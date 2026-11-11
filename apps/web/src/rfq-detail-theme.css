@@ -4,24 +4,25 @@
 .rfq-detail .detail-business-tabs { border-color:var(--border); padding-inline:16px; }
 .rfq-detail .detail-business-tabs>button { font-size:14px; color:var(--text-secondary); }
 .rfq-detail .detail-business-tabs>button.active { color:var(--primary); }
-.rfq-detail .detail-business .response-current-card .response-column-heading { padding:16px 24px; background:var(--surface); border-color:var(--border); }
-.rfq-detail .detail-business .response-current-card .response-column-heading h2 { font-size:16px; font-weight:600; color:var(--text); }
-.rfq-detail .detail-business .response-current-card .response-editor-body { padding:24px; font-size:14px; line-height:1.6; color:var(--text); }
-.rfq-detail .detail-business .response-current-card .response-active-title h2 { font-size:16px; font-weight:600; color:var(--text); }
-.rfq-detail .detail-business :is(.response-confirmation-owner,.response-save-state,.response-permission-tip,.response-wording-heading>span,.response-wording-footer>small,.response-card-navigation>span,.response-card-issue-tools>span,.response-card-queue-footer) { font-size:12px; color:var(--text-secondary); }
+.rfq-detail .detail-business .response-editor > .ant-card-head { flex:none; padding:12px 16px; }
+.rfq-detail .detail-business .response-editor > .ant-card-head .ant-card-head-title { white-space:normal; }
+.rfq-detail .detail-business .response-card-title-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; }
+.rfq-detail .detail-business .response-card-title-row h2 { margin:0; font-size:16px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+.rfq-detail .detail-business .response-confirmation-owner { max-width:100%; margin:0; white-space:normal; overflow-wrap:anywhere; }
+.rfq-detail .detail-business .response-card-meta-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 8px; margin-top:8px; font-weight:400; }
+.rfq-detail .detail-business .response-editor > .response-editor-body { padding:16px; font-size:14px; line-height:1.6; color:var(--text); }
+.rfq-detail .response-requirement-details { margin-bottom:16px; }
+.rfq-detail .response-requirement-details .ant-descriptions-item-label { min-width:48px; }
+.rfq-detail .response-requirement-details .ant-descriptions-item-content { min-width:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.rfq-detail .detail-business :is(.response-save-state,.response-permission-tip,.response-card-navigation>span,.response-card-issue-tools>span,.response-card-queue-footer) { font-size:12px; color:var(--text-secondary); }
 .rfq-detail .detail-business .response-save-state.dirty { color:#ad6800; }
-.rfq-detail .detail-business .response-current-card :is(.response-form .field>span,.response-editor-body>.field>span,.response-wording-heading h3) { font-size:14px; font-weight:500; color:var(--text); }
-.rfq-detail .detail-business .response-current-card :is(.response-advice,.response-wording) { background:#fafafa; border:1px solid var(--border); border-radius:6px; padding:12px 16px; color:var(--text); font-size:14px; }
-.rfq-detail .detail-business .response-current-card .response-wording>textarea.input { font:inherit; font-size:14px; line-height:1.6; color:var(--text); background:var(--surface); border:1px solid #d9d9d9; border-radius:6px; padding:10px 12px; min-height:120px; }
-.rfq-detail .detail-business .response-current-card .response-wording>textarea.input:focus { border-color:var(--primary); outline:2px solid #91caff; outline-offset:0; }
-.rfq-detail .detail-business :is(.rfq-conclusion-radio .ant-radio-wrapper,.response-editor-actions .btn,.response-card-issue-tools .btn,.response-wording .btn,.response-conclusion-options button) { font-size:14px; }
-.rfq-detail .detail-business :is(.response-card-footer,.response-fixed-actions) { background:var(--surface); border-color:var(--border); padding:16px 24px; }
+.rfq-detail .detail-business .response-current-card :is(.response-form .field>span,.response-editor-body>.field>span) { font-size:14px; font-weight:500; color:var(--text); }
+.rfq-detail .detail-business :is(.rfq-conclusion-radio .ant-radio-wrapper,.response-editor-actions .btn,.response-card-issue-tools .btn,.response-conclusion-options button) { font-size:14px; }
+.rfq-detail .detail-business :is(.response-card-footer,.response-fixed-actions) { background:var(--surface); border-color:var(--border); padding:12px 16px; }
+.rfq-detail .response-fixed-primary-actions { flex-wrap:wrap; justify-content:flex-end; min-width:0; }
 .rfq-detail .detail-business .response-advice-ai { font-size:12px; color:var(--text-secondary); }
 .rfq-detail :is(.detail-document-header>.workspace-check,.detail-source-toolbar small,.detail-source-actions,.detail-clause-toolbar,.detail-outline-footer .text-link) { font-size:12px; color:var(--text-secondary); }
 .rfq-detail .detail-source-toolbar strong { font-size:14px; color:var(--text); }
-@media(max-width:767px) {
- .rfq-detail .detail-business .response-current-card :is(.response-column-heading,.response-editor-body),.rfq-detail .detail-business :is(.response-card-footer,.response-fixed-actions) { padding:16px; }
-}
 
 /* AI suggestion content and sources share a single quiet card. */
 .rfq-detail .detail-business .response-current-card .response-advice {
@@ -42,19 +43,10 @@
 .rfq-detail .response-advice .response-reference-details[open]>summary>:last-child { transform:rotate(180deg); }
 .rfq-detail .response-advice .response-reference-body { margin-top:12px; padding:12px; background:#fafafa; border-radius:8px; }
 
-.rfq-detail .detail-business .response-current-card .response-wording {
-  background: var(--surface, #fff);
-  border: 1px solid #d6e4ff;
-  border-radius: 12px;
-  padding: 16px;
-}
-.rfq-detail .response-wording-heading { margin-bottom:14px; gap:8px 12px; }
-.rfq-detail .response-wording-heading .response-advice-heading { margin-bottom:0; }
-.rfq-detail .detail-business .response-wording-heading h3 { font-size:14px; font-weight:600; color:var(--text); }
-.rfq-detail .detail-business .response-current-card .response-wording>.ant-input {
-  width:100%; min-height:120px; padding:12px; border-radius:8px;
-  background:#fafafa; font-size:14px; line-height:1.8;
-}
-.rfq-detail .response-wording .response-wording-footer {
-  margin-top:12px; padding-top:12px; border-top:1px solid var(--border,#f0f0f0);
-}
+.rfq-detail .detail-business .response-answer-fields { gap:16px; margin-block-start:12px; }
+.rfq-detail .response-wording { min-width:0; }
+.rfq-detail .response-wording-heading { display:flex; align-items:center; gap:8px; margin:0; font-size:14px; font-weight:600; }
+.rfq-detail .response-wording-heading svg { color:var(--primary); flex:none; }
+.rfq-detail .response-wording .ant-card-extra { margin-inline-start:8px; font-size:12px; }
+.rfq-detail .response-wording .ant-card-extra .ant-tag { margin:0; }
+.rfq-detail .response-wording-footer { display:flex; justify-content:flex-end; margin-top:8px; }
