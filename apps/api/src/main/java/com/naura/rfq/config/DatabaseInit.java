@@ -49,6 +49,8 @@ class DatabaseInit {
     private static final String V20_END = "-- RFQ_MIGRATION_V20_END";
     private static final String V21_START = "-- RFQ_MIGRATION_V21\n";
     private static final String V21_END = "-- RFQ_MIGRATION_V21_END";
+    private static final String V22_START = "-- RFQ_MIGRATION_V22\n";
+    private static final String V22_END = "-- RFQ_MIGRATION_V22_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -98,8 +100,11 @@ class DatabaseInit {
         var historyParse = resource("V21__history_parse_queue.sql",
                 sql.substring(sql.indexOf(V21_START) + V21_START.length(), sql.indexOf(V21_END)),
                 "classpath:db/init.sql#V21");
+        var sourceRefs = resource("V22__word_requirement_sources.sql",
+                sql.substring(sql.indexOf(V22_START) + V22_START.length(), sql.indexOf(V22_END)),
+                "classpath:db/init.sql#V22");
         var resources = List.of(baseline, standardReplies, history, capability, match, workflow,
-                replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse);
+                replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {
@@ -137,6 +142,7 @@ class DatabaseInit {
                         && hasTable(jdbc, "standard_reply_index_sync")) {
                     String version = hasColumn(jdbc, "customer_document", "history_document_ids")
                             ? (hasColumn(jdbc, "requirement", "sort_order") ? "18"
+                                : hasColumn(jdbc, "requirement", "source_refs_json") ? "22"
                                 : hasColumn(jdbc, "history_document", "parse_due_at") ? "21" : "19")
                             : hasColumn(jdbc, "project", "group_id") ? "17"
                             : hasTable(jdbc, "rfq_document_replacement") ? "16"

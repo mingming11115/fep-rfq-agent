@@ -96,7 +96,7 @@ public class DocxBlockReader implements DocumentBlockReader {
         }
     }
 
-    private void readPictures(XWPFParagraph paragraph, List<RawBlock> blocks, List<String> sections,
+    void readPictures(XWPFParagraph paragraph, List<RawBlock> blocks, List<String> sections,
             int[] images, String anchor) {
         int pictureIndex = 0;
         for (XWPFRun run : paragraph.getRuns()) {
@@ -117,7 +117,7 @@ public class DocxBlockReader implements DocumentBlockReader {
     }
 
     /** Heading style ids look like "1", "Heading2" or a localized style name containing 标题. */
-    private int headingLevel(String style) {
+    static int headingLevel(String style) {
         if (style == null || style.isBlank()) {
             return 0;
         }
@@ -132,7 +132,7 @@ public class DocxBlockReader implements DocumentBlockReader {
         return 1;
     }
 
-    private void applyHeading(List<String> sections, int level, String text) {
+    static void applyHeading(List<String> sections, int level, String text) {
         while (sections.size() < level) {
             sections.add("");
         }
@@ -142,12 +142,12 @@ public class DocxBlockReader implements DocumentBlockReader {
         }
     }
 
-    private String sectionPath(List<String> sections) {
+    static String sectionPath(List<String> sections) {
         String joined = sections.stream().filter(part -> !part.isBlank()).collect(Collectors.joining(" / "));
         return joined.length() > 480 ? joined.substring(0, 480) : joined;
     }
 
-    private String clean(String raw) {
+    static String clean(String raw) {
         if (raw == null) {
             return "";
         }
@@ -156,5 +156,9 @@ public class DocxBlockReader implements DocumentBlockReader {
                 .replaceAll(" ?\\n ?", " ")
                 .replaceAll(" {2,}", " ")
                 .trim();
+    }
+
+    public static String nativeParagraphText(XWPFParagraph paragraph) {
+        return paragraph.getParagraphText().replaceAll("\\[(?:footnote|endnote)Ref:-?\\d+]", "");
     }
 }

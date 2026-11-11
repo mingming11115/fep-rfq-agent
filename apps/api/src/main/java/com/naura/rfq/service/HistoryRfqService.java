@@ -65,6 +65,7 @@ public class HistoryRfqService {
         if (previous != null && !scope.equals(previous.scope())) {
             throw new BusinessException(400, "新版须沿用历史原件的可见范围");
         }
+        parser.requireEnabled();
         var files = new ArrayList<StoredOriginal>();
         boolean retained = false;
         try {
@@ -146,6 +147,7 @@ public class HistoryRfqService {
         access.lockBu(buId);
         var source = sourceDocument(user, buId, id);
         requireRevision(source.payload(), revision);
+        parser.requireEnabled();
         var files = storedOriginals(source.originals());
         if (files.isEmpty()) {
             throw new BusinessException(409, "该文档没有可重新解析的独立原件");
@@ -195,6 +197,7 @@ public class HistoryRfqService {
         HistoryParseView parsed = null;
         String error = "";
         try {
+            parser.requireEnabled();
             var files = storedOriginals(job.originals());
             var sources = new ArrayList<HistorySource>();
             for (int i = 0; i < files.size(); i++) {

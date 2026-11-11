@@ -194,7 +194,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     public Map<String, String> extractWordHistoryAnswers(List<WordAnswerTarget> targets, List<String> issues) {
         var config = properties.getLlm();
-        if (!config.isEnabled() || targets.isEmpty()) {
+        if (!properties.historyLlmEnabled() || targets.isEmpty()) {
             return Map.of();
         }
         if (config.getModel().isBlank()) {
@@ -275,7 +275,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     public Map<String, String> extractMineruHistoryAnswers(RawBlock block, List<HistoryAnswerTarget> clauses, List<String> issues) {
         var config = properties.getLlm();
-        if (!config.isEnabled() || clauses.isEmpty()) {
+        if (!properties.historyLlmEnabled() || clauses.isEmpty()) {
             return Map.of();
         }
         var table = block.mineruTable();
@@ -344,7 +344,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, boolean fallbackToRules) {
         var config = properties.getLlm();
-        if (!config.isEnabled()) {
+        if (!(fallbackToRules ? config.isEnabled() : properties.historyLlmEnabled())) {
             log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
             return new ExtractionResult(fallbackToRules ? rules.extract(blocks) : List.of(), rules.name(), List.of());
         }
@@ -423,12 +423,8 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         return new ExtractionResult(ordered, used, issues);
     }
 
-    private JsonNode modelContent(JsonNode response) throws JsonProcessingException {
-        String content = response.path("choices").path(0).path("message").path("content").asText("").trim();
-        if (content.startsWith("```")) {
-            content = content.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
-        }
-        return json.readTree(content);
+    JsonNode modelContent(JsonNode response) throws JsonProcessingException {
+        return http.modelContent(response);
     }
 
     private static String validationDetail(Exception exception) {

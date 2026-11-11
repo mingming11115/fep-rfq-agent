@@ -429,6 +429,10 @@ alter table history_document
     add index idx_history_parse_due (parse_due_at);
 -- RFQ_MIGRATION_V21_END
 
+-- RFQ_MIGRATION_V22
+alter table requirement add column source_refs_json json;
+-- RFQ_MIGRATION_V22_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

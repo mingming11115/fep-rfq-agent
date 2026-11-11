@@ -221,6 +221,10 @@ public class RuleBasedExtractor implements RequirementExtractor {
         return metrics.isEmpty() ? null : writeJson(metrics);
     }
 
+    String sourcedMetrics(String original, String specification) {
+        return metricsJson(original.contains(specification) ? specification : "", extractMetrics(original));
+    }
+
     static int tableItemColumn(List<String> header) {
         return headerColumn(header, ITEM_HEADER);
     }

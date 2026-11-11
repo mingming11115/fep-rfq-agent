@@ -18,6 +18,7 @@ import com.naura.rfq.model.entity.CustomerDocument;
 import com.naura.rfq.model.entity.DocumentBlock;
 import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.model.entity.Requirement;
+import com.naura.rfq.model.parse.SourceRef;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.io.ByteArrayOutputStream;
@@ -167,8 +168,12 @@ public class ApprovedDocumentExportService {
                     frozen.remove("matchReference");
                 }
             }
+            var refs = SourceRef.decode(requirement.getSourceRefsJson());
+            var primary = refs == null || refs.isEmpty() ? null : refs.get(0);
             notes.computeIfAbsent(source.getId(), ignored -> new ArrayList<>())
-                    .add(new Note(block.getSourceAnchor(), requirement.getOriginalText(), answerText(row)));
+                    .add(primary == null
+                            ? new Note(block.getSourceAnchor(), requirement.getOriginalText(), answerText(row))
+                            : new Note(primary.anchor(), primary.quote(), answerText(row), true));
         }
 
         return notes;

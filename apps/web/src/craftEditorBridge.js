@@ -238,7 +238,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       if(!alive||engine!=='wordcraft'||!boundToken||target?.document!==boundToken||target.revision!==outline?.revision||!Array.isArray(outline?.items)||!outline.items.some(item=>item.index===target.index)) { return Promise.reject(new Error('目录已更新，请在当前文件中重新选择文档标题')); }
       return command('heading',{revision:target.revision,index:target.index});
     },
-    locate:(id=getContext().selectedAnchor?.requirementId)=>command('locate',{id}),
+    locate:(id=getContext().selectedAnchor?.requirementId,sourceIndex)=>command('locate',{id,sourceIndex}),
     openFileComment(key,{locate=false}={}){
       if(!alive) { return false; }
       const notes=snapshot?.notes.filter(note=>note.nativeKey===key)||[];

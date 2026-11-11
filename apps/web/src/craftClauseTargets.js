@@ -27,6 +27,10 @@ export function craftClauseTargets(source,rows,engine,blocks=[]){
   const counts=new Map(),byId=new Map(rows.map(row=>[row.id,row]));
   for(const target of targets){const quote=fold(target.quote);counts.set(quote,(counts.get(quote)||0)+1);}
   return targets.map(target=>{
+    const row=byId.get(target.id);
+    if(Array.isArray(row?.sourceRefs)){
+      return {...target,quote:row.sourceRefs[0]?.quote||'',sourceRefs:row.sourceRefs};
+    }
     const quote=fold(target.quote);
     let native=tableQuotes.get(quote);
     if(native===undefined&&quote.endsWith(' |')){
@@ -34,7 +38,6 @@ export function craftClauseTargets(source,rows,engine,blocks=[]){
       if(matches.length===1) { native=matches[0].native; }
     }
     if(native&&!paragraphs.some(text=>text.includes(quote))) { return {...target,quote:native}; }
-    const row=byId.get(target.id);
     if(quote&&row?.title&&row?.clause&&counts.get(quote)>1){
       return {...target,quote:`${row.clause} ${row.title}\n${target.quote}`};
     }

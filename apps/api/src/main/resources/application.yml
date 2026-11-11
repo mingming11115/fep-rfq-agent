@@ -59,6 +59,13 @@ rfq:
     max-blocks: ${RFQ_PARSE_MAX_BLOCKS:5000}
     max-requirement-chars: ${RFQ_PARSE_MAX_REQUIREMENT_CHARS:4000}
     integrations:
+      history:
+        rules-enabled: ${RFQ_HISTORY_RULES_ENABLED:true}
+        llm-enabled: ${RFQ_HISTORY_LLM_ENABLED:${rfq.parse.integrations.llm.enabled}}
+      word-markdown:
+        python: ${RFQ_MARKITDOWN_PYTHON:python}
+        timeout: ${RFQ_MARKITDOWN_TIMEOUT:60s}
+        max-chars: ${RFQ_WORD_MARKDOWN_MAX_CHARS:100000}
       llm:
         enabled: ${RFQ_LLM_ENABLED:false}
         url: ${RFQ_LLM_URL:}

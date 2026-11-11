@@ -31,6 +31,7 @@ public class Requirement {
     private String title;
 
     private String originalText;
+    private String sourceRefsJson;
 
     private String requirementText;
 

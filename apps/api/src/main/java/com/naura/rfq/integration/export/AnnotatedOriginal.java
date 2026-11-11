@@ -1,6 +1,10 @@
 package com.naura.rfq.integration.export;
 
+import static com.naura.rfq.integration.parse.DocxBlockReader.nativeParagraphText;
+
 import com.naura.rfq.common.exception.BusinessException;
+import com.naura.rfq.integration.parse.DocxBlockReader;
+import com.naura.rfq.integration.parse.WordSourceBody;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,7 +35,11 @@ public final class AnnotatedOriginal {
 
     private AnnotatedOriginal() {}
 
-    public record Note(String anchor, String quote, String text) {}
+    public record Note(String anchor, String quote, String text, boolean indexedWordSource) {
+        public Note(String anchor, String quote, String text) {
+            this(anchor, quote, text, false);
+        }
+    }
 
     public static byte[] wordWithAnswers(byte[] original, List<Note> notes) throws IOException {
         try (var document = new XWPFDocument(new ByteArrayInputStream(original));
@@ -96,6 +104,9 @@ public final class AnnotatedOriginal {
     }
 
     private static XWPFParagraph locateWord(XWPFDocument document, Note note, boolean acceptRuleQuote) {
+        if (note.indexedWordSource()) {
+            return locateIndexedWord(document, note);
+        }
         var imported = IMPORTED_PARAGRAPH.matcher(note.anchor());
         if (imported.matches()) {
             var element = at(document.getBodyElements(), Integer.parseInt(imported.group(1)), note);
@@ -139,6 +150,62 @@ public final class AnnotatedOriginal {
                 .filter(paragraph -> !paragraph.getText().isBlank())
                 .max(java.util.Comparator.comparingInt(paragraph -> paragraph.getText().length()))
                 .orElseThrow(() -> missingAnchor(note));
+    }
+
+    private static XWPFParagraph locateIndexedWord(XWPFDocument document, Note note) {
+        var parts = note.anchor().split("/");
+        int index = 1;
+        List<IBodyElement> elements = WordSourceBody.elements(document);
+        if ("footnote".equals(parts[0]) || "endnote".equals(parts[0])) {
+            var notes = "footnote".equals(parts[0]) ? document.getFootnotes() : document.getEndnotes();
+            var normal = notes.stream().filter(item -> {
+                var type = item.getCTFtnEdn().getType();
+                return type == null || "normal".equals(type.toString());
+            }).toList();
+            elements = WordSourceBody.elements(at(normal, sourceIndex(parts[index++], "", note), note));
+        } else if (!"body".equals(parts[0])) {
+            throw missingAnchor(note);
+        }
+        while (index < parts.length) {
+            var element = at(elements, sourceIndex(parts[index++], "", note), note);
+            if (element instanceof XWPFParagraph paragraph) {
+                if (index == parts.length && contains(nativeParagraphText(paragraph), note.quote())) {
+                    return paragraph;
+                }
+                if (index == parts.length - 1 && parts[index].startsWith("image-")) {
+                    int picture = sourceIndex(parts[index], "image-", note);
+                    var pictures = paragraph.getRuns().stream().flatMap(run -> run.getEmbeddedPictures().stream()).toList();
+                    at(pictures, picture, note);
+                    return paragraph;
+                }
+            }
+            if (element instanceof XWPFTable table && index < parts.length) {
+                var row = at(table.getRows(), sourceIndex(parts[index++], "r", note), note);
+                if (index == parts.length) {
+                    var paragraphs = row.getTableCells().stream().flatMap(cell -> WordSourceBody.elements(cell).stream())
+                            .filter(XWPFParagraph.class::isInstance).map(XWPFParagraph.class::cast).toList();
+                    var quote = paragraphs.stream().map(DocxBlockReader::nativeParagraphText)
+                            .collect(Collectors.joining(" "));
+                    if (contains(quote, note.quote())) {
+                        return paragraphs.stream().filter(p -> !p.getParagraphText().isBlank())
+                                .max(java.util.Comparator.comparingInt(p -> p.getParagraphText().length()))
+                                .orElseThrow(() -> missingAnchor(note));
+                    }
+                } else {
+                    elements = WordSourceBody.elements(at(row.getTableCells(), sourceIndex(parts[index++], "c", note), note));
+                    continue;
+                }
+            }
+            throw missingAnchor(note);
+        }
+        throw missingAnchor(note);
+    }
+
+    private static int sourceIndex(String segment, String prefix, Note note) {
+        if (!segment.startsWith(prefix) || !segment.substring(prefix.length()).matches("[0-9]{1,9}")) {
+            throw missingAnchor(note);
+        }
+        return Integer.parseInt(segment.substring(prefix.length()));
     }
 
     private static boolean rowContains(XWPFTableRow row, String quote, boolean acceptRuleQuote) {

@@ -184,16 +184,17 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     return()=>{unbind();element?.removeEventListener('load',bind);};
   },[moreOpen]);
   function clearLocationNotice(){window.clearTimeout(locationTimer.current);locationTimer.current=null;setLocationNotice(null);}
-  async function locateClause(id=latest.current.selectedAnchor?.requirementId){
+  async function locateClause(id=latest.current.selectedAnchor?.requirementId,sourceIndex=0){
     const instance=editor.current;
     if(!canLocate||!instance||!id||(locateRequest?.instance===instance&&locateRequest.id===id)) { return; }
-    const request={instance,id};setLocateRequest(request);clearLocationNotice();
+    const request={instance,id,sourceIndex};setLocateRequest(request);clearLocationNotice();
     const current=()=>alive.current&&editor.current===instance&&latest.current.selectedAnchor?.requirementId===id;
-    try{const result=await instance.locate(id);if(current()&&result?.id===id&&result.status==='matched') { setLocationConfirmation(value=>value+1); }}
+    try{const result=await instance.locate(id,sourceIndex);if(current()&&result?.id===id&&result.status==='matched') { setLocationConfirmation(value=>value+1); }}
     catch(cause){ console.error('定位 Craft 条款失败', cause); if(current()) { setError(cause.message); }}
     finally{if(alive.current) { setLocateRequest(value=>value===request?null:value); }}
   }
   const targetId=selectedAnchor?.requirementId;
+  const sourceRefs=rows.find(row=>row.id===targetId)?.sourceRefs;
   const sourceStatus=targetId&&editorState.source?.selectedId===targetId?editorState.source.status||'waiting':'waiting';
   const locationKey=JSON.stringify([identity,reference?.id,targetId,frameEpoch]);
   const canLocate=Boolean(reference&&bytes&&!loading&&editorState.ready&&editorState.sessionKey===JSON.stringify([reference.id,frameEpoch])&&targetId);
@@ -224,6 +225,10 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     {downloadError&&<Alert type="error" showIcon message={downloadError.message} action={<Button size="small" disabled={downloading||!canDownloadFile} onClick={()=>downloadFile(downloadError.kind)}>重试下载</Button>}/>}
     {error&&<Alert type="error" showIcon message={error} action={<div className="office-actions">{backup&&dirty&&<><Button size="small" onClick={()=>downloadCraftBlob(backup.blob,backup.name)}>下载本地备份</Button><Button size="small" disabled={saving||requestingSave||loading} onClick={reopen}>重新打开</Button></>}<Button size="small" disabled={saving||requestingSave||Boolean((saveFailed||backup&&dirty)&&!canSaveFile)} onClick={retryFile}>重试</Button></div>}/>}
     {!!editorState.conflicts?.length&&<Alert type="warning" showIcon message="部分批注两边都有新修改，已保留内容，请核对后再保存。"/>}
+    {sourceRefs?.length>1&&<div className="office-clause-status craft-clause-sources" role="group" aria-label="条款原文来源">
+      {sourceRefs.map((ref,index)=><Button key={ref.anchor} size="small" title={ref.quote} disabled={!canLocate||locating}
+        onClick={()=>locateClause(targetId,index)}>来源 {index+1}</Button>)}
+    </div>}
     {showLocationNotice&&<div className="office-clause-status" data-clause-status={sourceStatus} aria-label="定位结果"><span role="status">{locationText}</span>{sourceStatus!=='matched'&&<div className="office-actions"><Button size="small" disabled={locating} loading={locating} onClick={()=>locateClause()}>重新定位</Button></div>}</div>}
     <div className="craft-native-workspace" hidden={!bytes}>
       <AnnotationFilterView.Provider value={Boolean(bytes)}>

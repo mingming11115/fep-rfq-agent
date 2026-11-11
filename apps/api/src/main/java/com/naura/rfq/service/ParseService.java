@@ -7,6 +7,8 @@ import com.naura.rfq.integration.parse.DocxBlockReader;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
 import com.naura.rfq.integration.parse.DocumentReadException;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
+import com.naura.rfq.integration.parse.WordMarkdownExtractor;
+import com.naura.rfq.integration.parse.WordMarkdownReader;
 import com.naura.rfq.mapper.CustomerDocumentMapper;
 import com.naura.rfq.mapper.DocumentBlockMapper;
 import com.naura.rfq.mapper.ParseRunMapper;
@@ -19,6 +21,7 @@ import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.ExtractionResult;
 import com.naura.rfq.model.parse.RawBlock;
+import com.naura.rfq.model.parse.SourceRef;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.storage.DocumentStorage;
 import java.time.Instant;
@@ -50,6 +53,8 @@ public class ParseService {
     private final ParseRunMapper runs;
     private final List<DocumentBlockReader> readers;
     private final HybridRequirementExtractor extractor;
+    private final WordMarkdownReader wordMarkdownReader;
+    private final WordMarkdownExtractor wordMarkdownExtractor;
     private final DocumentStorage storage;
     private final ParseProperties properties;
     private final AuditService audit;
@@ -116,7 +121,14 @@ public class ParseService {
         String phase = "read";
         try {
             DocumentBlockReader reader = readerFor(document);
-            rawBlocks = readBlocks(document, reader);
+            WordMarkdownReader.Content wordMarkdown = null;
+            if (reader instanceof DocxBlockReader && wordMarkdownExtractor.enabled()) {
+                phase = "markitdown";
+                try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
+                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks());
+                }
+            }
+            rawBlocks = wordMarkdown == null ? readBlocks(document, reader) : wordMarkdown.blocks();
             if (rawBlocks.isEmpty()) {
                 throw new DocumentReadException("文档没有可读取内容");
             }
@@ -130,7 +142,9 @@ public class ParseService {
                 }
             }
             phase = "extract";
-            ExtractionResult result = reader instanceof DocxBlockReader
+            ExtractionResult result = wordMarkdown != null
+                    ? wordMarkdownExtractor.extract(wordMarkdown, run.getId())
+                    : reader instanceof DocxBlockReader
                     ? extractor.extractWordWithReport(rawBlocks, run.getId())
                     : extractor.extractWithReport(rawBlocks, run.getId());
             run.setExtractor(truncate(result.extractor(), 250));
@@ -141,6 +155,9 @@ public class ParseService {
                 throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
             }
         } catch (Exception exception) {
+            if (exception instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
                     run.getId(), documentId, project.getId(), phase, exception.getClass().getSimpleName(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
@@ -205,13 +222,17 @@ public class ParseService {
         for (var r : candidates) {
             RawBlock block = byIndex.get(r.blockIndex());
             if (block == null) {
+                if (r.sourceRefs() != null && r.sourceRefs().isEmpty() && r.needsReview()) {
+                    reviewed.add(r);
+                    continue;
+                }
                 throw new IllegalArgumentException("来源块不存在");
             }
             if (block.issue() == null) { reviewed.add(r); continue; }
             reviewed.add(new ExtractedRequirement(r.order(), r.blockIndex(), r.sectionPath(), r.customerClauseNo(),
                 r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(), r.metricsJson(),
                 r.conditionsText(), r.obligation(), ExtractedRequirement.NEEDS_REVIEW,
-                (r.reviewReasons() == null ? "" : r.reviewReasons() + "；") + block.issue()));
+                (r.reviewReasons() == null ? "" : r.reviewReasons() + "；") + block.issue(), r.sourceRefs()));
         }
         return reviewed;
     }
@@ -259,14 +280,14 @@ public class ParseService {
             excerpt.setId(Ids.next("BLK"));
             excerpt.setDocumentId(document.getId());
             excerpt.setBlockIndex(candidate.order());
-            excerpt.setParentBlockId(source.getId());
-            excerpt.setType(source.getType());
-            excerpt.setSectionPath(source.getSectionPath());
+            excerpt.setParentBlockId(source == null ? null : source.getId());
+            excerpt.setType(source == null ? RawBlock.PARAGRAPH : source.getType());
+            excerpt.setSectionPath(source == null ? null : source.getSectionPath());
             excerpt.setCustomerClauseNo(truncate(candidate.customerClauseNo(), 60));
             excerpt.setContent(candidate.originalText());
-            excerpt.setSourceAnchor(source.getSourceAnchor());
-            excerpt.setProvenance(source.getProvenance());
-            excerpt.setProcessingStatus(source.getProcessingStatus());
+            excerpt.setSourceAnchor(source == null ? null : source.getSourceAnchor());
+            excerpt.setProvenance(source == null ? "model" : source.getProvenance());
+            excerpt.setProcessingStatus(source == null ? "NEEDS_REVIEW" : source.getProcessingStatus());
             blocks.insert(excerpt);
 
             Requirement requirement = new Requirement();
@@ -279,6 +300,9 @@ public class ParseService {
             requirement.setCustomerClauseNo(truncate(candidate.customerClauseNo(), 60));
             requirement.setTitle(truncate(candidate.title(), 280));
             requirement.setOriginalText(candidate.originalText());
+            if (candidate.sourceRefs() != null) {
+                requirement.setSourceRefsJson(SourceRef.encode(candidate.sourceRefs()));
+            }
             requirement.setRequirementText(candidate.requirementText());
             requirement.setMetricsJson(candidate.metricsJson());
             requirement.setExtractionStatus(candidate.extractionStatus());

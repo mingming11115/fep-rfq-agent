@@ -149,7 +149,8 @@ class MineruPdfReaderTest {
                 return reply;
             }
         };
-        return new HistoryExtractor(rules, new HybridRequirementExtractor(rules, settings, client, JSON));
+        var model = new HybridRequirementExtractor(rules, settings, client, JSON);
+        return new HistoryExtractor(rules, model, settings, new HistoryModelExtractor(settings, client, model, JSON));
     }
 
     @Test

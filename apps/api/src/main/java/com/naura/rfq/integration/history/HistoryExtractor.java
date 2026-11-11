@@ -1,6 +1,9 @@
 package com.naura.rfq.integration.history;
 
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
+import com.naura.rfq.common.exception.BusinessException;
+import com.naura.rfq.config.properties.ParseIntegrationProperties;
+import com.naura.rfq.integration.parse.HistoryModelExtractor;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor.HistoryAnswerTarget;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor.WordAnswerCell;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor.WordAnswerTarget;
@@ -32,15 +35,35 @@ public class HistoryExtractor {
 
     private final RuleBasedExtractor requirements;
     private final HybridRequirementExtractor model;
+    private final ParseIntegrationProperties properties;
+    private final HistoryModelExtractor historyModel;
+
+    public void requireEnabled() {
+        if (!properties.getHistory().isRulesEnabled() && !properties.historyLlmEnabled()) {
+            throw new BusinessException(409, "历史 RFQ 解析至少启用规则解析或 LLM 解析之一");
+        }
+    }
 
     public Result extract(List<RawBlock> primary, List<RawBlock> companion) {
+        requireEnabled();
+        boolean rulesEnabled = properties.getHistory().isRulesEnabled();
+        boolean llmEnabled = properties.historyLlmEnabled();
         Map<String, String> metadata = new LinkedHashMap<>();
         List<String> issues = new ArrayList<>();
-        Map<String, RawBlock> customerSources = new LinkedHashMap<>();
         Map<String, WordAnswerTarget> wordSources = new LinkedHashMap<>();
-        List<HistoryClause> clauses = read(primary, "main:", false, metadata, issues, customerSources, wordSources);
-        clauses = applyModel(clauses, customerSources, issues);
-        List<HistoryClause> answers = read(companion, "answer:", true, new LinkedHashMap<>(), issues, new LinkedHashMap<>(), Map.of());
+        List<HistoryClause> clauses;
+        List<HistoryClause> answers;
+        if (rulesEnabled) {
+            Map<String, RawBlock> customerSources = new LinkedHashMap<>();
+            clauses = read(primary, "main:", false, metadata, issues, customerSources, wordSources);
+            if (llmEnabled) {
+                clauses = applyModel(clauses, customerSources, issues);
+            }
+            answers = read(companion, "answer:", true, new LinkedHashMap<>(), issues, new LinkedHashMap<>(), Map.of());
+        } else {
+            clauses = historyModel.extract(primary, false, metadata, issues);
+            answers = historyModel.extract(companion, true, new LinkedHashMap<>(), issues);
+        }
         Map<String, List<HistoryClause>> requirementsByNumber = group(clauses), answersByNumber = group(answers);
         List<HistoryClause> matched = new ArrayList<>();
         for (HistoryClause clause : clauses) {
@@ -63,8 +86,10 @@ public class HistoryExtractor {
                 issues.add("配套答复条款 " + (answer.clauseNo().isBlank() ? "（无编号）" : answer.clauseNo()) + " 未关联，请在原文中核对：" + answer.answerAnchor());
             }
         }
-        var answered = AlignedHistoryAnswers.apply(primary, matched, issues);
-        answered = applyTableAnswers(primary, answered, wordSources, issues);
+        List<HistoryClause> answered = rulesEnabled ? AlignedHistoryAnswers.apply(primary, matched, issues) : matched;
+        if (rulesEnabled && llmEnabled) {
+            answered = applyTableAnswers(primary, answered, wordSources, issues);
+        }
         return new Result(metadata, answered.stream().map(this::flagMissingFields).toList(), issues);
     }
 

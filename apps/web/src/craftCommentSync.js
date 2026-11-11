@@ -1,4 +1,4 @@
-import { makeSourceAnchor } from './documentAnchors.js';
+import { clauseSourceQuote, makeSourceAnchor } from './documentAnchors.js';
 
 const text = value => typeof value === 'string' ? value : '';
 const keyOf = value => text(value?.nativeKey || value?.nativeRef?.key);
@@ -145,7 +145,7 @@ export function craftCommentFingerprint(comment, options = {}) {
 function nativeProjection(note, row) {
   return {
     text: text(note.text), author: text(note.author), resolved: Boolean(note.resolved),
-    quote: text(note.quote) || text(row.sourceOriginal ?? row.original), clauseId: row.id,
+    quote: text(note.quote) || text(clauseSourceQuote(row)), clauseId: row.id,
     replies: (note.replies || []).filter(reply => keyOf(reply)).map(reply => ({ key: keyOf(reply), text: text(reply.text), author: text(reply.author) })),
   };
 }

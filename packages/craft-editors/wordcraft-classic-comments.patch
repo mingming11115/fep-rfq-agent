@@ -196,7 +196,7 @@ diff --git a/crates/engine/src/host_access.rs b/crates/engine/src/host_access.rs
 new file mode 100644
 --- /dev/null
 +++ b/crates/engine/src/host_access.rs
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,227 @@
 +//! Ephemeral host permissions. These never become document protection or exported metadata.
 +use crate::{CmdError, Session};
 +use serde_json::Value;
@@ -207,26 +207,72 @@ new file mode 100644
 +    document: u64,
 +    editable: bool,
 +    body: bool,
-+    targets: Vec<(String, bool)>,
++    targets: Vec<(String, Option<String>, bool)>,
 +    associations: BTreeMap<u32, Value>,
 +}
 +
 +impl Session {
-+    pub fn set_host_review_access(&mut self, editable: bool, body: bool, targets: Vec<(String, bool)>, associations: BTreeMap<u32, Value>) {
++    pub fn set_host_review_access(&mut self, editable: bool, body: bool, targets: Vec<(String, Option<String>, bool)>, associations: BTreeMap<u32, Value>) {
 +        self.host_access = Some(HostAccess { document: self.document_id(), editable, body, targets, associations });
 +    }
 +
 +    /// Literal quote search with whitespace folded and inline anchor markers ignored. At most
 +    /// two results are needed: ambiguity must never silently select the first occurrence.
 +    pub fn host_quote_matches(&self, quote: &str) -> Result<Vec<(Pos, Pos)>, String> {
++        self.host_quote_matches_in(quote, StoryRef::Body, &[])
++    }
++
++    pub fn host_source_matches(&self, anchor: &str, quote: &str) -> Result<Vec<(Pos, Pos)>, String> {
++        use wordcraft_doc::{PartKind, Path, para::InlineObject};
++        let invalid = || "invalid Word source anchor".to_string();
++        let mut segments = anchor.split('/');
++        let story = match segments.next() {
++            Some("body") => StoryRef::Body,
++            Some(kind @ ("footnote" | "endnote")) => {
++                let ordinal = segments.next().and_then(|n| n.parse::<usize>().ok()).ok_or_else(invalid)?;
++                let kind = if kind == "footnote" { PartKind::Footnote } else { PartKind::Endnote };
++                let Some((&id, _)) = self.doc.parts.iter().filter(|(_, part)| part.kind == kind).nth(ordinal) else {
++                    return Ok(Vec::new());
++                };
++                StoryRef::Part(id)
++            }
++            _ => return Err(invalid()),
++        };
++        let mut path = Vec::new();
++        let mut image = None;
++        for segment in segments {
++            if let Some(index) = segment.strip_prefix("image-") {
++                image = Some(index.parse::<usize>().map_err(|_| invalid())?);
++                break;
++            }
++            path.push(segment.trim_start_matches(['r', 'c']).parse::<u32>().map_err(|_| invalid())?);
++        }
++        if path.is_empty() {
++            return Err(invalid());
++        }
++        if let Some(image) = image {
++            let path = Path(path);
++            let Some(para) = self.doc.para(story, &path) else { return Ok(Vec::new()) };
++            let Some(off) = para.object_offsets().into_iter()
++                .filter(|&off| matches!(para.object_at(off), Some(InlineObject::Image { .. })))
++                .nth(image) else { return Ok(Vec::new()) };
++            return Ok(vec![(Pos::new(story, path.clone(), off),
++                Pos::new(story, path, off + wordcraft_doc::para::OBJ.len_utf8()))]);
++        }
++        self.host_quote_matches_in(quote, story, &path)
++    }
++
++    fn host_quote_matches_in(&self, quote: &str, story: StoryRef, prefix: &[u32]) -> Result<Vec<(Pos, Pos)>, String> {
 +        let needle = quote.split_whitespace().collect::<Vec<_>>().join(" ");
 +        if needle.is_empty() || needle.len() > 1_048_576 {
 +            return Err("quote is empty or too long".into());
 +        }
 +        let mut text = String::new();
 +        let mut map: Vec<(usize, Pos, Pos)> = Vec::new();
-+        for path in self.doc.para_paths(StoryRef::Body) {
-+            let Some(para) = self.doc.para(StoryRef::Body, &path) else { continue };
++        let is_row = prefix.len() % 3 == 2;
++        for path in self.doc.para_paths(story).into_iter().filter(|path|
++            path.0.starts_with(prefix) && (!is_row || path.0.len() == prefix.len() + 2)) {
++            let Some(para) = self.doc.para(story, &path) else { continue };
 +            for (off, ch) in para.text.char_indices() {
 +                if ch == wordcraft_doc::para::OBJ {
 +                    continue;
@@ -234,7 +280,7 @@ new file mode 100644
 +                if map.len() >= 500_000 {
 +                    return Err("source text exceeds the bounded quote search".into());
 +                }
-+                let a = Pos { story: StoryRef::Body, path: path.clone(), off };
++                let a = Pos { story, path: path.clone(), off };
 +                let b = Pos { off: off + ch.len_utf8(), ..a.clone() };
 +                let ch = if ch.is_whitespace() { ' ' } else { ch };
 +                if ch == ' ' && text.ends_with(' ') {
@@ -247,7 +293,7 @@ new file mode 100644
 +                text.push(ch);
 +            }
 +            if !text.ends_with(' ') {
-+                let pos = Pos { story: StoryRef::Body, path, off: para.text.len() };
++                let pos = Pos { story, path, off: para.text.len() };
 +                map.push((text.len(), pos.clone(), pos));
 +                text.push(' ');
 +            }
@@ -290,8 +336,12 @@ new file mode 100644
 +
 +    fn host_range_allowed(&self, access: &HostAccess, range: &(Pos, Pos)) -> bool {
 +        let mut matched = false;
-+        for (quote, editable) in &access.targets {
-+            let Ok(found) = self.host_quote_matches(quote) else { continue };
++        for (quote, anchor, editable) in &access.targets {
++            let matches = match anchor {
++                Some(anchor) => self.host_source_matches(anchor, quote),
++                None => self.host_quote_matches(quote),
++            };
++            let Ok(found) = matches else { continue };
 +            if found.len() != 1 {
 +                continue;
 +            }
@@ -852,7 +902,7 @@ diff --git a/crates/ui-egui/src/panes/host_project.rs b/crates/ui-egui/src/panes
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_project.rs
-@@ -0,0 +1,430 @@
+@@ -0,0 +1,472 @@
 +//! RFQ clause navigation and bidirectional comment writes; host metadata stays outside DOCX.
 +use super::*;
 +use std::collections::{BTreeMap, BTreeSet};
@@ -874,6 +924,7 @@ new file mode 100644
 +    pub selected: Option<String>,
 +    pub status: String,
 +    pub selection: Option<(Pos, Pos)>,
++    pub located_range: Option<(Pos, Pos)>,
 +}
 +pub(super) fn key(id: u32) -> String {
 +    format!("word-comment:{id}")
@@ -975,6 +1026,7 @@ new file mode 100644
 +            p.revision = None;
 +            p.selected = None;
 +            p.selection = None;
++            p.located_range = None;
 +            p.status = "unsupported".into();
 +            p.tools_visible = false;
 +            let _ = self.session.run("view.webLayout", &json!({}));
@@ -982,7 +1034,16 @@ new file mode 100644
 +        let targets = p
 +            .targets
 +            .iter()
-+            .filter_map(|t| Some((t.get("quote")?.as_str()?.to_string(), t.get("editable").and_then(Value::as_bool).unwrap_or(false))))
++            .flat_map(|t| {
++                let editable = t.get("editable").and_then(Value::as_bool).unwrap_or(false);
++                if let Some(refs) = t.get("sourceRefs").and_then(Value::as_array) {
++                    refs.iter().filter_map(|r| Some((r.get("quote")?.as_str()?.to_string(),
++                        Some(r.get("anchor")?.as_str()?.to_string()), editable))).collect::<Vec<_>>()
++                } else {
++                    t.get("quote").and_then(Value::as_str)
++                        .map(|quote| (quote.to_string(), None, editable)).into_iter().collect()
++                }
++            })
 +            .collect();
 +        let associations = p
 +            .associations
@@ -1002,7 +1063,7 @@ new file mode 100644
 +                .targets
 +                .iter()
 +                .filter_map(|t| {
-+                    Some((t.get("id")?.as_str()?.to_string(), self.session.host_quote_matches(t.get("quote")?.as_str()?).unwrap_or_default()))
++                    Some((t.get("id")?.as_str()?.to_string(), Self::host_target_matches(&self.session, t, 0).unwrap_or_default()))
 +                })
 +                .collect();
 +            p.revision = Some(self.session.rev());
@@ -1069,10 +1130,23 @@ new file mode 100644
 +        Ok(json!({}))
 +    }
 +    pub(super) fn locate_host_clause(&mut self, id: &str) -> Result<Value, String> {
++        self.locate_host_clause_source(id, 0)
++    }
++
++    fn host_target_matches(session: &wordcraft_engine::Session, target: &Value, index: usize) -> Result<Vec<(Pos, Pos)>, String> {
++        if let Some(refs) = target.get("sourceRefs").and_then(Value::as_array) {
++            let Some(source) = refs.get(index) else { return Ok(Vec::new()) };
++            return session.host_source_matches(source.get("anchor").and_then(Value::as_str).ok_or("missing source anchor")?,
++                source.get("quote").and_then(Value::as_str).ok_or("missing source quote")?);
++        }
++        session.host_quote_matches(target.get("quote").and_then(Value::as_str).unwrap_or(""))
++    }
++
++    pub(super) fn locate_host_clause_source(&mut self, id: &str, index: usize) -> Result<Value, String> {
 +        self.sync_host_project();
 +        let target = self.comment_drafts.project.targets.iter().find(|t| t.get("id").and_then(Value::as_str) == Some(id)).ok_or("unknown clause")?;
-+        let mut result = self.session.host_quote_matches(target.get("quote").and_then(Value::as_str).unwrap_or(""));
-+        if !matches!(&result, Ok(matches) if matches.len() == 1) {
++        let mut result = Self::host_target_matches(&self.session, target, index);
++        if target.get("sourceRefs").is_none() && !matches!(&result, Ok(matches) if matches.len() == 1) {
 +            let fallback = table_field_matches(
 +                &self.session.doc,
 +                target.get("title").and_then(Value::as_str).unwrap_or(""),
@@ -1099,6 +1173,7 @@ new file mode 100644
 +        p.selected = Some(id.to_string());
 +        p.status = status.into();
 +        p.selection = Some(self.session.sel.ordered());
++        p.located_range = p.selection.clone().filter(|_| status == "matched");
 +        Ok(json!({"id":id,"status":status}))
 +    }
 +    pub(super) fn host_source_state(&mut self) -> Value {
@@ -1118,6 +1193,7 @@ new file mode 100644
 +            if matches.len() == 1 {
 +                p.selected = matches.first().cloned();
 +                p.status = "matched".into();
++                p.located_range = p.selected.as_ref().and_then(|id| p.matches.get(id)).and_then(|ranges| ranges.first()).cloned();
 +            }
 +            p.selection = Some(selection);
 +        }
@@ -1175,7 +1251,39 @@ new file mode 100644
 +        }
 +        let anchor = if existing.is_none() {
 +            let quote = params.get("quote").and_then(Value::as_str).unwrap_or("");
-+            let found = self.session.host_quote_matches(quote)?;
++            let target = p.targets.iter().find(|t| t.get("id").and_then(Value::as_str) == Some(clause.as_str()))
++                .ok_or("unknown clause")?;
++            let found = if let Some(refs) = target.get("sourceRefs").and_then(Value::as_array) {
++                if target.get("quote").and_then(Value::as_str) == Some(quote) {
++                    Self::host_target_matches(&self.session, target, 0)?
++                } else {
++                    let mut matches = BTreeSet::new();
++                    for (index, source) in refs.iter().enumerate() {
++                        let Some(source_anchor) = source.get("anchor").and_then(Value::as_str) else { continue };
++                        if source_anchor.contains("/image-") && source.get("quote").and_then(Value::as_str) != Some(quote) {
++                            continue;
++                        }
++                        let bounds = Self::host_target_matches(&self.session, target, index)?;
++                        if let [(start, end)] = bounds.as_slice() {
++                            matches.extend(self.session.host_source_matches(source_anchor, quote)?.into_iter()
++                                .filter(|(a, b)| a >= start && b <= end));
++                        }
++                    }
++                    matches.into_iter().collect()
++                }
++            } else {
++                let found = self.session.host_quote_matches(quote)?;
++                let bounds = Self::host_target_matches(&self.session, target, 0)?;
++                if let [(a, b)] = found.as_slice() {
++                    if bounds.len() != 1 {
++                        return Err(if bounds.is_empty() { "clause quote missing from source" } else { "clause quote is ambiguous" }.into());
++                    }
++                    if !bounds.first().is_some_and(|(start, end)| a >= start && b <= end) {
++                        return Err("quote is outside the associated clause".into());
++                    }
++                }
++                found
++            };
 +            match found.len() {
 +                0 => return Err("quote missing from source".into()),
 +                1 => found.first().cloned(),
@@ -1184,22 +1292,6 @@ new file mode 100644
 +        } else {
 +            None
 +        };
-+        if let Some((a, b)) = &anchor {
-+            let target = self
-+                .comment_drafts
-+                .project
-+                .targets
-+                .iter()
-+                .find(|t| t.get("id").and_then(Value::as_str) == Some(clause.as_str()))
-+                .ok_or("unknown clause")?;
-+            let found = self.session.host_quote_matches(target.get("quote").and_then(Value::as_str).unwrap_or(""))?;
-+            if found.len() != 1 {
-+                return Err(if found.is_empty() { "clause quote missing from source" } else { "clause quote is ambiguous" }.into());
-+            }
-+            if !found.first().is_some_and(|(start, end)| a >= start && b <= end) {
-+                return Err("quote is outside the associated clause".into());
-+            }
-+        }
 +        for reply in &replies {
 +            if reply.get("text").and_then(Value::as_str).unwrap_or("").len() > 1_048_576 {
 +                return Err("reply is too long".into());
@@ -1472,7 +1564,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,316 @@
+@@ -0,0 +1,315 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1529,7 +1621,8 @@ new file mode 100644
 +                self.set_host_editor_tools(visible);
 +                Ok(json!({"visible":visible}))
 +            }
-+            "locate" => self.locate_host_clause(p.get("id").and_then(Value::as_str).ok_or("missing clause id")?),
++            "locate" => self.locate_host_clause_source(p.get("id").and_then(Value::as_str).ok_or("missing clause id")?,
++                p.get("sourceIndex").and_then(Value::as_u64).unwrap_or(0) as usize),
 +            "outline" => {
 +                let visible = p.get("visible").and_then(Value::as_bool).ok_or("missing outline visibility")?;
 +                self.session.run("view.navigationPane", &json!({"value":visible})).map_err(|e| e.to_string())?;
@@ -1672,15 +1765,13 @@ new file mode 100644
 +        let mut source_ranges = Vec::new();
 +        let project = &self.comment_drafts.project;
 +        if project.status == "matched" {
-+            if let Some(found) = project.selected.as_ref().and_then(|id| project.matches.get(id)).filter(|found| found.len() == 1) {
-+                if let Some((a, b)) = found.first() {
++            if let Some((a, b)) = project.located_range.as_ref() {
 +                    for (index, range) in layout.selection_rects(&self.session.doc, a, b, self.session.page_hint) {
 +                        if let (Some(screen), Some(page)) = (self.canvas.page_rects.get(index), layout.pages.get(index)) {
 +                            let scale = screen.width() / page.w.max(1.0);
 +                            source_ranges.push(json!({"page":index,"x":(screen.min.x+range.x*scale)*zoom,"y":(screen.min.y+range.y*scale)*zoom,"w":range.w*scale*zoom,"h":range.h*scale*zoom}));
 +                        }
 +                    }
-+                }
 +            }
 +        }
 +        let mut notes = Vec::new();

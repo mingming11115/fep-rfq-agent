@@ -15,7 +15,8 @@ import java.util.stream.Collectors;
 /** Associates a standalone compliance paragraph with the Word heading or clause at its text position. */
 final class AlignedHistoryAnswers {
     private static final Pattern COMPLIANCE = Pattern.compile(
-            "^(→|->)?\\s*((?:(?:conditional|partial|partially|not)\\s+|non[- ])?comply)\\b(.*)$",
+            "^(→|->|(?:\\\\)?=>)?\\s*"
+                    + "((?:(?:conditional|partial|partially|not)\\s+|non[- ])?comply|not\\s+applicable)\\b(.*)$",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern EXPLANATION = Pattern.compile("^[,，。:：;；(（—–-].*");
     private static final Pattern TABLE_ROW = Pattern.compile("/r\\d+$");

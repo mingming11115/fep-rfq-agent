@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.integration.parse.DocxBlockReader;
+import com.naura.rfq.integration.parse.HistoryModelExtractor;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
 import com.naura.rfq.integration.parse.OcrClient;
 import com.naura.rfq.integration.parse.ParseHttpClient;
@@ -13,11 +14,16 @@ import com.naura.rfq.model.vo.HistoryClause;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HistoryExtractorTest {
     private final ObjectMapper json = new ObjectMapper();
@@ -26,7 +32,75 @@ class HistoryExtractorTest {
     private final HistoryExtractor history = withClient(new ParseHttpClient(json));
 
     private HistoryExtractor withClient(ParseHttpClient client) {
-        return new HistoryExtractor(rules, new HybridRequirementExtractor(rules, properties, client, json));
+        var model = new HybridRequirementExtractor(rules, properties, client, json);
+        return new HistoryExtractor(rules, model, properties, new HistoryModelExtractor(properties, client, model, json));
+    }
+
+    @Test void historyRulesCanRunWithTheSharedModelEnabledButHistoryModelDisabled() {
+        historySettings(true, false);
+        properties.getLlm().setEnabled(true);
+        properties.getLlm().setModel("shared-test");
+        var parser = withClient(new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) {
+                throw new AssertionError("History must not call the disabled LLM");
+            }
+        });
+        var result = parser.extract(List.of(RawBlock.paragraph(0, "1. 设备必须设置急停按钮。", "", null, "body/0")), List.of());
+        assertThat(result.clauses()).extracting(HistoryClause::clauseNo).containsExactly("1");
+    }
+
+    @Test void historyModelCanExtractAnAnswerWithoutRulesOrTheSharedModelSwitch() {
+        historySettings(false, true);
+        properties.getLlm().setModel("history-test");
+        var parser = withClient(new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) throws Exception {
+                var input = json.readTree(json.valueToTree(body).path("messages").path(1).path("content").asText());
+                assertThat(input.path(4).path("textStartTwips").asInt()).isEqualTo(720);
+                String reply = """
+                    {"clauses":[{"source":1,"clauseNo":"7","title":"紧急停机",
+                    "requirement":"设备须支持紧急停机","answer":"Not Applicable","answerSource":1},
+                    {"source":3,"clauseNo":"9","title":"安全报警","requirement":"设备须记录安全报警。",
+                    "answer":"Comply","answerSource":4}]}
+                    """;
+                return json.valueToTree(Map.of("choices", List.of(Map.of("message", Map.of("content", reply)))));
+            }
+        });
+        var table = RawBlock.table(0, List.of(List.of("编号", "验收项目", "供应商填写"),
+                List.of("7", "设备须支持紧急停机", "Not Applicable")), "", "body/0");
+        var numbered = RawBlock.paragraph(1, "8. 设备必须提供说明书。", "", null, "body/1");
+        var layout = new RawBlock.ParagraphLayout(720, 0, null, 0);
+        var clause = RawBlock.wordParagraph(2, "9. 设备须记录安全报警。", "", "body/2", layout);
+        var answer = RawBlock.wordParagraph(3, "=> Comply", "", "body/3", layout);
+
+        var result = parser.extract(List.of(table, numbered, clause, answer), List.of());
+
+        assertThat(result.clauses()).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
+                .containsExactly(tuple("7", "Not Applicable", "main:body/0/r1"), tuple("9", "Comply", "main:body/3"));
+    }
+
+    @Test void historyRejectsParsingWhenBothExtractorsAreDisabled() {
+        historySettings(false, false);
+        assertThatThrownBy(() -> history.extract(List.of(), List.of())).hasMessageContaining("至少启用");
+    }
+
+    @Test void historyModelFailureDoesNotUseDisabledRules() {
+        historySettings(false, true);
+        properties.getLlm().setModel("history-test");
+        var parser = withClient(new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId)
+                    throws java.io.IOException {
+                throw new java.io.IOException("model unavailable");
+            }
+        });
+        var source = RawBlock.paragraph(0, "1. 设备必须设置急停按钮。", "", null, "body/0");
+        assertThatThrownBy(() -> parser.extract(List.of(source), List.of())).hasMessageContaining("LLM 未返回");
+    }
+
+    private void historySettings(boolean rulesEnabled, boolean llmEnabled) {
+        var source = new MapConfigurationPropertySource(Map.of(
+                "rfq.parse.integrations.history.rules-enabled", rulesEnabled,
+                "rfq.parse.integrations.history.llm-enabled", llmEnabled));
+        new Binder(source).bind("rfq.parse.integrations", Bindable.ofInstance(properties));
     }
 
     @Test void wordTabAlignsComplianceWithItsHeadingOrClause(@TempDir Path dir) throws Exception {
@@ -54,6 +128,27 @@ class HistoryExtractorTest {
         assertThat(result.issues()).isEmpty();
     }
 
+    @Test void wordTabAlignsEqualsArrowAnswers(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("equals-arrow-responses.docx");
+        try (var doc = new XWPFDocument(); var output = Files.newOutputStream(file)) {
+            paragraph(doc, "1. 安全", "Heading1", 0, false);
+            paragraph(doc, "1.1 设备应设置急停按钮。", null, 720, false);
+            paragraph(doc, "=> Comply", null, 0, false);
+            paragraph(doc, "2. 搬运", "Heading1", 0, false);
+            paragraph(doc, "2.1 设备应支持自动搬运。", null, 720, false);
+            paragraph(doc, "=> Not Applicable", null, 0, true);
+            paragraph(doc, "2.2 设备应记录搬运次数。", null, 720, false);
+            paragraph(doc, "\\=> Comply", null, 0, true);
+            doc.write(output);
+        }
+        var blocks = new DocxBlockReader(new OcrClient(properties, new ParseHttpClient(json))).read(file);
+        var result = history.extract(blocks, List.of());
+        assertThat(result.clauses()).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
+                .containsExactly(tuple("1.1", "Comply", "main:body/2"),
+                        tuple("2.1", "Not Applicable", "main:body/5"), tuple("2.2", "Comply", "main:body/7"));
+        assertThat(result.issues()).isEmpty();
+    }
+
     private void paragraph(XWPFDocument doc, String text, String style, int indent, boolean tab) {
         var paragraph = doc.createParagraph();
         if (style != null) {
@@ -68,7 +163,7 @@ class HistoryExtractorTest {
     }
 
     @Test void usesTheNormalModelPromptWithOnlyCustomerColumnsAndRetainsTheOriginalAnswer() throws Exception {
-        properties.getLlm().setEnabled(true);
+        historySettings(true, true);
         properties.getLlm().setModel("test-model");
         var table = RawBlock.table(0, List.of(List.of("编号", "客户要求", "历史答复"),
                 List.of("3", "设备应支持 300 mm 晶圆。", "Comply（供应商原文）")), "", "body/1");

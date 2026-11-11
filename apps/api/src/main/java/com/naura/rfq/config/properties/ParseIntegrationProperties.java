@@ -12,6 +12,25 @@ public class ParseIntegrationProperties {
     private Llm llm = new Llm();
     private Ocr ocr = new Ocr();
     private Mineru mineru = new Mineru();
+    private History history = new History();
+    private WordMarkdown wordMarkdown = new WordMarkdown();
+
+    public boolean historyLlmEnabled() {
+        return history.llmEnabled == null ? llm.isEnabled() : history.llmEnabled;
+    }
+
+    @Getter @Setter
+    public static class History {
+        private boolean rulesEnabled = true;
+        private Boolean llmEnabled;
+    }
+
+    @Getter @Setter
+    public static class WordMarkdown {
+        private String python = "python";
+        private Duration timeout = Duration.ofSeconds(60);
+        private int maxChars = 100000;
+    }
 
     @Getter @Setter
     public static class Endpoint {

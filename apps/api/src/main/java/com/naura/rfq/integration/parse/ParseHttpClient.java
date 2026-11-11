@@ -1,5 +1,6 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.io.JsonStringEncoder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +40,14 @@ public class ParseHttpClient {
         boolean logPayload = settings instanceof ParseIntegrationProperties.Llm config && config.isLogPayload();
         var call = new ExternalCallLog(llm ? "llm" : "ocr", llm ? "chat_completions" : "recognise", request, parseRunId);
         return send(settings, request, call, logPayload ? requestBytes : null);
+    }
+
+    JsonNode modelContent(JsonNode response) throws JsonProcessingException {
+        String content = response.path("choices").path(0).path("message").path("content").asText("").trim();
+        if (content.startsWith("```")) {
+            content = content.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+        }
+        return json.readTree(content);
     }
 
     JsonNode postMineru(ParseIntegrationProperties.Mineru settings, String boundary, HttpRequest.BodyPublisher body) throws Exception {

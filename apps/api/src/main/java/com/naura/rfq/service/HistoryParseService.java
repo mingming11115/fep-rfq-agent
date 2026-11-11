@@ -33,12 +33,17 @@ public class HistoryParseService {
     public HistoryParseView parse(CurrentUser user, MultipartFile file,
             MultipartFile responseFile, String buId) throws IOException {
         access.requireBu(user, buId);
+        requireEnabled();
         List<HistorySource> sources = new ArrayList<>();
         sources.add(read(file, "main:"));
         if (responseFile != null && !responseFile.isEmpty()) {
             sources.add(read(responseFile, "answer:"));
         }
         return extract(sources);
+    }
+
+    void requireEnabled() {
+        extractor.requireEnabled();
     }
 
     HistoryParseView extract(List<HistorySource> sources) {

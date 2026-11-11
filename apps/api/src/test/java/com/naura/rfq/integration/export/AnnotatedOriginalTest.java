@@ -70,6 +70,25 @@ class AnnotatedOriginalTest {
         }
     }
 
+    @Test void indexedWordSourceKeepsAnAnswerOnTheReferencedIdenticalRow() throws Exception {
+        var original = new ByteArrayOutputStream();
+        try (var document = new XWPFDocument()) {
+            var table = document.createTable(2, 2);
+            for (var row : table.getRows()) {
+                row.getCell(0).setText("额定负载");
+                row.getCell(1).setText("5 kg");
+            }
+            document.write(original);
+        }
+        var result = AnnotatedOriginal.wordWithAnswers(original.toByteArray(), List.of(
+                new AnnotatedOriginal.Note("body/0/r1", "额定负载 5 kg", "答复：满足", true)));
+        try (var copy = new XWPFDocument(new ByteArrayInputStream(result))) {
+            var rows = copy.getTables().get(0).getRows();
+            assertThat(rows.get(0).getCell(0).getText()).isEqualTo("额定负载");
+            assertThat(rows.get(1).getCell(0).getText()).isEqualTo("额定负载\n答复：满足");
+        }
+    }
+
     @Test void pdfKeepsTheOriginalPagesAndAddsTheNoteOnItsSourcePage() throws Exception {
         var original = new ByteArrayOutputStream();
         try (var document = new PDDocument()) {

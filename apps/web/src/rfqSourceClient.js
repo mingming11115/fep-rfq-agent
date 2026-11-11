@@ -32,7 +32,7 @@ async function readParsedRows(projectId,file,run,api){
   total=result.totalPages||1;
   for(const row of result.list||[])if(row.documentId===file.backendDocumentId) { rows.push({
    id:row.id,backendDocumentId:row.documentId,clause:row.customerClauseNo||'',title:row.title||'',
-   original:row.originalText,requirementText:row.requirementText,sourceOriginal:row.originalText,
+   original:row.originalText,requirementText:row.requirementText,sourceOriginal:row.originalText,sourceRefs:row.sourceRefs,
    specification:readRequirementSpecification(row.metricsJson),
    source:file.name,sourceFileId:file.id,sourceVersion:file.version,sectionPath:row.sectionPath?[row.sectionPath]:[],
    category:'技术',status:'待确认',conclusion:'',draft:'',matchLevel:'none',score:0,evidence:'',

@@ -1,4 +1,4 @@
-import { makeSourceAnchor } from './documentAnchors.js';
+import { clauseSourceQuote, makeSourceAnchor } from './documentAnchors.js';
 
 export function sourcePartText(row, part = 'body') {
   if (part === 'heading') { return `${row.clause || '无编号'}　${row.title || ''}`; }
@@ -12,7 +12,7 @@ export function makeCommentDraft(row, selectedDraft) {
     quote: selectedDraft.quote || selectedDraft.anchor.locator.quote,
     anchor: { ...selectedDraft.anchor, locator: { ...selectedDraft.anchor.locator, quote: selectedDraft.quote || selectedDraft.anchor.locator.quote, textRange: range } },
   }; }
-  return { quote: row.sourceOriginal ?? row.original ?? '', anchor: makeSourceAnchor(row) };
+  return { quote: clauseSourceQuote(row), anchor: makeSourceAnchor(row) };
 }
 
 export function commentTextRange(row, comment, part = 'body') {

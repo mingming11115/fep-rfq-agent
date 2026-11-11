@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {craftClauseTargets} from './craftClauseTargets.js';
+
+test('Word targets keep the physical references for a clause combined by the model',()=>{
+  const source={projectId:'P',fileId:'F',sourceVersion:'1'};
+  const sourceRefs=[{anchor:'body/2',quote:'须支持自动上料。'},
+    {anchor:'body/7/r3',quote:'额定负载 5 kg'}];
+  const row={id:'R',projectId:'P',sourceFileId:'F',original:'须在 5 kg 额定负载下支持自动上料。',sourceRefs};
+  const [target]=craftClauseTargets(source,[row],'wordcraft');
+  assert.equal(target.quote,'须支持自动上料。');
+  assert.deepEqual(target.sourceRefs,sourceRefs);
+});
 test('repeated Word clauses use their distinct headings for native navigation',()=>{
   const source={projectId:'P',fileId:'F',sourceVersion:'1'};
   const rows=[{id:'R1',projectId:'P',sourceFileId:'F',clause:'P3',title:'Delivery pending',original:'Same words'},

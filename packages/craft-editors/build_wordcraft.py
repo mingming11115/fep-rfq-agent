@@ -128,7 +128,7 @@ def main():
     run([args.cargo, 'build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'wordcraft-web'], cwd=source, env=env)
     args.out.mkdir(parents=True, exist_ok=True)
     run([args.wasm_bindgen, target / 'wasm32-unknown-unknown' / 'release' / 'wordcraft-web.wasm', '--target', 'web', '--no-typescript', '--out-dir', args.out, '--out-name', 'wordcraft-classic'], env=env)
-    html = (source / 'apps/wordcraft-web/index.html').read_text()
+    html = (source / 'apps/wordcraft-web/index.html').read_text(encoding='utf-8')
     html = '\n'.join(line for line in html.splitlines() if 'data-trunk' not in line)
     html = html.replace('</head>', '''<link rel="icon" href="data:,">
 <script type="module">
@@ -146,7 +146,7 @@ try {
 }
 </script>
 </head>''')
-    (args.out / 'index.html').write_text(html)
+    (args.out / 'index.html').write_text(html, encoding='utf-8', newline='\n')
     for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE'):
         shutil.copy2(source / name, args.out / name)
     for notice in fonts.glob('fonts/*/OFL.txt'):
