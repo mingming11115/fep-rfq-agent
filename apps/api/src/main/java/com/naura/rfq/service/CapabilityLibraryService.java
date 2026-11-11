@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
+import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue;
+import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
 import com.naura.rfq.model.dto.CapabilityLibraryRequest;
 import com.naura.rfq.security.CurrentUser;
 import com.naura.rfq.service.CapabilityCatalog.Row;
@@ -44,6 +46,7 @@ public class CapabilityLibraryService {
     private final KnowledgePublicationAccess access;
     private final CapabilityCatalog catalog;
     private final CapabilityExcelParser excel;
+    private final KnowledgeIndexQueue index;
 
     public record ImportError(int rowNumber, String message) {}
     public record Imported(List<ObjectNode> items, List<Integer> skippedRows, List<ImportError> errors) {}
@@ -215,7 +218,20 @@ public class CapabilityLibraryService {
         }
         row.payload().put("status", "已发布").put("validity", "有效").put("publishedById", user.id())
                 .put("publishedAt", Instant.now().toString());
+        index.enqueue(Library.CAPABILITY, buId, row.id(), row.version(), indexProjection(buId, row));
         return catalog.update(user, buId, Table.CAPABILITY, row, "批准发布能力", reason).put("eligible", true);
+    }
+
+    private ObjectNode indexProjection(String buId, Row row) {
+        var payload = row.payload();
+        String description = "指标编码：%s\n配置：%s\n能力值：%s（%s）\n适用条件：%s".formatted(
+                payload.path("metricCode").asText(), payload.path("config").asText(), payload.path("value").asText(),
+                payload.path("valueType").asText(), payload.path("conditions").asText());
+        if (!payload.path("limits").asText().isBlank()) {
+            description += "\n限制：" + payload.path("limits").asText();
+        }
+        return json.createObjectNode().put("title", payload.path("metric").asText()).put("requirement_text", description)
+                .put("bu_id", buId).put("record_version", row.version());
     }
 
     private ObjectNode returnDraft(CurrentUser user, String buId, Row row, String reason) {
@@ -229,6 +245,7 @@ public class CapabilityLibraryService {
         requireState(active(row), "只有当前发布版本可以撤销");
         requireReason(reason);
         row.payload().put("status", "已撤销").put("validity", "已撤销");
+        index.enqueue(Library.CAPABILITY, buId, row.id(), row.version(), null);
         return catalog.update(user, buId, Table.CAPABILITY, row, "撤销能力版本", reason).put("eligible", false);
     }
 

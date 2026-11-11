@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -64,6 +65,12 @@ class CapabilityLibraryIntegrationTest {
         action(version, "publish", knowledgeOnly, 1).andExpect(status().isForbidden());
         action(version, "publish", author, 1).andExpect(status().isForbidden());
         action(version, "publish", reviewer, 1).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("已发布"));
+        var index = jdbc.queryForMap("select version,operation,payload from capability_index_sync where bu_id=? and reply_id=?", bu, id);
+        assertThat(index).containsEntry("version", 1).containsEntry("operation", "upsert");
+        var projection = json.readTree(index.get("payload").toString());
+        assertThat(projection.path("title").asText()).isEqualTo("定位精度");
+        assertThat(projection.path("requirement_text").asText()).contains("≤5 μm", "CFG-2", "硅材料；方法 M1");
+        assertThat(projection.has("evidenceRefs")).isFalse();
 
         var lookup = get(path + "/published").param("modelId", model).param("modelVersion", "1")
                 .param("processId", process).param("processVersion", "1").param("config", "CFG-2")
@@ -74,6 +81,9 @@ class CapabilityLibraryIntegrationTest {
         action(evidenceVersion, "revoke", reviewer, 1).andExpect(status().isOk());
         call(lookup, author).andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
         call(get(version), author).andExpect(status().isOk()).andExpect(jsonPath("$.data.eligible").value(false));
+        action(version, "revoke", reviewer, 2).andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("select operation,payload from capability_index_sync where bu_id=? and reply_id=?", bu, id))
+                .containsEntry("operation", "delete").containsEntry("payload", null);
     }
 
     @Test void historicalCandidatesInheritProjectScopeAndDoNotInventAnActualValue() throws Exception {

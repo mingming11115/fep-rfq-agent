@@ -102,7 +102,7 @@ flowchart TD
 
 ### 3.1 数据集与同步
 
-每个试点 BU 配置两套数据集。标准回复数据集（例如 `rfq.fep.standard-reply`）只接收 `standard-reply-record` 中发布的标准回复。历史 RFQ 数据集（例如 `rfq.fep.history-clause`）只接收 `history-rfq-record` 中已审核发布的历史条款版本。两套索引各自同步、各自回源。`X-API-Key` 通过服务端密钥配置注入。上线前用测试环境确认 API Key 权限、数据集、字段类型、过滤白名单和可用索引。
+每个试点 BU 分别配置标准回复、历史 RFQ 和能力边界数据集。`BU-FEP` 的默认名称为 `rfq.fep.standard-reply`、`rfq.fep.history-clause` 和 `rfq.fep.capability-boundary`，配置位于后端 `application.yml`。三类数据集各自接收对应业务表的已发布版本。能力边界的语义投影包含指标名称、配置、能力值、适用条件和限制。`X-API-Key` 通过服务端密钥配置注入。上线前用测试环境确认 API Key 权限、数据集、字段类型、过滤白名单和可用索引。
 
 | 投影字段 | 写入规则 |
 | --- | --- |

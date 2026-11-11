@@ -38,8 +38,9 @@ public class StandardReplyIndexWorker {
         if (!settings.enabled()) {
             return;
         }
-        sync(Library.STANDARD_REPLY, settings.datasets());
-        sync(Library.HISTORY_RFQ, settings.historyDatasets());
+        for (Library library : Library.values()) {
+            sync(library, settings.datasets(library));
+        }
     }
 
     private void sync(Library library, Map<String, String> datasets) {
@@ -96,10 +97,10 @@ public class StandardReplyIndexWorker {
                 ? new Outcome(true, result.jobId(), 0, null, 0)
                 : new Outcome(false, result.jobId(), work.attempts(), null, POLL_DELAY_SECONDS);
         } catch (StandardReplyIndexClient.Failure e) {
-            log.error("同步标准回复索引失败", e);
+            log.error("同步知识索引失败", e);
             return retry(work, e.getMessage(), e.resubmit() ? null : work.jobId());
         } catch (JsonProcessingException e) {
-            log.error("解析标准回复索引数据失败 errorType={}", e.getClass().getSimpleName());
+            log.error("解析知识索引数据失败 errorType={}", e.getClass().getSimpleName());
             return retry(work, "INVALID_PROJECTION", null);
         }
     }

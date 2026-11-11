@@ -93,6 +93,28 @@ class StandardReplyIndexClientTest {
     }
 
     @Test
+    void ingestsPublishedCapabilityInItsOwnDataset() throws Exception {
+        String dataset = "rfq.fep.capability-boundary";
+        String prefix = "rfq.standard-reply-index";
+        var properties = new MapConfigurationPropertySource(Map.of(
+            prefix + ".base-url", "http://127.0.0.1:" + server.getAddress().getPort(),
+            prefix + ".api-key", "test-index-key",
+            prefix + ".capability-datasets[BU-FEP]", dataset));
+        var settings = new Binder(properties).bind(prefix, Bindable.of(StandardReplyIndexProperties.class)).get();
+        var capabilityClient = new StandardReplyIndexClient(json, settings);
+        replies = List.of(new Reply(404, "{\"error\":{\"code\":\"DATASET_NOT_FOUND\"}}"),
+            new Reply(200, "{\"job_id\":\"job-cap\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"));
+        var projection = json.createObjectNode().put("title", "定位精度").put("requirement_text", "≤5 μm")
+            .put("bu_id", "BU-FEP").put("record_version", 1);
+
+        assertThat(capabilityClient.submit(dataset, "CAP-1", "upsert", projection, UPDATED_AT).complete()).isTrue();
+        assertThat(requests).extracting(Exchange::path).containsOnly("/api/v1/semantic-datasets/" + dataset + ":ingest");
+        JsonNode created = json.readTree(requests.get(1).body());
+        assertThat(created.at("/dataset_config/display_name").asText()).isEqualTo("机型能力边界");
+        assertThat(created.at("/records/0/data")).isEqualTo(projection);
+    }
+
+    @Test
     void rejectedPartialJobIsNotSearchableAndCanBeResubmitted() {
         replies = List.of(new Reply(200, """
             {"status":"partial_success","total_count":1,"succeeded_count":0,"failed_count":1,

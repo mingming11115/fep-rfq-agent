@@ -51,6 +51,8 @@ class DatabaseInit {
     private static final String V21_END = "-- RFQ_MIGRATION_V21_END";
     private static final String V22_START = "-- RFQ_MIGRATION_V22\n";
     private static final String V22_END = "-- RFQ_MIGRATION_V22_END";
+    private static final String V23_START = "-- RFQ_MIGRATION_V23\n";
+    private static final String V23_END = "-- RFQ_MIGRATION_V23_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -103,8 +105,11 @@ class DatabaseInit {
         var sourceRefs = resource("V22__word_requirement_sources.sql",
                 sql.substring(sql.indexOf(V22_START) + V22_START.length(), sql.indexOf(V22_END)),
                 "classpath:db/init.sql#V22");
+        var capabilityIndex = resource("V23__capability_index_sync.sql",
+                sql.substring(sql.indexOf(V23_START) + V23_START.length(), sql.indexOf(V23_END)),
+                "classpath:db/init.sql#V23");
         var resources = List.of(baseline, standardReplies, history, capability, match, workflow,
-                replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs);
+                replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs, capabilityIndex);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {
@@ -150,6 +155,9 @@ class DatabaseInit {
                             : hasTable(jdbc, "requirement_match_result") ? "14"
                             : hasColumn(jdbc, "capability_record", "source_fingerprint") ? "13"
                             : hasTable(jdbc, "history_rfq_index_sync") ? "12" : "11";
+                    if ("22".equals(version) && hasTable(jdbc, "capability_index_sync")) {
+                        version = "23";
+                    }
                     Flyway.configure().configuration(flyway.getConfiguration()).baselineVersion(version).load().baseline();
                 } else {
                     flyway.baseline();

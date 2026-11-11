@@ -38,6 +38,12 @@ rfq:
     base-url: ${RFQ_STANDARD_REPLY_INDEX_BASE_URL:}
     api-key: ${RFQ_STANDARD_REPLY_INDEX_API_KEY:}
     poll-interval-ms: ${RFQ_STANDARD_REPLY_INDEX_POLL_INTERVAL_MS:5000}
+    datasets:
+      "[BU-FEP]": rfq.fep.standard-reply
+    history-datasets:
+      "[BU-FEP]": rfq.fep.history-clause
+    capability-datasets:
+      "[BU-FEP]": rfq.fep.capability-boundary
   match:
     worker-enabled: ${RFQ_MATCH_WORKER_ENABLED:false}
     poll-interval-ms: ${RFQ_MATCH_POLL_INTERVAL_MS:3000}

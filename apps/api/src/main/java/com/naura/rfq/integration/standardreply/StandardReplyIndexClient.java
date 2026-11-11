@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.integration.ExternalCallLog;
+import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -13,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -99,10 +101,9 @@ public class StandardReplyIndexClient {
     }
 
     Delivery submit(String dataset, String replyId, String operation, JsonNode payload, Instant updatedAt) {
-        boolean history = settings.historyDatasets().containsValue(dataset);
-        if (!history && !settings.datasets().containsValue(dataset)) {
-            throw new Failure("DATASET_NOT_CONFIGURED", false);
-        }
+        Library library = Arrays.stream(Library.values())
+                .filter(candidate -> settings.datasets(candidate).containsValue(dataset))
+                .findFirst().orElseThrow(() -> new Failure("DATASET_NOT_CONFIGURED", false));
         var body = json.createObjectNode();
         ObjectNode record = body.putArray("records").addObject();
         record.put("id", replyId).put("op", operation).put("updated_at", updatedAt.toString());
@@ -118,7 +119,7 @@ public class StandardReplyIndexClient {
             if ("delete".equals(operation)) {
                 return new Delivery(true, null);
             }
-            addDatasetConfig(body, history);
+            addDatasetConfig(body, library.displayName);
             result = request("ingest", path, body);
         }
         if (result.status() != 202 && result.status() != 200) {
@@ -174,8 +175,8 @@ public class StandardReplyIndexClient {
         return projection;
     }
 
-    private void addDatasetConfig(ObjectNode body, boolean history) {
-        var config = body.putObject("dataset_config").put("display_name", history ? "历史 RFQ" : "RFQ 标准回复");
+    private void addDatasetConfig(ObjectNode body, String displayName) {
+        var config = body.putObject("dataset_config").put("display_name", displayName);
         config.putArray("embedding_fields").add("title").add("requirement_text");
         var advanced = config.putObject("advanced");
         advanced.putObject("field_types").put("title", "text").put("requirement_text", "text")

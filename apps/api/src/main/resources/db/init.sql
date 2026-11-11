@@ -433,6 +433,10 @@ alter table history_document
 alter table requirement add column source_refs_json json;
 -- RFQ_MIGRATION_V22_END
 
+-- RFQ_MIGRATION_V23
+create table capability_index_sync like standard_reply_index_sync;
+-- RFQ_MIGRATION_V23_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

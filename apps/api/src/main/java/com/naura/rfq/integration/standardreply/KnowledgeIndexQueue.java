@@ -12,12 +12,16 @@ public class KnowledgeIndexQueue {
     private final JdbcTemplate jdbc;
 
     public enum Library {
-        STANDARD_REPLY("standard_reply_index_sync"), HISTORY_RFQ("history_rfq_index_sync");
+        STANDARD_REPLY("standard_reply_index_sync", "RFQ 标准回复"),
+        HISTORY_RFQ("history_rfq_index_sync", "历史 RFQ"),
+        CAPABILITY("capability_index_sync", "机型能力边界");
 
         final String table;
+        final String displayName;
 
-        Library(String table) {
+        Library(String table, String displayName) {
             this.table = table;
+            this.displayName = displayName;
         }
     }
 
