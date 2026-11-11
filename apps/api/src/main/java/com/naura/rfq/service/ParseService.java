@@ -132,7 +132,7 @@ public class ParseService {
             if (reader instanceof DocxBlockReader && wordMarkdownExtractor.enabled()) {
                 phase = "markitdown";
                 try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
-                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks());
+                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks(), run.getId());
                 }
             }
             rawBlocks = wordMarkdown == null ? readBlocks(document, reader) : wordMarkdown.blocks();

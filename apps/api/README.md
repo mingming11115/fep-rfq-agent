@@ -98,7 +98,7 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 | RFQ_LLM_URL | 空 | **完整** Chat Completions URL，例如内网 `http://model-gateway:8000/v1/chat/completions` |
 | RFQ_LLM_MODEL | 空 | 模型名称，由实际网关提供 |
 | RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |
-| RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后在 `external.call.payload` 中记录 LLM 请求和响应正文，包含 RFQ 原文。 |
+| RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后记录 LLM 请求和响应正文，并保存项目 DOCX 转换后的 Markdown。两者均包含 RFQ 原文。 |
 | RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 30s | 连接及整次请求超时 |
 | RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 分批模型请求的字符数与条目数上限 |
 | RFQ_MARKITDOWN_PYTHON | python | 具备 MarkItDown DOCX 依赖的 Python 可执行文件 |
@@ -210,6 +210,8 @@ Compose 将原件和批阅稿保存在 `/app/data` 的命名卷内。数据库�
 在 `apps/api` 目录运行 `docker compose logs -f rfq-service` 查看运行日志。Compose 使用 Docker `local` 日志驱动，每个 RFQ 容器最多保留 5 个 20 MiB 的轮转文件，保留时长随日志量变化。API 响应头 `X-Request-Id` 可用于查询同次请求的访问日志和异常，访问日志记录路由模板、HTTP 状态和耗时。解析和比对任务可通过 `parseRunId` 关联，手工重跑请求可通过日志中的 `runId` 关联。
 
 搜索 `external.call` 可查看 LLM、OCR 和语义知识库的出站请求。通过 `callId` 关联同一次调用的请求、响应和传输失败。语义知识库的检索、写入和轮询分别标记为 `search`、`ingest` 和 `poll`。默认记录方法、目标主机、字节数、HTTP 状态和耗时。开启 `RFQ_LLM_LOG_PAYLOAD=true` 后，使用同一 `callId` 查找 LLM 的 `direction=request` 和 `direction=response` 正文。
+
+开启同一开关后，项目 DOCX 模型解析在转换完成时将带来源标记的完整 Markdown 保存到 `${RFQ_STORAGE_DIR}/parse-payloads/<parseRunId>.md`，默认目录为 `./data/rfq-files/parse-payloads/`。文件在模型调用和分批前保存，`document.parse.word.markdown.saved` 日志会记录实际路径。磁盘写入失败会记录 `document.parse.word.markdown.save_failed`，解析继续运行。
 
 ## 原生 Word/PDF 批阅与 ONLYOFFICE
 

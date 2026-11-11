@@ -216,12 +216,20 @@ class WordMarkdownExtractionTest {
         config.getWordMarkdown().setPython(System.getenv("RFQ_MARKITDOWN_PYTHON"));
         config.getLlm().setModel("test");
         var http = new ParseHttpClient(json);
-        var reader = new WordMarkdownReader(config, new DocxBlockReader(new OcrClient(config, http)));
-        var content = reader.read(path, 100);
+        Path storageRoot = temp.resolve("rfq-files");
+        var reader = new WordMarkdownReader(config, new DocxBlockReader(new OcrClient(config, http)), storageRoot.toString());
+        var content = reader.read(path, 100, "RUN");
         assertThat(content.issues()).isEmpty();
         assertThat(content.markdown()).contains("须支持自动上料", "5 kg", "限标准工况", "[S0]", "[S1]", "[S3]", "[S6]");
         assertThat(content.blocks().get(5).anchor()).isEqualTo("body/4");
         assertThat(Files.readAllBytes(path)).isEqualTo(original);
+        Path payloads = storageRoot.resolve("parse-payloads");
+        assertThat(payloads).doesNotExist();
+        config.getLlm().setLogPayload(true);
+        var loggedContent = reader.read(path, 100, "RUN-PAYLOAD");
+        Path payload = payloads.resolve("RUN-PAYLOAD.md");
+        assertThat(payload).isRegularFile();
+        assertThat(Files.readString(payload)).isEqualTo(loggedContent.markdown());
         var request = new AtomicReference<String>();
         var response = json.writeValueAsBytes(Map.of("choices", List.of(Map.of("message", Map.of("content", """
                     {"requirements":[{"title":"自动上料","requirementText":"标准工况下支持 5 kg 自动上料",
@@ -239,8 +247,8 @@ class WordMarkdownExtractionTest {
         try {
             config.getLlm().setUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/model");
             var rules = new RuleBasedExtractor(json);
-            var result = new WordMarkdownExtractor(config, http, rules).extract(content, "RUN");
-            assertThat(request.get()).isEqualTo(content.markdown());
+            var result = new WordMarkdownExtractor(config, http, rules).extract(loggedContent, "RUN-PAYLOAD");
+            assertThat(request.get()).isEqualTo(Files.readString(payload));
             assertThat(result.issues()).isEmpty();
             assertThat(result.requirements().get(0).sourceRefs()).containsExactly(
                     new SourceRef("body/1", "须支持自动上料"), new SourceRef("body/2/r1", "额定负载 5 kg"),

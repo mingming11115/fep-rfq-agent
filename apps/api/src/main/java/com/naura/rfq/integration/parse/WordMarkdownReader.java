@@ -18,27 +18,34 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFAbstractFootnoteEndnote;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 public class WordMarkdownReader {
-    private final ParseIntegrationProperties.WordMarkdown settings;
+    private final ParseIntegrationProperties properties;
     private final DocxBlockReader word;
+    private final Path payloadDirectory;
 
-    public WordMarkdownReader(ParseIntegrationProperties properties, DocxBlockReader word) {
-        this.settings = properties.getWordMarkdown();
+    public WordMarkdownReader(ParseIntegrationProperties properties, DocxBlockReader word,
+            @Value("${rfq.storage-dir:./data/rfq-files}") String storageDirectory) {
+        this.properties = properties;
         this.word = word;
+        this.payloadDirectory = Path.of(storageDirectory).toAbsolutePath().normalize().resolve("parse-payloads");
     }
 
     public record Content(String markdown, List<RawBlock> blocks, Set<Integer> availableSources,
             List<String> issues) { }
 
-    public Content read(Path original, int maxBlocks) throws IOException, DocumentReadException, InterruptedException {
+    public Content read(Path original, int maxBlocks, String runId)
+            throws IOException, DocumentReadException, InterruptedException {
         Path marked = Files.createTempFile("rfq-marked-", ".docx");
         try {
             var sources = new ArrayList<RawBlock>();
@@ -55,9 +62,31 @@ public class WordMarkdownReader {
             if (sources.size() > maxBlocks) {
                 throw new DocumentReadException("Word 来源数量超过上限 " + maxBlocks + "，请拆分文档后重试");
             }
-            return mapMarkdown(convert(marked), prefix, sources);
+            Content content = mapMarkdown(convert(marked), prefix, sources);
+            if (properties.getLlm().isLogPayload()) {
+                savePayload(runId, content.markdown());
+            }
+            return content;
         } finally {
             Files.deleteIfExists(marked);
+        }
+    }
+
+    private void savePayload(String runId, String markdown) {
+        Path target = payloadDirectory.resolve(runId + ".md");
+        try {
+            Files.createDirectories(payloadDirectory);
+            Path pending = Files.createTempFile(payloadDirectory, "markdown-", ".tmp");
+            try {
+                Files.writeString(pending, markdown);
+                Files.move(pending, target);
+            } finally {
+                Files.deleteIfExists(pending);
+            }
+            log.info("document.parse.word.markdown.saved parseRunId={} path={}", runId, target);
+        } catch (IOException exception) {
+            log.warn("document.parse.word.markdown.save_failed parseRunId={} path={} errorType={}",
+                    runId, target, exception.getClass().getSimpleName());
         }
     }
 
@@ -164,6 +193,7 @@ public class WordMarkdownReader {
     }
 
     private String convert(Path input) throws IOException, DocumentReadException, InterruptedException {
+        var settings = properties.getWordMarkdown();
         Path output = Files.createTempFile("rfq-markdown-", ".md");
         try {
             Process process;
