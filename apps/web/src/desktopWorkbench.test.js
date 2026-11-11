@@ -56,3 +56,33 @@ test('desktop workbench defaults and resets to sixty percent while preserving un
     assert.ok(node.querySelector('iframe')===frame);assert.equal(h.calls.filter(message=>message.type==='wordcraft:open').length,1);assert.equal(node.querySelector('.response-reference-details textarea'),null);assert.equal(window.__rfqOfficeUnsaved.dirty,true);assert.equal(h.props().requirements[0].id,'R');assert.equal(h.writes.length,0);assert.ok(h.requests.every(request=>request.method==='GET'));
   }finally{await h.close();}
 });
+
+test('manual clause navigation updates the card and source selection while a transition is still running', async () => {
+  const h = await harness(1280);
+  const { node, button, click } = h;
+  const [first] = h.props().requirements;
+  const second = { ...first, id: 'R2', clause: '1.2', title: 'Second clause', original: 'Second source' };
+  const third = { ...first, id: 'R3', clause: '1.3', title: 'Third clause', original: 'Third source' };
+  h.setProps({ requirements: [first, second, third] });
+  try {
+    await h.render();
+    const frame = node.querySelector('iframe');
+    const card = node.querySelector('.response-current-card');
+    card.animate = () => {
+      let finish;
+      const finished = new Promise(resolve => { finish = resolve; });
+      return { finished, cancel: finish };
+    };
+
+    for (const [label, row] of [['下一条', second], ['下一条', third], ['上一条', second]]) {
+      await click(button(label));
+      assert.equal(card.querySelector('h2').textContent, row.title);
+      assert.equal(h.navigations.at(-1)?.[1], row.id);
+      assert.equal(node.querySelector('[data-response-note]')?.dataset.responseNote, row.id);
+      assert.equal(button('下一条').disabled, false);
+      assert.equal(node.querySelector('iframe'), frame);
+    }
+  } finally {
+    await h.close();
+  }
+});

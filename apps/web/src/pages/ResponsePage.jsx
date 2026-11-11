@@ -144,7 +144,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [cardBusy, setCardBusy] = useState(false);
   const cardRef = useRef(null), cardBusyRef = useRef(false), aliveRef = useRef(true), cardAnimation = useRef(null);
   useContentTransition(detailSideRef, detailTab, { kind:'tab',position:['response','activity'].indexOf(detailTab) });
-  useContentTransition(cardRef, active?.id, { kind: 'card-in', enabled: !cardBusy });
+  useContentTransition(cardRef, active?.id, { kind: 'rfq-tab', enabled: !cardBusy });
   useEffect(() => { cardRef.current?.querySelector('.response-editor-body')?.scrollTo({ top: 0 }); }, [active?.id]);
   const issueGuardRef = useRef(null);
   const registerIssueGuard = useCallback(guard => { issueGuardRef.current = guard; return () => { if (issueGuardRef.current === guard) { issueGuardRef.current = null; } }; }, []);
@@ -232,9 +232,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   function requestTransition(next) { if (cardBusyRef.current) { return false; } return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
     const officeSource = sourceRow ? makeSourceAnchor({ ...sourceRow, projectId: project.id }) : undefined;
-    const proceed = () => sourceRow && sourceRow.id !== active?.id && detailTab === 'response' && cardRef.current ? fadeToResponse(next) : next();
-    const allowed = !window.__rfqRequestNavigation || window.__rfqRequestNavigation(proceed, { officeSource });
-    if (allowed) { proceed(); }
+    const allowed = !window.__rfqRequestNavigation || window.__rfqRequestNavigation(next, { officeSource });
+    if (allowed) { next(); }
     return allowed;
   }
   function revealCard(row) {
@@ -291,27 +290,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     try { await animation.finished; } catch (error) { console.error('等待应答卡片动画结束失败', error); }
     animation.cancel();
     cardAnimation.current = null;
-  }
-  async function fadeToResponse(next) {
-    if (cardBusyRef.current || !aliveRef.current) { return; }
-    cardBusyRef.current = true;
-    setCardBusy(true);
-    try {
-      await animateCardMotion();
-      if (!aliveRef.current) { return; }
-      // The navigation callback has already passed the unsaved-change guard.
-      // Allow its synchronous route update, then lock input during the fade in.
-      cardBusyRef.current = false;
-      flushSync(next);
-      cardBusyRef.current = true;
-      await animateCardMotion(1, true);
-    } catch (error) {
-      console.error('切换应答界面失败', error);
-      if (aliveRef.current) { setError(error.message || '切换失败，请重试。'); }
-    } finally {
-      cardBusyRef.current = false;
-      if (aliveRef.current) { setCardBusy(false); }
-    }
   }
   async function advanceCard(nextId, direction = 1) {
     if (!aliveRef.current) { return; }

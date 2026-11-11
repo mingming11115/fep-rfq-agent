@@ -12,7 +12,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
   let alive=true,ready=false,file=null,sent=false,boundToken='',snapshot=null,busy=false,scheduled=false;
   let startupTimer=null;
   const clearStartupTimer=()=>{clearTimeout(startupTimer);startupTimer=null;};
-  let configuration='',failedConfiguration='',minimumApplied=0,lastMutatingSequence=0,lastActive=null,lastBusinessSelection='',lastState='';
+  let configuration='',failedConfiguration='',requestedSelection,minimumApplied=0,lastMutatingSequence=0,lastActive=null,lastBusinessSelection='',lastState='';
   const associations={},failures=new Map(),draftNativeKeys=new Set(),newDraftKeys=new Set(),freshNativeKeys=new Set();let discussion=null,lastUnlinked='';
   const discussionScope=()=>JSON.stringify([reference.id,boundToken]);
   function clearUnlinked(){if(lastUnlinked){lastUnlinked='';onUnlinkedComment?.({scope:discussionScope(),note:null});}}
@@ -127,16 +127,16 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     const key=JSON.stringify(value);if(key!==lastState){lastState=key;onState(value);}
   }
   function schedule(){if(!alive||scheduled) { return; } scheduled=true;queueMicrotask(()=>{scheduled=false;void pump();});}
-  function configurationFor(){
-    const c=getContext();
+  function configurationFor(c){
+    const rowsById=new Map(c.rows.map(row=>[row.id,row]));
     const targets=craftClauseTargets(source,c.rows,engine,c.sourceBlocks).map(({anchor,tag,...target})=>{
-      const row=c.rows.find(r=>r.id===target.id);
+      const row=rowsById.get(target.id);
       const description=engine==='wordcraft'&&row?.requirementText?{description:row.requirementText}:{};
       return {...target,title:row?.title||'',...description,page:Number.isFinite(Number(anchor.locator.page))?Math.max(0,Number(anchor.locator.page)-1):null,editable:Boolean(c.canEditRow?.(row))};
     });
     const linked=(c.comments||[]).filter(comment=>comment.nativeRef?.documentId===reference.id&&comment.nativeRef.key&&!comment.nativeDeleted).map(comment=>({nativeKey:comment.nativeRef.key,clauseId:comment.anchor.requirementId,...permissions({nativeKey:comment.nativeRef.key})}));
     for(const [nativeKey,clauseId] of Object.entries(associations))if(!linked.some(item=>item.nativeKey===nativeKey)) { linked.push({nativeKey,clauseId}); }
-    return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),externalOutline:true,externalTools:engine==='wordcraft',targets,selectedId:c.selectedAnchor?.requirementId,associations:linked};
+    return {editable:targets.some(t=>t.editable)||Boolean(c.editDocument),editDocument:Boolean(c.editDocument),externalOutline:true,externalTools:engine==='wordcraft',targets,associations:linked};
   }
   async function command(action,params){
     const pending=surface.command(action,params);minimumApplied=Math.max(minimumApplied,surface.sequence);
@@ -146,12 +146,21 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     if(!alive||busy||!snapshot||!boundToken||(snapshot.applied||0)<minimumApplied) { return; }
     busy=true;
     try{
-      const config=configurationFor(),key=JSON.stringify(config);
-      if(configuration!==key){
-        if(failedConfiguration===key) { return; }
-        try{await command('configure',config);configuration=key;failedConfiguration='';}
-        catch(error){ console.error('配置 Craft 批注同步失败', error); failedConfiguration=key;throw error;}
-        if(!alive||configuration!==JSON.stringify(configurationFor())||(snapshot.applied||0)<minimumApplied) { return; }
+      const current=getContext(),selectedId=current.selectedAnchor?.requirementId;
+      const config=configurationFor(current),key=JSON.stringify(config);
+      const needsConfiguration=configuration!==key;
+      if(needsConfiguration||requestedSelection!==selectedId){
+        if(needsConfiguration&&failedConfiguration===key) { return; }
+        requestedSelection=selectedId;
+        if(needsConfiguration){
+          try{await command('configure',{...config,selectedId});configuration=key;failedConfiguration='';}
+          catch(error){ console.error('配置 Craft 批注同步失败', error); failedConfiguration=key;throw error;}
+        }else if(selectedId&&snapshot.source?.selectedId!==selectedId){
+          await command('locate',{id:selectedId});
+        }
+        if(!alive||(snapshot.applied||0)<minimumApplied) { return; }
+        const latest=getContext();
+        if(configuration!==JSON.stringify(configurationFor(latest))||selectedId!==latest.selectedAnchor?.requirementId) { return; }
       }
       const mergeContext={...context(),snapshot},merged=mergeNativeComments(mergeContext);
       if(merged.changed) { publish(comments=>mergeNativeComments({...mergeContext,comments}).comments); }
@@ -183,8 +192,13 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     }catch(error){ console.error('同步 Craft 批注失败', error); if(alive) { onError(error.message); }}
     finally{
       busy=false;state();
-      const nextConfiguration=alive?JSON.stringify(configurationFor()):'';
-      if(alive&&snapshot&&(snapshot.applied||0)>=minimumApplied&&configuration!==nextConfiguration&&failedConfiguration!==nextConfiguration) { schedule(); }
+      if(alive&&snapshot&&(snapshot.applied||0)>=minimumApplied){
+        const latest=getContext(),nextConfiguration=JSON.stringify(configurationFor(latest));
+        const needsSync=configuration!==nextConfiguration
+          ? failedConfiguration!==nextConfiguration
+          : requestedSelection!==latest.selectedAnchor?.requirementId;
+        if(needsSync) { schedule(); }
+      }
     }
   }
   function sendFile(){
@@ -216,7 +230,11 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     clearStartupTimer();boundToken=payload.document;
     const previous=snapshot;snapshot=payload;
     surface.receive(kind,{...payload,notes:payload.notes.map(note=>({...note,...permissions(note)}))});
-    if(configuration&&payload.source?.status==='matched'&&payload.source.selectedId!==getContext().selectedAnchor?.requirementId){
+    // A new command sequence can report a location requested by the host.
+    // Only selection changes within the current sequence come from the editor.
+    const editorSelectedClause=previous&&payload.applied===previous.applied&&(payload.applied||0)>=minimumApplied
+      &&payload.source?.selectedId!==previous.source?.selectedId;
+    if(configuration&&editorSelectedClause&&payload.source?.status==='matched'&&payload.source.selectedId!==getContext().selectedAnchor?.requirementId){
       const row=getContext().rows.find(row=>row.id===payload.source.selectedId);
       if(row&&onSelectAnchor(makeSourceAnchor(row))===false) { void command('locate',{id:getContext().selectedAnchor?.requirementId}).catch((error)=>{ console.error('恢复条款定位失败', error); }); }
     }

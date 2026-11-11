@@ -248,12 +248,19 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
       {sourceRefs.map((ref,index)=><Button key={ref.anchor} size="small" title={ref.quote} disabled={!canLocate||locating}
         onClick={()=>locateClause(targetId,index)}>来源 {index+1}</Button>)}
     </div>}
-    {showLocationNotice&&<div className="office-clause-status" data-clause-status={sourceStatus} aria-label="定位结果"><span role="status">{locationText}</span>{sourceStatus!=='matched'&&<div className="office-actions"><Button size="small" disabled={locating} loading={locating} onClick={()=>locateClause()}>重新定位</Button></div>}</div>}
     <div className="craft-native-workspace" hidden={!bytes}>
       <AnnotationFilterView.Provider value={Boolean(bytes)}>
       <div className="word-classic-document review-tools" ref={tools}/>
       <div className="craft-editor-and-advice">
-      <div className="craft-editor-viewport"><iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/><div className="word-classic-document original-comments" ref={overlay}/>{!editorState.ready&&!error&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}</div>
+      <div className="craft-editor-viewport">
+        <iframe key={frameEpoch} ref={frame} title={meta?.fileType==='pdf'?'PDF 原文与统一批注':'Word 原文与统一批注'} allow="fullscreen; clipboard-read; clipboard-write"/>
+        <div className="word-classic-document original-comments" ref={overlay}/>
+        {!editorState.ready&&!error&&<div className="office-loading"><Spin/><span>正在打开原文件…</span></div>}
+        {showLocationNotice&&<div className="office-clause-status craft-location-notice" data-clause-status={sourceStatus} aria-label="定位结果">
+          <span role="status">{locationText}</span>
+          {sourceStatus!=='matched'&&<div className="office-actions"><Button size="small" disabled={locating} loading={locating} onClick={()=>locateClause()}>重新定位</Button></div>}
+        </div>}
+      </div>
       <CraftResponseAdvice key={craftSourceKey(source)} showResponses={showResponses} nativeNotes={editorState.nativeNotes} nativeActiveId={editorState.nativeActiveId} onOpenNativeComment={key=>editor.current?.openFileComment(key,{locate:true})} rows={rows} responsePreview={responsePreview} activeId={selectedAnchor?.requirementId} geometry={editorState.geometry} frame={frame} onSelectAnchor={anchor=>{const allowed=onSelectAnchor?.(anchor);if(allowed!==false&&editorState.ready) { void locateClause(anchor.requirementId); } return allowed;}} onQuote={onQuote} canEditRow={canEditRow}/>
       </div>
       </AnnotationFilterView.Provider>

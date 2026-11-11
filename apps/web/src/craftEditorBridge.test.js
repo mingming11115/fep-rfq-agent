@@ -28,12 +28,24 @@ test('project editor coordinates native and collaboration comments within one so
     {id:'R2',projectId:'P',sourceFileId:'F',sourceVersion:'V1',sourcePage:2,clause:'2',original:'Other source'}];
   let context={rows,comments:[],people:[user],canEditRow:row=>row.id==='R1',editDocument:false,selectedAnchor:makeSourceAnchor(rows[0])};
   let bridge,notes=[],nextId=10,applied=0,configureFailures=0,outlineVisible=false,editorToolsVisible=false,dirtyCount=0;const calls=[],states=[],errors=[],selected=[],files=[];
+  let selectedId='R1',holdLocation=false,finishLocation;
   const frame=document.getElementById('word-frame');
-  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,editorToolsControlled:true,editorToolsVisible,headingOutline:{revision:7,items:[{index:0,level:0,text:'Real heading'}]},pages:[],clip:null,active:null,source:{selectedId:'R1',status:'matched'},notes:structuredClone(notes)});
+  const snapshot=()=>({document:'native-session',fileName:'real.docx',applied,complete:true,author:'Alex',editable:true,formatting:false,outlineVisible,editorToolsControlled:true,editorToolsVisible,headingOutline:{revision:7,items:[{index:0,level:0,text:'Real heading'}]},pages:[],clip:null,active:null,source:{selectedId,status:'matched'},notes:structuredClone(notes)});
   const send=(type,data={},overrides={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+type,...data},...overrides}));
   const native={postMessage(message){
     calls.push(message);if(message.type==='wordcraft:open'){queueMicrotask(()=>send('reviewState',{payload:JSON.stringify(snapshot())}));return;}
-    if(message.type!=='wordcraft:review') { return; } const request=JSON.parse(message.payload);applied=request.request;let result={};
+    if(message.type!=='wordcraft:review') { return; } const request=JSON.parse(message.payload);let result={};
+    if(['configure','locate'].includes(request.action)&&holdLocation){
+      holdLocation=false;
+      finishLocation=()=>{
+        applied=request.request;
+        selectedId=request.params.selectedId??request.params.id;
+        send('reviewResult',{payload:JSON.stringify({request:request.request,ok:true,result:{}})});
+        send('reviewState',{payload:JSON.stringify(snapshot())});
+      };
+      return;
+    }
+    applied=request.request;
     if(request.action==='outline') { outlineVisible=request.params.visible; }
     if(request.action==='tools') { editorToolsVisible=request.params.visible; }
     if(request.action==='configure'&&configureFailures>0){
@@ -41,6 +53,8 @@ test('project editor coordinates native and collaboration comments within one so
       queueMicrotask(()=>{send('reviewResult',{payload:JSON.stringify({request:request.request,ok:false,error:'Configuration rejected'})});send('reviewState',{payload:JSON.stringify(snapshot())});});
       return;
     }
+    if(request.action==='configure') { selectedId=request.params.selectedId; }
+    if(request.action==='locate') { selectedId=request.params.id; }
     if(request.action==='upsert'){
       const p=request.params;let note=notes.find(n=>n.id===p.id);
       if(!note){const id=nextId++;note={id,nativeKey:'word:'+id,color:0,ranges:[],replies:[]};notes.push(note);}
@@ -70,6 +84,35 @@ test('project editor coordinates native and collaboration comments within one so
     assert.equal(configure.params.targets[0].page,0);assert.equal(configure.params.targets[0].editable,true);assert.equal(configure.params.targets[1].editable,false);
     assert.equal(configure.params.targets[0].title,'Safety');
     assert.equal(configure.params.targets[0].description,'Check the door interlock');
+  });
+  await t.test('delayed host locations cannot undo a newer clause selection, while native selection still navigates',async()=>{
+    holdLocation=true;
+    context={...context,selectedAnchor:makeSourceAnchor(rows[1])};
+    bridge.refresh();await tick();
+    assert.equal(typeof finishLocation,'function');
+    context={...context,selectedAnchor:makeSourceAnchor(rows[0])};
+    bridge.refresh();await tick();
+    finishLocation();await tick();
+
+    assert.deepEqual(selected,[],'the delayed R2 location must not select R2 again');
+    assert.equal(states.at(-1).source.selectedId,'R1');
+    selectedId='R2';
+    send('reviewState',{payload:JSON.stringify(snapshot())});await tick();
+    assert.deepEqual(selected,['R2'],'selecting R2 inside the editor still navigates');
+    selectedId='R1';
+    send('reviewState',{payload:JSON.stringify(snapshot())});await tick();
+  });
+  await t.test('switching clauses in the same file reuses the document configuration',async()=>{
+    const before=calls.length;
+    for(const row of [rows[1],rows[0]]){
+      context={...context,selectedAnchor:makeSourceAnchor(row)};
+      bridge.refresh();await tick();
+      assert.equal(states.at(-1).source.selectedId,row.id);
+    }
+    assert.deepEqual(calls.slice(before).map(call=>{
+      const {action,params}=JSON.parse(call.payload);
+      return {action,params};
+    }),[{action:'locate',params:{id:'R2'}},{action:'locate',params:{id:'R1'}}]);
   });
   await t.test('a separate outline changes viewing state without dirtying or saving the document',async()=>{
     const before=dirtyCount;
