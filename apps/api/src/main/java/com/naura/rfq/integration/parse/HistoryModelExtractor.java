@@ -58,14 +58,31 @@ public class HistoryModelExtractor {
         List<String> encoded = new ArrayList<>();
         int chars = 2;
         boolean accepted = false;
-        for (Source source : sources) {
+        for (int index = 0; index < sources.size(); index++) {
+            Source source = sources.get(index);
             String entry = json.valueToTree(source).toString();
             if (entry.length() + 2 > maxChars) {
                 issues.add(source.anchor() + "：原文超过 LLM 单批上限，待人工核对");
                 continue;
             }
-            if (!batch.isEmpty() && (batch.size() >= maxBlocks || chars + entry.length() + 1 > maxChars)) {
-                accepted |= extractBatch(batch, encoded, companion, clauses, metadata, issues);
+            int charsWithSource = chars + entry.length() + 1;
+            boolean batchFull = batch.size() >= maxBlocks || charsWithSource > maxChars;
+            if (!companion && !batch.isEmpty() && !batchFull && index + 1 < sources.size()
+                    && adjacentParagraphs(source, sources.get(index + 1))) {
+                int followingChars = json.valueToTree(sources.get(index + 1)).toString().length() + 1;
+                // Start a new batch if these paragraphs fit together only in an empty batch.
+                batchFull = entry.length() + followingChars + 2 <= maxChars
+                        && (batch.size() + 1 == maxBlocks || charsWithSource + followingChars > maxChars);
+            }
+            if (!batch.isEmpty() && batchFull) {
+                int primaryCount = batch.size();
+                Source last = batch.get(primaryCount - 1);
+                if (!companion && primaryCount < maxBlocks && charsWithSource <= maxChars
+                        && adjacentParagraphs(last, source)) {
+                    batch.add(source);
+                    encoded.add(entry);
+                }
+                accepted |= extractBatch(batch, encoded, primaryCount, companion, clauses, metadata, issues);
                 batch.clear();
                 encoded.clear();
                 chars = 2;
@@ -75,7 +92,7 @@ public class HistoryModelExtractor {
             encoded.add(entry);
         }
         if (!batch.isEmpty()) {
-            accepted |= extractBatch(batch, encoded, companion, clauses, metadata, issues);
+            accepted |= extractBatch(batch, encoded, batch.size(), companion, clauses, metadata, issues);
         }
         if (!accepted && !companion) {
             throw new BusinessException(422, "历史 RFQ 的 LLM 未返回可用的抽取结果，请检查模型配置和原文");
@@ -84,6 +101,11 @@ public class HistoryModelExtractor {
             issues.add("LLM 未识别到历史条款，待人工核对");
         }
         return clauses;
+    }
+
+    private static boolean adjacentParagraphs(Source first, Source second) {
+        return second.source() == first.source() + 1 && first.tableHeader() == null && second.tableHeader() == null
+                && first.sectionPath().equals(second.sectionPath());
     }
 
     private List<Source> sources(List<RawBlock> blocks, String prefix, List<String> issues) {
@@ -115,7 +137,7 @@ public class HistoryModelExtractor {
         return sources;
     }
 
-    private boolean extractBatch(List<Source> batch, List<String> encoded, boolean companion,
+    private boolean extractBatch(List<Source> batch, List<String> encoded, int primaryCount, boolean companion,
             List<HistoryClause> clauses, Map<String, String> metadata, List<String> issues) {
         String anchor = batch.get(0).anchor();
         try {
@@ -123,6 +145,10 @@ public class HistoryModelExtractor {
             String task = companion
                     ? "本文件是配套答复，只提取已有答复。source 指向答复原文，requirement 留空。"
                     : "本文件是历史 RFQ，提取客户要求和对应的原有答复。source 指向客户要求。";
+            if (primaryCount < batch.size()) {
+                task += "source=" + batch.get(primaryCount).source()
+                        + " 的末尾段落只用于判断是否包含对应答复，可以引用为 answerSource，不输出为条款。";
+            }
             var request = Map.of("model", config.getModel(), "stream", false, "messages", List.of(
                     Map.of("role", "system", "content", PROMPT + task),
                     Map.of("role", "user", "content", "[" + String.join(",", encoded) + "]")));
@@ -135,12 +161,15 @@ public class HistoryModelExtractor {
             Map<Integer, JsonNode> selected = new HashMap<>();
             for (JsonNode row : output.path("clauses")) {
                 Source source = reference(row.path("source"), byIndex);
+                if (source.source() > batch.get(primaryCount - 1).source()) {
+                    continue;
+                }
                 if (selected.putIfAbsent(source.source(), row) != null) {
                     throw new IllegalArgumentException("重复的原文来源");
                 }
             }
             List<HistoryClause> parsed = new ArrayList<>();
-            for (Source source : batch) {
+            for (Source source : batch.subList(0, primaryCount)) {
                 JsonNode row = selected.get(source.source());
                 if (row != null) {
                     parsed.add(clause(row, source, byIndex, companion, clauses.size() + parsed.size()));

@@ -18,6 +18,8 @@ import java.util.Map;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
@@ -85,6 +87,48 @@ class HistoryExtractorTest {
     @Test void historyRejectsParsingWhenBothExtractorsAreDisabled() {
         historySettings(false, false);
         assertThatThrownBy(() -> history.extract(List.of(), List.of())).hasMessageContaining("至少启用");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"2, 16000", "20, 390"})
+    void historyModelCanMatchTheNextParagraphAcrossABatchBoundary(int maxBlocks, int maxChars) {
+        historySettings(false, true);
+        properties.getLlm().setModel("history-test");
+        properties.getLlm().setBatchBlocks(maxBlocks);
+        properties.getLlm().setBatchChars(maxChars);
+        var parser = withClient(new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) throws Exception {
+                String content = json.valueToTree(body).path("messages").path(1).path("content").asText();
+                var input = json.readTree(content);
+                assertThat(input.size()).isLessThanOrEqualTo(maxBlocks);
+                assertThat(content.length()).isLessThanOrEqualTo(maxChars);
+                var clauses = json.createArrayNode();
+                for (var source : input) {
+                    switch (source.path("source").asInt()) {
+                        case 0 -> clauses.addObject().put("source", 0).put("clauseNo", "1").put("requirement", "设备须提供说明书。");
+                        case 1 -> {
+                            var requirement = clauses.addObject().put("source", 1).put("clauseNo", "2")
+                                    .put("requirement", "设备须支持紧急停机。");
+                            if (input.findValuesAsText("text").contains("=> Comply")) {
+                                requirement.put("answer", "Comply").put("answerSource", 2);
+                            }
+                        }
+                        case 3 -> clauses.addObject().put("source", 3).put("clauseNo", "3").put("requirement", "设备须记录报警。");
+                    }
+                }
+                String reply = json.createObjectNode().set("clauses", clauses).toString();
+                return json.valueToTree(Map.of("choices", List.of(Map.of("message", Map.of("content", reply)))));
+            }
+        });
+        var layout = new RawBlock.ParagraphLayout(720, 0, null, 0);
+        var result = parser.extract(List.of(
+                RawBlock.wordParagraph(0, "1. 设备须提供说明书。", "安全", "body/0", layout),
+                RawBlock.wordParagraph(1, "2. 设备须支持紧急停机。", "安全", "body/1", layout),
+                RawBlock.wordParagraph(2, "=> Comply", "安全", "body/2", layout),
+                RawBlock.wordParagraph(3, "3. 设备须记录报警。", "安全", "body/3", layout)), List.of());
+
+        assertThat(result.clauses()).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
+                .containsExactly(tuple("1", "", ""), tuple("2", "Comply", "main:body/2"), tuple("3", "", ""));
     }
 
     @Test void historyModelFailureDoesNotUseDisabledRules() {
