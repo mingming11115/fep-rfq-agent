@@ -74,6 +74,12 @@ class StandardReplyIntegrationTest {
                 .andExpect(jsonPath("$.data.validity").value("被替代"));
         action(next, "revoke", fixture.reviewer(), 3, "口径失效").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("已撤销"));
+        action(next, "delete", fixture.author(), 4, "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("已删除"));
+        call(get(path.replace("/standard-replies", "/resources")), fixture.author()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.knowledge.length()").value(1))
+                .andExpect(jsonPath("$.data.knowledge[0].version").value(1))
+                .andExpect(jsonPath("$.data.knowledge[0].validity").value("被替代"));
         assertThat(jdbc.queryForMap("select version, operation from standard_reply_index_sync where bu_id=? and reply_id=?",
                 fixture.bu(), id)).containsEntry("version", 2).containsEntry("operation", "delete");
     }

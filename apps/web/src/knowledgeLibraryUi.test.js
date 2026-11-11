@@ -26,6 +26,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
   const draft={buId:'BU',scope:'BU共享',version:1,revision:0,status:'草稿'};
   const reply={...draft,id:'R',type:'standard',title:'实际导入的标准回复',requirement:'定位',answer:'支持',conditions:'工况',source:'RFQ-陌生项目.xlsx'};
   const unwantedReply={...reply,id:'R2',title:'误导入的标准回复'};
+  const revokedReply={...reply,id:'R3',title:'已撤销的标准回复',status:'已撤销',revision:3};
   const historyDoc={...draft,id:'D',name:'后端历史原件.docx',sourceType:'history-upload',createdAt:'2026-11-11T09:00:00Z',parseStatus:'complete',sources:[{name:'原件',prefix:'main:'}]};
   const oldHistory={...historyDoc,id:'A',name:'较早的历史 RFQ.docx',createdAt:'2026-11-10T09:00:00Z'};
   const clause={...draft,id:'H',type:'history',documentId:'D',title:'历史条款',requirement:'定位',originalText:'3.2 原文定位',requirementAnchor:'main:body/1',answer:'已确认',status:'待审核',submitterId:'someone-else',clauseNo:'3.2'};
@@ -67,8 +68,11 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
           resources.historyDocuments=[oldHistory,result];historyParseOutcome=null;
         }
         data=resources;break;
-      case base+'/standard-replies/import':resources.knowledge=[reply,unwantedReply];data={items:[reply,unwantedReply],skippedRows:[4],errors:[{rowNumber:6,message:'缺少答复'}]};break;
-      case base+'/standard-replies/R2/versions/1/delete':resources.knowledge=[reply];data={...unwantedReply,status:'已删除',revision:1};break;
+      case base+'/standard-replies/import':resources.knowledge=[reply,unwantedReply,revokedReply];data={items:[reply,unwantedReply],skippedRows:[4],errors:[{rowNumber:6,message:'缺少答复'}]};break;
+      case base+'/standard-replies/R2/versions/1/delete':resources.knowledge=[reply,revokedReply];data={...unwantedReply,status:'已删除',revision:1};break;
+      case base+'/standard-replies/R3/versions/1/delete':
+        assert.equal(JSON.parse(request.body).revision,3);
+        resources.knowledge=[reply];data={...revokedReply,status:'已删除',revision:4};break;
       case base+'/standard-replies/R/versions/1/submit':data={...reply,status:'待审核',revision:1};resources.knowledge=[data];break;
       case base+'/history-rfq/import':
         await historyImportGate;
@@ -132,13 +136,17 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     assert.match(document.body.textContent,/第 6 行 · 缺少答复/);
     await click('完成');
     assert.match(host.textContent,/实际导入的标准回复/);
-    await click('误导入的标准回复',host);
-    await click('删除',host);
+    const replyRow=title=>[...host.querySelectorAll('.ref-knowledge-list tbody tr')].find(row=>row.textContent.includes(title));
+    await click('删除',replyRow(unwantedReply.title));
+    assert.match(document.querySelector('[role="dialog"]').textContent,/误导入的标准回复/);
     await click('取消');
     assert.match(host.textContent,/误导入的标准回复/);
-    await click('删除',host);
+    await click('删除',replyRow(unwantedReply.title));
     await click('确认删除');
     assert.doesNotMatch(host.textContent,/误导入的标准回复/);
+    await click('删除',replyRow(revokedReply.title));
+    await click('确认删除');
+    assert.doesNotMatch(host.textContent,/已撤销的标准回复/);
     await click('提交审核',host);
     await click('确认提交审核');
     assert.match(host.querySelector('.ref-knowledge-detail').textContent,/待审核/);
@@ -235,7 +243,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await click('提交审核',host);
     await click('确认提交审核');
     assert.match(host.querySelector('.generic-detail-card .ant-table-tbody').textContent,/待审核/);
-    assert.equal(calls.filter(([,method])=>method==='POST').length,10);
+    assert.equal(calls.filter(([,method])=>method==='POST').length,11);
     assert.deepEqual(Object.keys(localStorage),['fep-rfq-auth']);
   }finally{
     releaseHistoryImport();

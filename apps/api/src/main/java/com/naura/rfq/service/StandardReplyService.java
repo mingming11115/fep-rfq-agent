@@ -109,7 +109,7 @@ public class StandardReplyService {
             case "return" -> returnForEdit(user, buId, record, reason);
             case "revoke" -> revoke(user, buId, chain, record, reason);
             case "revise" -> revise(user, buId, chain, record);
-            case "delete" -> deleteDraft(user, buId, record);
+            case "delete" -> deleteVersion(user, buId, record);
             default -> throw new BusinessException(404, "未知的标准回复操作");
         };
     }
@@ -122,8 +122,9 @@ public class StandardReplyService {
         return saveAction(user, buId, record, "提交标准回复审核", reason);
     }
 
-    private ObjectNode deleteDraft(CurrentUser user, String buId, Reply record) {
-        requireState(EDITABLE.contains(record.status()), "仅草稿或退回版本可以删除");
+    private ObjectNode deleteVersion(CurrentUser user, String buId, Reply record) {
+        String status = record.status();
+        requireState(EDITABLE.contains(status) || "已撤销".equals(status), "仅草稿、退回或已撤销版本可以删除");
         record.payload().put("status", "已删除").put("validity", "已删除");
         return saveAction(user, buId, record, "删除标准回复", "");
     }
