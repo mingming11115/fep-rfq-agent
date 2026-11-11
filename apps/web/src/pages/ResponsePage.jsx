@@ -16,13 +16,14 @@ import {resizePanelShare} from '../antdAdapters';
 import ProjectActivityPanel from '../components/ProjectActivityPanel';
 import './rfq-detail.css';
 import SourceDocumentPane from '../components/SourceDocumentPane';
+import SelectionExtractionDialog from '../components/SelectionExtractionDialog';
 import { officeCanLeave } from '../officeClient';
 import SourceProcessingPane from '../components/SourceProcessingPane';
 import {getProjectSourceSummary} from '../projectSelectors';
 import {isSourceParsing} from '../useSourceParsing';
 import RequirementOutline from '../components/RequirementOutline';
 import RfqDirectory from '../components/RfqDirectory';
-import {craftSourceKey} from '../craftClient';
+import {craftSourceKey, supportsCraft} from '../craftClient';
 import {makeSourceAnchor} from '../documentAnchors';
 import {makeDocumentDemo} from '../documentMocks';
 import {canPerform} from '../permissions';
@@ -65,7 +66,7 @@ function Notice({ children, warning = false, loading = false }) {
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
 
-export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange,sourceReparse, logEvent = () => {} }) {
+export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onAddSelection, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,onFilesChange,sourceReparse, logEvent = () => {} }) {
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
   const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
@@ -82,6 +83,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const baseline = useRef({ id: initialRow?.id, version: initialRow?.version, status: initialRow?.status });
   const savedFilters=read(`rfq.response.filters.${project.id}`,{});
   const [query, setQuery] = useState(savedFilters.query||'');
+  const [emptySourceId, setEmptySourceId] = useState(null);
+  const [selectionDraft, setSelectionDraft] = useState(null);
   const [status, setStatus] = useState(['待确认','待复核'].includes(savedFilters.status)?'待处理':savedFilters.status||'全部状态');
   const [section, setSection] = useState(savedFilters.section||'全部章节');
   const [owner, setOwner] = useState('全部责任人');
@@ -250,7 +253,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     entryScopeRef.current=scope;
     if(initialRow){hydrate(initialRow);revealCard(initialRow);}
   },[project.id,actorId,actorRole,requirements,initialRow?.id]);
-  function chooseRow(row) { if (!row) { return; } return guardedDetail(() => { revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); },row); }
+  function chooseRow(row) { if (!row) { return; } return guardedDetail(() => { setEmptySourceId(null); revealCard(row); hydrate(row); setQuoteDraft(null); setActiveCommentId(null); navigate('response', row.id, { fileId: row.sourceFileId, sourceVersion: row.sourceVersion, taskId: undefined, action: undefined, reviewId: undefined }); },row); }
   function applyCardFilters(next, mine = onlyMine) {
     const rows = selectResponseCards(mine ? myRequirements : requirements, reviews, next);
     const changingScope = mine !== onlyMine;
@@ -577,6 +580,32 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const sourceSummary=getProjectSourceSummary(appState,project.id);
   const parsingFiles=sourceSummary.files.filter(isSourceParsing);
   const canManageSource=canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id});
+  const selectableFiles=canManageSource&&onAddSelection
+    ? sourceSummary.files.filter(file=>file.backendDocumentId&&supportsCraft(file.name)&&!isSourceParsing(file))
+    : [];
+  const emptySource=selectableFiles.find(file=>file.id===emptySourceId&&!requirements.some(row=>row.sourceFileId===file.id))
+    || (!requirements.length ? selectableFiles[0] : null);
+  const sourceChoices=new Map(requirements.map(row=>[row.sourceFileId||row.source||'manual',row.source||'人工补录']));
+  selectableFiles.forEach(file=>sourceChoices.set(file.id,file.name));
+  function sourceSelector(value){
+    return <UiSelect className="select rfq-document-file-selector" aria-label="应答来源文件" value={value} onChange={event=>{
+      const fileId=event.target.value;
+      const row=requirements.find(item=>(item.sourceFileId||item.source||'manual')===fileId);
+      if(row) { chooseRow(row); }
+      else { guardedDetail(()=>setEmptySourceId(fileId)); }
+    }}>{[...sourceChoices].map(([id,name])=><option key={id} value={id}>{name}</option>)}</UiSelect>;
+  }
+  function selectionAction(file){
+    if(staleSource||!selectableFiles.some(item=>item.id===file?.id)) { return undefined; }
+    return selection=>guardedDetail(()=>setSelectionDraft({projectId:project.id,file,selection}));
+  }
+  async function addSelectedClauses(file,selection,candidates){
+    const rows=await onAddSelection(file,selection,candidates);
+    if(aliveRef.current&&rows.length) { chooseRow(rows[0]); }
+  }
+  const selectionDialog=selectionDraft?.projectId===project.id&&<SelectionExtractionDialog
+    file={selectionDraft.file} selection={selectionDraft.selection} onSave={addSelectedClauses}
+    onClose={()=>setSelectionDraft(null)}/>;
   async function deleteExtractedClause() {
     if (cardBusyRef.current || !deleteTarget || deleteTarget.id !== active?.id) { return; }
     cardBusyRef.current = true;
@@ -609,24 +638,47 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const projectActivity = <ProjectActivityPanel key={project.id} project={project} requirements={requirements}
     reviews={reviews} snapshots={appState.snapshotsByProject?.[project.id] || []} audit={appState.audit || []}
     databaseBacked={appState.dataSource === 'mysql'} accountsById={appState.accountsById}/>;
+  if (emptySource) {
+    return <div className="response-page rfq-detail">
+      <div className="detail-layout">
+        <div className="detail-document-column">
+          <SourceDocumentPane file={emptySource} rows={[]} canManageOffice={canManageSource}
+            toolbar={{fileSelector:sourceSelector(emptySource.id)}}
+            selectedAnchor={{projectId:project.id,fileId:emptySource.id,sourceVersion:emptySource.version,locator:{}}}
+            officeUser={{id:actorId,name:personName(appState,actorId)}} showResponses={false}
+            onExtractSelection={selectionAction(emptySource)}/>
+        </div>
+        <div className="response-processing detail-business">
+          {detailTabs}
+          <div className="detail-side-content">{detailTab==='activity' ? projectActivity
+            : <EmptyState title="应答项尚未生成" description="在原文中选中文字，再点「抽取条款」。"
+                action={sourceReparse?.hasSources(project.id,emptySource.id)&&<UiButton className="btn" onClick={()=>sourceReparse.open(project.id,emptySource.id)}>重新解析</UiButton>}/>}</div>
+        </div>
+      </div>
+      {selectionDialog}
+    </div>;
+  }
   if (!requirements.length) { return <div className="response-page rfq-detail"><div className="detail-layout"><div className="detail-document-column">{sourceSummary.status==='empty'?<section className="detail-source detail-no-source"><EmptyState title="还没有 RFQ 原文" description="上传客户文件后，在这里阅读原文并处理条款。" action={<UiButton className="btn btn-primary" onClick={() => {const next=getSourceUploadRoute({...route,projectId:project.id},actorRole);navigate(next.page,null,next);}}>{canPerform(actorRole,'source:manage')?'上传与解析资料':'查看来源资料'}<ArrowRight size={15}/></UiButton>}/></section>:<SourceProcessingPane summary={sourceSummary} onRetry={canManageSource?retrySources:undefined}/>}</div><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content">{detailTab === 'activity' ? projectActivity : <EmptyState title="应答项尚未生成" description={sourceSummary.status==='empty'?'上传并解析客户文件后，可在这里处理应答项。':sourceSummary.status==='parsing'?'当前文件正在解析，完成后可在这里处理应答项。':'当前项目暂无可应答条款。'}/>}</div></div></div></div>; }
   const activeSourceAnchor={ ...makeSourceAnchor({ ...active, projectId: project.id }), ...(route?.requirementId === active.id ? { sourceVersion: route.sourceVersion || String(active.sourceVersion || '1'), fileId: route.fileId || active.sourceFileId || active.source || 'manual' } : {}) };
+  const activeFile=(appState?.documentsByProject?.[project.id] ?? read(`fep-rfq-documents:${project.id}`, null)?.files ?? makeDocumentDemo(project.id, requirements).files)
+    .find(file=>file.id===active.sourceFileId);
   const reparseFileId=active.sourceFileId;
   const canReparseCurrent=!staleSource&&reparseFileId&&sourceReparse?.hasSources(project.id,reparseFileId);
   const reparseBlocked=dirty||reviewForm||candidateDirty.current||cardBusy;
   const reparseAction=canReparseCurrent&&<UiButton className="btn btn-sm" aria-label="重新解析当前文件"
     title={reparseBlocked?'请先处理未保存的修改':'重新解析当前文件'} disabled={!!reparseBlocked}
     onClick={()=>sourceReparse.open(project.id,reparseFileId)}><RefreshCw size={14}/><span className="rfq-editor-tools-label">重新解析</span></UiButton>;
-  const sourceToolbar={fileAction:reparseAction,fileSelector:<UiSelect className="select rfq-document-file-selector" aria-label="应答来源文件" value={active.sourceFileId || active.source || 'manual'} onChange={e => { const row = requirements.find(r => (r.sourceFileId || r.source || 'manual') === e.target.value); if (row) { chooseRow(row); } }}>{[...new Map(requirements.map(r => [r.sourceFileId || r.source || 'manual', r.source || '人工补录'])).entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</UiSelect>,actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
+  const sourceToolbar={fileAction:reparseAction,fileSelector:sourceSelector(active.sourceFileId||active.source||'manual'),actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
   const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id))}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!selectedRows.length || cardBusy} onClick={batchConfirm}>批量确认 {selectedRows.length || ''}</UiButton></div></RfqDirectory>;
   return <div className="response-page rfq-detail">
+    {selectionDialog}
     {parsingFiles.length>0&&<Notice loading>正在解析：{parsingFiles.map(file=>file.name).join('、')}</Notice>}
     {sourceSummary.status==='failed'&&<Notice warning>资料解析失败：{sourceSummary.files.filter(file=>file.status==='失败').map(file=>[file.name,file.error].filter(Boolean).join('：')).join('；')}{canManageSource&&<UiButton className="text-link" onClick={retrySources}>重新解析</UiButton>}</Notice>}
     {staleSource && <Notice warning>当前链接指向旧来源版本，本页只读。<UiButton className="text-link" onClick={() => chooseRow(active)}>打开当前有效来源版本</UiButton></Notice>}
     <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total) { setPaneShare(sizes[0]/total*100); }}}>
       <Splitter.Panel size={paneShare+'%'} min={narrowWorkbench?280:320}><div className="detail-document-column">
 
-        <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={row=>actorRole!=='最终审批人'&&!staleSource&&canBusinessAction('requirement',row.id)} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={(appState?.documentsByProject?.[project.id] ?? read(`fep-rfq-documents:${project.id}`, null)?.files ?? makeDocumentDemo(project.id, requirements).files).find(f => f.id === active.sourceFileId)} rows={requirements.filter(r => (r.sourceFileId || r.source) === (active.sourceFileId || active.source)).map(r => ({ ...r, projectId: project.id }))} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={!conflicted && !staleSource ? { ...active, ...form } : undefined} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
+        <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={row=>actorRole!=='最终审批人'&&!staleSource&&canBusinessAction('requirement',row.id)} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={activeFile} onExtractSelection={selectionAction(activeFile)} rows={requirements.filter(r => (r.sourceFileId || r.source) === (active.sourceFileId || active.source)).map(r => ({ ...r, projectId: project.id }))} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={!conflicted && !staleSource ? { ...active, ...form } : undefined} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
       </div></Splitter.Panel>
       <Splitter.Panel size={(100-paneShare)+'%'} min={narrowWorkbench?360:380}><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content" ref={detailSideRef}>
 

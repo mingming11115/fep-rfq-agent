@@ -122,7 +122,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
       editorToolsControlled:engine==='wordcraft'&&Boolean(snapshot?.editorToolsControlled),editorToolsVisible:engine==='wordcraft'&&Boolean(snapshot?.editorToolsVisible),
       documentOutline:{document:boundToken,revision:snapshot?.headingOutline?.revision??null,items:snapshot?.headingOutline?.items||[],ready:Boolean(boundToken),supported:engine==='wordcraft'&&Boolean(snapshot?.headingOutline)},
       geometry:{selectedId:snapshot?.source?.selectedId,status:snapshot?.source?.status,clip:snapshot?.clip,ranges:snapshot?.sourceRanges||[]},
-      nativeNotes:snapshot?.notes||[],nativeActiveId:snapshot?.active,
+      nativeNotes:snapshot?.notes||[],nativeActiveId:snapshot?.active,hasTextSelection:snapshot?.hasTextSelection===true,
       unlinked:(merged.unlinked||[]).map(({id,nativeKey,text,author,reason})=>({id,nativeKey,text,author,reason})),conflicts:merged.conflicts||[]};
     const key=JSON.stringify(value);if(key!==lastState){lastState=key;onState(value);}
   }
@@ -231,6 +231,7 @@ export function createCraftProjectEditor({frame,root,tools,source,reference,revi
     checkpointCovers,
     open(name,bytes){file={name,bytes};clearStartupTimer();startupTimer=setTimeout(()=>{if(alive&&!boundToken) { onError('编辑器启动超时，请检查编辑器 JS/WASM 资源是否完整、可访问，并点击重试。'); }},60000);sendFile();},refresh(){failedConfiguration='';schedule();},
     save:()=>command('save',{}),setVisible:value=>surface.setVisible(value),
+    readSelection:()=>command('selection',{}),
     setOutline:visible=>engine==='wordcraft'?command('outline',{visible}):Promise.reject(new Error('当前编辑器不支持 Word 文档目录')),
     setEditorTools:visible=>alive&&boundToken&&engine==='wordcraft'&&snapshot?.editorToolsControlled&&typeof visible==='boolean'?command('tools',{visible}):Promise.reject(new Error('当前 Word 编辑工具尚不可用')),
     navigateHeading:target=>{

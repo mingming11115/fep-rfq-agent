@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import com.naura.rfq.service.SelectionExtractionService;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class RequirementController {
     private final RequirementService service;
+    private final SelectionExtractionService selections;
     private final com.naura.rfq.service.ConfirmationAssignmentService assignments;
 
     @GetMapping("/requirements/{id}/confirmation-candidates")
@@ -40,6 +43,18 @@ public class RequirementController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sort) {
         return ApiResponse.success(service.list(CurrentUserHolder.require(), projectId, page, size, sort));
+    }
+
+    @PostMapping("/documents/{id}/selection-extraction")
+    public ApiResponse<SelectionExtractionService.Preview> extractSelection(@PathVariable String id,
+            @RequestBody SelectionExtractionService.Selection request) {
+        return ApiResponse.success(selections.preview(CurrentUserHolder.require(), id, request));
+    }
+
+    @PostMapping("/documents/{id}/selection-requirements")
+    public ApiResponse<java.util.List<RequirementView>> addSelection(@PathVariable String id,
+            @RequestBody SelectionExtractionService.Confirm request) {
+        return ApiResponse.success(selections.confirm(CurrentUserHolder.require(), id, request));
     }
 
     @PatchMapping("/requirements/{id}")

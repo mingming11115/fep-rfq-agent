@@ -26,7 +26,7 @@ public interface RequirementMapper {
 
     long countByProjectId(@Param("projectId") String projectId);
 
-    int deleteByDocumentId(@Param("documentId") String documentId);
+    int deleteGeneratedByDocumentId(@Param("documentId") String documentId);
 
     int deleteByProjectId(@Param("projectId") String projectId);
 

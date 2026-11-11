@@ -97,6 +97,9 @@ public class RequirementMatchService {
         jdbc.update("""
                 update requirement_match_run set current_run=null,status='superseded',lease_token=null,lease_until=null,next_attempt_at=null
                 where project_id=? and document_id=? and current_run=1
+                    and not exists (select 1 from requirement selected
+                        where selected.id=requirement_match_run.requirement_id
+                        and selected.parse_run_id is null and selected.block_id is null and selected.source_refs_json is not null)
                 """, project.getId(), document.getId());
         Policy policy = policy(project.getBuId());
         for (var requirement : rows) {

@@ -2,6 +2,11 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.naura.rfq.mapper.RequirementMapper">
 
+    <!-- An accepted selection has source references and no generated parse run or block. -->
+    <sql id="generatedRequirement">
+        (parse_run_id is not null or block_id is not null or source_refs_json is null)
+    </sql>
+
     <select id="findById" resultType="com.naura.rfq.model.entity.Requirement">
         select *
         from requirement
@@ -42,7 +47,7 @@
     <!-- Include excluded rows so re-parsing sees the human correction and preserves it. -->
     <select id="findByDocumentIdForReparse" resultType="com.naura.rfq.model.entity.Requirement" useCache="false" flushCache="true">
         select * from requirement
-        where document_id=#{documentId} order by id for update
+        where document_id=#{documentId} and <include refid="generatedRequirement"/> order by id for update
     </select>
 
     <select id="countByProjectId" resultType="long">
@@ -51,8 +56,8 @@
         where project_id = #{projectId} and extraction_status &lt;&gt; 'EXCLUDED'
     </select>
 
-    <delete id="deleteByDocumentId">
-        delete from requirement where document_id = #{documentId}
+    <delete id="deleteGeneratedByDocumentId">
+        delete from requirement where document_id = #{documentId} and <include refid="generatedRequirement"/>
     </delete>
 
     <delete id="deleteByProjectId">

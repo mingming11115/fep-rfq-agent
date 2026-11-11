@@ -1582,7 +1582,7 @@ diff --git a/crates/ui-egui/src/host_review.rs b/crates/ui-egui/src/host_review.
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/host_review.rs
-@@ -0,0 +1,617 @@
+@@ -0,0 +1,625 @@
 +//! Host review adapter; edits stay in the native PDF engine.
 +use crate::PdfCraftApp;
 +use pdfcraft_engine::{DocId, Edit, NewAnnotation, NoteIcon, ReviewState, Shape};
@@ -1845,6 +1845,13 @@ new file mode 100644
 +        }
 +        match action {
 +            "configure" => return self.configure_host_project(i, id, params),
++            "selection" => {
++                let text = self.views[i].selected_text().filter(|text| !text.trim().is_empty())
++                    .ok_or("select text in the document")?;
++                let (page, _) = self.session.get(id).and_then(|doc| self.views[i].selection_quads(&doc.info))
++                    .ok_or("selection has no page")?;
++                return Ok(json!({"text":text,"page":page + 1}));
++            }
 +            "locate" => return self.locate_host_clause(i, id, params.get("id").and_then(Value::as_str).ok_or("missing clause id")?),
 +            "upsert" => return self.upsert_host_comment(i, id, params),
 +            "draft" | "replyDraft" => {
@@ -2073,7 +2080,8 @@ new file mode 100644
 +            notes.push(json!({"id":numeric,"nativeKey":state.native_keys.get(&(a.page,a.index)),"quote":state.native_keys.get(&(a.page,a.index)).and_then(|key|state.project.quotes.get(key)).cloned().unwrap_or_default(),"clauseId":state.native_keys.get(&(a.page,a.index)).and_then(|key|state.project.associations.get(key)),"page":a.page,"author":a.author,"text":state.edits.get(&numeric).map(String::as_str).unwrap_or(a.contents.as_deref().unwrap_or("")),"date":a.modified,"resolved":resolved,"color":(numeric-1)%3,"ranges":ranges,"replies":replies,"highlight":false}));
 +        }
 +        let active = view.comments.selected.and_then(|at| tops.get(&at).copied().or(Some(at))).and_then(|at| state.native.get(&at));
-+        json!({"fileName":doc.name,"source":source,"sourceRanges":source_ranges,"complete":doc.info.annotations.iter().filter(|a|a.is_comment()).count()<=2000&&state.native.len()<50_000,"document":state.token,"notes":notes,"pages":pages,"clip":rect(area),"selection":null,"active":active,"author":self.comment_prefs.author,"editable":self.session.host_review_editable(id)&&doc.allows_annotation()&&doc.read_only_reason.is_none(),"formatting":false,"applied":applied,"edit":state.edit,"editRequest":state.edit_request})
++        let has_text_selection = view.selected_text().is_some_and(|text| !text.trim().is_empty());
++        json!({"hasTextSelection":has_text_selection,"fileName":doc.name,"source":source,"sourceRanges":source_ranges,"complete":doc.info.annotations.iter().filter(|a|a.is_comment()).count()<=2000&&state.native.len()<50_000,"document":state.token,"notes":notes,"pages":pages,"clip":rect(area),"selection":null,"active":active,"author":self.comment_prefs.author,"editable":self.session.host_review_editable(id)&&doc.allows_annotation()&&doc.read_only_reason.is_none(),"formatting":false,"applied":applied,"edit":state.edit,"editRequest":state.edit_request})
 +    }
 +}
 +

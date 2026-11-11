@@ -196,7 +196,7 @@ diff --git a/crates/engine/src/host_access.rs b/crates/engine/src/host_access.rs
 new file mode 100644
 --- /dev/null
 +++ b/crates/engine/src/host_access.rs
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,248 @@
 +//! Ephemeral host permissions. These never become document protection or exported metadata.
 +use crate::{CmdError, Session};
 +use serde_json::Value;
@@ -225,6 +225,16 @@ new file mode 100644
 +    pub fn host_source_matches(&self, anchor: &str, quote: &str) -> Result<Vec<(Pos, Pos)>, String> {
 +        use wordcraft_doc::{PartKind, Path, para::InlineObject};
 +        let invalid = || "invalid Word source anchor".to_string();
++        if let Some(range) = anchor.strip_prefix("selection:word:") {
++            let (start, end) = range.split_once('-').ok_or_else(invalid)?;
++            let position = |encoded: &str| -> Result<Pos, String> {
++                let (path, offset) = encoded.split_once(':').ok_or_else(invalid)?;
++                let path = path.split('/').map(str::parse::<u32>).collect::<Result<Vec<_>, _>>().map_err(|_| invalid())?;
++                Ok(Pos::new(StoryRef::Body, Path(path), offset.parse().map_err(|_| invalid())?))
++            };
++            let range = (position(start)?, position(end)?);
++            return self.host_quote_matches_in_range(quote, StoryRef::Body, &[], Some(&range));
++        }
 +        let mut segments = anchor.split('/');
 +        let story = match segments.next() {
 +            Some("body") => StoryRef::Body,
@@ -263,6 +273,10 @@ new file mode 100644
 +    }
 +
 +    fn host_quote_matches_in(&self, quote: &str, story: StoryRef, prefix: &[u32]) -> Result<Vec<(Pos, Pos)>, String> {
++        self.host_quote_matches_in_range(quote, story, prefix, None)
++    }
++
++    fn host_quote_matches_in_range(&self, quote: &str, story: StoryRef, prefix: &[u32], range: Option<&(Pos, Pos)>) -> Result<Vec<(Pos, Pos)>, String> {
 +        let needle = quote.split_whitespace().collect::<Vec<_>>().join(" ");
 +        if needle.is_empty() || needle.len() > 1_048_576 {
 +            return Err("quote is empty or too long".into());
@@ -272,8 +286,15 @@ new file mode 100644
 +        let is_row = prefix.len() % 3 == 2;
 +        for path in self.doc.para_paths(story).into_iter().filter(|path|
 +            path.0.starts_with(prefix) && (!is_row || path.0.len() == prefix.len() + 2)) {
++            if range.is_some_and(|(start, end)| path < start.path || path > end.path) {
++                continue;
++            }
 +            let Some(para) = self.doc.para(story, &path) else { continue };
 +            for (off, ch) in para.text.char_indices() {
++                if range.is_some_and(|(start, end)|
++                    (path == start.path && off < start.off) || (path == end.path && off >= end.off)) {
++                    continue;
++                }
 +                if ch == wordcraft_doc::para::OBJ {
 +                    continue;
 +                }
@@ -1564,7 +1585,7 @@ diff --git a/crates/ui-egui/src/panes/host_review.rs b/crates/ui-egui/src/panes/
 new file mode 100644
 --- /dev/null
 +++ b/crates/ui-egui/src/panes/host_review.rs
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,325 @@
 +//! Native data and commands for the host's existing Word-style comment surface.
 +use super::{Value, WordApp, comment_threads, commit_reply, drafts, flush_comment_drafts, json};
 +use std::collections::BTreeMap;
@@ -1613,6 +1634,15 @@ new file mode 100644
 +        self.sync_host_project();
 +        match action {
 +            "configure" => self.configure_host_project(&p),
++            "selection" => {
++                let (start, end) = self.session.sel.ordered();
++                let text = self.session.selected_text();
++                if start.story != wordcraft_doc::StoryRef::Body || text.trim().is_empty() {
++                    return Err("select text in the document body".into());
++                }
++                let range = format!("{}:{}-{}:{}", start.path, start.off, end.path, end.off);
++                Ok(json!({"text":text,"wordRange":range}))
++            }
 +            "tools" => {
 +                let visible = p.get("visible").and_then(Value::as_bool).ok_or("missing tools visibility")?;
 +                if !self.canvas.host_comments || !self.comment_drafts.project.external_tools {
@@ -1803,6 +1833,7 @@ new file mode 100644
 +            notes.push(json!({"id":id,"nativeKey":project::key(id),"quote":self.host_comment_quote(id),"clauseId":self.comment_drafts.project.associations.get(&project::key(id)),"author":comment.author,"date":comment.date,"text":text,"resolved":comment.resolved,"color":index%3,"ranges":ranges,"replies":replies}));
 +        }
 +        json!({"fileName":self.session.path.as_ref().and_then(|p|p.file_name()).map(|n|n.to_string_lossy().to_string()).or_else(||self.session.file_name.clone()),"source":source,"complete":comment_threads(&self.session.doc.comments).len()<=2000,"document":document.to_string(),"author":self.session.author,"active":active,"notes":notes,"pages":pages,
++            "hasTextSelection":!self.session.sel.is_collapsed() && self.session.sel.ordered().0.story == wordcraft_doc::StoryRef::Body,
 +            "sourceRanges":source_ranges,"clip":self.canvas.canvas_rect.map(rect),"selection":self.canvas.mini_anchor.map(rect).filter(|_| !self.session.sel.is_collapsed()),
 +            "editable":self.session.host_review_editable()&&crate::widgets::enabled(self,"review.editComment"),"formatting":self.session.view.marks,"outlineVisible":self.session.view.nav_pane,
 +            "headingOutline":{"revision":self.session.rev(),"items":headings},

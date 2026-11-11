@@ -26,10 +26,13 @@ import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.storage.DocumentStorage;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,18 +89,22 @@ public class ParseService {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
         }
         if (!previous.isEmpty() && Boolean.TRUE.equals(jdbc.queryForObject("""
+                with generated as (
+                    select id,project_id from requirement where document_id=?
+                    and (parse_run_id is not null or block_id is not null or source_refs_json is null)
+                )
                 select exists(
-                    select 1 from requirement r join requirement_response a on a.requirement_id=r.id where r.document_id=?
+                    select 1 from generated r join requirement_response a on a.requirement_id=r.id
                     union all
-                    select 1 from requirement r join response_confirmation_history h on h.requirement_id=r.id where r.document_id=?
+                    select 1 from generated r join response_confirmation_history h on h.requirement_id=r.id
                     union all
-                    select 1 from requirement r join response_review v on v.project_id=r.project_id
-                        and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id where r.document_id=?
+                    select 1 from generated r join response_review v on v.project_id=r.project_id
+                        and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id
                     union all
                     select 1 from response_snapshot where project_id=?
                         and json_search(payload,'one',?,null,'$.rows[*].sourceFileId') is not null
                 )
-                """, Boolean.class, documentId, documentId, documentId, project.getId(), documentId))) {
+                """, Boolean.class, documentId, project.getId(), documentId))) {
             throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
         }
 
@@ -173,7 +180,9 @@ public class ParseService {
             return view(run);
         }
 
-        requirements.deleteByDocumentId(documentId);
+        boolean recognized = !extracted.isEmpty();
+        extracted = omitRetainedSelections(documentId, extracted, rawBlocks);
+        requirements.deleteGeneratedByDocumentId(documentId);
         blocks.deleteByDocumentId(documentId);
         Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, rawBlocks);
         List<Requirement> saved = persistRequirements(document, run.getId(), extracted, sourceBlocks);
@@ -187,7 +196,7 @@ public class ParseService {
         run.setIssueCount(issueCount);
         run.setFinishedAt(Instant.now());
 
-        if (saved.isEmpty()) {
+        if (!recognized) {
             run.setStatus(ParseRun.PARTIAL);
             run.setMessage(join(issues, "未识别到可应答条款，请检查文档编号结构或改用人工补录"));
             document.setStatus(CustomerDocument.STATUS_PARTIAL);
@@ -214,6 +223,56 @@ public class ParseService {
                 run.getId(), documentId, project.getId(), run.getStatus(), rawBlocks.size(), saved.size(), issueCount,
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         return view(run);
+    }
+
+    private static final Pattern SELECTED_WORD = Pattern.compile("selection:word:([0-9/]+):[0-9]+-([0-9/]+):[0-9]+");
+    private static final Pattern WORD_BLOCK = Pattern.compile("body/([0-9]+(?:/[rc]?[0-9]+)*)");
+
+    private List<ExtractedRequirement> omitRetainedSelections(String documentId, List<ExtractedRequirement> extracted,
+                                                              List<RawBlock> rawBlocks) {
+        var selected = requirements.findByDocumentIdOrderBySource(documentId).stream()
+            .filter(row -> row.getParseRunId() == null && row.getBlockId() == null)
+            .map(row -> SourceRef.decode(row.getSourceRefsJson()))
+            .filter(refs -> refs != null && refs.size() == 1 && refs.get(0).anchor() != null
+                && refs.get(0).anchor().startsWith("selection:"))
+            .map(refs -> refs.get(0)).toList();
+        if (selected.isEmpty()) { return extracted; }
+        var sources = new HashMap<Integer, RawBlock>();
+        rawBlocks.forEach(block -> sources.put(block.index(), block));
+        var covered = new HashSet<ExtractedRequirement>();
+        for (SourceRef selection : selected) {
+            if (selection.anchor().startsWith("selection:page:")
+                    && rawBlocks.stream().filter(block -> selectionCoversBlock(selection, block)).limit(2).count() != 1) {
+                continue;
+            }
+            var matches = extracted.stream().filter(candidate -> selection.quote().equals(candidate.originalText()))
+                .filter(candidate -> selectionCoversBlock(selection, sources.get(candidate.blockIndex()))).toList();
+            if (matches.size() == 1) { covered.add(matches.get(0)); }
+        }
+        return extracted.stream().filter(candidate -> !covered.contains(candidate)).toList();
+    }
+
+    private static boolean selectionCoversBlock(SourceRef selection, RawBlock block) {
+        if (block == null || block.anchor() == null || block.text() == null) {
+            return false;
+        }
+        int offset = block.text().indexOf(selection.quote());
+        if (offset < 0 || offset != block.text().lastIndexOf(selection.quote())) { return false; }
+        var selectedWord = SELECTED_WORD.matcher(selection.anchor());
+        var wordBlock = WORD_BLOCK.matcher(block.anchor());
+        if (selectedWord.matches() && wordBlock.matches()) {
+            int[] path = sourcePath(wordBlock.group(1));
+            return Arrays.compare(sourcePath(selectedWord.group(1)), path) <= 0
+                && Arrays.compare(path, sourcePath(selectedWord.group(2))) <= 0;
+        }
+        if (!selection.anchor().startsWith("selection:page:")) { return false; }
+        String page = "page-" + selection.anchor().substring("selection:page:".length());
+        return page.equals(block.anchor()) || block.anchor().startsWith(page + "/");
+    }
+
+    private static int[] sourcePath(String value) {
+        return Arrays.stream(value.split("/")).map(part -> part.replaceFirst("^[rc]", ""))
+            .mapToInt(Integer::parseInt).toArray();
     }
 
     private List<ExtractedRequirement> withSourceReview(List<ExtractedRequirement> candidates, List<RawBlock> source) {

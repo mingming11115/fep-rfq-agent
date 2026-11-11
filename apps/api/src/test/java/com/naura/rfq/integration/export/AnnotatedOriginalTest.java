@@ -13,6 +13,21 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 
 class AnnotatedOriginalTest {
+    @Test void wordSelectionPlacesTheAnswerInTheSelectedOccurrence() throws Exception {
+        var original = new ByteArrayOutputStream();
+        try (var document = new XWPFDocument()) {
+            document.createParagraph().createRun().setText("提供安全联锁");
+            document.createParagraph().createRun().setText("提供安全联锁");
+            document.write(original);
+        }
+        var result = AnnotatedOriginal.wordWithAnswers(original.toByteArray(), List.of(
+                new AnnotatedOriginal.Note("selection:word:1:0-1:18", "提供安全联锁", "答复：支持", true)));
+        try (var copy = new XWPFDocument(new ByteArrayInputStream(result))) {
+            assertThat(copy.getParagraphs()).extracting(paragraph -> paragraph.getText())
+                .containsExactly("提供安全联锁", "提供安全联锁\n答复：支持");
+        }
+    }
+
     @Test void wordCommentsFollowTheSourceParagraphAndTableRow() throws Exception {
         var original = new ByteArrayOutputStream();
         try (var document = new XWPFDocument()) {

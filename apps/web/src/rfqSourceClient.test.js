@@ -16,6 +16,21 @@ test('manual reparse sends the selected scope, including an explicit reset to th
  assert.deepEqual(bodies,[undefined,{historyDocumentIds:['HD-NEW']},{historyDocumentIds:[]}]);
 });
 
+test('reparse keeps clauses added from a selection without counting them as newly extracted',async()=>{
+ const sourceRefs=[{anchor:'selection:page:2',quote:'Supply spare filters'}];
+ const api={
+  post:async()=>({status:'completed',requirementCount:1}),
+  get:async()=>({list:[
+   {id:'R1',documentId:'D',originalText:'Provide training'},
+   {id:'R2',documentId:'D',originalText:'Supply spare filters',sourceRefs},
+  ]}),
+ };
+ const {rows}=await parseRfqSource('P',{id:'D',backendDocumentId:'D',name:'RFQ.pdf'},api);
+ assert.deepEqual(rows.map(row=>row.id),['R1','R2']);
+ assert.equal(rows[1].sourcePage,2);
+ assert.deepEqual(rows[1].sourceRefs,sourceRefs);
+});
+
 test('upload sends selected history file versions before submitting parsing',async()=>{
  const historyDocumentIds=['HD-1','HD-2'];
  const api={

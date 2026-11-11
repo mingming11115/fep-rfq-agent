@@ -151,15 +151,23 @@ public class ApprovedDocumentExportService {
                     || !sameAnswer(row, requirement, response)) {
                 throw changed();
             }
-            var documentAnchors = anchors.computeIfAbsent(source.getId(), fileId -> blocks.findByDocumentIdOrderByBlockIndex(fileId)
-                    .stream().collect(Collectors.toMap(DocumentBlock::getId, Function.identity())));
-            var block = documentAnchors.get(requirement.getBlockId());
-            if (block == null || block.getSourceAnchor() == null || block.getSourceAnchor().isBlank()) {
-                throw new BusinessException(409, "条款缺少原文定位：" + row.path("clause").asText(id));
+            var refs = SourceRef.decode(requirement.getSourceRefsJson());
+            var primary = refs == null || refs.isEmpty() ? null : refs.get(0);
+            String sourceAnchor;
+            if (primary != null && primary.anchor() != null && primary.anchor().startsWith("selection:")) {
+                sourceAnchor = primary.anchor();
+            } else {
+                var documentAnchors = anchors.computeIfAbsent(source.getId(), fileId -> blocks.findByDocumentIdOrderByBlockIndex(fileId)
+                        .stream().collect(Collectors.toMap(DocumentBlock::getId, Function.identity())));
+                var block = documentAnchors.get(requirement.getBlockId());
+                if (block == null || block.getSourceAnchor() == null || block.getSourceAnchor().isBlank()) {
+                    throw new BusinessException(409, "条款缺少原文定位：" + row.path("clause").asText(id));
+                }
+                sourceAnchor = block.getSourceAnchor();
             }
             if (pinSources && row instanceof ObjectNode frozen) {
                 validateFinalAnswer(response);
-                frozen.put("sourceAnchor", block.getSourceAnchor());
+                frozen.put("sourceAnchor", sourceAnchor);
                 frozen.put("sourceRequirementVersion", requirement.getVersion());
                 frozen.put("section", requirement.getSectionPath());
                 if (response.hasNonNull("matchReference")) {
@@ -168,11 +176,9 @@ public class ApprovedDocumentExportService {
                     frozen.remove("matchReference");
                 }
             }
-            var refs = SourceRef.decode(requirement.getSourceRefsJson());
-            var primary = refs == null || refs.isEmpty() ? null : refs.get(0);
             notes.computeIfAbsent(source.getId(), ignored -> new ArrayList<>())
                     .add(primary == null
-                            ? new Note(block.getSourceAnchor(), requirement.getOriginalText(), answerText(row))
+                            ? new Note(sourceAnchor, requirement.getOriginalText(), answerText(row))
                             : new Note(primary.anchor(), primary.quote(), answerText(row), true));
         }
 

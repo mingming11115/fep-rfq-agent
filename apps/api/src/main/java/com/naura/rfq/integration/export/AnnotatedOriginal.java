@@ -9,14 +9,21 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.TableRowHeightRule;
 import org.apache.poi.xwpf.usermodel.XWPFComment;
@@ -29,7 +36,8 @@ import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 /** Writes answers into a copy of the original, using the parser's source anchors. */
 public final class AnnotatedOriginal {
     private static final String AUTHOR = "RFQ 正式应答";
-    private static final Pattern PDF_PAGE = Pattern.compile("page-(\\d+)(?:/.*)?");
+    private static final Pattern PDF_PAGE = Pattern.compile("(?:page-|selection:page:)(\\d+)(?:/.*)?");
+    private static final Pattern WORD_SELECTION = Pattern.compile("selection:word:([0-9/]+):(\\d+)-([0-9/]+):(\\d+)");
     private static final Pattern WORD_BODY = Pattern.compile("body/(\\d+)(?:/r(\\d+)/c(\\d+)(/table/0)?)?(?:/image-\\d+)?");
     private static final Pattern IMPORTED_PARAGRAPH = Pattern.compile("paragraph:(\\d+)");
 
@@ -39,6 +47,38 @@ public final class AnnotatedOriginal {
         public Note(String anchor, String quote, String text) {
             this(anchor, quote, text, false);
         }
+    }
+
+    public static void requireSelectedText(byte[] original, String anchor, String quote) throws IOException {
+        var note = new Note(anchor, quote, "");
+        var word = WORD_SELECTION.matcher(anchor);
+        String text;
+        if (word.matches()) {
+            try (var document = new XWPFDocument(new ByteArrayInputStream(original))) {
+                text = wordSelection(document, note, word).stream().map(SelectedParagraph::text)
+                    .collect(Collectors.joining(" "));
+            }
+        } else {
+            var page = PDF_PAGE.matcher(anchor);
+            if (!page.matches()) { throw missingAnchor(note); }
+            try (var document = Loader.loadPDF(original)) {
+                int index = sourceIndex(page.group(1), "", note);
+                if (index < 1 || index > document.getNumberOfPages()) { throw missingAnchor(note); }
+                var reader = new PDFTextStripper();
+                reader.setSortByPosition(true);
+                reader.setStartPage(index);
+                reader.setEndPage(index);
+                text = reader.getText(document);
+            }
+        }
+        String normalized = normalizeQuote(text);
+        int offset = 0;
+        for (String line : quote.lines().map(AnnotatedOriginal::normalizeQuote).filter(value -> !value.isEmpty()).toList()) {
+            int match = normalized.indexOf(line, offset);
+            if (match < 0) { throw missingAnchor(note); }
+            offset = match + line.length();
+        }
+        if (offset == 0) { throw missingAnchor(note); }
     }
 
     public static byte[] wordWithAnswers(byte[] original, List<Note> notes) throws IOException {
@@ -104,6 +144,15 @@ public final class AnnotatedOriginal {
     }
 
     private static XWPFParagraph locateWord(XWPFDocument document, Note note, boolean acceptRuleQuote) {
+        var selection = WORD_SELECTION.matcher(note.anchor());
+        if (selection.matches()) {
+            StringBuilder text = new StringBuilder();
+            for (var paragraph : wordSelection(document, note, selection)) {
+                text.append(paragraph.text()).append(' ');
+                if (contains(text.toString(), note.quote())) { return paragraph.paragraph(); }
+            }
+            throw missingAnchor(note);
+        }
         if (note.indexedWordSource()) {
             return locateIndexedWord(document, note);
         }
@@ -150,6 +199,59 @@ public final class AnnotatedOriginal {
                 .filter(paragraph -> !paragraph.getText().isBlank())
                 .max(java.util.Comparator.comparingInt(paragraph -> paragraph.getText().length()))
                 .orElseThrow(() -> missingAnchor(note));
+    }
+
+    private record ParagraphPath(int[] path, XWPFParagraph paragraph) {}
+    private record SelectedParagraph(String text, XWPFParagraph paragraph) {}
+
+    private static List<SelectedParagraph> wordSelection(XWPFDocument document, Note note, Matcher range) {
+        int[] start = Arrays.stream(range.group(1).split("/")).mapToInt(segment -> sourceIndex(segment, "", note)).toArray();
+        int[] end = Arrays.stream(range.group(3).split("/")).mapToInt(segment -> sourceIndex(segment, "", note)).toArray();
+        List<ParagraphPath> paragraphs = new ArrayList<>();
+        selectionParagraphs(WordSourceBody.elements(document), new int[0], start, end, paragraphs);
+        if (paragraphs.isEmpty() || !Arrays.equals(paragraphs.get(0).path(), start)
+                || !Arrays.equals(paragraphs.get(paragraphs.size() - 1).path(), end)) {
+            throw missingAnchor(note);
+        }
+        var selected = new ArrayList<SelectedParagraph>();
+        for (ParagraphPath paragraph : paragraphs) {
+            byte[] bytes = nativeParagraphText(paragraph.paragraph()).getBytes(StandardCharsets.UTF_8);
+            int from = Arrays.equals(paragraph.path(), start) ? sourceIndex(range.group(2), "", note) : 0;
+            int to = Arrays.equals(paragraph.path(), end) ? sourceIndex(range.group(4), "", note) : bytes.length;
+            if (from > to || to > bytes.length) { throw missingAnchor(note); }
+            try {
+                String text = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes, from, to - from)).toString();
+                selected.add(new SelectedParagraph(text, paragraph.paragraph()));
+            } catch (CharacterCodingException exception) {
+                throw missingAnchor(note);
+            }
+        }
+        return selected;
+    }
+
+    private static void selectionParagraphs(List<IBodyElement> elements, int[] parent, int[] start, int[] end,
+                                            List<ParagraphPath> selected) {
+        int depth = parent.length;
+        for (int index = 0; index < elements.size(); index++) {
+            int[] path = Arrays.copyOf(parent, depth + 1);
+            path[depth] = index;
+            if (Arrays.compare(path, end) > 0) { break; }
+            if (Arrays.compare(path, 0, path.length, start, 0, Math.min(start.length, path.length)) < 0) { continue; }
+            var element = elements.get(index);
+            if (element instanceof XWPFParagraph paragraph && Arrays.compare(path, start) >= 0) {
+                selected.add(new ParagraphPath(path, paragraph));
+            } else if (element instanceof XWPFTable table) {
+                for (int row = 0; row < table.getRows().size(); row++) {
+                    var cells = table.getRow(row).getTableCells();
+                    for (int col = 0; col < cells.size(); col++) {
+                        int[] cell = Arrays.copyOf(path, path.length + 2);
+                        cell[path.length] = row;
+                        cell[path.length + 1] = col;
+                        selectionParagraphs(WordSourceBody.elements(cells.get(col)), cell, start, end, selected);
+                    }
+                }
+            }
+        }
     }
 
     private static XWPFParagraph locateIndexedWord(XWPFDocument document, Note note) {
@@ -215,8 +317,12 @@ public final class AnnotatedOriginal {
     }
 
     private static boolean contains(String text, String quote) {
-        String needle = quote.replaceAll("[\\s\\p{Zs}|]+", "");
-        return !needle.isEmpty() && text.replaceAll("[\\s\\p{Zs}|]+", "").contains(needle);
+        String needle = normalizeQuote(quote);
+        return !needle.isEmpty() && normalizeQuote(text).contains(needle);
+    }
+
+    private static String normalizeQuote(String quote) {
+        return quote.replaceAll("[\\s\\p{Zs}|]+", "");
     }
 
     private static <T> T at(List<T> list, int index, Note note) {

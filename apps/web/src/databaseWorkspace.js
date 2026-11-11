@@ -2,6 +2,7 @@ import {api as defaultApi} from './authClient.js';
 import {hydrateSessionPersonnel} from './sessionPersonnel.js';
 import {reconcileTasks} from './taskDomain.js';
 import {readRequirementSpecification} from './requirementSpecification.js';
+import {selectionSource} from './documentAnchors.js';
 import {normalizeResponseRemark} from './responseFields.js';
 
 const roleNames={SR:'SR',TECH:'技术',APPROVER:'技术'};
@@ -25,6 +26,7 @@ export function mapDatabaseRequirement(row,files,owner){
  const file=files.find(file=>file.id===row.documentId);
  return {...row,clause:row.customerClauseNo||'',original:row.originalText||'',sourceOriginal:row.originalText||'',
   specification:readRequirementSpecification(row.metricsJson),
+  ...selectionSource(row),
   source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',activeForApproval:file?.activeForApproval!==false,sectionPath:sectionPath(row.sectionPath),
   category:'未分类',status:'待确认',conclusion:'',draft:'',evidence:'',remark:'',
   matchLevel:'none',score:0,backendVersion:row.version,version:Math.max(1,row.version),owner,
