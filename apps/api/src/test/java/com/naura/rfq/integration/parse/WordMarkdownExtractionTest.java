@@ -1,6 +1,7 @@
 package com.naura.rfq.integration.parse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.ExtractedRequirement;
@@ -10,6 +11,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,9 +19,146 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class WordMarkdownExtractionTest {
     private final ObjectMapper json = new ObjectMapper();
+
+    @ParameterizedTest
+    @ValueSource(strings = {"local-limit", "context-length", "output-length", "large-full", "auth-error"})
+    void retriesLengthLimitsWithOverlappingSourcesAndKeepsOneBoundaryClause(String limit) throws Exception {
+        String prefix = limit.equals("large-full") ? "长".repeat(101_000) : "";
+        var content = WordMarkdownReader.mapMarkdown(prefix + """
+                简介 RFQX0END
+
+                设备必须自动上料 RFQX1END
+
+                限标准工况 RFQX2END
+
+                必须记录运行时间 RFQX3END
+                """, "RFQX", List.of(
+                RawBlock.paragraph(0, "简介", "", null, "body/0"),
+                RawBlock.paragraph(1, "设备必须自动上料", "", null, "body/1"),
+                RawBlock.paragraph(2, "限标准工况", "", null, "body/2"),
+                RawBlock.paragraph(3, "必须记录运行时间", "", null, "body/3")));
+        var config = new ParseIntegrationProperties();
+        config.getLlm().setModel("test");
+        config.getLlm().setBatchBlocks(2);
+        if (limit.equals("local-limit")) {
+            config.getWordMarkdown().setMaxChars(44);
+        }
+        var requests = new ArrayList<String>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/model", exchange -> {
+            String markdown = json.readTree(exchange.getRequestBody()).path("messages").path(1).path("content").asText();
+            requests.add(markdown);
+            int status = 200;
+            Object response;
+            if (limit.equals("auth-error")) {
+                status = 401;
+                response = Map.of("error", Map.of("code", "invalid_api_key", "message", "Invalid API key"));
+            } else if (markdown.equals(content.markdown()) && limit.equals("context-length")) {
+                status = 400;
+                response = Map.of("error", Map.of("code", "context_length_exceeded", "message", "Context length exceeded"));
+            } else if (markdown.equals(content.markdown()) && limit.equals("output-length")) {
+                response = Map.of("choices", List.of(Map.of("finish_reason", "length", "message", Map.of("content", "{"))));
+            } else {
+                var requirements = new ArrayList<Map<String, Object>>();
+                var ignored = new ArrayList<String>();
+                if (markdown.contains("[S1]") && markdown.contains("[S2]")) {
+                    String requirement = !markdown.equals(content.markdown()) && markdown.contains("[S3]")
+                            ? "设备在标准工况下须自动上料" : "标准工况下必须自动上料";
+                    requirements.add(Map.of("requirementText", requirement, "sourceRefs", List.of("S1", "S2")));
+                }
+                if (markdown.contains("[S3]")) {
+                    requirements.add(Map.of("requirementText", "必须记录运行时间", "sourceRefs", List.of("S3")));
+                }
+                if (markdown.contains("[S0]")) {
+                    ignored.add("S0");
+                }
+                var output = json.writeValueAsString(Map.of("requirements", requirements, "ignoredSourceRefs", ignored));
+                response = Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", output))));
+            }
+            var bytes = json.writeValueAsBytes(response);
+            exchange.sendResponseHeaders(status, bytes.length);
+            try (var output = exchange.getResponseBody()) {
+                output.write(bytes);
+            }
+        });
+        server.start();
+        try {
+            config.getLlm().setUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/model");
+            var extractor = new WordMarkdownExtractor(config, new ParseHttpClient(json), new RuleBasedExtractor(json));
+            if (limit.equals("auth-error")) {
+                assertThatThrownBy(() -> extractor.extract(content, "RUN")).isInstanceOf(DocumentReadException.class);
+                assertThat(requests).containsExactly(content.markdown());
+                return;
+            }
+            var result = extractor.extract(content, "RUN");
+
+            if (limit.equals("local-limit")) {
+                assertThat(requests).doesNotContain(content.markdown());
+            } else {
+                assertThat(requests.get(0)).isEqualTo(content.markdown());
+            }
+            if (limit.equals("large-full")) {
+                assertThat(requests).containsExactly(content.markdown());
+            } else {
+                assertThat(requests.stream().filter(request -> !request.equals(content.markdown()))
+                        .filter(request -> request.contains("[S1]") && request.contains("[S2]"))).hasSize(2);
+            }
+            assertThat(result.issues()).isEmpty();
+            assertThat(result.requirements()).extracting(ExtractedRequirement::requirementText)
+                    .containsExactly("标准工况下必须自动上料", "必须记录运行时间");
+            assertThat(result.requirements().get(0).sourceRefs()).containsExactly(
+                    new SourceRef("body/1", "设备必须自动上料"), new SourceRef("body/2", "限标准工况"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void continuedTableBatchKeepsHeaderAndAssignsTheClauseToItsDataRow() throws Exception {
+        String markdown = """
+                | 项目 [S0] | 负载 (kg) |
+                | --- | --- |
+                | 甲 [S1] | 10 |
+                | 乙 [S2] | 20 |
+                | 丙 [S3] | 30 |
+                | 丁 [S4] | 40 |
+                """;
+        var blocks = List.of(RawBlock.table(0, List.of(List.of("项目", "负载 (kg)")), "", "body/0/r0"),
+                RawBlock.table(1, List.of(List.of("甲", "10")), "", "body/0/r1"),
+                RawBlock.table(2, List.of(List.of("乙", "20")), "", "body/0/r2"),
+                RawBlock.table(3, List.of(List.of("丙", "30")), "", "body/0/r3"),
+                RawBlock.table(4, List.of(List.of("丁", "40")), "", "body/0/r4"));
+        var content = new WordMarkdownReader.Content(markdown, blocks, java.util.Set.of(0, 1, 2, 3, 4), List.of());
+        var config = new ParseIntegrationProperties();
+        config.getLlm().setModel("test");
+        config.getLlm().setUrl("http://unused.invalid/model");
+        config.getLlm().setBatchBlocks(2);
+        var http = new ParseHttpClient(json) {
+            @Override public com.fasterxml.jackson.databind.JsonNode post(ParseIntegrationProperties.Endpoint settings,
+                    Object body, String parseRunId) throws Exception {
+                String text = json.valueToTree(body).path("messages").path(1).path("content").asText();
+                if (text.equals(markdown)) {
+                    return json.readTree("{\"choices\":[{\"finish_reason\":\"length\"}]}");
+                }
+                String output = text.contains("负载 (kg)") && text.contains("[S4]")
+                        ? """
+                          {"requirements":[{"requirementText":"丁的额定负载 40 kg","sourceRefs":["S0","S4"]}],"ignoredSourceRefs":[]}
+                          """
+                        : "{\"requirements\":[],\"ignoredSourceRefs\":[]}";
+                return json.valueToTree(Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", output)))));
+            }
+        };
+        var result = new WordMarkdownExtractor(config, http, new RuleBasedExtractor(json)).extract(content, "RUN");
+        assertThat(result.requirements()).singleElement().satisfies(clause -> {
+            assertThat(clause.blockIndex()).isEqualTo(4);
+            assertThat(clause.sourceRefs()).extracting(SourceRef::anchor).containsExactly("body/0/r4", "body/0/r0");
+        });
+    }
 
     @Test
     void referencesUseOriginalWordPositionsAndRejectInventedAndMissingMarkers() throws Exception {

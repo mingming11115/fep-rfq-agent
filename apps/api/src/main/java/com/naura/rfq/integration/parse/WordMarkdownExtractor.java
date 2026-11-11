@@ -7,17 +7,21 @@ import com.naura.rfq.model.parse.ExtractionResult;
 import com.naura.rfq.model.parse.RawBlock;
 import com.naura.rfq.model.parse.SourceRef;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class WordMarkdownExtractor {
     private static final Pattern SOURCE_ID = Pattern.compile("S([0-9]{1,9})");
     private static final String PROMPT = """
@@ -51,18 +55,21 @@ public class WordMarkdownExtractor {
             }
             throw new DocumentReadException("Markdown 没有可引用的 Word 原文");
         }
-        if (content.markdown().length() > properties.getWordMarkdown().getMaxChars()) {
-            throw new DocumentReadException("Markdown 超过模型输入上限，请拆分文档后重试");
-        }
-        var request = Map.of("model", config.getModel(), "stream", false, "messages", List.of(
-                Map.of("role", "system", "content", PROMPT),
-                Map.of("role", "user", "content", content.markdown())));
+        int configuredMax = properties.getWordMarkdown().getMaxChars();
+        int maxChars = configuredMax > 0 ? configuredMax : Integer.MAX_VALUE;
+        String extractor = "markitdown+llm:" + config.getModel();
         try {
-            var response = http.post(config, request, runId);
-            if ("length".equals(response.path("choices").path(0).path("finish_reason").asText())) {
-                throw new DocumentReadException("Word 模型输出被截断，请拆分文档后重试");
+            if (content.markdown().length() <= maxChars) {
+                try {
+                    var response = request(content.markdown(), PROMPT, config, runId);
+                    return validate(response, content, extractor);
+                } catch (LengthLimitException exception) {
+                    log.info("document.parse.word.llm.batching parseRunId={} reason={}", runId, exception.getMessage());
+                }
+            } else {
+                log.info("document.parse.word.llm.batching parseRunId={} reason=local_length_limit", runId);
             }
-            return validate(http.modelContent(response), content, "markitdown+llm:" + config.getModel());
+            return extractBatches(content, config, runId, maxChars, extractor);
         } catch (DocumentReadException exception) {
             throw exception;
         } catch (Exception exception) {
@@ -73,59 +80,159 @@ public class WordMarkdownExtractor {
         }
     }
 
-    ExtractionResult validate(JsonNode response, WordMarkdownReader.Content content, String extractor)
-            throws DocumentReadException {
-        if (response == null || !response.path("requirements").isArray() || !response.path("ignoredSourceRefs").isArray()) {
-            throw new DocumentReadException("Word 模型输出缺少条款或来源覆盖字段");
-        }
-        var result = new ArrayList<ExtractedRequirement>();
-        var issues = new ArrayList<>(content.issues());
-        var covered = new HashSet<Integer>();
-        var blocks = content.blocks().stream().collect(Collectors.toMap(RawBlock::index, block -> block));
-        for (JsonNode ignored : response.path("ignoredSourceRefs")) {
-            int index = sourceIndex(ignored);
-            if (content.availableSources().contains(index)) {
-                covered.add(index);
-            } else {
-                issues.add("模型返回了无效的忽略来源");
+    private JsonNode request(String markdown, String prompt, ParseIntegrationProperties.Llm config, String runId) throws Exception {
+        var request = Map.of("model", config.getModel(), "stream", false, "messages", List.of(
+                Map.of("role", "system", "content", prompt), Map.of("role", "user", "content", markdown)));
+        JsonNode response;
+        try {
+            response = http.post(config, request, runId);
+        } catch (Exception exception) {
+            if (ParseHttpClient.requestExceedsLengthLimit(exception)) {
+                throw new LengthLimitException("input_length_limit");
             }
+            throw exception;
         }
-        for (JsonNode candidate : response.path("requirements")) {
-            String requirement = candidate.path("requirementText").asText("").strip();
-            if (!candidate.path("requirementText").isTextual() || requirement.isEmpty()) {
-                issues.add("模型返回了空条款");
-                continue;
+        if ("length".equals(response.path("choices").path(0).path("finish_reason").asText())) {
+            throw new LengthLimitException("output_length_limit");
+        }
+        return http.modelContent(response);
+    }
+
+    private ExtractionResult extractBatches(WordMarkdownReader.Content content, ParseIntegrationProperties.Llm config,
+            String runId, int maxChars, String extractor) throws Exception {
+        var batches = new WordMarkdownBatches(content.markdown());
+        if (batches.size() < 2) {
+            throw new DocumentReadException("Word 内容块超出模型长度上限，请拆分文档后重试");
+        }
+        var validation = new Validation(content, batches.tableHeaders());
+        int batchChars = Math.min(Math.max(1, config.getBatchChars()), Math.min(maxChars, content.markdown().strip().length() - 1));
+        int batchBlocks = Math.min(Math.max(1, config.getBatchBlocks()), (batches.size() + 1) / 2);
+        for (int start = 0; start < batches.size();) {
+            int end = batches.endOfBatch(start, batchChars, batchBlocks);
+            extractBatch(batches, start, end, batchChars, maxChars, config, runId, validation);
+            start = end;
+        }
+        return validation.result(extractor + "+batched");
+    }
+
+    private void extractBatch(WordMarkdownBatches batches, int start, int end, int batchChars, int maxChars,
+            ParseIntegrationProperties.Llm config, String runId, Validation validation) throws Exception {
+        var batch = batches.batch(start, end, batchChars, true);
+        var primary = new TreeSet<>(batch.primary());
+        primary.retainAll(validation.content.availableSources());
+        if (primary.isEmpty()) {
+            return;
+        }
+        String prompt = PROMPT + "\n本批的主要来源为 " + primary.stream().map(id -> "S" + id).collect(Collectors.joining(", "))
+                + "。只输出主要来源在此列表内的条款。其他来源可作为表头、条件或相邻正文引用。";
+        try {
+            if (batch.markdown().length() > maxChars) {
+                throw new LengthLimitException("local_length_limit");
             }
-            var sourceIndices = new TreeSet<Integer>();
-            var invalid = !candidate.path("sourceRefs").isArray() || candidate.path("sourceRefs").isEmpty();
-            for (JsonNode id : candidate.path("sourceRefs")) {
-                int index = sourceIndex(id);
-                if (content.availableSources().contains(index) && blocks.containsKey(index)) {
-                    sourceIndices.add(index);
-                    covered.add(index);
-                } else {
-                    invalid = true;
+            validation.add(request(batch.markdown(), prompt, config, runId), batch.visible(), primary);
+        } catch (LengthLimitException exception) {
+            if (end - start > 1) {
+                int middle = start + (end - start) / 2;
+                int smaller = Math.min(batchChars, batch.markdown().length() - 1);
+                extractBatch(batches, start, middle, smaller, maxChars, config, runId, validation);
+                extractBatch(batches, middle, end, smaller, maxChars, config, runId, validation);
+                return;
+            }
+            var core = batches.batch(start, end, batchChars, false);
+            if (core.markdown().length() <= maxChars && !core.markdown().equals(batch.markdown())) {
+                try {
+                    validation.add(request(core.markdown(), prompt, config, runId), core.visible(), primary);
+                    return;
+                } catch (LengthLimitException ignored) {
+                    // This request already contains just one source unit.
                 }
             }
-            var sources = sourceIndices.stream().map(blocks::get).toList();
-            // Prefer a native paragraph or row for the default jump when the clause also cites an image or note.
-            var ordered = sources.stream().sorted(java.util.Comparator.comparingInt(WordMarkdownExtractor::sourcePriority))
-                    .toList();
-            var primary = ordered.isEmpty() ? null : ordered.get(0);
-            var refs = ordered.stream().map(block -> new SourceRef(block.anchor(), block.text())).toList();
-            String original = sources.stream().map(RawBlock::text).collect(Collectors.joining("\n"));
-            String metrics = rules.sourcedMetrics(original, candidate.path("specification").asText("").strip());
-            String reason = invalid ? "模型引用缺失或无法定位，请核对原文" : "模型抽取，需核对原文及适用条件";
-            result.add(new ExtractedRequirement(result.size(), primary == null ? -1 : primary.index(),
-                    primary == null ? "" : primary.sectionPath(), candidate.path("customerClauseNo").asText(""),
-                    candidate.path("title").asText(""), 1, null, original, requirement,
-                    metrics, null, null, ExtractedRequirement.NEEDS_REVIEW, reason, refs));
+            throw new DocumentReadException("Word 内容块超出模型长度上限（" + primary + "），请拆分文档后重试");
         }
-        long missing = content.availableSources().stream().filter(index -> !covered.contains(index)).count();
-        if (missing > 0) {
-            issues.add("模型未交代 " + missing + " 处 Word 来源，请核对是否遗漏条款");
+    }
+
+    private static class LengthLimitException extends Exception {
+        LengthLimitException(String reason) { super(reason); }
+    }
+
+    ExtractionResult validate(JsonNode response, WordMarkdownReader.Content content, String extractor)
+            throws DocumentReadException {
+        var validation = new Validation(content, Set.of());
+        validation.add(response, content.availableSources(), content.availableSources());
+        return validation.result(extractor);
+    }
+
+    private class Validation {
+        private final WordMarkdownReader.Content content;
+        private final Set<Integer> tableHeaders;
+        private final List<ExtractedRequirement> requirements = new ArrayList<>();
+        private final List<String> issues;
+        private final Set<Integer> covered = new HashSet<>();
+        private final Map<Integer, RawBlock> blocks;
+
+        Validation(WordMarkdownReader.Content content, Set<Integer> tableHeaders) {
+            this.content = content;
+            this.tableHeaders = tableHeaders;
+            this.issues = new ArrayList<>(content.issues());
+            this.blocks = content.blocks().stream().collect(Collectors.toMap(RawBlock::index, block -> block));
         }
-        return new ExtractionResult(result, extractor, issues);
+
+        void add(JsonNode response, Set<Integer> visible, Set<Integer> primarySources) throws DocumentReadException {
+            if (response == null || !response.path("requirements").isArray() || !response.path("ignoredSourceRefs").isArray()) {
+                throw new DocumentReadException("Word 模型输出缺少条款或来源覆盖字段");
+            }
+            for (JsonNode ignored : response.path("ignoredSourceRefs")) {
+                int index = sourceIndex(ignored);
+                if (primarySources.contains(index)) {
+                    covered.add(index);
+                } else if (!visible.contains(index) || !content.availableSources().contains(index)) {
+                    issues.add("模型返回了无效的忽略来源");
+                }
+            }
+            for (JsonNode candidate : response.path("requirements")) {
+                String requirement = candidate.path("requirementText").asText("").strip();
+                if (!candidate.path("requirementText").isTextual() || requirement.isEmpty()) {
+                    issues.add("模型返回了空条款");
+                    continue;
+                }
+                var sourceIndices = new TreeSet<Integer>();
+                var invalid = !candidate.path("sourceRefs").isArray() || candidate.path("sourceRefs").isEmpty();
+                for (JsonNode id : candidate.path("sourceRefs")) {
+                    int index = sourceIndex(id);
+                    if (visible.contains(index) && content.availableSources().contains(index) && blocks.containsKey(index)) {
+                        sourceIndices.add(index);
+                    } else {
+                        invalid = true;
+                    }
+                }
+                var sources = sourceIndices.stream().map(blocks::get).toList();
+                // Prefer a native paragraph or row for the default jump when the clause also cites an image or note.
+                var ordered = sources.stream().sorted(Comparator.comparingInt(
+                        block -> tableHeaders.contains(block.index()) ? 3 : sourcePriority(block)))
+                        .toList();
+                var primary = ordered.isEmpty() ? null : ordered.get(0);
+                if (primary != null && !primarySources.contains(primary.index())) {
+                    continue;
+                }
+                covered.addAll(sourceIndices);
+                var refs = ordered.stream().map(block -> new SourceRef(block.anchor(), block.text())).toList();
+                String original = sources.stream().map(RawBlock::text).collect(Collectors.joining("\n"));
+                String metrics = rules.sourcedMetrics(original, candidate.path("specification").asText("").strip());
+                String reason = invalid ? "模型引用缺失或无法定位，请核对原文" : "模型抽取，需核对原文及适用条件";
+                requirements.add(new ExtractedRequirement(requirements.size(), primary == null ? -1 : primary.index(),
+                        primary == null ? "" : primary.sectionPath(), candidate.path("customerClauseNo").asText(""),
+                        candidate.path("title").asText(""), 1, null, original, requirement,
+                        metrics, null, null, ExtractedRequirement.NEEDS_REVIEW, reason, refs));
+            }
+        }
+
+        ExtractionResult result(String extractor) {
+            long missing = content.availableSources().stream().filter(index -> !covered.contains(index)).count();
+            if (missing > 0) {
+                issues.add("模型未交代 " + missing + " 处 Word 来源，请核对是否遗漏条款");
+            }
+            return new ExtractionResult(requirements, extractor, issues);
+        }
     }
 
     private static int sourceIndex(JsonNode value) {

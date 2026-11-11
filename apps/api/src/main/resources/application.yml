@@ -65,7 +65,7 @@ rfq:
       word-markdown:
         python: ${RFQ_MARKITDOWN_PYTHON:python}
         timeout: ${RFQ_MARKITDOWN_TIMEOUT:60s}
-        max-chars: ${RFQ_WORD_MARKDOWN_MAX_CHARS:100000}
+        max-chars: ${RFQ_WORD_MARKDOWN_MAX_CHARS:0}
       llm:
         enabled: ${RFQ_LLM_ENABLED:false}
         url: ${RFQ_LLM_URL:}

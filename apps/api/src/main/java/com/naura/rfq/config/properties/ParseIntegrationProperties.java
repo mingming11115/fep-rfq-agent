@@ -29,7 +29,7 @@ public class ParseIntegrationProperties {
     public static class WordMarkdown {
         private String python = "python";
         private Duration timeout = Duration.ofSeconds(60);
-        private int maxChars = 100000;
+        private int maxChars;
     }
 
     @Getter @Setter

@@ -15,6 +15,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +32,8 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class ParseHttpClient {
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    private static final Set<String> LENGTH_CODES = Set.of("context_length_exceeded", "context_window_exceeded",
+            "max_context_length_exceeded", "input_too_long", "prompt_too_long", "request_too_large");
     private final ObjectMapper json;
     private final ConcurrentHashMap<Duration, HttpClient> clients = new ConcurrentHashMap<>();
 
@@ -95,7 +99,7 @@ public class ParseHttpClient {
             logPayload(call, "response", response.body(), settings.getApiKey());
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new RemoteStatusException(response.statusCode());
+            throw new RemoteStatusException(response.statusCode(), isLengthError(response.statusCode(), response.body()));
         }
         try {
             return json.readTree(response.body());
@@ -103,6 +107,35 @@ public class ParseHttpClient {
             call.failed(e);
             throw e;
         }
+    }
+
+    private boolean isLengthError(int status, byte[] body) {
+        if (status == 413) {
+            return true;
+        }
+        if (status != 400 && status != 422) {
+            return false;
+        }
+        try {
+            JsonNode response = json.readTree(body);
+            if (response == null) {
+                return false;
+            }
+            JsonNode error = response.path("error");
+            if (LENGTH_CODES.contains(error.path("code").asText()) || LENGTH_CODES.contains(error.path("type").asText())) {
+                return true;
+            }
+            String message = error.path("message").asText(response.path("message").asText()).toLowerCase(Locale.ROOT);
+            return message.contains("maximum context length") || message.contains("context length exceeded")
+                    || message.contains("context window exceeded") || message.contains("prompt is too long")
+                    || message.contains("input is too long");
+        } catch (java.io.IOException e) {
+            return false;
+        }
+    }
+
+    static boolean requestExceedsLengthLimit(Exception exception) {
+        return exception instanceof RemoteStatusException status && status.lengthError;
     }
 
     private static void logPayload(ExternalCallLog call, String direction, byte[] bytes, String apiKey) {
@@ -133,7 +166,11 @@ public class ParseHttpClient {
     }
     private static class RemoteStatusException extends Exception {
         private final int status;
-        RemoteStatusException(int status) { this.status = status; }
+        private final boolean lengthError;
+        RemoteStatusException(int status, boolean lengthError) {
+            this.status = status;
+            this.lengthError = lengthError;
+        }
     }
     private static class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
         private final CompletableFuture<byte[]> result = new CompletableFuture<>();

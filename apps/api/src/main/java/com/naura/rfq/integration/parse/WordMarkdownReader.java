@@ -183,9 +183,6 @@ public class WordMarkdownReader {
                 if (process.exitValue() != 0 || Files.size(output) == 0) {
                     throw new DocumentReadException("MarkItDown 转换失败，请检查文件及 markitdown[docx] 安装");
                 }
-                if (Files.size(output) > settings.getMaxChars() * 4L) {
-                    throw new DocumentReadException("Markdown 超过模型输入上限，请拆分文档后重试");
-                }
                 return Files.readString(output);
             } finally {
                 if (process.isAlive()) {
