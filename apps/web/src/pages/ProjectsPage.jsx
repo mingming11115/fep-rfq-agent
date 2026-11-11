@@ -1,4 +1,4 @@
-import { Segmented, Table } from 'antd';
+import { Card, Progress, Segmented, Table, Typography } from 'antd';
 import OverlayPresence from '../components/OverlayPresence';
 import { QueryFilter, ProFormText } from '@ant-design/pro-components';
 import { UiButton, PageHeading, BusinessTabs, UiInput, UiTextArea } from '../components/AntContent';
@@ -69,7 +69,46 @@ export default function ProjectsPage({appState,route,navigate,sourceReparse,onCr
    {title:'操作',key:'actions',render:(_,p)=>canMaintainProject(p)&&<UiButton className="text-link" onClick={()=>openProjectAction(p)}>恢复项目</UiButton>},
   ]}/>
  </div>:<>
- {f.view==='cards'&&<div className="rfq-project-toolbar"><span className="muted">{rows.length} 个项目</span>{viewControl}</div>}<div ref={resultsRef} className="rfq-project-results">{f.view==='cards'?<div className="workspace-project-grid">{rows.map(p=>{const s=getProjectSummary(appState,p.id,appState.actorId);return <article className="workspace-project-card" key={p.id}><div className="workspace-card-top"><StatusBadge status={s.stage}/><small>{p.id}</small></div><button className="workspace-project-title" onClick={()=>onOpenProject(p.id,'view')}>{p.name}</button><p>{p.customer||'客户待补充'}</p><div className="workspace-project-meta"><span>负责人 <b>{p.owner}</b></span><span>截止 <b>{p.deadline||'未设置'}</b></span></div><div className="workspace-progress"><span style={{width:`${s.total?s.confirmed/s.total*100:0}%`}}/></div><small>确认 {s.confirmed}/{s.total} · 评审 {s.reviews} · 重新确认 {s.rechecks}</small><div className="workspace-card-actions"><UiButton className="btn btn-sm" onClick={()=>onOpenProject(p.id,isBuAdmin?'response':'continue')}>{isBuAdmin?'查看RFQ':'继续处理'} {s.pending>0&&`(${s.pending})`}<ArrowRight size={14}/></UiButton><UiButton className="text-link" title={p.groupPath||(p.modelId?[p.modelName,p.modelRevision].filter(Boolean).join(' · '):'该 RFQ 尚未绑定目录')} onClick={()=>openModel(p)}>查看关联组</UiButton>{canManage&&p.ownerId===appState.actorId&&<><UiButton className="text-link" onClick={()=>{setTransfer(p);setTo('');setReason('');}}>移交</UiButton></>}{canMaintainProject(p)&&<UiButton className="text-link workspace-delete-button" onClick={()=>openProjectAction(p)}>删除</UiButton>}</div></article>;})}</div>:<RfqProjectTable sourceReparse={sourceReparse} viewControl={viewControl} rows={rows} appState={appState} canManage={canManage} isBuAdmin={isBuAdmin} onOpenProject={onOpenProject} onOpenModel={openModel} onTransfer={p=>{setTransfer(p);setTo('');setReason('');}} onDelete={openProjectAction} canMaintainProject={canMaintainProject}/>}{f.view==='cards'&&!rows.length&&<div className="workspace-empty">{isBuAdmin?'没有符合条件的项目，可调整筛选条件。':'没有符合条件的项目。可调整筛选或新建 RFQ。'}</div>}</div></>}</section>
+ {f.view==='cards'&&<div className="rfq-project-toolbar"><span className="muted">{rows.length} 个项目</span>{viewControl}</div>}<div ref={resultsRef} className="rfq-project-results">{f.view==='cards'?<div className="workspace-project-grid">{rows.map(project => {
+  const summary = getProjectSummary(appState, project.id, appState.actorId);
+  const percent = summary.total ? Math.round(summary.confirmed / summary.total * 100) : 0;
+  const groupTitle = project.groupPath || (project.modelId
+    ? [project.modelName, project.modelRevision].filter(Boolean).join(' · ')
+    : '该 RFQ 尚未绑定目录');
+
+  return <Card key={project.id} size="small" className="rfq-project-card"
+    title={<button type="button" className="workspace-project-title"
+      onClick={() => onOpenProject(project.id, 'view')}>{project.name}</button>}
+    extra={<StatusBadge status={summary.stage}/>}
+    classNames={{ body: 'rfq-project-card-body' }}>
+    <div className="rfq-project-card-identity">
+      <Typography.Text>{project.customer || '客户待补充'}</Typography.Text>
+      <Typography.Text type="secondary">{project.id}</Typography.Text>
+    </div>
+    <dl className="rfq-project-card-details">
+      <div><dt>负责人</dt><dd>{project.owner}</dd></div>
+      <div><dt>截止日期</dt><dd>{project.deadline || '未设置'}</dd></div>
+    </dl>
+    <div className="rfq-project-card-progress">
+      <div className="rfq-project-card-progress-label">
+        <span>确认进度</span>
+        <span>{summary.confirmed}/{summary.total}</span>
+      </div>
+      <Progress percent={percent} size="small" showInfo={false} aria-label="确认进度"/>
+      <Typography.Text type="secondary">评审 {summary.reviews} · 重新确认 {summary.rechecks}</Typography.Text>
+    </div>
+    <div className="workspace-card-actions">
+      <UiButton className="btn btn-primary btn-sm" onClick={() => onOpenProject(project.id, isBuAdmin ? 'response' : 'continue')}>
+        {isBuAdmin ? '查看RFQ' : '继续处理'} {summary.pending > 0 && `(${summary.pending})`}<ArrowRight size={14}/>
+      </UiButton>
+      <UiButton className="text-link" title={groupTitle} onClick={() => openModel(project)}>查看关联组</UiButton>
+      {canManage && project.ownerId === appState.actorId && <UiButton className="text-link"
+        onClick={() => { setTransfer(project); setTo(''); setReason(''); }}>移交</UiButton>}
+      {canMaintainProject(project) && <UiButton className="text-link workspace-delete-button"
+        onClick={() => openProjectAction(project)}>删除</UiButton>}
+    </div>
+  </Card>;
+})}</div>:<RfqProjectTable sourceReparse={sourceReparse} viewControl={viewControl} rows={rows} appState={appState} canManage={canManage} isBuAdmin={isBuAdmin} onOpenProject={onOpenProject} onOpenModel={openModel} onTransfer={p=>{setTransfer(p);setTo('');setReason('');}} onDelete={openProjectAction} canMaintainProject={canMaintainProject}/>}{f.view==='cards'&&!rows.length&&<div className="workspace-empty">{isBuAdmin?'没有符合条件的项目，可调整筛选条件。':'没有符合条件的项目。可调整筛选或新建 RFQ。'}</div>}</div></>}</section>
  <OverlayPresence>{projectAction&&<Modal title={actionLabel+' RFQ 项目'} onClose={closeProjectAction} footer={<>
   <UiButton className="btn" disabled={submitting} onClick={closeProjectAction}>取消</UiButton>
   <UiButton className={restoring?'btn btn-primary':'btn btn-danger'} loading={submitting} disabled={restoring&&!actionReason.trim()} onClick={submitProjectAction}>确认{actionLabel}</UiButton>

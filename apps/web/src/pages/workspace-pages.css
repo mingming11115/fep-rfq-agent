@@ -5,3 +5,88 @@
 
 .workspace-todo.is-overdue{background:#fff6f5;box-shadow:inset 3px 0 #dc4545}.workspace-overdue-badge{display:inline-flex;align-items:center;gap:4px;vertical-align:middle;margin-right:12px;padding:3px 8px;border:1px solid #f7c2bd;border-radius:5px;background:#ffebe8;color:#b42318;font-size:12px;font-weight:600;white-space:nowrap}.workspace-todo-deadline{color:var(--text-secondary,#595959);font-size:14px;white-space:nowrap}.workspace-todo-deadline.is-overdue{color:#b42318;font-weight:600}
 @media(max-width:760px){.workspace-todo{flex-wrap:wrap;padding:16px 18px}.workspace-todo>div{flex-basis:100%;line-height:1.8}.workspace-todo-deadline{margin-right:auto}}
+
+.rfq-project-results .workspace-project-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 24px;
+}
+
+.rfq-project-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rfq-project-card.ant-card .ant-card-head {
+  min-height: 52px;
+  padding: 8px 20px;
+}
+
+.rfq-project-card .ant-card-head-title {
+  white-space: normal;
+}
+
+.rfq-project-card .ant-card-head-wrapper {
+  gap: 12px;
+}
+
+.rfq-project-card .workspace-project-title {
+  color: inherit;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+}
+
+.rfq-project-card .workspace-project-title:hover {
+  color: var(--primary, #1677ff);
+  text-decoration: underline;
+}
+
+.rfq-project-card.ant-card .rfq-project-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  overflow-wrap: anywhere;
+}
+
+.rfq-project-card-identity,
+.rfq-project-card-progress-label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.rfq-project-card-identity .ant-typography-secondary,
+.rfq-project-card-progress .ant-typography {
+  font-size: 12px;
+}
+
+.rfq-project-card-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.rfq-project-card-details dt {
+  color: var(--text-secondary, #595959);
+  font-size: 12px;
+}
+
+.rfq-project-card-details dd {
+  margin: 4px 0 0;
+}
+
+.rfq-project-card-progress-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rfq-project-card .workspace-card-actions {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: auto;
+  padding-top: 16px;
+}
