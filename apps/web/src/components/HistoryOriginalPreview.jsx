@@ -19,6 +19,7 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
   const viewer=frame.current;
   const abort=new AbortController();
   const origin=window.location.origin;
+  const hasQuote=Boolean(quote.trim());
   let engine='',filename='',bytes=null,opened=false,configured=false,timer;
   function finish(message,type='warning'){
    clearTimeout(timer);
@@ -41,20 +42,28 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
    let payload;
    try{payload=typeof message.payload==='string'?JSON.parse(message.payload):message.payload;}
    catch{finish('无法读取原文定位结果，请在原件中核对。');return;}
-   if(message.type===engine+':reviewState'&&payload?.document&&payload.fileName===filename&&!configured){
+   if(message.type===engine+':reviewState'&&payload?.document&&payload.fileName===filename){
+    // PdfCraft draws its toolbar on the canvas. Its viewport starts below that toolbar.
+    const top=payload.clip?.y;
+    if(engine==='pdfcraft'&&Number.isFinite(top)&&top>=0) {
+     viewer.style.setProperty('--history-preview-top',`${top}px`);
+    }
+    if(configured) { return; }
     configured=true;
-    if(!quote.trim()){finish();return;}
+    const externalTools=engine==='wordcraft';
+    if(!hasQuote&&!externalTools){finish();return;}
     const target={id:targetId,quote,title,description,editable:false,
      page:pageNumber>0?pageNumber-1:null};
     viewer.contentWindow.postMessage({type:engine+':review',payload:JSON.stringify({
      document:payload.document,request:1,action:'configure',
-     params:{editable:false,editDocument:false,targets:[target],selectedId:targetId},
+     params:{editable:false,editDocument:false,externalTools,targets:hasQuote?[target]:[],selectedId:hasQuote?targetId:null},
     })},origin);
    }else if(message.type===engine+':reviewResult'&&configured&&payload?.request===1){
-    finish(payload.ok&&payload.result?.status==='matched'?'':'已打开原件，无法唯一定位该条款，请在原文中核对。');
+    finish(!hasQuote||(payload.ok&&payload.result?.status==='matched')?'':'已打开原件，无法唯一定位该条款，请在原文中核对。');
    }
   }
   window.addEventListener('message',receive);
+  viewer.style.removeProperty('--history-preview-top');
   setLoading(true);setNotice(null);
   async function load(){
    try{
@@ -64,7 +73,7 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
     if(abort.signal.aborted) { return; }
     engine=/\.pdf$/i.test(filename)?'pdfcraft':'wordcraft';
     timer=setTimeout(()=>finish('原文预览或定位超时，请下载原件核对。'),30000);
-    viewer.src=`${import.meta.env?.BASE_URL||'/'}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0`;
+    viewer.src=`${import.meta.env?.BASE_URL||'/'}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0${engine==='wordcraft'?'&tools=host':''}`;
    }catch(cause){
     if(!abort.signal.aborted) { finish(cause.message,'error'); }
    }
@@ -76,6 +85,6 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
  return <div className="history-original-preview">
   {loading&&<Spin tip="正在打开原文并定位"><div className="history-original-progress"/></Spin>}
   {notice&&<Alert showIcon {...notice}/>}
-  <iframe ref={frame} title="历史 RFQ 原文"/>
+  <div className="history-original-viewport"><iframe ref={frame} title="历史 RFQ 原文"/></div>
  </div>;
 }

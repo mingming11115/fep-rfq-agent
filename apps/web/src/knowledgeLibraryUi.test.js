@@ -196,6 +196,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await click('查看',historyRows);
     const preview=document.querySelector('iframe[title="历史 RFQ 原文"]');
     assert.ok(preview?.src.includes('/wordcraft-classic/'));
+    assert.equal(new URL(preview.src).searchParams.get('tools'),'host');
     assert.equal(calls.at(-1)[0],base+'/history-rfq/documents/D/original?part=main');
     const messages=[];
     const editor={postMessage:message=>messages.push(message)};
@@ -208,6 +209,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     assert.equal(messages[0]?.type,'wordcraft:open');
     const command=JSON.parse(messages[1]?.payload||'{}');
     assert.equal(command.action,'configure');
+    assert.equal(command.params.externalTools,true);
     assert.equal(command.params.targets[0].quote,'3.2 原文定位');
     assert.equal(command.params.selectedId,command.params.targets[0].id);
     await act(async()=>send({type:'wordcraft:reviewResult',payload:{request:1,ok:true,result:{status:'matched'}}}));
