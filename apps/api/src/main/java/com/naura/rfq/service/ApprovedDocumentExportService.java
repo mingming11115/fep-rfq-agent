@@ -176,9 +176,12 @@ public class ApprovedDocumentExportService {
 
     private static void validateFinalAnswer(JsonNode response) {
         String conclusion = response.path("conclusion").asText();
-        if (!Set.of("Comply", "有条件 Comply", "不满足", "不适用").contains(conclusion) || response.path("draft").asText().isBlank()
-                || "有条件 Comply".equals(conclusion) && response.path("conditions").asText().isBlank()
-                || Set.of("Comply", "有条件 Comply").contains(conclusion) && response.path("evidence").asText().isBlank()) {
+        if ("Comply".equals(conclusion)) {
+            return;
+        }
+        if (!Set.of("有条件 Comply", "不满足", "不适用").contains(conclusion) || response.path("draft").asText().isBlank()
+                || "有条件 Comply".equals(conclusion) && (response.path("conditions").asText().isBlank()
+                        || response.path("evidence").asText().isBlank())) {
             throw new BusinessException(409, "定稿需要完整答复、适用条件和应答依据");
         }
     }
@@ -304,9 +307,10 @@ public class ApprovedDocumentExportService {
 
     private static String answerText(JsonNode row) {
         String clause = row.path("clause").asText("");
+        String draft = row.path("draft").asText("");
         String conditions = row.path("conditions").asText("");
         return (clause.isBlank() ? "" : "条款 " + clause + "\n") + "结论：" + row.path("conclusion").asText()
-                + "\n答复：" + row.path("draft").asText() + (conditions.isBlank() ? "" : "\n适用条件：" + conditions);
+                + (draft.isBlank() ? "" : "\n答复：" + draft) + (conditions.isBlank() ? "" : "\n适用条件：" + conditions);
     }
 
     private ExportFile exportDocument(CurrentUser user, String sourceId, List<Note> notes, boolean wordInBody) throws IOException {

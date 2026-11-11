@@ -108,7 +108,8 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
   let requirements=[row,{...saved,id:'R2'},{...saved,id:'R3',clause:'1.3',title:'Unverified conditions',conditions:'Option A'},
     {...saved,id:'R4',clause:'1.4',title:'Conditional answer',conclusion:'有条件 Comply'},
     {...saved,id:'R5',clause:'1.5',title:'Open review'},
-    {...saved,id:'R6',clause:'1.6',title:'Already adopted',matchReference:{library:'standard_reply',runId:'RUN-R6',candidateId:'S1',version:1}}];
+    {...saved,id:'R6',clause:'1.6',title:'Already adopted',matchReference:{library:'standard_reply',runId:'RUN-R6',candidateId:'S1',version:1}},
+    {...row,id:'R7',clause:'1.7',title:'Conclusion only',conclusion:'Comply'}];
   const reviews=[{id:'V1',requirementId:'R5',kind:'review',status:'待处理'}];
   const props={project:{id:'P',name:'Project',buId:'BU'},reviews,route:{page:'response',projectId:'P',requirementId:'R1',fileId:'F',sourceVersion:'V1.0'},
     appState:{dataSource:'mysql',accountsById:{},commentsByProject:{},membersByProject:{}},
@@ -140,6 +141,7 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
   }}));}
   const batchButton=()=>[...node.querySelectorAll('.detail-outline-footer button')].find(button=>button.textContent.includes('批量确认'));
   const draft=()=>node.querySelector('textarea[aria-label="对外答复"]').value;
+  const field=label=>node.querySelector(`.response-form [aria-label="${label}"]`);
   const resultRow=(dialog,title)=>[...dialog.querySelectorAll('tbody tr')].find(item=>item.textContent.includes(title));
   try{
     await act(async()=>{paint();await settle();});
@@ -149,7 +151,8 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
     assert.equal(batchButton().disabled,false,'prefill must not disable the whole batch');
     await click(batchButton());
     assert.deepEqual(writes,[{id:'R2',version:1,sourceVersion:0,matchRunId:'RUN-R2',candidateId:'S1'},
-      {id:'R6',version:1,sourceVersion:0}]);
+      {id:'R6',version:1,sourceVersion:0},
+      {id:'R7',version:1,sourceVersion:0,matchRunId:'RUN-R7',candidateId:'S1'}]);
     const result=document.querySelector('.ant-modal');
     assert.match(resultRow(result,'Saved clause').textContent,/已确认.*确认成功/);
     assert.match(resultRow(result,'Prefilled clause').textContent,/已排除/);
@@ -160,10 +163,15 @@ test('MySQL batch uses current standard matches while preserving unconfirmed sug
     await click([...result.querySelectorAll('button')].find(button=>button.textContent.replace(/\s/g,'')==='完成'));
     await act(async()=>{result.dispatchEvent(new h.window.Event('animationend',{bubbles:true}));});
     await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
+    for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
+    await click(node.querySelector('[aria-label="人工最终结论"] input[value="有条件 Comply"]'));
+    for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(field(label),`${label} is available for conditional Comply`); }
+    assert.equal(draft(),'Standard answer','switching conclusions preserves the prefilled answer');
+    await click(node.querySelector('[aria-label="人工最终结论"] input[value="Comply"]'));
     await click(batchButton());
     assert.deepEqual(writes.at(-1),{id:'R1',version:1,sourceVersion:0,matchRunId:'RUN-R1',candidateId:'S1',
       patch:{original:'Source',conclusion:'Comply',draft:'Standard answer',conditions:'',reason:'',evidence:'S1 · v1'}});
-    assert.equal(writes.length,3,'retry never resubmits previously confirmed clauses');
+    assert.equal(writes.length,4,'retry never resubmits previously confirmed clauses');
     assert.match(resultRow(document.querySelector('.ant-modal'),'Prefilled clause').textContent,/已确认.*确认成功/);
   }finally{await h.close();}
 });

@@ -120,6 +120,11 @@ test('formal export still checks response completeness after clause confirmation
   assert.ok(issues.some(issue => /证据/.test(issue.message)));
 });
 
+test('confirmed Comply can proceed to final review and export with only the conclusion', () => {
+  const confirmed = call('confirmRequirement', validRow({ draft: '', conditions: '', evidence: '' }));
+  assert.deepEqual(call('getExportIssues', [confirmed], []), []);
+});
+
 test('not-applicable replies allow an empty remark while non-compliance need not invent evidence', () => {
   assert.equal(call('requirementValidation', validRow({ conclusion: '不适用', reason: '', evidence: '' })).length, 0);
   assert.equal(call('requirementValidation', validRow({ conclusion: '不适用', reason: '本次采购不含该设备。', evidence: '' })).length, 0);

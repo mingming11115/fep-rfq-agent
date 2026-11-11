@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.AppUserMapper;
 import com.naura.rfq.mapper.BuMemberProfileMapper;
@@ -138,6 +139,26 @@ class ApprovedDocumentExportServiceTest {
             var tech = new CurrentUser("tech", "李工", false, List.of(new CurrentUser.RoleGrant(bu, "TECH")));
             assertThatThrownBy(() -> exporter.download(tech, projectId, snapshotId, true))
                     .isInstanceOfSatisfying(BusinessException.class, error -> assertThat(error.getCode()).isEqualTo(403));
+
+            var comply = (ObjectNode) snapshot.path("rows").get(0);
+            var optionalFields = List.of("draft", "conditions", "evidence");
+            comply.put("conclusion", "Comply").remove(optionalFields);
+            var currentResponses = new ArrayList<String>();
+            for (String payload : responses) {
+                var response = (ObjectNode) json.readTree(payload);
+                if (response.path("id").equals(comply.path("id"))) {
+                    response.put("conclusion", "Comply").remove(optionalFields);
+                }
+                currentResponses.add(response.toString());
+            }
+            when(jdbc.queryForList(startsWith("select payload from requirement_response"), eq(String.class), eq(projectId)))
+                    .thenReturn(currentResponses);
+            var notes = exporter.validateContents(project, snapshot, true);
+            assertThat(notes.get(documentId).get(0).text())
+                    .isEqualTo("条款 " + comply.path("clause").asText() + "\n结论：Comply");
+
+            when(jdbc.queryForList(startsWith("select payload from requirement_response"), eq(String.class), eq(projectId)))
+                    .thenReturn(responses);
             sourceRows.get(0).setOriginalText("已经修改的原文");
             assertThatThrownBy(() -> exporter.download(actor, projectId, snapshotId, true))
                     .isInstanceOfSatisfying(BusinessException.class, error -> assertThat(error.getCode()).isEqualTo(409));

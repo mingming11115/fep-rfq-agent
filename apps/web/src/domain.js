@@ -41,9 +41,12 @@ export function confirmationValidation(row) {
 
 export function requirementValidation(row) {
   const issues = confirmationValidation(row);
+  if (row.conclusion === 'Comply') { return issues; }
   if (!hasText(row.draft)) { issues.push('请填写对外答复'); }
-  if (row.conclusion === '有条件 Comply' && !hasText(row.conditions)) { issues.push('有条件 Comply 必须填写适用条件'); }
-  if (['Comply', '有条件 Comply'].includes(row.conclusion) && !hasText(row.evidence)) { issues.push('满足类结论必须关联有效证据'); }
+  if (row.conclusion === '有条件 Comply') {
+    if (!hasText(row.conditions)) { issues.push('有条件 Comply 必须填写适用条件'); }
+    if (!hasText(row.evidence)) { issues.push('有条件 Comply 必须关联有效证据'); }
+  }
   return issues;
 }
 

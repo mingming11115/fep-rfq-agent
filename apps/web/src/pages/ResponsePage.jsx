@@ -34,7 +34,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
-import { applyRequirementEdit, confirmationValidation, requirementValidation } from '../domain';
+import { applyRequirementEdit, confirmationValidation } from '../domain';
 import { matchClient } from '../requirementMatchClient';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
@@ -460,7 +460,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (draft && (!databaseBacked || !matchChoice || conflicted)) { return { exclusion: '本条有未保存的修改，请先核对草稿' }; }
     const answer = draft ? { ...row, ...draft } : row;
     if (answer.conclusion !== 'Comply') { return { exclusion: '仅可批量确认已明确为 Comply 的应答' }; }
-    const issues = databaseBacked ? requirementValidation(answer) : confirmationValidation(answer);
+    const issues = confirmationValidation(answer);
     if (issues.length) { return { exclusion: issues.join('；') }; }
 
     const noStandardMatch = '不符合标准回复相似度 >80% 的批量条件，请逐条确认';
@@ -482,8 +482,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       draft && (matchChoice.matchRunId !== run.runId || matchChoice.candidateId !== candidate.id)) {
       return { exclusion: '已采纳的比对依据已变化，请逐条核对' };
     }
+    const conditions = answer.conditions?.trim();
+    const wording = answer.draft?.trim();
     if (!['same', 'not_specified'].includes(candidate.conditionStatus) ||
-      (answer.conditions || '').trim() !== (candidate.conditions || '').trim() || answer.draft.trim() !== candidate.answer?.trim()) {
+      (conditions && conditions !== (candidate.conditions || '').trim()) || (wording && wording !== candidate.answer?.trim())) {
       return { exclusion: '答复或适用条件与标准回复不一致，或条件尚未核实' };
     }
     return reference && !draft ? {} : { choice: { matchRunId: run.runId, candidateId: candidate.id } };
@@ -659,7 +661,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           onDeviation={item=>onDeviation?.(project.id,item)} toast={toast}/>
           : <AssessmentPanel sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}/>}
         <div className="form-grid response-form"><div className="field response-wide"><span><i className="response-required">*</i>人工最终结论</span><Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit} onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/></div>{form.conclusion === '不适用' && <Field label="备注" wide><UiTextArea className="input" aria-label="备注" value={form.reason} readOnly={!canEdit} onChange={(e) => edit('reason', e.target.value)} placeholder="填写备注（选填）" /></Field>}</div>
-        {databaseBacked && <div className="form-grid response-form">
+        {databaseBacked && form.conclusion !== 'Comply' && <div className="form-grid response-form">
           <Field label="对外答复" wide><UiTextArea className="input" aria-label="对外答复" value={form.draft} readOnly={!canEdit} onChange={event=>edit('draft',event.target.value)}/></Field>
           <Field label="适用条件" wide><UiTextArea className="input" aria-label="适用条件" value={form.conditions} readOnly={!canEdit} onChange={event=>edit('conditions',event.target.value)}/></Field>
           <Field label="应答依据" wide><UiInput className="input" aria-label="应答依据" value={form.evidence} readOnly={!canEdit} onChange={event=>edit('evidence',event.target.value)}/></Field>
