@@ -21,7 +21,7 @@ public class ParseIntegrationProperties {
     private WordMarkdown wordMarkdown = new WordMarkdown();
 
     @Autowired
-    public ParseIntegrationProperties(@Value("${rfq.llm.enabled:false}") Boolean llmEnabled) {
+    public ParseIntegrationProperties(@Value("${rfq.llm.enabled:}") Boolean llmEnabled) {
         this.llmEnabled = Boolean.TRUE.equals(llmEnabled);
     }
 

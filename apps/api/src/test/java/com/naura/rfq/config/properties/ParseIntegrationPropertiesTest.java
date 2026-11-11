@@ -43,6 +43,8 @@ class ParseIntegrationPropertiesTest {
                 .withUserConfiguration(SettingsConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+                    assertThat(context.getEnvironment().getProperty("rfq.llm.enabled"))
+                            .isEqualTo(variables.getOrDefault("RFQ_LLM_ENABLED", "false"));
                     var settings = context.getBean(ParseIntegrationProperties.class);
                     var json = new ObjectMapper();
                     var word = new WordMarkdownExtractor(settings, new ParseHttpClient(json), new RuleBasedExtractor(json));
