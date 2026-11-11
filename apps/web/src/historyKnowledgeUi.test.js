@@ -5,6 +5,7 @@ import {mkdir} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
+import {loadLibraryResources} from './knowledgeLibraryClient.js';
 
 async function setupHistoryPage(){
  const w=new Window({url:'http://localhost:5173',settings:{disableCSSFileLoading:true,disableJavaScriptFileLoading:true}});
@@ -17,7 +18,7 @@ async function setupHistoryPage(){
  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
  const settle=async()=>{for(let n=0;n<5;n++)await new Promise(resolve=>setTimeout(resolve,0));};
  const click=async(text,scope=document)=>act(async()=>{const button=[...scope.querySelectorAll('button')].find(node=>node.textContent.replaceAll(' ','')===text.replaceAll(' ',''));assert.ok(button,text);assert.equal(button.disabled,false,text);button.click();await settle();});
- const render=async(id,role)=>act(async()=>{root.render(React.createElement(Page,{actorId:id,actorRole:role,permissionContext:{state,actorId:id,buId:'A'}}));await settle();});
+ const render=async(id,role,props={})=>act(async()=>{root.render(React.createElement(Page,{actorId:id,actorRole:role,permissionContext:{state,actorId:id,buId:'A'},...props}));await settle();});
  const cleanup=async()=>{await act(async()=>root.unmount());await w.happyDOM.cancelAsync();globalThis.MessageChannel=channel;};
  return {w,host,state,settle,click,render,cleanup};
 }
@@ -116,6 +117,39 @@ test('history document UI separates metadata, repairs missing answers and enforc
   const uploadDialog=document.querySelector('[aria-label="历史 RFQ 文件"]').closest('[role="dialog"]');
   assert.doesNotMatch(uploadDialog.textContent,/可见范围|配套答复文件/);
  }finally{await cleanup();}
+});
+
+test('switching history statistics filters reloads the BU resources and shows updated counts and clauses',async t=>{
+ const {host,state,click,render,cleanup}=await setupHistoryPage();
+ t.after(cleanup);
+ const clause={id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'待审核',
+  requirement:'要求支持自动上料',answer:'需配置上料模块 S'};
+ const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:[clause]};
+ Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
+ const resourcePath='/api/rfq/business-units/A/resources';
+ const requests=[];
+ let serverClauses=[{...clause,status:'已发布',revision:1}];
+ const originalFetch=globalThis.fetch;
+ globalThis.fetch=async(path,request)=>{
+  requests.push([path,request.method||'GET']);
+  return new Response(JSON.stringify({code:0,data:{...resources,historyClauses:serverClauses}}));
+ };
+ t.after(()=>{globalThis.fetch=originalFetch;});
+ const props={onLibraryRefresh:async buId=>{state.resourcesByBuId[buId]=await loadLibraryResources(buId);}};
+ await render('bu','BU管理员',props);
+ await click('历史RFQ.docx',host);
+ const counts=host.querySelector('.history-counts');
+ await click('已发布0',counts);
+ assert.deepEqual(requests,[[resourcePath,'GET']]);
+ await render('bu','BU管理员',props);
+ assert.equal(counts.querySelector('.active').textContent,'已发布1');
+ assert.match(host.querySelector('.history-clause-panel tbody').textContent,/要求支持自动上料/);
+ serverClauses=[];
+ await click('全部条款1',counts);
+ assert.deepEqual(requests,[[resourcePath,'GET'],[resourcePath,'GET']]);
+ await render('bu','BU管理员',props);
+ assert.equal(counts.querySelector('.active').textContent,'全部条款0');
+ assert.doesNotMatch(host.querySelector('.history-clause-panel tbody').textContent,/要求支持自动上料/);
 });
 
 test('a published history clause can be revoked with the reason left empty',async t=>{

@@ -94,6 +94,16 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const persist=next=>{writeHistorySnapshot(buId,next);setSnapshot(next);};
  const openDoc=doc=>{const match=query&&latestVersions(clausesForDocument(doc,readableClauses)).find(row=>[row.clauseNo,row.requirement,row.answer].join(' ').toLowerCase().includes(query.toLowerCase()));setActiveId(doc.id);setQuery('');setFilter('all');setSelected([]);setError('');if(match) { editClause(match); }};
  function changePage(){setActiveId(null);setSelected([]);setFilter('all');setQuery('');setDocumentPage(1);}
+ async function changeFilter(nextFilter){
+  setFilter(nextFilter);
+  setSelected([]);
+  if(!databaseBacked||nextFilter===filter) { return; }
+  try { await refresh(); }
+  catch(cause){
+   console.error('刷新历史 RFQ 条款失败',cause);
+   toast?.('刷新历史 RFQ 条款失败','error');
+  }
+ }
  async function upload(){
   if(databaseBacked){
    setError('');
@@ -355,7 +365,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    <HistoryVersionPanel key={active.id} active={active} documents={documents} clauses={readableClauses} onLocate={(doc,row)=>{setActiveId(doc.id);setQuery('');setFilter('all');if(row) { editClause(row); } else { setEditing(null); }}}/>
    <section className="panel history-metadata-panel"><div className="history-section-heading"><h2>文档信息</h2><Space>{<Button disabled={!actor.canEdit} onClick={()=>{setMetadata({...structuredClone(active),version:active.version||'V1',groupIds:groupScope?.groups('history',active)||active.groupIds||[]});setError('');}}>编辑文档信息</Button>}{(databaseBacked?active.sourceType==='history-upload':!active.legacy&&!active.manual)&&<Button onClick={download}><Download size={14}/>下载原件</Button>}</Space></div><Descriptions column={{xs:1,sm:2,lg:3}} items={[...Object.entries(labels).map(([key,label])=>({key,label,children:active.metadata?.[key]||'待补充'})),{key:'version',label:'文件版本',children:active.version||'—'}]}/></section>
    {(pending||interrupted||active.parseStatus==='failed')&&<Alert type={pending?'info':'warning'} showIcon message={pending?'原件已保存，正在解析条款。':interrupted?'上次解析未完成，原件已保留，可以重试。':active.error||'解析失败，原件已保留'} action={!pending&&<Button disabled={!actor.canEdit||saving} onClick={databaseBacked?reparse:()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重试历史 RFQ 解析失败', error); return fail(error); })}>重试解析</Button>}/>}
-   <div className="history-counts">{[{key:'all',label:'全部条款',count:rows.length},{key:'missing',label:'缺少答复',count:rows.filter(row=>!row.answer?.trim()).length},{key:'review',label:'需核对',count:rows.filter(row=>issues(row).length).length},{key:'待审核',label:'待审核',count:rows.filter(row=>row.status==='待审核').length},{key:'已发布',label:'已发布',count:rows.filter(row=>row.status==='已发布').length}].map(item=><button key={item.key} className={filter===item.key?'active':''} onClick={()=>{setFilter(item.key);setSelected([]);}}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>
+   <div className="history-counts">{[{key:'all',label:'全部条款',count:rows.length},{key:'missing',label:'缺少答复',count:rows.filter(row=>!row.answer?.trim()).length},{key:'review',label:'需核对',count:rows.filter(row=>issues(row).length).length},{key:'待审核',label:'待审核',count:rows.filter(row=>row.status==='待审核').length},{key:'已发布',label:'已发布',count:rows.filter(row=>row.status==='已发布').length}].map(item=><button key={item.key} className={filter===item.key?'active':''} onClick={()=>changeFilter(item.key)}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>
    <section className="panel history-clause-panel"><div className="history-toolbar"><Input.Search aria-label="搜索文档内条款" placeholder="搜索编号、要求或历史答复" value={query} onChange={event=>setQuery(event.target.value)} allowClear/><Space wrap><Button disabled={!actor.canEdit||saving} onClick={manual}>补录条款</Button>
     {databaseBacked ? active.sourceType==='history-upload'&&!pending&&active.parseStatus!=='failed'&&!allDocuments.some(doc=>versionFamily(doc)===versionFamily(active)&&doc.versionNumber>active.versionNumber)&&
       <Button disabled={!actor.canEdit||saving} onClick={reparse}>重新解析为新版</Button>
