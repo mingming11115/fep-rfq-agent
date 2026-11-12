@@ -8,9 +8,9 @@ import {Window} from 'happy-dom';
 import React,{act} from 'react';
 import {updateResponseReview} from './reviewDomain.js';
 
-test('processing my review reveals the existing editor, preserves edits on repeated clicks, and reopens a collapsed editor',async()=>{
+test('opening a problem record shows the review in a drawer and preserves edits on repeated clicks',async()=>{
   const window=new Window({url:'http://127.0.0.1:5173',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
-  Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
+  Object.assign(globalThis,{window,document:window.document,Element:window.Element,HTMLElement:window.HTMLElement,SVGElement:window.SVGElement,ShadowRoot:window.ShadowRoot,DOMParser:window.DOMParser,CSS:window.CSS,location:window.location,localStorage:window.localStorage,getComputedStyle:window.getComputedStyle.bind(window),ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:window.requestAnimationFrame.bind(window),cancelAnimationFrame:window.cancelAnimationFrame.bind(window),IS_REACT_ACT_ENVIRONMENT:true});
   const directory=fileURLToPath(new URL('../node_modules/.cache/',import.meta.url));await mkdir(directory,{recursive:true});const output=path.join(directory,'response-review-navigation-test.mjs');
   await build({entryPoints:[fileURLToPath(new URL('./pages/ResponsePage.jsx',import.meta.url))],outfile:output,bundle:true,format:'esm',platform:'node',packages:'external',jsx:'automatic',loader:{'.css':'empty'},define:{'import.meta.env':'{"BASE_URL":"/"}'},plugins:[{name:'raw-template',setup(b){b.onResolve({filter:/\.html\?raw$/},args=>({path:path.resolve(args.resolveDir,args.path.slice(0,-4)),namespace:'raw'}));b.onLoad({filter:/.*/,namespace:'raw'},async args=>({contents:await readFile(args.path,'utf8'),loader:'text'}));}}]});
   const {ResponsePage}=await import(pathToFileURL(output));const {createRoot}=await import('react-dom/client');
@@ -20,19 +20,17 @@ test('processing my review reveals the existing editor, preserves edits on repea
   const writes=[];
   const settle=async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));};
   const render=async()=>act(async()=>{root.render(React.createElement(ResponsePage,{project,requirements:state.requirementsByProject.P,reviews:state.reviewsByProject.P,route:{page:'response',projectId:'P',requirementId:'R'},appState:state,actorId:'t1',actorRole:'技术',canBusinessAction:()=>true,navigate:()=>{},toast:()=>{},onUpdateReview:(reviewId,patch,expectedVersion,expectedRound)=>{state=updateResponseReview(state,{projectId:'P',reviewId,patch,expectedVersion,expectedRound});writes.push(patch);return state.reviewsByProject.P.find(r=>r.id===reviewId);}}));await settle();});
-  const button=text=>[...node.querySelectorAll('button')].find(button=>button.textContent===text||button.getAttribute('aria-label')===text);
-  const panel=()=>node.querySelector('section[aria-label="应答评审"]');
+  const button=text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text||button.getAttribute('aria-label')===text||(text==='问题处理记录'&&button.matches('.rfq-review-link')));
+  const panel=()=>document.querySelector('[role="dialog"]');
   const click=async text=>act(async()=>{const target=button(text);assert.ok(target,`${text} exists`);assert.equal(target.disabled,false);target.focus();target.click();await settle();});
-  const assertReviewFocused=()=>assert.ok(document.activeElement!==document.body&&document.activeElement.contains(panel()),'the review editor receives focus even when already expanded');
   try{
-    await render();assert.ok(panel(),'the review starts expanded');
-    await click('处理本人评审');assertReviewFocused();assert.equal(writes.length,0,'opening a review does not submit a confirmation');
-    await click('收起应答评审');assert.equal(panel(),null);
-    await click('处理本人评审');assert.ok(panel());assertReviewFocused();
-    const note=node.querySelector('textarea[aria-label="本人评审意见"]');
+    await render();assert.equal(panel(),null,'the review starts closed');
+    await click('问题处理记录');assert.ok(panel());assert.equal(writes.length,0,'opening a review does not submit a confirmation');
+    assert.equal(node.querySelector('[role="dialog"]'),null,'the review is outside the response card');
+    const note=panel().querySelector('textarea[aria-label="本人评审意见"]');
     await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(note,'Checked the evidence');note.dispatchEvent(new window.Event('input',{bubbles:true}));await settle();});
-    await click('处理本人评审');assertReviewFocused();
-    assert.equal(node.querySelector('textarea[aria-label="本人评审意见"]'),note,'repeated clicks keep the same editor');
+    await click('处理本人评审');
+    assert.equal(panel().querySelector('textarea[aria-label="本人评审意见"]'),note,'repeated clicks keep the same editor');
     assert.equal(note.value,'Checked the evidence');assert.ok(!document.body.textContent.includes('评审内容尚未保存'),'focusing the current review does not trigger a leave guard');
     await click('确认本人评审');await render();
     assert.equal(state.reviewsByProject.P[0].confirmations.t1.note,'Checked the evidence');

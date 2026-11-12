@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Space, Tag} from 'antd';
 import {MATCH_LIBRARIES, matchClient, matchNeedsPolling, matchStages} from '../requirementMatchClient.js';
 import MatchInputDialog from './MatchInputDialog';
+import {demoMatchPreview} from '../demoMatchPreview.js';
 import {Modal} from './ui';
 
 const matches = matchClient();
@@ -44,7 +45,23 @@ function Candidate({candidate, sourceDocument, action}) {
   </details>;
 }
 
-export default function RequirementMatchPanel({row, resources, canRun, canSetInput, canAdopt, canCloseDeviation, actorId, review, onAdopt, onResult, onDetach, onDeviation, toast}) {
+export default function RequirementMatchPanel(props) {
+  const preview = demoMatchPreview(props.row.id, window.location.hash);
+  if (preview) {
+    return <section className="response-match-panel" aria-label="知识库比对">
+      <Space wrap><strong>知识库比对</strong><Tag color="blue">模拟召回</Tag><Tag>已完成</Tag></Space>
+      <ol>{matchStages(preview).map(stage => <li key={stage.library}>
+        <Space><b>{MATCH_LIBRARIES[stage.library]}</b><Tag>{statusLabels[stage.status]}</Tag></Space>
+        {stage.candidates?.map(candidate => <Candidate key={candidate.id} candidate={candidate}/>)}
+      </li>)}</ol>
+      {preview.result.matchedLibrary && <p>系统建议　{preview.result.conclusion}</p>}
+      {preview.result.knowledgeGap && <p>三库均未命中，请人工核对条款。</p>}
+    </section>;
+  }
+  return <LiveRequirementMatchPanel {...props}/>;
+}
+
+function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdopt, canCloseDeviation, actorId, review, onAdopt, onResult, onDetach, onDeviation, toast}) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
