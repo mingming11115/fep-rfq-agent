@@ -1,5 +1,6 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.ResponseMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -37,29 +38,44 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class ApprovedDocumentExportService {
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final RequirementMapper requirements;
-    private final DocumentBlockMapper blocks;
-    private final BuMemberProfileMapper profiles;
-    private final AppUserMapper users;
-    private final UserBuRoleMapper roles;
-    private final AccessGuard access;
-    private final DocumentService originalFiles;
-    private final RequirementMatchService matches;
-    private final ProjectWorkScope work;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private DocumentBlockMapper blocks;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private AppUserMapper users;
+    @Autowired
+    private UserBuRoleMapper roles;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private DocumentService originalFiles;
+    @Autowired
+    private RequirementMatchService matches;
+    @Autowired
+    private ProjectWorkScope work;
 
     public record ExportFile(String name, String contentType, byte[] bytes) {}
 
@@ -117,12 +133,12 @@ public class ApprovedDocumentExportService {
         var sourceRows = requirements.findByProjectIdOrderBySource(projectId).stream()
                 .filter(row -> sourceFiles.containsKey(row.getDocumentId()))
                 .collect(Collectors.toMap(Requirement::getId, Function.identity()));
-        if (payloads("select payload from response_review where project_id=?", projectId).stream()
+        if (payloads(responseRecords.listReviews(projectId)).stream()
                 .anyMatch(review -> (review.path("requirementId").asText().isBlank() || sourceRows.containsKey(review.path("requirementId").asText()))
                         && !Set.of("已关闭", "已取消").contains(review.path("status").asText()))) {
             throw changed();
         }
-        var responses = payloads("select payload from requirement_response where project_id=?", projectId).stream()
+        var responses = payloads(responseRecords.listResponses(projectId)).stream()
                 .collect(Collectors.toMap(row -> row.path("id").asText(), Function.identity()));
         JsonNode scope = snapshot.path("approvalScope");
         validateScope(projectId, scope, sourceFiles);
@@ -197,7 +213,7 @@ public class ApprovedDocumentExportService {
     }
 
     JsonNode latestSnapshot(String projectId) {
-        var snapshots = payloads("select payload from response_snapshot where project_id=? order by id", projectId);
+        var snapshots = payloads(responseRecords.listSnapshots(projectId));
         Set<String> superseded = snapshots.stream().map(row -> row.path("revisionOf").asText(""))
                 .collect(Collectors.toSet());
         return snapshots.stream().filter(row -> !superseded.contains(row.path("id").asText()))
@@ -281,7 +297,7 @@ public class ApprovedDocumentExportService {
         if (sourceFiles.values().stream().anyMatch(file -> Set.of("PARSING", "FAILED").contains(file.getStatus()))) {
             throw changed();
         }
-        var config = payloads("select payload from project_response_config where project_id=?", projectId);
+        var config = payloads(responseRecords.findConfig(projectId));
         var frozen = scope.path("configuration");
         if (config.size() != 1 || !config.get(0).path("approvalConfig").equals(frozen.path("approvalConfig"))
                 || !config.get(0).path("equipment").asText("").equals(frozen.path("equipment").asText(""))) {
@@ -339,8 +355,8 @@ public class ApprovedDocumentExportService {
         return new ExportFile(insertSuffix(name, "-正式应答"), original.contentType(), bytes);
     }
 
-    private List<JsonNode> payloads(String sql, String projectId) {
-        return jdbc.queryForList(sql, String.class, projectId).stream().map(payload -> {
+    private List<JsonNode> payloads(List<String> payloads) {
+        return payloads.stream().map(payload -> {
             try { return json.readTree(payload); }
             catch (IOException e) {
                 log.error("解析导出的业务记录失败 errorType={}", e.getClass().getSimpleName());

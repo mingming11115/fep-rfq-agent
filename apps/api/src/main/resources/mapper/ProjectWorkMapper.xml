@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.ProjectWorkMapper">
+
+    <select id="findVersion" resultType="long">
+        select work_version from project_work_version where project_id=#{projectId}
+    </select>
+
+    <insert id="upsertVersion">
+        insert into project_work_version(project_id,work_version) values (#{projectId},#{version}) as desired
+        on duplicate key update work_version=desired.work_version
+    </insert>
+
+    <select id="listReplacements" resultType="com.naura.rfq.mapper.ProjectWorkMapper$Replacement">
+        select old_document_id,new_document_id,status,work_version,created_by,created_at,activated_by,activated_at,reason
+        from rfq_document_replacement where project_id=#{projectId} order by created_at,new_document_id
+    </select>
+
+    <select id="countRetired" resultType="int">
+        select count(*) from rfq_document_replacement where project_id=#{projectId} and
+            ((old_document_id=#{documentId} and status='active') or (new_document_id=#{documentId} and status='cancelled'))
+    </select>
+
+    <insert id="insertReplacement">
+        insert into rfq_document_replacement(project_id,old_document_id,new_document_id,status,created_by)
+        values (#{projectId},#{oldDocumentId},#{newDocumentId},'pending',#{userId})
+    </insert>
+
+    <update id="activateReplacement">
+        update rfq_document_replacement set status='active',work_version=#{version},activated_by=#{userId},
+            activated_at=utc_timestamp(6),reason=#{reason}
+        where project_id=#{projectId} and new_document_id=#{newDocumentId} and status='pending'
+    </update>
+
+    <update id="cancelReplacement">
+        update rfq_document_replacement set status='cancelled',reason=#{reason}
+        where project_id=#{projectId} and new_document_id=#{newDocumentId} and status='pending'
+    </update>
+</mapper>

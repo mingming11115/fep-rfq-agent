@@ -33,9 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,28 +45,42 @@ import org.springframework.transaction.annotation.Transactional;
  * the same document are replaced so a retry never duplicates clauses.
  */
 @Service
-@RequiredArgsConstructor
 public class ParseService {
 
     private static final Logger log = LoggerFactory.getLogger(ParseService.class);
 
-    private final CustomerDocumentMapper documents;
-    private final DocumentBlockMapper blocks;
-    private final RequirementMapper requirements;
-    private final ParseRunMapper runs;
-    private final List<DocumentBlockReader> readers;
-    private final HybridRequirementExtractor extractor;
-    private final WordMarkdownReader wordMarkdownReader;
-    private final WordMarkdownExtractor wordMarkdownExtractor;
-    private final DocumentStorage storage;
-    private final ParseProperties properties;
-    private final AuditService audit;
-    private final ProjectMapper projects;
-    private final AccessGuard access;
-    private final RequirementMatchService matches;
-    private final ProjectWorkScope work;
-    private final HistoryRecallScope historyRecall;
-    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private DocumentBlockMapper blocks;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private ParseRunMapper runs;
+    @Autowired
+    private List<DocumentBlockReader> readers;
+    @Autowired
+    private HybridRequirementExtractor extractor;
+    @Autowired
+    private WordMarkdownReader wordMarkdownReader;
+    @Autowired
+    private WordMarkdownExtractor wordMarkdownExtractor;
+    @Autowired
+    private DocumentStorage storage;
+    @Autowired
+    private ParseProperties properties;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private RequirementMatchService matches;
+    @Autowired
+    private ProjectWorkScope work;
+    @Autowired
+    private HistoryRecallScope historyRecall;
 
     public record ParseRunView(String id, String documentId, String status, int totalBlocks,
             int processedBlocks, int requirementCount, int issueCount, String message,
@@ -88,23 +102,7 @@ public class ParseService {
         if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
         }
-        if (!previous.isEmpty() && Boolean.TRUE.equals(jdbc.queryForObject("""
-                with generated as (
-                    select id,project_id from requirement where document_id=?
-                    and (parse_run_id is not null or block_id is not null or source_refs_json is null)
-                )
-                select exists(
-                    select 1 from generated r join requirement_response a on a.requirement_id=r.id
-                    union all
-                    select 1 from generated r join response_confirmation_history h on h.requirement_id=r.id
-                    union all
-                    select 1 from generated r join response_review v on v.project_id=r.project_id
-                        and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id
-                    union all
-                    select 1 from response_snapshot where project_id=?
-                        and json_search(payload,'one',?,null,'$.rows[*].sourceFileId') is not null
-                )
-                """, Boolean.class, documentId, project.getId(), documentId))) {
+        if (!previous.isEmpty() && requirements.hasResponseArtifacts(documentId, project.getId())) {
             throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
         }
 

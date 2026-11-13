@@ -10,18 +10,24 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Adapts the self-hosted MinerU 3.4.x content_list to the RFQ extraction contract. */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 class MineruPdfReader {
     private static final String PROVENANCE = "mineru";
     private static final String REVIEW = "MinerU 识别内容，需核对原文、数值及单位";
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
-    private final ObjectMapper json;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
+    @Autowired
+    private ObjectMapper json;
 
     boolean enabled() {
         return properties.getMineru().isEnabled();

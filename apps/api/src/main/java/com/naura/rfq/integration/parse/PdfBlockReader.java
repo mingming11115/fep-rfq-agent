@@ -8,10 +8,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,12 +23,15 @@ import org.springframework.stereotype.Component;
  * silently dropping content.
  */
 @Component
-@lombok.RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class PdfBlockReader implements DocumentBlockReader {
 
-    private final OcrClient ocr;
-    private final MineruPdfReader mineru;
+    @Autowired
+    private OcrClient ocr;
+    @Autowired
+    private MineruPdfReader mineru;
 
     private static final int MAX_PARAGRAPH_CHARS = 1200;
 

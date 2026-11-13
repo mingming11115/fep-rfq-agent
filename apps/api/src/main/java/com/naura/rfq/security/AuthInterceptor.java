@@ -8,21 +8,23 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 @Component
-@RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
     private static final String BEARER = "Bearer ";
 
-    private final JwtService jwtService;
-    private final SessionService sessions;
-    private final ObjectMapper objectMapper;
+    @Autowired
+    private JwtService jwtService;
+    @Autowired
+    private SessionService sessions;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)

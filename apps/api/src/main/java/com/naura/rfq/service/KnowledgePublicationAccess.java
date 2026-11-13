@@ -1,5 +1,6 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.BusinessUnitMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.BuMemberProfileMapper;
@@ -10,22 +11,24 @@ import com.naura.rfq.security.CurrentUser;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 class KnowledgePublicationAccess {
     private static final Set<String> EDITORS = Set.of("BU_ADMIN", "SR", "TECH", "APPROVER");
     private static final Pattern LEGACY_PROJECT = Pattern.compile("MYSQL-DEMO-\\d{3}");
-    private final AccessGuard guard;
-    private final BuMemberProfileMapper profiles;
-    private final ProjectMapper projects;
-    private final JdbcTemplate jdbc;
+    @Autowired
+    private AccessGuard guard;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private BusinessUnitMapper businessUnits;
 
     void lockBu(String buId) {
-        if (jdbc.query("select id from business_unit where id=? for update", (row, n) -> row.getString(1), buId).isEmpty()) {
+        if (businessUnits.lockId(buId).isEmpty()) {
             throw new BusinessException(404, "BU 不存在");
         }
     }

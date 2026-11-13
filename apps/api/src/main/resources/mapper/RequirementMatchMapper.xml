@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.RequirementMatchMapper">
+
+    <sql id="runColumns">
+        id,requirement_id,document_id,document_version,parse_run_id,requirement_version,policy_version,
+        input_fingerprint,coalesce(current_run,0) as current_run,status,lease_token,attempts,progress,bu_id,project_id,
+        input_snapshot,match_order
+    </sql>
+
+    <sql id="due">
+        current_run=1 and status in ('queued','running','retry_wait','blocked') and next_attempt_at&lt;=utc_timestamp(6)
+        and (lease_until is null or lease_until&lt;=utc_timestamp(6))
+    </sql>
+
+    <sql id="requirementFilter">
+        where r.project_id=#{projectId} and r.extraction_status &lt;&gt; 'EXCLUDED'
+            <if test="documentId != null">and r.document_id=#{documentId}</if>
+            <if test="parseRunId != null">and r.parse_run_id=#{parseRunId}</if>
+    </sql>
+
+    <insert id="upsertPolicy">
+        insert into bu_match_policy(bu_id,match_order,version,changed_by,changed_at)
+        values (#{buId},#{order},#{version},#{userId},utc_timestamp(6)) as desired
+        on duplicate key update match_order=desired.match_order,version=desired.version,
+            changed_by=desired.changed_by,changed_at=desired.changed_at
+    </insert>
+
+    <update id="supersedeGenerated">
+        update requirement_match_run set current_run=null,status='superseded',lease_token=null,lease_until=null,next_attempt_at=null
+        where project_id=#{projectId} and document_id=#{documentId} and current_run=1
+            and not exists (select 1 from requirement selected
+                where selected.id=requirement_match_run.requirement_id
+                and selected.parse_run_id is null and selected.block_id is null and selected.source_refs_json is not null)
+    </update>
+
+    <update id="supersedeDocument">
+        update requirement_match_run set current_run=null,status='superseded',next_attempt_at=null,lease_token=null,lease_until=null
+        where project_id=#{projectId} and document_id=#{documentId} and current_run=1
+    </update>
+
+    <insert id="upsertInput">
+        insert into requirement_match_input(requirement_id,source_fingerprint,version,payload)
+        values (#{requirementId},#{fingerprint},#{version},#{payload}) as desired on duplicate key update source_fingerprint=desired.source_fingerprint,
+            version=desired.version,payload=desired.payload
+    </insert>
+
+    <select id="countRequirements" resultType="long">
+        select count(*) from requirement r
+        <include refid="requirementFilter"/>
+    </select>
+
+    <select id="listRequirementIds" resultType="string">
+        select r.id from requirement r left join document_block source on source.id=r.block_id
+        <include refid="requirementFilter"/>
+        order by r.document_id, coalesce(source.block_index, 2147483647), r.id limit #{size} offset #{offset}
+    </select>
+
+    <select id="findCapabilityStamp" resultType="string">
+        select json_unquote(json_extract(scope_stamp,'$.capability')) from requirement_match_result where run_id=#{runId}
+    </select>
+
+    <select id="listDue" resultType="string">
+        select id from requirement_match_run where <include refid="due"/>
+        order by next_attempt_at,id limit 4
+    </select>
+
+    <update id="claim">
+        update requirement_match_run set status='running',lease_token=#{token},lease_until=timestampadd(second,90,utc_timestamp(6)),
+            attempts=least(attempts+1,1000000) where id=#{id} and <include refid="due"/>
+    </update>
+
+    <insert id="insertResult">
+        insert into requirement_match_result(run_id,scope_stamp,payload) values (#{runId},#{stamp},#{payload})
+    </insert>
+
+    <update id="finish">
+        update requirement_match_run set status=#{status},next_attempt_at=timestampadd(second,#{delay},utc_timestamp(6)),
+            lease_token=null,lease_until=null,progress=#{progress} where id=#{id} and lease_token=#{token}
+    </update>
+
+    <select id="findResult" resultType="com.naura.rfq.mapper.RequirementMatchMapper$MatchResult">
+        select scope_stamp,payload from requirement_match_result where run_id=#{runId}
+    </select>
+
+    <insert id="insertRun">
+        insert into requirement_match_run(id,bu_id,project_id,requirement_id,requirement_version,document_id,document_version,
+            parse_run_id,input_fingerprint,policy_version,match_order,input_snapshot,request_key,trigger_reason,current_run,
+            status,next_attempt_at,progress)
+        values (#{id},#{buId},#{projectId},#{requirementId},#{requirementVersion},#{documentId},#{documentVersion},#{parseRunId},#{fingerprint},#{policyVersion},#{order},#{snapshot},#{requestKey},#{reason},1,'queued',utc_timestamp(6),#{progress})
+    </insert>
+
+    <update id="supersedeRequirement">
+        update requirement_match_run set current_run=null,status='superseded',lease_token=null,lease_until=null,next_attempt_at=null
+        where requirement_id=#{requirementId} and current_run=1
+    </update>
+
+    <select id="findInput" resultType="com.naura.rfq.mapper.RequirementMatchMapper$InputRow">
+        select version,source_fingerprint,payload from requirement_match_input where requirement_id=#{requirementId}
+    </select>
+
+    <select id="findPolicy" resultType="com.naura.rfq.mapper.RequirementMatchMapper$PolicyRow">
+        select match_order,version,changed_by,changed_at from bu_match_policy where bu_id=#{buId}
+    </select>
+
+    <select id="findByRequest" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">
+        select <include refid="runColumns"/>
+        from requirement_match_run where requirement_id=#{requirementId} and request_key=#{requestKey}
+    </select>
+
+    <select id="findCurrent" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">
+        select <include refid="runColumns"/>
+        from requirement_match_run where requirement_id=#{requirementId} and current_run=1
+    </select>
+
+    <select id="findRunForRequirement" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">
+        select <include refid="runColumns"/>
+        from requirement_match_run where id=#{id} and requirement_id=#{requirementId}
+    </select>
+
+    <select id="findCurrentRunForRequirement" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">
+        select <include refid="runColumns"/>
+        from requirement_match_run where id=#{id} and requirement_id=#{requirementId} and current_run=1
+    </select>
+
+    <select id="findClaimed" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">
+        select <include refid="runColumns"/>
+        from requirement_match_run where id=#{id} and lease_token=#{token}
+    </select>
+
+    <select id="findCurrentClaimed" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">
+        select <include refid="runColumns"/>
+        from requirement_match_run where id=#{id} and lease_token=#{token} and current_run=1
+    </select>
+
+    <select id="lockActiveClaim" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow" useCache="false" flushCache="true">
+        select <include refid="runColumns"/>
+        from requirement_match_run where id=#{id} and lease_token=#{token} and current_run=1 and lease_until&gt;utc_timestamp(6) for update
+    </select>
+</mapper>

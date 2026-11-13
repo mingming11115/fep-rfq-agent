@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
  * 也不能停用自己 —— 所有判断都在服务端完成，前端只负责展示。
  */
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class AdminService {
 
@@ -46,13 +45,20 @@ public class AdminService {
     /** 资料发布资格的可选值，与前端 personnelDomain 的校验保持一致。 */
     private static final Set<String> QUALIFICATIONS = Set.of("knowledge-publish", "capability-publish");
 
-    private final AppUserMapper users;
-    private final BusinessUnitMapper businessUnits;
-    private final UserBuRoleMapper bindings;
-    private final BuMemberProfileMapper profiles;
-    private final PasswordEncoder passwordEncoder;
-    private final AuditService audit;
-    private final AccessGuard access;
+    @Autowired
+    private AppUserMapper users;
+    @Autowired
+    private BusinessUnitMapper businessUnits;
+    @Autowired
+    private UserBuRoleMapper bindings;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private AccessGuard access;
 
     public record UserRow(AppUser user, List<UserBuRole> roles) {
     }

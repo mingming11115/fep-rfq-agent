@@ -18,20 +18,26 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class ProjectAccessService {
-    private final ProjectMapper projects;
-    private final ProjectMemberMapper members;
-    private final AppUserMapper users;
-    private final UserBuRoleMapper roles;
-    private final BuMemberProfileMapper profiles;
-    private final AccessGuard access;
-    private final AuditService audit;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private ProjectMemberMapper members;
+    @Autowired
+    private AppUserMapper users;
+    @Autowired
+    private UserBuRoleMapper roles;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
 
     public record AccessView(String projectId, String buId, String ownerId, long version) {
         static AccessView of(Project p) { return new AccessView(p.getId(),p.getBuId(),p.getOwnerId(),p.getVersion()); }

@@ -13,6 +13,8 @@ public interface BusinessUnitMapper {
 
     Optional<BusinessUnit> findById(@Param("id") String id);
 
+    Optional<String> lockId(@Param("id") String id);
+
     Optional<BusinessUnit> findByCode(@Param("code") String code);
 
     List<BusinessUnit> findAll();

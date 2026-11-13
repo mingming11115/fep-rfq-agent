@@ -10,8 +10,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +21,8 @@ import org.springframework.stereotype.Component;
  * never rewrites meaning; anything it cannot judge is flagged for review instead of guessed.
  */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class RuleBasedExtractor implements RequirementExtractor {
 
@@ -51,7 +54,8 @@ public class RuleBasedExtractor implements RequirementExtractor {
                     + "(-?\\d+(?:\\.\\d+)?)\\s*"
                     + "(MPa|kPa|Pa|bar|L/min|l/min|m3/h|m³/h|Nm3/h|℃|°C|mm|cm|km|kg|t|kV|V|A|kW|MW|%|Hz|r/min|rpm|dB|min|h|s)");
 
-    private final ObjectMapper objectMapper;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Override
     public String name() {

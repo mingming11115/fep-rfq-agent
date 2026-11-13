@@ -15,4 +15,7 @@
         values (#{projectId},#{userId},#{enabled},#{grantedBy},#{createdAt},#{updatedAt})
         on duplicate key update enabled=values(enabled),granted_by=values(granted_by),updated_at=values(updated_at)
     </insert>
+    <select id="findEnabledUserIds" resultType="string">
+        select user_id from project_member where project_id=#{projectId} and enabled=1 order by user_id
+    </select>
 </mapper>

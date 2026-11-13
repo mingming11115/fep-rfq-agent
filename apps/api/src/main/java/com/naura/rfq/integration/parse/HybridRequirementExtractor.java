@@ -15,20 +15,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 @Primary
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class HybridRequirementExtractor implements RequirementExtractor {
-    private final RuleBasedExtractor rules;
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
-    private final ObjectMapper json;
+    @Autowired
+    private RuleBasedExtractor rules;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
+    @Autowired
+    private ObjectMapper json;
 
     private static final Pattern TABLE_SEPARATOR = Pattern.compile("\\h*\\|\\h*");
     private static final Pattern QUOTE_WHITESPACE = Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);

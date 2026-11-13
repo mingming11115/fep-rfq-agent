@@ -8,15 +8,20 @@ import java.time.Instant;
 import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Component
 @Slf4j
+@NoArgsConstructor
 public class OfficeJwt {
-    private final OfficeProperties properties;
-    private final ObjectMapper json;
+    @Autowired
+    private OfficeProperties properties;
+    @Autowired
+    private ObjectMapper json;
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
     public OfficeJwt(OfficeProperties properties, ObjectMapper json) { this.properties = properties; this.json = json; }
     public String sign(Object payload) {

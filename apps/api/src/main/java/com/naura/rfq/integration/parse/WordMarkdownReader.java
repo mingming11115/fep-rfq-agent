@@ -18,27 +18,36 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFAbstractFootnoteEndnote;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
+@NoArgsConstructor
 public class WordMarkdownReader {
-    private final ParseIntegrationProperties properties;
-    private final DocxBlockReader word;
-    private final Path payloadDirectory;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private DocxBlockReader word;
+    private Path payloadDirectory;
 
-    public WordMarkdownReader(ParseIntegrationProperties properties, DocxBlockReader word,
-            @Value("${rfq.storage-dir:./data/rfq-files}") String storageDirectory) {
+    public WordMarkdownReader(ParseIntegrationProperties properties, DocxBlockReader word, String storageDirectory) {
         this.properties = properties;
         this.word = word;
-        this.payloadDirectory = Path.of(storageDirectory).toAbsolutePath().normalize().resolve("parse-payloads");
+        setStorageDirectory(storageDirectory);
+    }
+
+    @Value("${rfq.storage-dir:./data/rfq-files}")
+    private void setStorageDirectory(String storageDirectory) {
+        payloadDirectory = Path.of(storageDirectory).toAbsolutePath().normalize().resolve("parse-payloads");
     }
 
     public record Content(String markdown, List<RawBlock> blocks, Set<Integer> availableSources,

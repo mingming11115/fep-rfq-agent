@@ -7,17 +7,17 @@ import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.AuditQueryService;
 import java.time.Instant;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
 @Slf4j
 public class AuditController {
-    private final AuditQueryService service;
+    @Autowired
+    private AuditQueryService service;
 
     @GetMapping("/audit")
     public ApiResponse<PageView<AuditEvent>> list(@RequestParam(defaultValue="1") int page,

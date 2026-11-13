@@ -21,18 +21,23 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
+@NoArgsConstructor
 public class StandardReplyIndexClient {
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
     private static final Pattern JOB_ID = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,254}");
     private static final Pattern ERROR_CODE = Pattern.compile("[A-Z][A-Z0-9_]{0,63}");
 
-    private final ObjectMapper json;
-    private final StandardReplyIndexProperties settings;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private StandardReplyIndexProperties settings;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
         .followRedirects(HttpClient.Redirect.NEVER).build();
 

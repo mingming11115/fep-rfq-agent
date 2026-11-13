@@ -22,19 +22,23 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Bounded response and whole-request deadline, including request upload and response body. */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class ParseHttpClient {
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
     private static final Set<String> LENGTH_CODES = Set.of("context_length_exceeded", "context_window_exceeded",
             "max_context_length_exceeded", "input_too_long", "prompt_too_long", "request_too_large");
-    private final ObjectMapper json;
+    @Autowired
+    private ObjectMapper json;
     private final ConcurrentHashMap<Duration, HttpClient> clients = new ConcurrentHashMap<>();
 
     public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String parseRunId) throws Exception {

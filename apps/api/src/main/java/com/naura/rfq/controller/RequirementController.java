@@ -6,8 +6,8 @@ import com.naura.rfq.model.dto.PatchRequirementRequest;
 import com.naura.rfq.model.vo.RequirementView;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.RequirementService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,12 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
 @Slf4j
 public class RequirementController {
-    private final RequirementService service;
-    private final SelectionExtractionService selections;
-    private final com.naura.rfq.service.ConfirmationAssignmentService assignments;
+    @Autowired
+    private RequirementService service;
+    @Autowired
+    private SelectionExtractionService selections;
+    @Autowired
+    private com.naura.rfq.service.ConfirmationAssignmentService assignments;
 
     @GetMapping("/requirements/{id}/confirmation-candidates")
     public ApiResponse<java.util.List<com.naura.rfq.service.ConfirmationAssignmentService.Candidate>> candidates(@PathVariable String id) {

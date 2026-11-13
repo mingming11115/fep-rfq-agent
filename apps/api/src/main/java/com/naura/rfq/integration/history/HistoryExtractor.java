@@ -17,12 +17,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Conservative extraction: preserve responses verbatim, never infer historical compliance. */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 public class HistoryExtractor {
     public record Result(Map<String, String> metadata, List<HistoryClause> clauses, List<String> issues) { }
     private static final Pattern NUMBER = Pattern.compile("^(\\d{1,3}(?:\\.\\d{1,3}){0,5}|[（(]\\d+[）)])(?:[.、．)）]\\s*|\\s+)(.+)$");
@@ -33,10 +36,14 @@ public class HistoryExtractor {
     private static final Pattern REVISION_VALUE = Pattern.compile(
             "(?i)(?:rev(?:ision)?[\\s.:-]*)?(?:[a-z](?:\\d+(?:[._-]\\d+)*)?|\\d+(?:[._-]\\d+)*[a-z]?)");
 
-    private final RuleBasedExtractor requirements;
-    private final HybridRequirementExtractor model;
-    private final ParseIntegrationProperties properties;
-    private final HistoryModelExtractor historyModel;
+    @Autowired
+    private RuleBasedExtractor requirements;
+    @Autowired
+    private HybridRequirementExtractor model;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private HistoryModelExtractor historyModel;
 
     public void requireEnabled() {
         if (!properties.getHistory().isRulesEnabled() && !properties.llmEnabled()) {

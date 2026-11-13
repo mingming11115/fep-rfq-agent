@@ -12,19 +12,24 @@ import com.naura.rfq.model.vo.BlockView;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class ParseQueryService {
 
-    private final ParseService parseService;
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final ParseRunMapper runs;
-    private final DocumentBlockMapper blocks;
-    private final AccessGuard access;
+    @Autowired
+    private ParseService parseService;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private ParseRunMapper runs;
+    @Autowired
+    private DocumentBlockMapper blocks;
+    @Autowired
+    private AccessGuard access;
 
     public ParseService.ParseRunView start(CurrentUser user, String documentId, List<String> historyDocumentIds) {
         CustomerDocument document = requireDocument(documentId);

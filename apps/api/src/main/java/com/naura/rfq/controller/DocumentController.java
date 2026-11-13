@@ -12,8 +12,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -30,11 +30,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
 @Slf4j
 public class DocumentController {
-    private final DocumentService service;
-    private final DocumentReplacementService replacements;
+    @Autowired
+    private DocumentService service;
+    @Autowired
+    private DocumentReplacementService replacements;
 
     @PostMapping("/projects/{projectId}/documents/{documentId}/replacement")
     public ApiResponse<ObjectNode> uploadReplacement(@PathVariable String projectId, @PathVariable String documentId,

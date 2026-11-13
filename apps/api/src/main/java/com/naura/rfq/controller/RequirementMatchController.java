@@ -7,8 +7,8 @@ import com.naura.rfq.model.dto.RequirementMatchRequest;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.RequirementMatchService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,10 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
 @Slf4j
 public class RequirementMatchController {
-    private final RequirementMatchService matches;
+    @Autowired
+    private RequirementMatchService matches;
 
     @GetMapping("/business-units/{buId}/match-policy")
     public ApiResponse<RequirementMatchService.Policy> policy(@PathVariable String buId) {

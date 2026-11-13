@@ -3,16 +3,20 @@ package com.naura.rfq.security;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.ProjectMemberMapper;
 import com.naura.rfq.model.entity.Project;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Server-side authorization. The browser never decides who may mutate what. */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 public class AccessGuard {
 
     private static final String BU_ADMIN = "BU_ADMIN";
-    private final ProjectMemberMapper members;
+    @Autowired
+    private ProjectMemberMapper members;
 
     public void requireBu(CurrentUser user, String buId) {
         if (!user.canReach(buId)) {

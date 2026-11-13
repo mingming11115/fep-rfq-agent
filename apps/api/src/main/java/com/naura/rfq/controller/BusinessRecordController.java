@@ -10,20 +10,24 @@ import com.naura.rfq.service.KnowledgeGroupService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@RestController @RequestMapping("/api/rfq") @RequiredArgsConstructor
+@RestController @RequestMapping("/api/rfq")
 @Slf4j
 public class BusinessRecordController {
-    private final BusinessRecordService service;
-    private final ApprovedDocumentExportService exports;
-    private final FinalSnapshotService snapshots;
-    private final KnowledgeGroupService groups;
+    @Autowired
+    private BusinessRecordService service;
+    @Autowired
+    private ApprovedDocumentExportService exports;
+    @Autowired
+    private FinalSnapshotService snapshots;
+    @Autowired
+    private KnowledgeGroupService groups;
     @GetMapping("/projects/{id}/workflow-records")
     public ApiResponse<Map<String,Object>> workflow(@PathVariable String id){
         try {

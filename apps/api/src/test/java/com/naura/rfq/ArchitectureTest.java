@@ -51,4 +51,12 @@ class ArchitectureTest {
             assertThat(Files.readString(path)).as(path.toString()).doesNotContain("com.naura.rfq.controller.");
         }
     }
+
+    @Test
+    void applicationDatabaseAccessGoesThroughMappers() throws Exception {
+        for (Path path : sources()) {
+            assertThat(Files.readString(path)).as(path.toString())
+                    .doesNotContain("org.springframework.jdbc.core.", "java.sql.ResultSet");
+        }
+    }
 }

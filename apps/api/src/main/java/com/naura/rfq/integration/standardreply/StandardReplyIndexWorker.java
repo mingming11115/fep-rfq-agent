@@ -1,37 +1,40 @@
 package com.naura.rfq.integration.standardreply;
 
+import com.naura.rfq.mapper.KnowledgeIndexMapper;
+import com.naura.rfq.mapper.KnowledgeIndexMapper.Key;
+import com.naura.rfq.mapper.KnowledgeIndexMapper.Work;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 @EnableScheduling
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class StandardReplyIndexWorker {
     private static final int POLL_DELAY_SECONDS = 5;
-    private static final String DUE = """
-        synced_at is null and next_attempt_at <= utc_timestamp(6)
-        and (lease_until is null or lease_until <= utc_timestamp(6))
-        """;
 
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final StandardReplyIndexProperties settings;
-    private final StandardReplyIndexClient client;
+    @Autowired
+    private KnowledgeIndexMapper indexRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private StandardReplyIndexProperties settings;
+    @Autowired
+    private StandardReplyIndexClient client;
 
     @Scheduled(fixedDelayString = "${rfq.standard-reply-index.poll-interval-ms:5000}")
     void sync() {
@@ -63,29 +66,16 @@ public class StandardReplyIndexWorker {
     }
 
     private List<Key> dueEntries(Library library, Map<String, String> datasets) {
-        String placeholders = String.join(",", Collections.nCopies(datasets.size(), "?"));
-        return jdbc.query("select bu_id,reply_id from " + library.table + " where bu_id in (" + placeholders
-                + ") and " + DUE + " order by next_attempt_at,bu_id,reply_id limit 16",
-            (row, number) -> new Key(row.getString("bu_id"), row.getString("reply_id")), datasets.keySet().toArray());
+        return indexRecords.listDue(library, datasets.keySet());
     }
 
     private boolean claim(Library library, Key key, String token) {
         // The lease exceeds two consecutive platform request deadlines, including dataset creation.
-        return jdbc.update("""
-            update %s
-            set lease_token=?,lease_until=timestampadd(second,45,utc_timestamp(6))
-            where bu_id=? and reply_id=? and
-            """.formatted(library.table) + DUE, token, key.buId(), key.replyId()) == 1;
+        return indexRecords.claim(library, key.buId(), key.replyId(), token) == 1;
     }
 
     private Work read(Library library, Key key, String token) {
-        return jdbc.query("""
-            select version,operation,payload,updated_at,attempts,job_id from %s
-            where bu_id=? and reply_id=? and lease_token=?
-            """.formatted(library.table), (row, number) -> new Work(row.getInt("version"), row.getString("operation"),
-                row.getString("payload"), row.getObject("updated_at", LocalDateTime.class),
-                row.getInt("attempts"), row.getString("job_id")), key.buId(), key.replyId(), token)
-            .stream().findFirst().orElse(null);
+        return indexRecords.findClaimed(library, key.buId(), key.replyId(), token);
     }
 
     private Outcome deliver(Key key, String dataset, Work work) {
@@ -124,23 +114,13 @@ public class StandardReplyIndexWorker {
     }
 
     private void finish(Library library, Key key, String token, Work work, Outcome outcome) {
-        int changed = jdbc.update("""
-            update %s
-            set job_id=?,attempts=?,last_error=?,synced_at=case when ? then utc_timestamp(6) else null end,
-                next_attempt_at=timestampadd(second,?,utc_timestamp(6)),lease_token=null,lease_until=null
-            where bu_id=? and reply_id=? and lease_token=? and updated_at=?
-            """.formatted(library.table), outcome.jobId(), outcome.attempts(), outcome.error(), outcome.complete(), outcome.delaySeconds(),
-            key.buId(), key.replyId(), token, work.updatedAt());
+        int changed = indexRecords.finish(library, key.buId(), key.replyId(), token, work.updatedAt(),
+                outcome.jobId(), outcome.attempts(), outcome.error(), outcome.complete(), outcome.delaySeconds());
         if (changed == 0) {
             // A new desired state arrived during the request. Release only this worker's lease.
-            jdbc.update("""
-                update %s set lease_token=null,lease_until=null
-                where bu_id=? and reply_id=? and lease_token=?
-                """.formatted(library.table), key.buId(), key.replyId(), token);
+            indexRecords.release(library, key.buId(), key.replyId(), token);
         }
     }
 
-    private record Key(String buId, String replyId) {}
-    private record Work(int version, String operation, String payload, LocalDateTime updatedAt, int attempts, String jobId) {}
     private record Outcome(boolean complete, String jobId, int attempts, String error, int delaySeconds) {}
 }

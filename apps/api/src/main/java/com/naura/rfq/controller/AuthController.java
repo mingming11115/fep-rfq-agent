@@ -7,8 +7,8 @@ import com.naura.rfq.model.vo.LoginResult;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.AuthService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,10 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/rfq/auth")
-@RequiredArgsConstructor
 @Slf4j
 public class AuthController {
-    private final AuthService service;
+    @Autowired
+    private AuthService service;
 
     @PostMapping("/login")
     public ApiResponse<LoginResult> login(@Valid @RequestBody LoginRequest request) {

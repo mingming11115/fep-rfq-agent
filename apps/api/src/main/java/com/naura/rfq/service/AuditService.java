@@ -3,16 +3,16 @@ package com.naura.rfq.service;
 import com.naura.rfq.common.id.Ids;
 import com.naura.rfq.mapper.AuditEventMapper;
 import com.naura.rfq.model.entity.AuditEvent;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class AuditService {
 
-    private final AuditEventMapper events;
+    @Autowired
+    private AuditEventMapper events;
 
     @Transactional
     public void success(String actorId, String action, String objectType, String objectId, String detail) {

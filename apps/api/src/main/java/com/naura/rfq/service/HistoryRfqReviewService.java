@@ -1,5 +1,8 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.HistoryDocumentMapper;
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -8,33 +11,35 @@ import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue;
 import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
 import com.naura.rfq.model.dto.HistoryRfqDraftRequest;
 import com.naura.rfq.security.CurrentUser;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class HistoryRfqReviewService {
-    private static final String SELECT = "select id,version,revision,project_id,scope,payload from `history-rfq-record`";
     private static final Set<String> EDITABLE = Set.of("草稿", "退回");
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final KnowledgePublicationAccess access;
-    private final KnowledgeIndexQueue index;
-    private final AuditService audit;
+    @Autowired
+    private HistoryDocumentMapper historyDocuments;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private KnowledgePublicationAccess access;
+    @Autowired
+    private KnowledgeIndexQueue index;
+    @Autowired
+    private AuditService audit;
 
     public ObjectNode version(CurrentUser user, String buId, String id, int version) {
         access.requireScope(user, buId, null, null);
-        var record = find(jdbc.query(SELECT + " where bu_id=? and id=? and version=?", this::map, buId, id, version), version);
+        var record = find(knowledgeRecords.findVersion(Table.HISTORY, buId, id, version).stream().map(this::map).toList(), version);
         requireReadable(user, buId, record);
         return withIndexStatus(buId, record);
     }
@@ -94,9 +99,7 @@ public class HistoryRfqReviewService {
         requireContent(row);
         requireState(row.buShared() || "仅当前项目".equals(row.scope()) && row.projectId() != null,
                 "请通过历史 RFQ 导入入口确认共享范围后再发布");
-        var sourceDocument = jdbc.query("select project_id,scope from history_document where bu_id=? and id=? order by version desc limit 1",
-                (result, n) -> new SourceScope(result.getString("project_id"), result.getString("scope")),
-                buId, row.payload().path("documentId").asText()).stream().findFirst();
+        var sourceDocument = historyDocuments.findLatestScope(buId, row.payload().path("documentId").asText());
         requireState(sourceDocument.isPresent() && java.util.Objects.equals(sourceDocument.get().projectId(), row.projectId())
                 && java.util.Objects.equals(sourceDocument.get().scope(), row.scope()), "历史条款缺少同范围的来源文档");
 
@@ -141,8 +144,7 @@ public class HistoryRfqReviewService {
         next.remove(List.of("submitterId", "submittedAt", "publishedById", "publishedAt", "supersededByVersion", "history"));
         next.put("version", version).put("revision", 0).put("status", "草稿").put("validity", "待核对");
         addHistory(next, user, "修订历史 RFQ 条款", "基于 V" + row.version());
-        jdbc.update("insert into `history-rfq-record`(bu_id,id,version,project_id,scope,payload) values (?,?,?,?,?,?)",
-                buId, row.id(), version, row.projectId(), row.scope(), next.toString());
+        knowledgeRecords.insertVersion(Table.HISTORY, buId, row.id(), version, row.projectId(), row.scope(), next.toString());
         audit(user, buId, row.id(), version, "修订历史 RFQ 条款", "基于 V" + row.version());
         return next;
     }
@@ -151,8 +153,8 @@ public class HistoryRfqReviewService {
         long revision = row.revision() + 1;
         row.payload().put("revision", revision);
         addHistory(row.payload(), user, action, reason);
-        requireState(jdbc.update("update `history-rfq-record` set payload=?, revision=? where bu_id=? and id=? and version=? and revision=?",
-                row.payload().toString(), revision, buId, row.id(), row.version(), row.revision()) == 1,
+        requireState(knowledgeRecords.updateVersion(Table.HISTORY, buId, row.id(), row.version(),
+                revision, row.revision(), row.payload().toString()) == 1,
                 "历史条款已变更，请刷新后再操作");
         audit(user, buId, row.id(), row.version(), action, reason);
         return withIndexStatus(buId, new Clause(row.id(), row.version(), revision, row.projectId(), row.scope(), row.payload()));
@@ -213,7 +215,7 @@ public class HistoryRfqReviewService {
     }
 
     private List<Clause> lock(String buId, String id) {
-        return jdbc.query(SELECT + " where bu_id=? and id=? order by version for update", this::map, buId, id);
+        return knowledgeRecords.lockVersions(Table.HISTORY, buId, id).stream().map(this::map).toList();
     }
 
     private Clause checked(CurrentUser user, String buId, List<Clause> chain, int version, long revision) {
@@ -221,9 +223,7 @@ public class HistoryRfqReviewService {
         requireReadable(user, buId, row);
         String documentId = row.payload().path("documentId").asText();
         if (!documentId.isBlank()) {
-            requireState(jdbc.queryForList("""
-                    select id from history_document where bu_id=? and id=? and payload->>'$.status'='已删除'
-                    """, String.class, buId, documentId).isEmpty(), "历史 RFQ 文档已删除");
+            requireState(historyDocuments.findDeletedIds(buId, documentId).isEmpty(), "历史 RFQ 文档已删除");
         }
         requireState(row.revision() == revision, "历史条款已变更，请刷新后再操作");
         return row;
@@ -234,17 +234,16 @@ public class HistoryRfqReviewService {
                 .orElseThrow(() -> new BusinessException(404, "历史条款版本不存在"));
     }
 
-    private Clause map(ResultSet row, int number) throws SQLException {
+    private Clause map(KnowledgeRecordMapper.VersionRow row) {
         try {
-            return new Clause(row.getString("id"), row.getInt("version"), row.getLong("revision"), row.getString("project_id"),
-                    row.getString("scope"), (ObjectNode) json.readTree(row.getString("payload")));
+            return new Clause(row.id(), row.version(), row.revision(), row.projectId(),
+                    row.scope(), (ObjectNode) json.readTree(row.payload()));
         } catch (JsonProcessingException failure) {
             log.error("解析历史条款失败 errorType={}", failure.getClass().getSimpleName());
             throw new IllegalStateException("历史条款格式异常", failure);
         }
     }
 
-    private record SourceScope(String projectId, String scope) {}
     private record Clause(String id, int version, long revision, String projectId, String scope, ObjectNode payload) {
         String status() { return payload.path("status").asText(); }
         boolean active() { return "已发布".equals(status()) && !"被替代".equals(payload.path("validity").asText()); }

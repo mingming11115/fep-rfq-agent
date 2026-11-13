@@ -9,8 +9,8 @@ import com.naura.rfq.service.CapabilityCatalog;
 import com.naura.rfq.service.CapabilityLibraryService;
 import jakarta.validation.Valid;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -25,11 +25,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/rfq/business-units/{buId}/capability-library")
-@RequiredArgsConstructor
 @Slf4j
 public class CapabilityLibraryController {
-    private final CapabilityLibraryService capabilities;
-    private final CapabilityCatalog catalog;
+    @Autowired
+    private CapabilityLibraryService capabilities;
+    @Autowired
+    private CapabilityCatalog catalog;
 
     @PostMapping(value = "/capabilities/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CapabilityLibraryService.Imported> importExcel(@PathVariable String buId,

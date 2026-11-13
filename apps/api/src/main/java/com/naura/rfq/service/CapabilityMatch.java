@@ -10,12 +10,11 @@ import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 class CapabilityMatch {
     private record Unit(String dimension, BigDecimal factor) {}
@@ -27,8 +26,10 @@ class CapabilityMatch {
             Map.entry("MPa", unit("pressure", "1000000")), Map.entry("bar", unit("pressure", "100000")),
             Map.entry("s", unit("time", "1")), Map.entry("min", unit("time", "60")), Map.entry("h", unit("time", "3600")),
             Map.entry("g", unit("mass", "0.001")), Map.entry("kg", unit("mass", "1")), Map.entry("t", unit("mass", "1000")));
-    private final CapabilityLibraryService library;
-    private final ObjectMapper json;
+    @Autowired
+    private CapabilityLibraryService library;
+    @Autowired
+    private ObjectMapper json;
 
     void validate(String bu, Context context) {
         if (context.devices() == null) {

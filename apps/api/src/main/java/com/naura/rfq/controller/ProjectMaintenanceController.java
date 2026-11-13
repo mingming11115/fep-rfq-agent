@@ -11,17 +11,17 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/rfq/projects")
-@RequiredArgsConstructor
 @Slf4j
 public class ProjectMaintenanceController {
-    private final ProjectMaintenanceService service;
+    @Autowired
+    private ProjectMaintenanceService service;
 
     @Getter
     public static class ActionRequest {

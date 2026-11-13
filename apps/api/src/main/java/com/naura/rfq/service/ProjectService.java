@@ -12,21 +12,26 @@ import com.naura.rfq.model.vo.ProjectView;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class ProjectService {
 
-    private final ProjectMapper projects;
-    private final AccessGuard access;
-    private final AuditService audit;
-    private final ProjectAccessService projectAccess;
-    private final ConfirmationAssignmentService confirmationAssignments;
-    private final KnowledgeGroupService groups;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private ProjectAccessService projectAccess;
+    @Autowired
+    private ConfirmationAssignmentService confirmationAssignments;
+    @Autowired
+    private KnowledgeGroupService groups;
 
     public PageView<ProjectView> list(CurrentUser user,
             int page,

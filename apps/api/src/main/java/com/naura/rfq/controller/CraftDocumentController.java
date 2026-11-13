@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -33,13 +34,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/craft")
 @Slf4j
 public class CraftDocumentController {
-    private final OfficeDocumentService service;
-    private final OfficeFileStore store;
-    private final OfficeProperties properties;
-
-    public CraftDocumentController(OfficeDocumentService service, OfficeFileStore store, OfficeProperties properties) {
-        this.service = service; this.store = store; this.properties = properties;
-    }
+    @Autowired
+    private OfficeDocumentService service;
+    @Autowired
+    private OfficeFileStore store;
+    @Autowired
+    private OfficeProperties properties;
 
     @PostMapping("/documents")
     public ResponseEntity<?> upload(@RequestParam MultipartFile file,

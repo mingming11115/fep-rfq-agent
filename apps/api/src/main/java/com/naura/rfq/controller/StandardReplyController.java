@@ -9,8 +9,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -24,10 +24,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/rfq/business-units/{buId}/standard-replies")
-@RequiredArgsConstructor
 @Slf4j
 public class StandardReplyController {
-    private final StandardReplyService service;
+    @Autowired
+    private StandardReplyService service;
 
     public record ReviewRequest(@NotNull @PositiveOrZero Long revision, @Size(max = 900) String reason) {}
 

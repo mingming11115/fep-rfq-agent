@@ -29,6 +29,8 @@ mybatis:
   configuration:
     # bu_id -> buId, created_at -> createdAt. Schema and POJO stay in step automatically.
     map-underscore-to-camel-case: true
+    # A fresh statement is needed for reads in READ_COMMITTED workflows and workers.
+    local-cache-scope: STATEMENT
     default-statement-timeout: 30
 
 rfq:

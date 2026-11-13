@@ -1,5 +1,7 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -12,25 +14,26 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class KnowledgeGroupService {
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final KnowledgePublicationAccess access;
-    private final AuditService audit;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private KnowledgePublicationAccess access;
+    @Autowired
+    private AuditService audit;
 
     public record Membership(long revision, List<String> groupIds) {}
     record ProjectBinding(String path, long catalogVersion, JsonNode values) {}
-    private record Resource(String projectId, String scope, ObjectNode payload) {}
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public ObjectNode save(CurrentUser user, String bu, ObjectNode proposed) {
@@ -53,10 +56,7 @@ public class KnowledgeGroupService {
             result.putArray("attachments");
         }
         validate(result, existing);
-        jdbc.update("""
-                insert into knowledge_group_catalog(bu_id,payload) values (?,?) as desired
-                on duplicate key update payload=desired.payload
-                """, bu, result.toString());
+        knowledgeRecords.upsertGroupCatalog(bu, result.toString());
         audit.successInBu(user.id(), bu, "保存知识分组", "knowledge_group_catalog", bu, "目录修订 " + (revision + 1));
         return result;
     }
@@ -65,16 +65,14 @@ public class KnowledgeGroupService {
     public ObjectNode assign(CurrentUser user, String bu, String kind, String id, int version, Membership request) {
         requireManager(user, bu);
         access.lockBu(bu);
-        String table = switch (kind) {
-            case "reply" -> "`standard-reply-record`";
-            case "capability" -> "capability_record";
+        Table table = switch (kind) {
+            case "reply" -> Table.STANDARD_REPLY;
+            case "capability" -> Table.CAPABILITY;
             default -> throw new BusinessException(400, "未知知识类型");
         };
-        var record = jdbc.query("select project_id,scope,payload from " + table + " where bu_id=? and id=? and version=? for update",
-                (row, n) -> new Resource(row.getString(1), row.getString(2), parse(row.getString(3))), bu, id, version)
-                .stream().findFirst().orElseThrow(() -> new BusinessException(404, "知识版本不存在"));
+        var record = knowledgeRecords.lockResource(table, bu, id, version).orElseThrow(() -> new BusinessException(404, "知识版本不存在"));
         access.requireScope(user, bu, record.projectId(), record.scope());
-        var data = record.payload();
+        var data = parse(record.payload());
         if ("reply".equals(kind) && "已删除".equals(data.path("status").asText())) {
             throw new BusinessException(409, "已删除的标准回复不能修改分组");
         }
@@ -88,7 +86,7 @@ public class KnowledgeGroupService {
         data.set("groupIds", groupIds(bu, request.groupIds(), data.path("groupIds")));
         data.remove("groupId");
         data.put("groupRevision", request.revision() + 1);
-        jdbc.update("update " + table + " set payload=? where bu_id=? and id=? and version=?", data.toString(), bu, id, version);
+        knowledgeRecords.updatePayload(table, bu, id, version, data.toString());
         audit.successInBu(user.id(), bu, "更新知识条目分组", kind, id, "v" + version);
         return data;
     }
@@ -225,8 +223,7 @@ public class KnowledgeGroupService {
     }
 
     private ObjectNode catalog(String bu) {
-        return jdbc.query("select payload from knowledge_group_catalog where bu_id=?",
-                (row, n) -> parse(row.getString(1)), bu).stream().findFirst().orElseGet(json::createObjectNode);
+        return knowledgeRecords.findGroupCatalog(bu).stream().map(this::parse).findFirst().orElseGet(json::createObjectNode);
     }
 
     private ObjectNode parse(String payload) {

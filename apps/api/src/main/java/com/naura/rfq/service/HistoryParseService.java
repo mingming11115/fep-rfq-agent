@@ -16,19 +16,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class HistoryParseService {
-    private final AccessGuard access;
-    private final DocumentStorage storage;
-    private final List<DocumentBlockReader> readers;
-    private final HistoryExtractor extractor;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private DocumentStorage storage;
+    @Autowired
+    private List<DocumentBlockReader> readers;
+    @Autowired
+    private HistoryExtractor extractor;
 
     public HistoryParseView parse(CurrentUser user, MultipartFile file,
             MultipartFile responseFile, String buId) throws IOException {

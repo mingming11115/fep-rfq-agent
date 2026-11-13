@@ -1,5 +1,9 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.ResponseMapper;
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
+import com.naura.rfq.mapper.ProjectMemberMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -11,21 +15,31 @@ import com.naura.rfq.security.CurrentUser;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-@Service @RequiredArgsConstructor
+@Service
 @Slf4j
 public class BusinessRecordService {
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final ProjectMapper projects;
-    private final AccessGuard guard;
-    private final ConfirmationAssignmentService confirmationAssignments;
-    private final ProjectWorkScope work;
-    private final RequirementMatchService matches;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ProjectMemberMapper projectMembers;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private AccessGuard guard;
+    @Autowired
+    private ConfirmationAssignmentService confirmationAssignments;
+    @Autowired
+    private ProjectWorkScope work;
+    @Autowired
+    private RequirementMatchService matches;
     private JsonNode decode(String payload) {
         try {
             return json.readTree(payload);
@@ -34,19 +48,21 @@ public class BusinessRecordService {
             throw new IllegalStateException("数据库业务记录格式异常", e);
         }
     }
-    private List<JsonNode> rows(String sql,Object... args){return jdbc.query(sql,(rs,n)->decode(rs.getString("payload")),args);}
+    private List<JsonNode> decodeRows(List<String> payloads) {
+        return payloads.stream().map(this::decode).toList();
+    }
     public Map<String,Object> workflow(CurrentUser user,String id){
         var project=projects.findById(id).orElse(null);
         guard.requireProject(user,project);
-        var config=rows("select payload from project_response_config where project_id=?",id);
+        var config=decodeRows(responseRecords.findConfig(id));
         return Map.of("metadata",config.isEmpty()?json.createObjectNode():config.get(0),
             "workVersion",work.version(id), "replacements",work.replacements(id),
-            "participantIds",jdbc.queryForList("select user_id from project_member where project_id=? and enabled=1 order by user_id",String.class,id),
+            "participantIds",projectMembers.findEnabledUserIds(id),
             "defaultConfirmationAssigneeId",confirmationAssignments.defaultAssigneeId(project),
-            "responses",rows("select payload from requirement_response where project_id=? order by requirement_id",id).stream()
+            "responses",decodeRows(responseRecords.listOrderedResponses(id)).stream()
                 .map(row -> matches.readableResponse(project, row)).toList(),
-            "reviews",rows("select payload from response_review where project_id=? order by id",id),
-            "snapshots",rows("select payload from response_snapshot where project_id=? order by id",id).stream()
+            "reviews",decodeRows(responseRecords.listOrderedReviews(id)),
+            "snapshots",decodeRows(responseRecords.listSnapshots(id)).stream()
                 .map(row -> readableSnapshot(project, row)).toList());
     }
 
@@ -79,34 +95,28 @@ public class BusinessRecordService {
     public Map<String,Object> resources(CurrentUser user,String buId){
         guard.requireBu(user,buId);
         var result=new LinkedHashMap<String,Object>();
-        for(var entry:Map.of("models","model_definition","processes","process_definition","capabilities","capability_record","knowledge","`standard-reply-record`","evidence","evidence_record","historyDocuments","history_document").entrySet()) {
+        for(var entry:Map.of("models", Table.MODEL, "processes", Table.PROCESS, "capabilities", Table.CAPABILITY,
+                "knowledge", Table.STANDARD_REPLY, "evidence", Table.EVIDENCE, "historyDocuments", Table.HISTORY_DOCUMENT).entrySet()) {
             boolean hasDeletedVersions = List.of("knowledge", "historyDocuments").contains(entry.getKey());
-            result.put(entry.getKey(),rows("select r.payload from "+entry.getValue()+" r where r.bu_id=? order by r.id,r.version",buId).stream()
+            result.put(entry.getKey(),decodeRows(knowledgeRecords.listPayloads(entry.getValue(), buId)).stream()
                     .filter(row -> !hasDeletedVersions || !"已删除".equals(row.path("status").asText()))
                     .filter(row->readable(user,row)).toList());
         }
         result.put("historyClauses", historyClauses(user, buId));
-        var catalog=rows("select payload from knowledge_group_catalog where bu_id=?",buId);
+        var catalog=decodeRows(knowledgeRecords.findGroupCatalog(buId));
         result.put("catalog",catalog.isEmpty()?json.nullNode():catalog.get(0));
         return result;
     }
 
     private List<JsonNode> historyClauses(CurrentUser user, String buId) {
-        return jdbc.query("""
-                select r.payload,s.operation,s.synced_at is not null as synced,s.last_error is not null as has_error
-                from `history-rfq-record` r left join history_rfq_index_sync s
-                    on s.bu_id=r.bu_id and s.reply_id=r.id and s.version=r.version
-                where r.bu_id=? and not exists (select 1 from history_document d where d.bu_id=r.bu_id
-                    and d.id=r.payload->>'$.documentId' and d.payload->>'$.status'='已删除')
-                order by r.id,r.version
-                """, (row, number) -> {
-                    var payload = decode(row.getString("payload"));
+        return knowledgeRecords.listHistoryClauses(buId).stream().map(row -> {
+                    var payload = decode(row.payload());
                     if (payload instanceof ObjectNode object) {
-                        Status.from(row.getString("operation"), row.getBoolean("synced"), row.getBoolean("has_error"))
+                        Status.from(row.operation(), row.synced(), row.hasError())
                                 .annotate(object);
                     }
                     return payload;
-                }, buId).stream()
+                })
                 .filter(row -> !"已删除".equals(row.path("status").asText()))
                 .filter(row -> readable(user, row)).toList();
     }

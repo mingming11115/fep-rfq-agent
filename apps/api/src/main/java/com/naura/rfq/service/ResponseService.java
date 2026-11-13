@@ -8,14 +8,16 @@ import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.security.*;
 import java.time.Instant;
 import java.util.*;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class ResponseService {
     private static final String CONFIRMATION = "confirmation";
@@ -28,18 +30,30 @@ public class ResponseService {
     public record MatchChoice(String matchRunId, String candidateId, String detachMatchReason) {}
     private record Restore(String kind, long version) {}
 
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final RequirementMapper requirements;
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final BuMemberProfileMapper profiles;
-    private final AccessGuard guard;
-    private final AuditService audit;
-    private final ConfirmationAssignmentService confirmationAssignments;
-    private final RequirementMatchService matches;
-    private final ProjectWorkScope work;
-    private final MatchDeviationService deviations;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private AccessGuard guard;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private ConfirmationAssignmentService confirmationAssignments;
+    @Autowired
+    private RequirementMatchService matches;
+    @Autowired
+    private ProjectWorkScope work;
+    @Autowired
+    private MatchDeviationService deviations;
     private JsonNode decode(String value) {
         try {
             return json.readTree(value);
@@ -48,7 +62,9 @@ public class ResponseService {
             throw new IllegalStateException("业务记录格式异常", e);
         }
     }
-    private List<JsonNode> rows(String sql,Object... args){return jdbc.queryForList(sql,String.class,args).stream().map(this::decode).toList();}
+    private List<JsonNode> decodeRows(List<String> payloads) {
+        return payloads.stream().map(this::decode).toList();
+    }
 
     @Transactional(readOnly = true)
     public History history(CurrentUser user, String id) {
@@ -58,7 +74,7 @@ public class ResponseService {
         guard.requireProject(user, project);
         var versions = historyRows(id, projectId, CONFIRMATION);
         if (versions.isEmpty()) {
-            versions = rows("select payload from requirement_response where requirement_id=? and project_id=?", id, projectId)
+            versions = decodeRows(responseRecords.findResponse(id, projectId))
                     .stream().findFirst().flatMap(row -> legacyConfirmation(row, requirement)).stream().toList();
         }
         return new History(versions.stream().map(ResponseService::withRemark)
@@ -96,7 +112,7 @@ public class ResponseService {
         if(sourceVersion==null||!sourceVersion.equals(requirement.getVersion())) {
             throw new BusinessException(409,"来源版本已变化，请刷新后重试");
         }
-        var records=rows("select payload from requirement_response where requirement_id=? and project_id=? for update",id,project.getId());
+        var records=decodeRows(responseRecords.lockResponse(id, project.getId()));
         ObjectNode row=records.isEmpty()?json.createObjectNode().put("id",id).put("version",Math.max(1,requirement.getVersion())):(ObjectNode)records.get(0).deepCopy();
         if(version==null||version!=row.path("version").asLong(1)) {
             throw new BusinessException(409,"应答版本已变化，请刷新后重试");
@@ -117,7 +133,7 @@ public class ResponseService {
         if((confirm||!sr)&&!user.id().equals(assignee)) {
             throw new BusinessException(403,"当前账号不是本条确认人");
         }
-        var projectReviews=rows("select payload from response_review where project_id=? for update",project.getId());
+        var projectReviews=decodeRows(responseRecords.lockReviews(project.getId()));
         boolean explicitlyAssigned=assignedConfirmer!=null||row.path("confirmationAssignmentSource").asText().equals("explicit");
         if(!explicitlyAssigned&&projectReviews.stream().anyMatch(r->id.equals(r.path("requirementId").asText())&&!Set.of("clarification","deviation").contains(r.path("kind").asText())&&!r.path("status").asText().equals("已取消")&&r.path("reviewerIds").isArray())) {
             throw new BusinessException(409,"本条由评审人共同确认，评审确认流程尚未接通");
@@ -136,8 +152,7 @@ public class ResponseService {
         var previous = latestConfirmation(row, requirement, projectId);
         previous.ifPresent(saved -> row.put("confirmationVersion", saved.path("confirmationVersion").asLong()));
         if (restore != null) {
-            var saved = rows("select payload from response_confirmation_history where requirement_id=? and project_id=? and kind=? and entry_version=?",
-                    id, projectId, restore.kind(), restore.version()).stream().findFirst()
+            var saved = decodeRows(responseRecords.findHistoryEntry(id, projectId, restore.kind(), restore.version())).stream().findFirst()
                     .orElseThrow(() -> new BusinessException(404, "该条款的历史版本不存在"));
             if (!records.isEmpty() && !isConfirmed(row)) {
                 var checkpoint = row.deepCopy().put("checkpointVersion", version).put("checkpointBy", user.displayName())
@@ -235,7 +250,7 @@ public class ResponseService {
             row.put("status","待确认");row.remove(List.of("confirmedAt","confirmedBy","confirmedById"));
         }
         row.put("version",version+1).put("sourceRequirementVersion",sourceVersion);
-        jdbc.update("insert into requirement_response(requirement_id,project_id,payload) values (?,?,?) on duplicate key update payload=values(payload),updated_at=current_timestamp",id,project.getId(),row.toString());
+        responseRecords.upsertResponse(id, project.getId(), row.toString());
         // Frozen snapshots remain historical; live scope versions no longer match after this write.
         if (restore != null) {
             String label = CONFIRMATION.equals(restore.kind()) ? "恢复条款确认版本" : "恢复草稿检查点";
@@ -249,14 +264,12 @@ public class ResponseService {
     }
 
     private List<JsonNode> historyRows(String id, String projectId, String kind) {
-        return rows("select payload from response_confirmation_history where requirement_id=? and project_id=? and kind=? order by entry_version desc",
-                id, projectId, kind);
+        return decodeRows(responseRecords.listHistory(id, projectId, kind));
     }
 
     private Optional<JsonNode> latestConfirmation(JsonNode row, Requirement requirement, String projectId) {
         String id = requirement.getId();
-        var versions = rows("select payload from response_confirmation_history where requirement_id=? and project_id=? and kind=? order by entry_version desc limit 1",
-                id, projectId, CONFIRMATION);
+        var versions = decodeRows(responseRecords.findLatestHistory(id, projectId, CONFIRMATION));
         if (!versions.isEmpty()) {
             return Optional.of(versions.get(0));
         }
@@ -278,8 +291,7 @@ public class ResponseService {
     }
 
     private void insertHistory(String id, String projectId, String kind, long version, JsonNode payload) {
-        jdbc.update("insert into response_confirmation_history(requirement_id,project_id,kind,entry_version,payload) values (?,?,?,?,?)",
-                id, projectId, kind, version, payload.toString());
+        responseRecords.insertHistory(id, projectId, kind, version, payload.toString());
     }
 
     private static boolean isConfirmed(JsonNode row) {

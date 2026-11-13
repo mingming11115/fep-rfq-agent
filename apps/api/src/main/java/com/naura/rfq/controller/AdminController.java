@@ -17,8 +17,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,14 +35,14 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/rfq/admin")
-@RequiredArgsConstructor
 @Slf4j
 public class AdminController {
 
     private static final List<String> BU_SORTS = List.of("createdAt", "code", "name");
     private static final List<String> USER_SORTS = List.of("createdAt", "username", "displayName");
 
-    private final AdminService admin;
+    @Autowired
+    private AdminService admin;
 
     public record BuView(String id, String code, String name, Instant createdAt) {
 

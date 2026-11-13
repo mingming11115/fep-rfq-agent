@@ -9,22 +9,34 @@ import com.naura.rfq.security.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 public class ConfirmationAssignmentService {
-    private final RequirementMapper requirements;
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final AppUserMapper users;
-    private final UserBuRoleMapper roles;
-    private final BuMemberProfileMapper profiles;
-    private final ProjectMemberMapper members;
-    private final AccessGuard access;
-    private final AuditService audit;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private AppUserMapper users;
+    @Autowired
+    private UserBuRoleMapper roles;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private ProjectMemberMapper members;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
 
     public record Candidate(String userId, String name) {}
 

@@ -10,8 +10,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -32,13 +32,14 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
 @Slf4j
 public class HistoryRfqController {
     private static final String LIBRARY = "/business-units/{buId}/history-rfq";
     private static final String CLAUSE = LIBRARY + "/clauses/{id}/versions/{version}";
-    private final HistoryRfqService intake;
-    private final HistoryRfqReviewService review;
+    @Autowired
+    private HistoryRfqService intake;
+    @Autowired
+    private HistoryRfqReviewService review;
 
     public record ReviewRequest(@NotNull @PositiveOrZero Long revision, @Size(max = 900) String reason) {}
 

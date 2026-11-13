@@ -13,21 +13,27 @@ import com.naura.rfq.model.vo.RequirementView;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class RequirementService {
 
-    private final RequirementMapper requirements;
-    private final ProjectMapper projects;
-    private final com.naura.rfq.mapper.CustomerDocumentMapper documents;
-    private final AccessGuard access;
-    private final AuditService audit;
-    private final RequirementMatchService matches;
-    private final ProjectWorkScope work;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private com.naura.rfq.mapper.CustomerDocumentMapper documents;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private RequirementMatchService matches;
+    @Autowired
+    private ProjectWorkScope work;
 
     private record EditableRequirement(Project project, CustomerDocument document, Requirement row) {}
 

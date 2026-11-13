@@ -1,6 +1,8 @@
 package com.naura.rfq.storage;
 
+import com.naura.rfq.mapper.DemoDocumentMapper;
 import com.naura.rfq.common.exception.BusinessException;
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -8,23 +10,32 @@ import java.nio.file.Path;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 /** Immutable source storage. Only fully validated files become visible. */
 @Component
 @Slf4j
+@NoArgsConstructor
 public class DocumentStorage {
     private static final long MAX_BYTES = 30L * 1024 * 1024;
-    private final Path root;
-    private final String type, bucket;
-    private final MinioObjectStore remote;
-    private final JdbcTemplate jdbc;
+    private Path root;
+    @Value("${rfq.storage-dir:./data/rfq-files}")
+    private String directory;
+    @Value("${rfq.storage-type:local}")
+    private String type;
+    @Value("${rfq.minio.bucket:rfq-files}")
+    private String bucket;
+    @Autowired
+    private MinioObjectStore remote;
+    @Autowired
+    private DemoDocumentMapper demoDocuments;
 
     public DocumentStorage(String directory) { this(directory, "local", "rfq-files", null); }
 
@@ -32,10 +43,18 @@ public class DocumentStorage {
         this(directory, type, bucket, remote, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
-    public DocumentStorage(@Value("${rfq.storage-dir:./data/rfq-files}") String directory,
-            @Value("${rfq.storage-type:local}") String type,
-            @Value("${rfq.minio.bucket:rfq-files}") String bucket, MinioObjectStore remote, JdbcTemplate jdbc) {
+    public DocumentStorage(String directory, String type, String bucket,
+            MinioObjectStore remote, DemoDocumentMapper demoDocuments) {
+        this.directory = directory;
+        this.type = type;
+        this.bucket = bucket;
+        this.remote = remote;
+        this.demoDocuments = demoDocuments;
+        initialize();
+    }
+
+    @PostConstruct
+    private void initialize() {
         root = Path.of(directory).toAbsolutePath().normalize();
         if (!java.util.List.of("local", "minio").contains(type)) {
             throw new IllegalArgumentException("存储类型必须为 local 或 minio");
@@ -43,7 +62,6 @@ public class DocumentStorage {
         if (!bucket.matches("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")) {
             throw new IllegalArgumentException("MinIO bucket 无效");
         }
-        this.type = type; this.bucket = bucket; this.remote = remote; this.jdbc = jdbc;
     }
     public record StoredFile(String storageRef, long size, String sha256) { }
 
@@ -240,12 +258,11 @@ public class DocumentStorage {
     }
 
     private FileLease openDemoDocument(String id, Long size, String hash) throws IOException {
-        if (jdbc == null || !id.matches("MYSQL-DEMO-\\d{3}-DOC") || size == null || size <= 0
+        if (demoDocuments == null || !id.matches("MYSQL-DEMO-\\d{3}-DOC") || size == null || size <= 0
                 || size > MAX_BYTES || hash == null || !hash.matches("(?i)[0-9a-f]{64}")) {
                 throw new BusinessException(409, "演示原件记录无效");
                 }
-        byte[] bytes = jdbc.query("select content from rfq_demo_document where id=? and octet_length(content)=?",
-            rows -> rows.next() ? rows.getBytes(1) : null, id, size);
+        byte[] bytes = demoDocuments.findContent(id, size).orElse(null);
         if (bytes == null) {
             throw new BusinessException(404, "演示原件不存在或大小不匹配");
         }

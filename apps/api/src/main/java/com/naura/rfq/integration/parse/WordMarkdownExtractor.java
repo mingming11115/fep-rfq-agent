@@ -16,12 +16,15 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class WordMarkdownExtractor {
     private static final Pattern SOURCE_ID = Pattern.compile("S([0-9]{1,9})");
@@ -37,9 +40,12 @@ public class WordMarkdownExtractor {
         {"requirements":[{"customerClauseNo":"","title":"","requirementText":"","specification":"","sourceRefs":["S0"]}],"ignoredSourceRefs":[]}
         """;
 
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
-    private final RuleBasedExtractor rules;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
+    @Autowired
+    private RuleBasedExtractor rules;
 
     public boolean enabled() {
         return properties.llmEnabled();

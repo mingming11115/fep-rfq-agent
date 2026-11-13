@@ -1,5 +1,6 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.ResponseMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -12,30 +13,37 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class FinalSnapshotService {
     public record Reviewers(long version, String technicalMode, String srId, List<String> technicalIds,
             String technicalRepresentativeId, String reason) {}
     public record Vote(long version, String result, String reason) {}
 
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final ProjectMapper projects;
-    private final AccessGuard access;
-    private final AuditService audit;
-    private final ApprovedDocumentExportService export;
-    private final HistoryRfqService history;
-    private final KnowledgePublicationAccess publication;
-    private final ProjectWorkScope work;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private ApprovedDocumentExportService export;
+    @Autowired
+    private HistoryRfqService history;
+    @Autowired
+    private KnowledgePublicationAccess publication;
+    @Autowired
+    private ProjectWorkScope work;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public ObjectNode configure(CurrentUser user, String projectId, Reviewers input) {
@@ -56,10 +64,7 @@ public class FinalSnapshotService {
         }
         ((ObjectNode) config.get("approvalConfig")).set("finalReviewers", reviewers);
         config.set("technicalReviewSettings", settings);
-        jdbc.update("""
-                insert into project_response_config(project_id,payload) values (?,?) as desired
-                on duplicate key update payload=desired.payload,updated_at=current_timestamp
-                """, projectId, config.toString());
+        responseRecords.upsertConfig(projectId, config.toString());
         audit.successInBu(user.id(), project.getBuId(), "配置最终评审", "project", projectId, reason);
         return config;
     }
@@ -110,7 +115,7 @@ public class FinalSnapshotService {
             snapshot.put("revisionOf", latest.path("id").asText());
             snapshot.put("round", latest.path("round").asLong(1) + 1);
         }
-        jdbc.update("insert into response_snapshot(id,project_id,payload) values (?,?,?)", id, projectId, snapshot.toString());
+        responseRecords.insertSnapshot(id, projectId, snapshot.toString());
         audit.successInBu(user.id(), project.getBuId(), "提交定稿审批", "snapshot", id, snapshot.path("submissionReason").asText());
         return snapshot;
     }
@@ -171,11 +176,11 @@ public class FinalSnapshotService {
         if ("已批准".equals(snapshot.path("status").asText()) && !ApprovedDocumentExportService.approved(snapshot)) {
             snapshot.put("status", "审批中");
         }
-        jdbc.update("update response_snapshot set payload=? where project_id=? and id=?", snapshot.toString(), projectId, id);
+        responseRecords.updateSnapshot(projectId, id, snapshot.toString());
         if ("已批准".equals(snapshot.path("status").asText())) {
             var candidate = history.fromSnapshot(user, projectId, id, false);
             snapshot.put("historyCandidateCount", candidate.clauses().size());
-            jdbc.update("update response_snapshot set payload=? where project_id=? and id=?", snapshot.toString(), projectId, id);
+            responseRecords.updateSnapshot(projectId, id, snapshot.toString());
         }
         audit.successInBu(user.id(), project.getBuId(), "记录定稿审批", "snapshot", id, snapshot.path("status").asText());
         return snapshot;
@@ -227,12 +232,12 @@ public class FinalSnapshotService {
     }
 
     private ObjectNode config(String projectId) {
-        var result = jdbc.queryForList("select payload from project_response_config where project_id=?", String.class, projectId);
+        var result = responseRecords.findConfig(projectId);
         return result.isEmpty() ? json.createObjectNode() : decode(result.get(0));
     }
 
     private ObjectNode snapshot(String projectId, String id) {
-        var result = jdbc.queryForList("select payload from response_snapshot where project_id=? and id=?", String.class, projectId, id);
+        var result = responseRecords.findSnapshot(projectId, id);
         return result.isEmpty() ? null : decode(result.get(0));
     }
 

@@ -8,16 +8,16 @@ import com.naura.rfq.service.ProjectAccessService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/rfq/projects")
-@RequiredArgsConstructor
 @Slf4j
 public class ProjectAccessController {
-    private final ProjectAccessService service;
+    @Autowired
+    private ProjectAccessService service;
     public record MemberRequest(@NotNull @PositiveOrZero Long version,@NotNull Boolean enabled,@NotBlank @Size(max=500) String reason) {}
     @GetMapping("/{id}/access")
     public ApiResponse<ProjectAccessService.AccessView> describe(@PathVariable String id) {

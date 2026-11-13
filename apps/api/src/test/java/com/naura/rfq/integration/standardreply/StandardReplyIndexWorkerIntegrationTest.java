@@ -11,12 +11,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import com.naura.rfq.mapper.KnowledgeIndexMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = "rfq.demo-data.enabled=false")
 class StandardReplyIndexWorkerIntegrationTest {
     @Autowired JdbcTemplate jdbc;
+    @Autowired KnowledgeIndexMapper indexRecords;
     @Autowired ObjectMapper json;
 
     @ParameterizedTest
@@ -44,7 +46,7 @@ class StandardReplyIndexWorkerIntegrationTest {
                             set version=2,operation='delete',payload=null,updated_at=timestampadd(microsecond,1,updated_at),
                                 next_attempt_at=utc_timestamp(6),job_id=null,synced_at=null
                             where bu_id=? and reply_id=?
-                            """.formatted(library.table), bu, id);
+                            """.formatted(table(library)), bu, id);
                         status = 200;
                         body = """
                             {"status":"succeeded","succeeded_count":1,"failed_count":0}
@@ -68,15 +70,15 @@ class StandardReplyIndexWorkerIntegrationTest {
             var settings = new StandardReplyIndexProperties("http://127.0.0.1:" + server.getAddress().getPort(),
                 "test-index-key", library == KnowledgeIndexQueue.Library.STANDARD_REPLY ? Map.of(bu, dataset) : Map.of(),
                 Map.of(), library == KnowledgeIndexQueue.Library.CAPABILITY ? Map.of(bu, dataset) : Map.of());
-            var worker = new StandardReplyIndexWorker(jdbc, json, settings, new StandardReplyIndexClient(json, settings));
+            var worker = new StandardReplyIndexWorker(indexRecords, json, settings, new StandardReplyIndexClient(json, settings));
             var data = json.createObjectNode().put("title", "标题").put("requirement_text", "要求")
                 .put("bu_id", bu).put("record_version", 1);
-            new KnowledgeIndexQueue(jdbc).enqueue(library, bu, id, 1, data);
+            new KnowledgeIndexQueue(indexRecords).enqueue(library, bu, id, 1, data);
 
             worker.sync();
             assertThat(read(library, bu, id)).containsEntry("job_id", "job-old").containsEntry("synced_at", null)
                 .containsEntry("lease_token", null);
-            jdbc.update("update " + library.table + " set next_attempt_at=utc_timestamp(6) where bu_id=? and reply_id=?", bu, id);
+            jdbc.update("update " + table(library) + " set next_attempt_at=utc_timestamp(6) where bu_id=? and reply_id=?", bu, id);
 
             worker.sync();
             assertThat(read(library, bu, id)).containsEntry("version", 2).containsEntry("operation", "delete")
@@ -87,7 +89,7 @@ class StandardReplyIndexWorkerIntegrationTest {
             assertThat(calls).hasValue(3);
         } finally {
             server.stop(0);
-            jdbc.update("delete from " + library.table + " where bu_id=? and reply_id=?", bu, id);
+            jdbc.update("delete from " + table(library) + " where bu_id=? and reply_id=?", bu, id);
         }
     }
 
@@ -95,6 +97,14 @@ class StandardReplyIndexWorkerIntegrationTest {
         return jdbc.queryForMap("""
             select version,operation,job_id,synced_at,lease_token from %s
             where bu_id=? and reply_id=?
-            """.formatted(library.table), bu, id);
+            """.formatted(table(library)), bu, id);
+    }
+
+    private static String table(KnowledgeIndexQueue.Library library) {
+        return switch (library) {
+            case STANDARD_REPLY -> "standard_reply_index_sync";
+            case HISTORY_RFQ -> "history_rfq_index_sync";
+            case CAPABILITY -> "capability_index_sync";
+        };
     }
 }

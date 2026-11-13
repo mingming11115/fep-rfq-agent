@@ -7,6 +7,7 @@ import com.naura.rfq.service.OfficeDocumentService;
 import com.naura.rfq.storage.OfficeFileStore;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
@@ -18,10 +19,13 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/office")
 @Slf4j
 public class OfficeController {
-    private final OfficeDocumentService service;
-    private final OfficeFileStore store;
-    private final OfficeProperties properties;
-    public OfficeController(OfficeDocumentService s, OfficeFileStore store, OfficeProperties p) { service = s; this.store = store; properties = p; }
+    @Autowired
+    private OfficeDocumentService service;
+    @Autowired
+    private OfficeFileStore store;
+    @Autowired
+    private OfficeProperties properties;
+
     @GetMapping("/status")
     public ApiResponse<?> status() {
         try {

@@ -67,4 +67,7 @@
         set name = #{name}
         where id = #{id}
     </update>
+    <select id="lockId" resultType="string" useCache="false" flushCache="true">
+        select id from business_unit where id=#{id} for update
+    </select>
 </mapper>

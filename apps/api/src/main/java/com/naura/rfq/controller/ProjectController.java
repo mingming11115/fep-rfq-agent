@@ -7,8 +7,8 @@ import com.naura.rfq.model.vo.ProjectView;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.ProjectService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,10 +19,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/rfq/projects")
-@RequiredArgsConstructor
 @Slf4j
 public class ProjectController {
-    private final ProjectService service;
+    @Autowired
+    private ProjectService service;
 
     @GetMapping
     public ApiResponse<PageView<ProjectView>> list(
