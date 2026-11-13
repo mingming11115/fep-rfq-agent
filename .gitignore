@@ -20,6 +20,7 @@
 **/.env
 **/.env.*
 !**/.env.example
+/data/
 /apps/api/data/
 
 # Temporary Office lock files and browser artifacts
