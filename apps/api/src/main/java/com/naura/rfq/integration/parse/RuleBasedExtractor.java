@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.RawBlock;
+import com.naura.rfq.model.parse.SourceRef;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +28,10 @@ import org.springframework.stereotype.Component;
 public class RuleBasedExtractor implements RequirementExtractor {
 
     private static final int MAX_REQUIREMENT_CHARS = 4000;
+    /** 条款正文里拼接单元格用的分隔符，保持抽取文本可读。 */
+    private static final String CELL_SEPARATOR = "：";
+    /** 定位引用里的单元格分隔符：Word 跨单元格检索时按单个空格匹配。 */
+    private static final String WORD_CELL_SEPARATOR = " ";
     private static final Pattern ITEM_HEADER = Pattern.compile("(?iU)(?:项目\\s*item|item\\s*项目|item|项目名称|项目)");
     private static final Pattern SPECIFICATION_HEADER = Pattern.compile("(?iU)(?:规格(?:\\s*spec(?:ification)?)?|spec(?:ification)?)");
     private static final Pattern OTHER_TABLE_HEADER = Pattern.compile("(?i)(?:no\\.?|rev\\.?|description)");
@@ -197,9 +202,24 @@ public class RuleBasedExtractor implements RequirementExtractor {
                     null,
                     obligationOf(joined),
                     ExtractedRequirement.NEEDS_REVIEW,
-                    String.join("；", reasons)));
+                    String.join("；", reasons),
+                    rowRefs(block, rowIndex, cells)));
+        }
+        if (!results.isEmpty()) {
+            log.debug("document.parse.word.table.refs anchor={} rows={}", block.anchor(), results.size());
         }
         return results;
+    }
+
+    /**
+     * 表格行的定位引用：anchor 精确到行，quote 用空格拼接单元格。
+     * Word 文档里单元格之间按空格检索，用「：」拼的正文匹配不到，所以两者分开。
+     */
+    private List<SourceRef> rowRefs(RawBlock block, int rowIndex, List<String> cells) {
+        if (block.anchor() == null || block.anchor().isBlank()) {
+            return null;
+        }
+        return List.of(new SourceRef(block.anchor() + "/r" + rowIndex, joinCells(cells, WORD_CELL_SEPARATOR)));
     }
 
     /** Describe a known customer clause, using a table row with only customer-side cells. */
@@ -251,6 +271,10 @@ public class RuleBasedExtractor implements RequirementExtractor {
     }
 
     private String joinCells(List<String> cells) {
+        return joinCells(cells, CELL_SEPARATOR);
+    }
+
+    private static String joinCells(List<String> cells, String separator) {
         List<String> filled = cells.stream().filter(cell -> !cell.isBlank()).toList();
         if (filled.isEmpty()) {
             return "";
@@ -258,7 +282,7 @@ public class RuleBasedExtractor implements RequirementExtractor {
         if (filled.size() == 1) {
             return filled.get(0);
         }
-        return String.join("：", filled);
+        return String.join(separator, filled);
     }
 
     private String cellNumber(List<String> cells) {
