@@ -39,7 +39,7 @@ public class HistoryExtractor {
     private final HistoryModelExtractor historyModel;
 
     public void requireEnabled() {
-        if (!properties.getHistory().isRulesEnabled() && !properties.historyLlmEnabled()) {
+        if (!properties.getHistory().isRulesEnabled() && !properties.llmEnabled()) {
             throw new BusinessException(409, "历史 RFQ 解析至少启用规则解析或 LLM 解析之一");
         }
     }
@@ -47,7 +47,7 @@ public class HistoryExtractor {
     public Result extract(List<RawBlock> primary, List<RawBlock> companion) {
         requireEnabled();
         boolean rulesEnabled = properties.getHistory().isRulesEnabled();
-        boolean llmEnabled = properties.historyLlmEnabled();
+        boolean llmEnabled = properties.llmEnabled();
         Map<String, String> metadata = new LinkedHashMap<>();
         List<String> issues = new ArrayList<>();
         Map<String, WordAnswerTarget> wordSources = new LinkedHashMap<>();

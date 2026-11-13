@@ -59,7 +59,7 @@ rfq:
     jwt-secret: ${RFQ_JWT_SECRET:rfq-local-dev-secret-key-please-replace-in-production}
     token-ttl-minutes: ${RFQ_TOKEN_TTL_MINUTES:480}
   llm:
-    # Model extraction for project RFQs and the default for historical RFQs.
+    # Shared model extraction switch for project and historical RFQs.
     enabled: ${RFQ_LLM_ENABLED:false}
   parse:
     # Guards against pathological documents; real RFQ files stay far below this.
@@ -68,7 +68,6 @@ rfq:
     integrations:
       history:
         rules-enabled: ${RFQ_HISTORY_RULES_ENABLED:true}
-        llm-enabled: ${RFQ_HISTORY_LLM_ENABLED:}
       word-markdown:
         python: ${RFQ_MARKITDOWN_PYTHON:python}
         timeout: ${RFQ_MARKITDOWN_TIMEOUT:60s}

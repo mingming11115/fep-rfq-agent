@@ -92,9 +92,8 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| RFQ_LLM_ENABLED | false | 模型开关 |
+| RFQ_LLM_ENABLED | false | 项目 RFQ 和历史 RFQ 共用的模型解析开关 |
 | RFQ_HISTORY_RULES_ENABLED | true | 历史 RFQ 规则解析开关 |
-| RFQ_HISTORY_LLM_ENABLED | 跟随 RFQ_LLM_ENABLED | 历史 RFQ LLM 解析开关，可独立覆盖默认值 |
 | RFQ_LLM_URL | 空 | **完整** Chat Completions URL，例如内网 `http://model-gateway:8000/v1/chat/completions` |
 | RFQ_LLM_MODEL | 空 | 模型名称，由实际网关提供 |
 | RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |

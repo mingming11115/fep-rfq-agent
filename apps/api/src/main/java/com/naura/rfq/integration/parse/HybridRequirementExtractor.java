@@ -194,7 +194,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     public Map<String, String> extractWordHistoryAnswers(List<WordAnswerTarget> targets, List<String> issues) {
         var config = properties.getLlm();
-        if (!properties.historyLlmEnabled() || targets.isEmpty()) {
+        if (!properties.llmEnabled() || targets.isEmpty()) {
             return Map.of();
         }
         if (config.getModel().isBlank()) {
@@ -275,7 +275,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     public Map<String, String> extractMineruHistoryAnswers(RawBlock block, List<HistoryAnswerTarget> clauses, List<String> issues) {
         var config = properties.getLlm();
-        if (!properties.historyLlmEnabled() || clauses.isEmpty()) {
+        if (!properties.llmEnabled() || clauses.isEmpty()) {
             return Map.of();
         }
         var table = block.mineruTable();
@@ -344,7 +344,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, boolean fallbackToRules) {
         var config = properties.getLlm();
-        if (!(fallbackToRules ? properties.llmEnabled() : properties.historyLlmEnabled())) {
+        if (!properties.llmEnabled()) {
             log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
             return new ExtractionResult(fallbackToRules ? rules.extract(blocks) : List.of(), rules.name(), List.of());
         }
