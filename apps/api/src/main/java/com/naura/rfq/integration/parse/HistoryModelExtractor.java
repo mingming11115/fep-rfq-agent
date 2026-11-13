@@ -193,9 +193,11 @@ public class HistoryModelExtractor {
             }
             return true;
         } catch (InterruptedException exception) {
+            log.error("历史 RFQ 的 LLM 解析被中断", exception);
             Thread.currentThread().interrupt();
             throw new BusinessException(503, "历史 RFQ 的 LLM 解析已中断");
         } catch (Exception exception) {
+            log.error("历史 RFQ 的 LLM 批次解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
             log.warn("history.parse.llm.failed firstAnchor={} reason={}", anchor, reason);
             issues.add(anchor + "：历史 RFQ 的 LLM 批次解析失败，" + reason);

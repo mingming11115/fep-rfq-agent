@@ -1,6 +1,6 @@
 package com.naura.rfq.integration.standardreply;
 
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Locale;

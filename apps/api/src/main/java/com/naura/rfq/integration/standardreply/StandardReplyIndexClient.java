@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.integration.ExternalCallLog;
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -212,6 +212,7 @@ public class StandardReplyIndexClient {
             try {
                 parsed = json.readTree(response.body());
             } catch (IOException e) {
+                log.error("解析知识索引服务的响应 JSON 失败", e);
                 call.failed(e);
                 parsed = null;
             }
@@ -223,16 +224,20 @@ public class StandardReplyIndexClient {
             }
             return new Reply(response.statusCode(), parsed);
         } catch (InterruptedException e) {
+            log.error("知识索引请求被中断", e);
             Thread.currentThread().interrupt();
             call.failed(e);
             throw new Failure("INTERRUPTED", false);
         } catch (java.util.concurrent.TimeoutException e) {
+            log.error("知识索引请求超时", e);
             call.failed(e);
             throw new Failure("REQUEST_TIMEOUT", false);
         } catch (java.util.concurrent.ExecutionException e) {
+            log.error("知识索引请求传输失败", e);
             call.failed(e);
             throw new Failure("TRANSPORT_ERROR", false);
         } catch (RuntimeException e) {
+            log.error("知识索引请求失败", e);
             call.failed(e);
             throw e;
         } finally {

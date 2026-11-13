@@ -71,6 +71,7 @@ public class WordMarkdownExtractor {
                     var response = request(content.markdown(), PROMPT, config, runId);
                     return validate(response, content, extractor);
                 } catch (LengthLimitException exception) {
+                    log.error("Word 模型响应超出长度限制", exception);
                     log.info("document.parse.word.llm.batching parseRunId={} reason={}", runId, exception.getMessage());
                 }
             } else {
@@ -78,10 +79,12 @@ public class WordMarkdownExtractor {
             }
             return extractBatches(content, config, runId, maxChars, extractor);
         } catch (DocumentReadException exception) {
+            log.error("Word 模型抽取失败", exception);
             log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
                     runId, exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
         } catch (Exception exception) {
+            log.error("Word 模型抽取失败", exception);
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -101,6 +104,7 @@ public class WordMarkdownExtractor {
         try {
             response = http.post(config, request, runId);
         } catch (Exception exception) {
+            log.error("调用 Word 模型接口失败", exception);
             if (ParseHttpClient.requestExceedsLengthLimit(exception)) {
                 throw new LengthLimitException("input_length_limit");
             }
@@ -145,6 +149,7 @@ public class WordMarkdownExtractor {
             }
             validation.add(request(batch.markdown(), prompt, config, runId), batch.visible(), primary);
         } catch (LengthLimitException exception) {
+            log.error("Word 模型批次超出模型长度上限", exception);
             if (end - start > 1) {
                 int middle = start + (end - start) / 2;
                 int smaller = Math.min(batchChars, batch.markdown().length() - 1);
@@ -158,6 +163,7 @@ public class WordMarkdownExtractor {
                     validation.add(request(core.markdown(), prompt, config, runId), core.visible(), primary);
                     return;
                 } catch (LengthLimitException ignored) {
+                    log.error("Word 单来源请求仍超出模型长度上限", ignored);
                     // This request already contains just one source unit.
                 }
             }

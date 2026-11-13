@@ -2,7 +2,7 @@ package com.naura.rfq.service;
 
 import com.naura.rfq.mapper.ResponseMapper;
 import com.naura.rfq.mapper.KnowledgeRecordMapper;
-import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
+import com.naura.rfq.mapper.Table;
 import com.naura.rfq.mapper.ProjectMemberMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

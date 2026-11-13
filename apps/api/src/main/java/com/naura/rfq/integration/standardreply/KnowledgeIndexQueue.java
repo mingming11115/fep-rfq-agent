@@ -15,18 +15,6 @@ public class KnowledgeIndexQueue {
     @Autowired
     private KnowledgeIndexMapper indexRecords;
 
-    public enum Library {
-        STANDARD_REPLY("RFQ 标准回复"),
-        HISTORY_RFQ("历史 RFQ"),
-        CAPABILITY("机型能力边界");
-
-        final String displayName;
-
-        Library(String displayName) {
-            this.displayName = displayName;
-        }
-    }
-
     public void enqueue(Library library, String buId, String id, int version, JsonNode projection) {
         String operation = projection == null ? "delete" : "upsert";
         // Preserve an active lease while advancing the desired timestamp.

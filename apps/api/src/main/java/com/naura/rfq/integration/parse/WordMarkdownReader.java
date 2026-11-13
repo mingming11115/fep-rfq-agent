@@ -94,6 +94,7 @@ public class WordMarkdownReader {
             }
             log.info("document.parse.word.markdown.saved parseRunId={} path={}", runId, target);
         } catch (IOException exception) {
+            log.error("保存 Word Markdown 载荷失败", exception);
             log.warn("document.parse.word.markdown.save_failed parseRunId={} path={} errorType={}",
                     runId, target, exception.getClass().getSimpleName());
         }
@@ -213,6 +214,7 @@ public class WordMarkdownReader {
                         .redirectError(ProcessBuilder.Redirect.DISCARD)
                         .start();
             } catch (IOException exception) {
+                log.error("启动 MarkItDown 转换进程失败", exception);
                 throw new DocumentReadException("无法启动 MarkItDown，请检查 Python 路径", exception);
             }
             try {

@@ -1,6 +1,6 @@
 package com.naura.rfq.mapper;
 
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;

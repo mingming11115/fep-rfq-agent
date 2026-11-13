@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import com.naura.rfq.mapper.KnowledgeIndexMapper;
+import com.naura.rfq.integration.standardreply.Library;
 import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,11 +23,11 @@ class StandardReplyIndexWorkerIntegrationTest {
     @Autowired ObjectMapper json;
 
     @ParameterizedTest
-    @EnumSource(value = KnowledgeIndexQueue.Library.class, names = {"STANDARD_REPLY", "CAPABILITY"})
-    void pendingJobSurvivesAndItsStaleCompletionCannotAcknowledgeANewerDelete(KnowledgeIndexQueue.Library library) throws Exception {
+    @EnumSource(value = Library.class, names = {"STANDARD_REPLY", "CAPABILITY"})
+    void pendingJobSurvivesAndItsStaleCompletionCannotAcknowledgeANewerDelete(Library library) throws Exception {
         String bu = "BU-INDEX-" + UUID.randomUUID();
         String id = "R-TEST";
-        String dataset = library == KnowledgeIndexQueue.Library.CAPABILITY ? "rfq.test.capability-boundary" : "rfq.test.standard-reply";
+        String dataset = library == Library.CAPABILITY ? "rfq.test.capability-boundary" : "rfq.test.standard-reply";
         var calls = new AtomicInteger();
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
@@ -68,8 +69,8 @@ class StandardReplyIndexWorkerIntegrationTest {
         server.start();
         try {
             var settings = new StandardReplyIndexProperties("http://127.0.0.1:" + server.getAddress().getPort(),
-                "test-index-key", library == KnowledgeIndexQueue.Library.STANDARD_REPLY ? Map.of(bu, dataset) : Map.of(),
-                Map.of(), library == KnowledgeIndexQueue.Library.CAPABILITY ? Map.of(bu, dataset) : Map.of());
+                "test-index-key", library == Library.STANDARD_REPLY ? Map.of(bu, dataset) : Map.of(),
+                Map.of(), library == Library.CAPABILITY ? Map.of(bu, dataset) : Map.of());
             var worker = new StandardReplyIndexWorker(indexRecords, json, settings, new StandardReplyIndexClient(json, settings));
             var data = json.createObjectNode().put("title", "标题").put("requirement_text", "要求")
                 .put("bu_id", bu).put("record_version", 1);
@@ -93,14 +94,14 @@ class StandardReplyIndexWorkerIntegrationTest {
         }
     }
 
-    private Map<String, Object> read(KnowledgeIndexQueue.Library library, String bu, String id) {
+    private Map<String, Object> read(Library library, String bu, String id) {
         return jdbc.queryForMap("""
             select version,operation,job_id,synced_at,lease_token from %s
             where bu_id=? and reply_id=?
             """.formatted(table(library)), bu, id);
     }
 
-    private static String table(KnowledgeIndexQueue.Library library) {
+    private static String table(Library library) {
         return switch (library) {
             case STANDARD_REPLY -> "standard_reply_index_sync";
             case HISTORY_RFQ -> "history_rfq_index_sync";

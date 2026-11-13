@@ -7,10 +7,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.model.entity.Project;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 public class HistoryRecallScope {
     @Autowired
     private HistoryDocumentMapper historyDocuments;
@@ -69,6 +71,7 @@ public class HistoryRecallScope {
         try {
             return json.readTree(payload);
         } catch (JsonProcessingException error) {
+            log.error("解析历史 RFQ 文档范围数据失败", error);
             throw new IllegalStateException("无法读取历史 RFQ 文档范围", error);
         }
     }

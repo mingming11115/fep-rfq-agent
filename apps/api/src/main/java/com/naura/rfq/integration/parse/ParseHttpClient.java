@@ -91,6 +91,7 @@ public class ParseHttpClient {
             pending = client.sendAsync(request, info -> new LimitedBody());
             response = pending.get(Math.max(1, timeout.toMillis()), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            log.error("调用解析服务请求失败", e);
             call.failed(e);
             throw e;
         } finally {
@@ -108,6 +109,7 @@ public class ParseHttpClient {
         try {
             return json.readTree(response.body());
         } catch (java.io.IOException e) {
+            log.error("读取解析服务的响应 JSON 失败", e);
             call.failed(e);
             throw e;
         }
@@ -134,6 +136,7 @@ public class ParseHttpClient {
                     || message.contains("context window exceeded") || message.contains("prompt is too long")
                     || message.contains("input is too long");
         } catch (java.io.IOException e) {
+            log.error("读取解析服务的错误响应内容失败", e);
             return false;
         }
     }

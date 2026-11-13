@@ -3,7 +3,7 @@ package com.naura.rfq.service;
 import com.naura.rfq.mapper.HistoryDocumentMapper;
 import com.naura.rfq.mapper.HistoryDocumentMapper.ParseKey;
 import com.naura.rfq.mapper.KnowledgeRecordMapper;
-import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
+import com.naura.rfq.mapper.Table;
 import com.naura.rfq.mapper.ResponseMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -204,6 +204,7 @@ public class HistoryRfqService {
             }
             parsed = parser.extract(sources);
         } catch (IOException | RuntimeException failure) {
+            log.error("历史 RFQ 解析任务失败 documentId={}", job.key().id(), failure);
             log.warn("历史 RFQ 解析失败 documentId={} errorType={}", job.key().id(), failure.getClass().getSimpleName());
             error = failure instanceof BusinessException ? failure.getMessage() : "解析失败，请重试";
         }

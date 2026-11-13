@@ -7,6 +7,7 @@ import com.naura.rfq.integration.parse.DocxBlockReader;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
 import com.naura.rfq.integration.parse.DocumentReadException;
 import com.naura.rfq.integration.parse.HybridRequirementExtractor;
+import com.naura.rfq.integration.parse.ParseHttpClient;
 import com.naura.rfq.integration.parse.WordMarkdownExtractor;
 import com.naura.rfq.integration.parse.WordMarkdownReader;
 import com.naura.rfq.mapper.CustomerDocumentMapper;
@@ -183,12 +184,12 @@ public class ParseService {
      * @return 抽取产物；任一阶段失败时已调用 {@link #recordFailure} 并返回 null
      */
     private ParseOutcome readAndExtract(ParseContext ctx, List<String> issues) {
-        String phase = "read";
+        ParsePhase phase = ParsePhase.READ;
         try {
             DocumentBlockReader reader = readerFor(ctx.document());
             WordMarkdownReader.Content wordMarkdown = null;
             if (reader instanceof DocxBlockReader && wordMarkdownExtractor.enabled()) {
-                phase = "markitdown";
+                phase = ParsePhase.MARKITDOWN;
                 try (var lease = storage.open(ctx.document().getStorageRef(), ctx.document().getSizeBytes(),
                         ctx.document().getSha256())) {
                     wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks(), ctx.run().getId());
@@ -207,7 +208,7 @@ public class ParseService {
                     issues.add(block.anchor() + "：" + block.issue());
                 }
             }
-            phase = "extract";
+            phase = ParsePhase.EXTRACT;
             ExtractionResult result = wordMarkdown != null
                     ? wordMarkdownExtractor.extract(wordMarkdown, ctx.run().getId())
                     : reader instanceof DocxBlockReader
@@ -215,7 +216,7 @@ public class ParseService {
                     : extractor.extractWithReport(rawBlocks, ctx.run().getId());
             ctx.run().setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
-            phase = "source_review";
+            phase = ParsePhase.SOURCE_REVIEW;
             List<ExtractedRequirement> extracted = withSourceReview(result.requirements(), rawBlocks);
             if (extracted.isEmpty() && ctx.hasPreviousResult()) {
                 throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
@@ -231,25 +232,45 @@ public class ParseService {
     }
 
     /**
-     * 解析失败收尾：记录结构化错误日志，将运行记录置为 FAILED 并落库失败原因，
+     * 解析失败收尾：记录结构化错误日志（附带原始异常堆栈），将运行记录置为 FAILED 并落库失败原因，
      * 文档状态置为 FAILED，并写入失败审计事件。已有解析结果保持不变。
+     *
+     * <p>落库原因不透出第三方异常的原始 message，避免把服务器路径、SQL 与服务配置细节写进
+     * 用户可见的运行记录与审计日志；原始异常只保留在本方法输出的日志里。
      */
-    private void recordFailure(ParseContext ctx, String phase, Exception exception) {
+    private void recordFailure(ParseContext ctx, ParsePhase phase, Exception exception) {
         log.error("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
-                ctx.run().getId(), ctx.document().getId(), ctx.project().getId(), phase,
+                ctx.run().getId(), ctx.document().getId(), ctx.project().getId(), phase.label(),
                 exception.getClass().getSimpleName(),
-                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()),
+                exception);
         ParseRun run = ctx.run();
         run.setStatus(ParseRun.FAILED);
-        String reason = exception instanceof DocumentReadException ? exception.getMessage()
-                : "解析失败，请检查文档及服务配置；已有结果保留";
-        run.setMessage(truncate(reason, 990));
+        run.setMessage(truncate(failureReason(phase, exception), 990));
         run.setIssueCount(1);
         run.setFinishedAt(Instant.now());
         runs.update(run);
         ctx.document().setStatus(CustomerDocument.STATUS_FAILED);
         documents.update(ctx.document());
         audit.failure(ctx.actorId(), "解析客户文件", "document", ctx.document().getId(), run.getMessage());
+    }
+
+    /**
+     * 拼装面向用户的失败原因：项目自定义的受控异常直接沿用其 message，
+     * 其余异常映射为「失败阶段 + 可操作描述」，兼顾信息量与内部细节保护。
+     *
+     * @param phase     失败所处的解析阶段
+     * @param exception 读取/抽取阶段抛出的异常
+     * @return 可写入运行记录与审计日志的失败原因
+     */
+    private String failureReason(ParsePhase phase, Exception exception) {
+        if (exception instanceof DocumentReadException || exception instanceof BusinessException) {
+            return exception.getMessage();
+        }
+        if (exception instanceof InterruptedException) {
+            return "解析已中断，请重新发起解析；已有结果保留";
+        }
+        return phase.title() + "阶段失败（" + ParseHttpClient.reason(exception) + "），请检查文档及服务配置；已有结果保留";
     }
 
     /**

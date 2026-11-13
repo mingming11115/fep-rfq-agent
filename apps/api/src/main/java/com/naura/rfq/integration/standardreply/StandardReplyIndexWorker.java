@@ -6,7 +6,7 @@ import com.naura.rfq.mapper.KnowledgeIndexMapper.Work;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;

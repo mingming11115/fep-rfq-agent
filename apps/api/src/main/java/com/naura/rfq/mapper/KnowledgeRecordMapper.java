@@ -8,22 +8,6 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface KnowledgeRecordMapper {
 
-    enum Table {
-        MODEL("model_definition"), PROCESS("process_definition"), EVIDENCE("evidence_record"),
-        CAPABILITY("capability_record"), HISTORY("`history-rfq-record`"), STANDARD_REPLY("standard-reply-record"),
-        HISTORY_DOCUMENT("history_document");
-
-        private final String auditType;
-
-        Table(String auditType) {
-            this.auditType = auditType;
-        }
-
-        public String auditType() {
-            return auditType;
-        }
-    }
-
     List<VersionRow> findVersion(@Param("table") Table table, @Param("buId") String buId, @Param("id") String id,
             @Param("version") int version);
 

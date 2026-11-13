@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText;
@@ -34,6 +35,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 
 /** Writes answers into a copy of the original, using the parser's source anchors. */
+@Slf4j
 public final class AnnotatedOriginal {
     private static final String AUTHOR = "RFQ 正式应答";
     private static final Pattern PDF_PAGE = Pattern.compile("(?:page-|selection:page:)(\\d+)(?:/.*)?");
@@ -223,6 +225,7 @@ public final class AnnotatedOriginal {
                 String text = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes, from, to - from)).toString();
                 selected.add(new SelectedParagraph(text, paragraph.paragraph()));
             } catch (CharacterCodingException exception) {
+                log.error("解码 Word 选区文字失败", exception);
                 throw missingAnchor(note);
             }
         }

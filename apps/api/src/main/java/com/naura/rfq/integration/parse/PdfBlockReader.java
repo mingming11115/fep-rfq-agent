@@ -62,9 +62,11 @@ public class PdfBlockReader implements DocumentBlockReader {
             }
             return recoverMineruImages(file, blocks);
         } catch (InterruptedException exception) {
+            log.error("MinerU 解析 PDF 被中断", exception);
             Thread.currentThread().interrupt();
             throw new DocumentReadException("PDF 解析已中断", exception);
         } catch (Exception exception) {
+            log.error("MinerU 解析 PDF 失败", exception);
             String reason = exception instanceof DocumentReadException ? exception.getMessage() : ParseHttpClient.reason(exception);
             log.warn("document.parse.mineru.fallback reason={}", reason);
             var blocks = read(file, historyLines);

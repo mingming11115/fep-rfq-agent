@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import javax.sql.DataSource;
+import lombok.extern.slf4j.Slf4j;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.ResourceProvider;
 import org.flywaydb.core.api.resource.LoadableResource;
@@ -27,6 +28,7 @@ import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration(proxyBeanMethods = false)
+@Slf4j
 class DatabaseInit {
     private static final String BASELINE_NAME = "B10__rfq_schema.sql";
     private static final String V11_NAME = "V11__standard_reply_records.sql";
@@ -188,6 +190,7 @@ class DatabaseInit {
         try {
             return new SqlSessionTemplate(factory.getObject()).getMapper(DatabaseBootstrapMapper.class);
         } catch (Exception error) {
+            log.error("初始化数据库迁移 Mapper 失败", error);
             throw new IllegalStateException("无法初始化数据库迁移 Mapper", error);
         }
     }

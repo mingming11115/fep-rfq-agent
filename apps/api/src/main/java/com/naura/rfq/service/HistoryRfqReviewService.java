@@ -2,13 +2,13 @@ package com.naura.rfq.service;
 
 import com.naura.rfq.mapper.HistoryDocumentMapper;
 import com.naura.rfq.mapper.KnowledgeRecordMapper;
-import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
+import com.naura.rfq.mapper.Table;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue;
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import com.naura.rfq.model.dto.HistoryRfqDraftRequest;
 import com.naura.rfq.security.CurrentUser;
 import java.time.Instant;

@@ -172,6 +172,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             return accepted.size();
         } catch (Exception exception) {
+            log.error("Word 条款总结批次失败", exception);
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -270,9 +271,11 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             return accepted;
         } catch (InterruptedException exception) {
+            log.error("历史答复模型批次被中断", exception);
             Thread.currentThread().interrupt();
             issues.add(label + " 已中断");
         } catch (Exception exception) {
+            log.error("历史答复模型批次解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
             log.warn("document.parse.llm.history_answers.fallback anchor={} reason={}", batch.get(0).anchor(), reason);
             issues.add(label + " 未返回可用结果，" + reason);
@@ -312,9 +315,11 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             return accepted;
         } catch (InterruptedException exception) {
+            log.error("历史答复模型解析被中断", exception);
             Thread.currentThread().interrupt();
             issues.add(block.anchor() + "：历史答复模型已中断");
         } catch (Exception exception) {
+            log.error("历史答复模型解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
             log.warn("document.parse.llm.history_answers.fallback blockIndex={} reason={}", block.index(), reason);
             issues.add(block.anchor() + "：历史答复模型未返回可用结果，" + reason);

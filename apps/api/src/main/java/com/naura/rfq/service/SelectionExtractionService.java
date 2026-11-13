@@ -26,8 +26,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class SelectionExtractionService {
     @Autowired
     private ProjectMapper projects;
@@ -160,6 +162,7 @@ public class SelectionExtractionService {
             var original = originals.download(user, document.getId());
             AnnotatedOriginal.requireSelectedText(original.content(), anchor, selection.text());
         } catch (IOException | BusinessException exception) {
+            log.error("校验选中文字与原件内容失败", exception);
             throw new BusinessException(409, "选中文字与当前原件位置不一致，请打开原件重新选择");
         }
     }

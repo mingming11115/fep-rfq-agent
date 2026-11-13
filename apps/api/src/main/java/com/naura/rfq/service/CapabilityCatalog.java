@@ -1,7 +1,7 @@
 package com.naura.rfq.service;
 
 import com.naura.rfq.mapper.KnowledgeRecordMapper;
-import com.naura.rfq.mapper.KnowledgeRecordMapper.Table;
+import com.naura.rfq.mapper.Table;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
