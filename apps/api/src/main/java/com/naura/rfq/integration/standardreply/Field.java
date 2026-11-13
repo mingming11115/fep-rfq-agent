@@ -9,9 +9,10 @@ enum Field {
     ANSWER("标准回复", "answer", 8000),
     CONDITIONS("适用条件", "conditions", 2000);
 
-    private final String label;
-    private final String alias;
-    private final int maxLength;
+    /** 包内可见：由 StandardReplyImportParser 直接读取表头名与列长度上限。 */
+    final String label;
+    final String alias;
+    final int maxLength;
 
     Field(String label, String alias, int maxLength) {
         this.label = label;
