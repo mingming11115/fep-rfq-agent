@@ -18,6 +18,7 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/rfq/admin")
 @RequiredArgsConstructor
+@Slf4j
 public class AdminController {
 
     private static final List<String> BU_SORTS = List.of("createdAt", "code", "name");
@@ -107,25 +109,40 @@ public class AdminController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String keyword) {
-        CurrentUser actor = CurrentUserHolder.require();
-        PageQuery query = PageQuery.of(page, size, sort, BU_SORTS, "createdAt,asc");
-        AdminService.Slice<BusinessUnit> slice = admin.listBusinessUnits(actor, query, keyword);
-        return ApiResponse.success(PageView.of(slice.rows().stream().map(BuView::of).toList(),
-                slice.total(), query.getPage(), query.getSize()));
+        try {
+            CurrentUser actor = CurrentUserHolder.require();
+            PageQuery query = PageQuery.of(page, size, sort, BU_SORTS, "createdAt,asc");
+            AdminService.Slice<BusinessUnit> slice = admin.listBusinessUnits(actor, query, keyword);
+            return ApiResponse.success(PageView.of(slice.rows().stream().map(BuView::of).toList(),
+                    slice.total(), query.getPage(), query.getSize()));
+        } catch (Exception exception) {
+            log.error("Request failed in listBusinessUnits", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/business-units")
     public ApiResponse<BuView> createBusinessUnit(@Valid @RequestBody CreateBuRequest request) {
-        return ApiResponse.success(BuView.of(
-                admin.createBusinessUnit(CurrentUserHolder.require(), request.code().trim(),
-                        request.name().trim())));
+        try {
+            return ApiResponse.success(BuView.of(
+                    admin.createBusinessUnit(CurrentUserHolder.require(), request.code().trim(),
+                            request.name().trim())));
+        } catch (Exception exception) {
+            log.error("Request failed in createBusinessUnit", exception);
+            throw exception;
+        }
     }
 
     @PatchMapping("/business-units/{id}")
     public ApiResponse<BuView> renameBusinessUnit(@PathVariable String id,
             @Valid @RequestBody RenameBuRequest request) {
-        return ApiResponse.success(BuView.of(
-                admin.renameBusinessUnit(CurrentUserHolder.require(), id, request.name().trim())));
+        try {
+            return ApiResponse.success(BuView.of(
+                    admin.renameBusinessUnit(CurrentUserHolder.require(), id, request.name().trim())));
+        } catch (Exception exception) {
+            log.error("Request failed in renameBusinessUnit", exception);
+            throw exception;
+        }
     }
 
     // ------------------------------------------------------------------ 账号
@@ -137,67 +154,107 @@ public class AdminController {
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String buId) {
-        CurrentUser actor = CurrentUserHolder.require();
-        PageQuery query = PageQuery.of(page, size, sort, USER_SORTS, "createdAt,desc");
-        AdminService.Slice<AdminService.UserRow> slice = admin.listUsers(actor, query, keyword, buId);
-        return ApiResponse.success(PageView.of(slice.rows().stream().map(UserView::of).toList(),
-                slice.total(), query.getPage(), query.getSize()));
+        try {
+            CurrentUser actor = CurrentUserHolder.require();
+            PageQuery query = PageQuery.of(page, size, sort, USER_SORTS, "createdAt,desc");
+            AdminService.Slice<AdminService.UserRow> slice = admin.listUsers(actor, query, keyword, buId);
+            return ApiResponse.success(PageView.of(slice.rows().stream().map(UserView::of).toList(),
+                    slice.total(), query.getPage(), query.getSize()));
+        } catch (Exception exception) {
+            log.error("Request failed in listUsers", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/users")
     public ApiResponse<UserView> createUser(@Valid @RequestBody CreateUserRequest request) {
-        CurrentUser actor = CurrentUserHolder.require();
-        AdminService.UserRow row = admin.createUser(actor, new AdminService.NewUser(
-                request.username().trim(), request.password(), request.displayName().trim(),
-                request.email(), request.buId(), request.role()));
-        return ApiResponse.success(UserView.of(row));
+        try {
+            CurrentUser actor = CurrentUserHolder.require();
+            AdminService.UserRow row = admin.createUser(actor, new AdminService.NewUser(
+                    request.username().trim(), request.password(), request.displayName().trim(),
+                    request.email(), request.buId(), request.role()));
+            return ApiResponse.success(UserView.of(row));
+        } catch (Exception exception) {
+            log.error("Request failed in createUser", exception);
+            throw exception;
+        }
     }
 
     @PatchMapping("/users/{id}")
     public ApiResponse<UserView> updateUser(@PathVariable String id,
             @Valid @RequestBody UpdateUserRequest request) {
-        CurrentUser actor = CurrentUserHolder.require();
-        AppUser updated = admin.updateUser(actor, id, request.displayName().trim(), request.email());
-        return ApiResponse.success(UserView.of(
-                new AdminService.UserRow(updated, rolesOf(id))));
+        try {
+            CurrentUser actor = CurrentUserHolder.require();
+            AppUser updated = admin.updateUser(actor, id, request.displayName().trim(), request.email());
+            return ApiResponse.success(UserView.of(
+                    new AdminService.UserRow(updated, rolesOf(id))));
+        } catch (Exception exception) {
+            log.error("Request failed in updateUser", exception);
+            throw exception;
+        }
     }
 
     @PatchMapping("/users/{id}/status")
     public ApiResponse<UserView> updateUserStatus(@PathVariable String id,
             @Valid @RequestBody UpdateStatusRequest request) {
-        CurrentUser actor = CurrentUserHolder.require();
-        AppUser updated = admin.updateUserStatus(actor, id, request.status());
-        return ApiResponse.success(UserView.of(
-                new AdminService.UserRow(updated, rolesOf(id))));
+        try {
+            CurrentUser actor = CurrentUserHolder.require();
+            AppUser updated = admin.updateUserStatus(actor, id, request.status());
+            return ApiResponse.success(UserView.of(
+                    new AdminService.UserRow(updated, rolesOf(id))));
+        } catch (Exception exception) {
+            log.error("Request failed in updateUserStatus", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/users/{id}/password")
     public ApiResponse<Void> resetPassword(@PathVariable String id,
             @Valid @RequestBody ResetPasswordRequest request) {
-        admin.resetPassword(CurrentUserHolder.require(), id, request.password());
-        return ApiResponse.success(null);
+        try {
+            admin.resetPassword(CurrentUserHolder.require(), id, request.password());
+            return ApiResponse.success(null);
+        } catch (Exception exception) {
+            log.error("Request failed in resetPassword", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/users/{id}/roles")
     public ApiResponse<RoleView> assignRole(@PathVariable String id,
             @Valid @RequestBody AssignRoleRequest request) {
-        UserBuRole binding = admin.assignRole(CurrentUserHolder.require(), id, request.buId(),
-                request.role());
-        return ApiResponse.success(RoleView.of(binding));
+        try {
+            UserBuRole binding = admin.assignRole(CurrentUserHolder.require(), id, request.buId(),
+                    request.role());
+            return ApiResponse.success(RoleView.of(binding));
+        } catch (Exception exception) {
+            log.error("Request failed in assignRole", exception);
+            throw exception;
+        }
     }
 
     @DeleteMapping("/users/{id}/roles")
     public ApiResponse<Void> revokeRole(@PathVariable String id,
             @RequestParam String buId, @RequestParam String role) {
-        admin.revokeRole(CurrentUserHolder.require(), id, buId, role);
-        return ApiResponse.success(null);
+        try {
+            admin.revokeRole(CurrentUserHolder.require(), id, buId, role);
+            return ApiResponse.success(null);
+        } catch (Exception exception) {
+            log.error("Request failed in revokeRole", exception);
+            throw exception;
+        }
     }
 
     // ------------------------------------------------------------ 成员资格
 
     @GetMapping("/business-units/{buId}/members")
     public ApiResponse<List<AdminService.MemberView>> listMembers(@PathVariable String buId) {
-        return ApiResponse.success(admin.listMembers(CurrentUserHolder.require(), buId));
+        try {
+            return ApiResponse.success(admin.listMembers(CurrentUserHolder.require(), buId));
+        } catch (Exception exception) {
+            log.error("Request failed in listMembers", exception);
+            throw exception;
+        }
     }
 
     public record MemberProfileRequest(Boolean canConfirm, Boolean canFinalReview,
@@ -207,8 +264,13 @@ public class AdminController {
     @PatchMapping("/business-units/{buId}/members/{userId}")
     public ApiResponse<AdminService.MemberView> updateMemberProfile(@PathVariable String buId,
             @PathVariable String userId, @RequestBody MemberProfileRequest request) {
-        return ApiResponse.success(admin.updateMemberProfile(CurrentUserHolder.require(), buId, userId,
-                request.canConfirm(), request.canFinalReview(), request.resourceQualifications()));
+        try {
+            return ApiResponse.success(admin.updateMemberProfile(CurrentUserHolder.require(), buId, userId,
+                    request.canConfirm(), request.canFinalReview(), request.resourceQualifications()));
+        } catch (Exception exception) {
+            log.error("Request failed in updateMemberProfile", exception);
+            throw exception;
+        }
     }
 
     public record MemberStatusRequest(@NotNull Boolean enabled) {
@@ -217,8 +279,13 @@ public class AdminController {
     @PatchMapping("/business-units/{buId}/members/{userId}/status")
     public ApiResponse<AdminService.MemberView> updateMemberStatus(@PathVariable String buId,
             @PathVariable String userId, @Valid @RequestBody MemberStatusRequest request) {
-        return ApiResponse.success(admin.updateMemberEnabled(CurrentUserHolder.require(), buId, userId,
-                request.enabled()));
+        try {
+            return ApiResponse.success(admin.updateMemberEnabled(CurrentUserHolder.require(), buId, userId,
+                    request.enabled()));
+        } catch (Exception exception) {
+            log.error("Request failed in updateMemberStatus", exception);
+            throw exception;
+        }
     }
 
     private List<UserBuRole> rolesOf(String userId) {

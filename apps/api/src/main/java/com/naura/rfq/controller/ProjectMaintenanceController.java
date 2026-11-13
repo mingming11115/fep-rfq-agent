@@ -12,12 +12,14 @@ import jakarta.validation.constraints.*;
 import java.time.LocalDate;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/rfq/projects")
 @RequiredArgsConstructor
+@Slf4j
 public class ProjectMaintenanceController {
     private final ProjectMaintenanceService service;
 
@@ -67,25 +69,50 @@ public class ProjectMaintenanceController {
 
     @PatchMapping("/{id}")
     public ApiResponse<ProjectView> patch(@PathVariable String id,@Valid @RequestBody PatchRequest request) {
-        var command=new ProjectMaintenanceService.PatchCommand(request.getVersion(),request.getReason(),request.getName(),
-                request.hasCustomer(),request.getCustomer(),request.hasDeadline(),request.getDeadline());
-        return ApiResponse.success(ProjectView.of(service.patch(CurrentUserHolder.require(),id,command)));
+        try {
+            var command=new ProjectMaintenanceService.PatchCommand(request.getVersion(),request.getReason(),request.getName(),
+                    request.hasCustomer(),request.getCustomer(),request.hasDeadline(),request.getDeadline());
+            return ApiResponse.success(ProjectView.of(service.patch(CurrentUserHolder.require(),id,command)));
+        } catch (Exception exception) {
+            log.error("Request failed in patch", exception);
+            throw exception;
+        }
     }
     @PostMapping("/{id}/handovers")
     public ApiResponse<ProjectView> handover(@PathVariable String id,@Valid @RequestBody HandoverRequest request) {
-        return ApiResponse.success(ProjectView.of(service.handover(CurrentUserHolder.require(),id,
-                request.getVersion(),request.getOwnerId(),request.getReason())));
+        try {
+            return ApiResponse.success(ProjectView.of(service.handover(CurrentUserHolder.require(),id,
+                    request.getVersion(),request.getOwnerId(),request.getReason())));
+        } catch (Exception exception) {
+            log.error("Request failed in handover", exception);
+            throw exception;
+        }
     }
     @DeleteMapping("/{id}")
     public ApiResponse<ProjectView> delete(@PathVariable String id,@RequestParam @PositiveOrZero long version) {
-        return ApiResponse.success(ProjectView.of(service.softDelete(CurrentUserHolder.require(),id,version,null)));
+        try {
+            return ApiResponse.success(ProjectView.of(service.softDelete(CurrentUserHolder.require(),id,version,null)));
+        } catch (Exception exception) {
+            log.error("Request failed in delete", exception);
+            throw exception;
+        }
     }
     @PostMapping("/{id}/archives")
     public ApiResponse<ProjectView> archive(@PathVariable String id,@Valid @RequestBody ActionRequest request) {
-        return ApiResponse.success(ProjectView.of(service.softDelete(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
+        try {
+            return ApiResponse.success(ProjectView.of(service.softDelete(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
+        } catch (Exception exception) {
+            log.error("Request failed in archive", exception);
+            throw exception;
+        }
     }
     @PostMapping("/{id}/restorations")
     public ApiResponse<ProjectView> restore(@PathVariable String id,@Valid @RequestBody ActionRequest request) {
-        return ApiResponse.success(ProjectView.of(service.restore(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
+        try {
+            return ApiResponse.success(ProjectView.of(service.restore(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
+        } catch (Exception exception) {
+            log.error("Request failed in restore", exception);
+            throw exception;
+        }
     }
 }

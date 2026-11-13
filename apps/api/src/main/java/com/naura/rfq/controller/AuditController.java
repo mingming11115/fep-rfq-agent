@@ -8,12 +8,14 @@ import com.naura.rfq.service.AuditQueryService;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/rfq")
 @RequiredArgsConstructor
+@Slf4j
 public class AuditController {
     private final AuditQueryService service;
 
@@ -25,11 +27,21 @@ public class AuditController {
             @RequestParam(required=false) String objectId,@RequestParam(required=false) String result,
             @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME) Instant createdFrom,
             @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME) Instant createdTo) {
-        return ApiResponse.success(service.list(CurrentUserHolder.require(), page, size, sort, buId, actorId, action, objectType, objectId, result, createdFrom, createdTo));
+        try {
+            return ApiResponse.success(service.list(CurrentUserHolder.require(), page, size, sort, buId, actorId, action, objectType, objectId, result, createdFrom, createdTo));
+        } catch (Exception exception) {
+            log.error("Request failed in list", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/projects/{id}/activity")
     public ApiResponse<List<AuditEvent>> projectActivity(@PathVariable String id) {
-        return ApiResponse.success(service.listProjectActivity(CurrentUserHolder.require(), id));
+        try {
+            return ApiResponse.success(service.listProjectActivity(CurrentUserHolder.require(), id));
+        } catch (Exception exception) {
+            log.error("Request failed in projectActivity", exception);
+            throw exception;
+        }
     }
 }
