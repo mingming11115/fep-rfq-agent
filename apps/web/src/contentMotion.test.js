@@ -17,6 +17,18 @@ test('reduced motion and unsupported surfaces never block a content change',()=>
   assert.equal(playContentMotion(null),null);
   assert.equal(playContentMotion({}),null);
 });
+test('content transitions play by default when the system requests reduced motion', (t) => {
+  const matchMedia = globalThis.matchMedia;
+  globalThis.matchMedia = (query) => ({ matches: query === '(prefers-reduced-motion: reduce)' });
+  t.after(() => {
+    if (matchMedia === undefined) { delete globalThis.matchMedia; }
+    else { globalThis.matchMedia = matchMedia; }
+  });
+
+  const target = surface();
+  const animation = playContentMotion(target, { kind: 'tab' });
+  assert.equal(animation?.options.duration, 150);
+});
 test('a rapid second switch cancels the first transition on that surface',async()=>{
   const target=surface();
   const first=playContentMotion(target,{kind:'tab',direction:1,reducedMotion:false});

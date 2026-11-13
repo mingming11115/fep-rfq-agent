@@ -65,4 +65,3 @@
  .workspace-todo{padding:16px}
  .rfq-ant-table .ant-pro-table-list-toolbar-container{gap:8px;flex-wrap:wrap}
 }
-@media(prefers-reduced-motion:reduce){.rfq-theme{--motion-fast:0ms;--motion-normal:0ms}}

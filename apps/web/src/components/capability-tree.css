@@ -62,6 +62,5 @@
 @media(max-width:850px) { .ref-cap-panel .cap-workspace { grid-template-columns:1fr; } .cap-directory { border-right:0; border-bottom:1px solid #e8edf3; } .cap-directory .cap-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .cap-node-detail { padding:17px 14px; } .cap-node-detail .ref-kv > div { grid-template-columns:68px minmax(0,1fr); } .cap-model-context { padding:12px; } .capability-value { font-size:24px; } .cap-node-detail .table-wrap { max-width:100%; } }
 @media(pointer:coarse) { .cap-tree .cap-tree-toggle { width:30px; min-height:44px; } .cap-tree .cap-tree-node { min-height:44px; } }
-@media(prefers-reduced-motion:reduce) { .cap-tree-toggle svg { transition:none; } }
 
 .cap-tree-actions{display:flex;flex:none;gap:1px;padding-right:3px}.cap-tree-action{display:grid;place-items:center;width:23px;height:28px;border:0;border-radius:4px;background:transparent;color:#7d8ca2}.cap-tree-action:hover,.cap-tree-action:focus-visible{background:#e4edfc;color:#1677ff}.cap-tree-action.danger:hover,.cap-tree-action.danger:focus-visible{background:#fff0ed;color:#d94141}

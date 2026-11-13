@@ -143,8 +143,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [queueDone, setQueueDone] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const cardRef = useRef(null), cardBusyRef = useRef(false), aliveRef = useRef(true), cardAnimation = useRef(null);
+  const cardTitleRef = useRef(null);
   useContentTransition(detailSideRef, detailTab, { kind:'tab',position:['response','activity'].indexOf(detailTab) });
-  useContentTransition(cardRef, active?.id, { kind: 'rfq-tab', enabled: !cardBusy });
+  useContentTransition(cardTitleRef, active?.id, { kind: 'clause-title', enabled: !cardBusy });
   useEffect(() => { cardRef.current?.querySelector('.response-editor-body')?.scrollTo({ top: 0 }); }, [active?.id]);
   const issueGuardRef = useRef(null);
   const registerIssueGuard = useCallback(guard => { issueGuardRef.current = guard; return () => { if (issueGuardRef.current === guard) { issueGuardRef.current = null; } }; }, []);
@@ -673,7 +674,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 <Card className="response-editor" size="small" variant="borderless" classNames={{ body: 'response-editor-body' }}
   title={<>
     <div className="response-card-title-row">
-      <h2>{active.title}</h2>
+      <h2 ref={cardTitleRef}>{active.title}</h2>
       <Tag className="response-confirmation-owner" color="blue">确认责任人：{getConfirmationActorIds(appState,project.id,active).map(id=>personName(appState,id)).join('、')||'未指派'}</Tag>
     </div>
     <div className="response-card-meta-row">
