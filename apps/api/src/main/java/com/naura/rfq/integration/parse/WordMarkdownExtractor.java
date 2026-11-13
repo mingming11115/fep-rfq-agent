@@ -1,5 +1,6 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.ExtractedRequirement;
@@ -71,11 +72,18 @@ public class WordMarkdownExtractor {
             }
             return extractBatches(content, config, runId, maxChars, extractor);
         } catch (DocumentReadException exception) {
+            log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
+                    runId, exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
         } catch (Exception exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+            Throwable cause = ParseHttpClient.unwrap(exception);
+            String reason = cause instanceof JsonProcessingException ? "模型响应 JSON 无法解析"
+                    : ParseHttpClient.reason(exception);
+            log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
+                    runId, cause.getClass().getSimpleName(), reason);
             throw new DocumentReadException("Word 模型抽取失败，请检查模型配置或重试", exception);
         }
     }

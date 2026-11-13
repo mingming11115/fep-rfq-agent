@@ -153,9 +153,7 @@ public class ParseHttpClient {
         return value;
     }
     public static String reason(Exception e) {
-        Throwable reason = e;
-        while (reason.getCause() != null && (reason instanceof java.util.concurrent.ExecutionException
-                || reason instanceof java.util.concurrent.CompletionException)) reason = reason.getCause();
+        Throwable reason = unwrap(e);
         if (reason instanceof java.util.concurrent.TimeoutException || reason instanceof java.net.http.HttpTimeoutException) {
             return "请求超时";
         }
@@ -164,6 +162,16 @@ public class ParseHttpClient {
         }
         return "配置、连接或响应校验失败";
     }
+
+    static Throwable unwrap(Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null && (cause instanceof java.util.concurrent.ExecutionException
+                || cause instanceof java.util.concurrent.CompletionException)) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
     private static class RemoteStatusException extends Exception {
         private final int status;
         private final boolean lengthError;
