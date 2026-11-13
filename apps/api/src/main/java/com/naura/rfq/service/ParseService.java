@@ -17,6 +17,7 @@ import com.naura.rfq.mapper.RequirementMapper;
 import com.naura.rfq.model.entity.CustomerDocument;
 import com.naura.rfq.model.entity.DocumentBlock;
 import com.naura.rfq.model.entity.ParseRun;
+import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.ExtractionResult;
@@ -48,6 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ParseService {
 
     private static final Logger log = LoggerFactory.getLogger(ParseService.class);
+    private static final Pattern SELECTED_WORD = Pattern.compile("selection:word:([0-9/]+):[0-9]+-([0-9/]+):[0-9]+");
+    private static final Pattern WORD_BLOCK = Pattern.compile("body/([0-9]+(?:/[rc]?[0-9]+)*)");
 
     @Autowired
     private CustomerDocumentMapper documents;
@@ -87,11 +90,32 @@ public class ParseService {
             Instant startedAt, Instant finishedAt, String extractor) {
     }
 
+    /** 一次解析运行的事务内上下文：项目、文档、解析运行记录及审计信息。 */
+    record ParseContext(Project project, CustomerDocument document, ParseRun run,
+            List<String> recallIds, boolean hasPreviousResult, String actorId, long started) {
+    }
+
+    /** 读取与抽取阶段的产物：原始块与抽取出的条款。 */
+    record ParseOutcome(List<RawBlock> rawBlocks, List<ExtractedRequirement> extracted) {
+    }
+
     @Transactional
     public ParseRunView run(String documentId, String actorId, List<String> historyDocumentIds) {
+        ParseContext ctx = prepare(documentId, actorId, historyDocumentIds);
+        List<String> issues = new ArrayList<>();
+        ParseOutcome outcome = readAndExtract(ctx, issues);
+        if (outcome == null) {
+            // 读取/抽取阶段失败已在 readAndExtract 内记录失败状态并落库
+            return view(ctx.run());
+        }
+        return finalizeRun(ctx, outcome, issues);
+    }
+
+    /** 校验访问权限与可重解析条件，锁定文档并创建 RUNNING 状态的解析运行记录。 */
+    private ParseContext prepare(String documentId, String actorId, List<String> historyDocumentIds) {
         CustomerDocument reference = documents.findById(documentId)
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
-        var project = projects.findByIdForUpdate(reference.getProjectId())
+        Project project = projects.findByIdForUpdate(reference.getProjectId())
                 .orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireActiveProject(project);
         work.requireEditable(project.getId(), documentId);
@@ -106,9 +130,8 @@ public class ParseService {
             throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
         }
 
-        var recallIds = historyDocumentIds == null ? document.historyRecallIds()
+        List<String> recallIds = historyDocumentIds == null ? document.historyRecallIds()
                 : historyRecall.validate(project, historyDocumentIds);
-        long started = System.nanoTime();
         ParseRun run = new ParseRun();
         run.setId(Ids.next("RUN"));
         run.setDocumentId(documentId);
@@ -119,21 +142,23 @@ public class ParseService {
 
         document.setStatus(CustomerDocument.STATUS_PARSING);
         documents.update(document);
+        return new ParseContext(project, document, run, recallIds, !previous.isEmpty(), actorId, System.nanoTime());
+    }
 
-        List<RawBlock> rawBlocks;
-        List<ExtractedRequirement> extracted;
-        List<String> issues = new ArrayList<>();
+    /** 读取原始块并抽取条款；失败时记录失败状态并返回 null（由调用方回显失败结果）。 */
+    private ParseOutcome readAndExtract(ParseContext ctx, List<String> issues) {
         String phase = "read";
         try {
-            DocumentBlockReader reader = readerFor(document);
+            DocumentBlockReader reader = readerFor(ctx.document());
             WordMarkdownReader.Content wordMarkdown = null;
             if (reader instanceof DocxBlockReader && wordMarkdownExtractor.enabled()) {
                 phase = "markitdown";
-                try (var lease = storage.open(document.getStorageRef(), document.getSizeBytes(), document.getSha256())) {
-                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks(), run.getId());
+                try (var lease = storage.open(ctx.document().getStorageRef(), ctx.document().getSizeBytes(),
+                        ctx.document().getSha256())) {
+                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks(), ctx.run().getId());
                 }
             }
-            rawBlocks = wordMarkdown == null ? readBlocks(document, reader) : wordMarkdown.blocks();
+            List<RawBlock> rawBlocks = wordMarkdown == null ? readBlocks(ctx.document(), reader) : wordMarkdown.blocks();
             if (rawBlocks.isEmpty()) {
                 throw new DocumentReadException("文档没有可读取内容");
             }
@@ -148,48 +173,63 @@ public class ParseService {
             }
             phase = "extract";
             ExtractionResult result = wordMarkdown != null
-                    ? wordMarkdownExtractor.extract(wordMarkdown, run.getId())
+                    ? wordMarkdownExtractor.extract(wordMarkdown, ctx.run().getId())
                     : reader instanceof DocxBlockReader
-                    ? extractor.extractWordWithReport(rawBlocks, run.getId())
-                    : extractor.extractWithReport(rawBlocks, run.getId());
-            run.setExtractor(truncate(result.extractor(), 250));
+                    ? extractor.extractWordWithReport(rawBlocks, ctx.run().getId())
+                    : extractor.extractWithReport(rawBlocks, ctx.run().getId());
+            ctx.run().setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
             phase = "source_review";
-            extracted = withSourceReview(result.requirements(), rawBlocks);
-            if (extracted.isEmpty() && !previous.isEmpty()) {
+            List<ExtractedRequirement> extracted = withSourceReview(result.requirements(), rawBlocks);
+            if (extracted.isEmpty() && ctx.hasPreviousResult()) {
                 throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
             }
+            return new ParseOutcome(rawBlocks, extracted);
         } catch (Exception exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            log.error("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
-                    run.getId(), documentId, project.getId(), phase, exception.getClass().getSimpleName(),
-                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
-            run.setStatus(ParseRun.FAILED);
-            String reason = exception instanceof DocumentReadException ? exception.getMessage() : "解析失败，请检查文档及服务配置；已有结果保留";
-            run.setMessage(truncate(reason, 990));
-            run.setIssueCount(1);
-            run.setFinishedAt(Instant.now());
-            runs.update(run);
-            document.setStatus(CustomerDocument.STATUS_FAILED);
-            documents.update(document);
-            audit.failure(actorId, "解析客户文件", "document", documentId, run.getMessage());
-            return view(run);
+            recordFailure(ctx, phase, exception);
+            return null;
         }
+    }
 
-        boolean recognized = !extracted.isEmpty();
-        extracted = omitRetainedSelections(documentId, extracted, rawBlocks);
+    /** 解析失败：落库失败状态与原因，文档标记为失败，并写入审计日志。 */
+    private void recordFailure(ParseContext ctx, String phase, Exception exception) {
+        log.error("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
+                ctx.run().getId(), ctx.document().getId(), ctx.project().getId(), phase,
+                exception.getClass().getSimpleName(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
+        ParseRun run = ctx.run();
+        run.setStatus(ParseRun.FAILED);
+        String reason = exception instanceof DocumentReadException ? exception.getMessage()
+                : "解析失败，请检查文档及服务配置；已有结果保留";
+        run.setMessage(truncate(reason, 990));
+        run.setIssueCount(1);
+        run.setFinishedAt(Instant.now());
+        runs.update(run);
+        ctx.document().setStatus(CustomerDocument.STATUS_FAILED);
+        documents.update(ctx.document());
+        audit.failure(ctx.actorId(), "解析客户文件", "document", ctx.document().getId(), run.getMessage());
+    }
+
+    /** 解析成功：替换旧数据并持久化新块与条款，更新运行/文档状态，触发匹配与审计。 */
+    private ParseRunView finalizeRun(ParseContext ctx, ParseOutcome outcome, List<String> issues) {
+        String documentId = ctx.document().getId();
+        boolean recognized = !outcome.extracted().isEmpty();
+        List<ExtractedRequirement> extracted =
+                omitRetainedSelections(documentId, outcome.extracted(), outcome.rawBlocks());
         requirements.deleteGeneratedByDocumentId(documentId);
         blocks.deleteByDocumentId(documentId);
-        Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, rawBlocks);
-        List<Requirement> saved = persistRequirements(document, run.getId(), extracted, sourceBlocks);
+        Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, outcome.rawBlocks());
+        List<Requirement> saved = persistRequirements(ctx.document(), ctx.run().getId(), extracted, sourceBlocks);
 
         long reviewCount = extracted.stream().filter(ExtractedRequirement::needsReview).count();
         int issueCount = (int) reviewCount + issues.size();
 
-        run.setTotalBlocks(rawBlocks.size());
-        run.setProcessedBlocks(rawBlocks.size());
+        ParseRun run = ctx.run();
+        run.setTotalBlocks(outcome.rawBlocks().size());
+        run.setProcessedBlocks(outcome.rawBlocks().size());
         run.setRequirementCount(saved.size());
         run.setIssueCount(issueCount);
         run.setFinishedAt(Instant.now());
@@ -197,34 +237,31 @@ public class ParseService {
         if (!recognized) {
             run.setStatus(ParseRun.PARTIAL);
             run.setMessage(join(issues, "未识别到可应答条款，请检查文档编号结构或改用人工补录"));
-            document.setStatus(CustomerDocument.STATUS_PARTIAL);
+            ctx.document().setStatus(CustomerDocument.STATUS_PARTIAL);
         } else if (issueCount > 0) {
             run.setStatus(ParseRun.PARTIAL);
             run.setMessage(join(issues, reviewCount + " 条条款需要人工核对"));
-            document.setStatus(CustomerDocument.STATUS_PARTIAL);
+            ctx.document().setStatus(CustomerDocument.STATUS_PARTIAL);
         } else {
             run.setStatus(ParseRun.COMPLETED);
             run.setMessage(join(issues, "解析完成"));
-            document.setStatus(CustomerDocument.STATUS_PARSED);
+            ctx.document().setStatus(CustomerDocument.STATUS_PARSED);
         }
         run.setMessage(truncate(run.getMessage(), 990));
         runs.update(run);
-        documents.update(document);
-        if (!document.historyRecallIds().equals(recallIds)) {
-            document.setHistoryDocumentIds(String.join(",", recallIds));
-            documents.updateHistoryRecall(document);
+        documents.update(ctx.document());
+        if (!ctx.document().historyRecallIds().equals(ctx.recallIds())) {
+            ctx.document().setHistoryDocumentIds(String.join(",", ctx.recallIds()));
+            documents.updateHistoryRecall(ctx.document());
         }
-        matches.parsed(project, document, saved);
-        audit.successInBu(actorId, project.getBuId(), "解析客户文件", "document", documentId,
+        matches.parsed(ctx.project(), ctx.document(), saved);
+        audit.successInBu(ctx.actorId(), ctx.project().getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
         log.info("document.parse.result parseRunId={} documentId={} projectId={} status={} blocks={} requirements={} issues={} durationMs={}",
-                run.getId(), documentId, project.getId(), run.getStatus(), rawBlocks.size(), saved.size(), issueCount,
-                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                run.getId(), documentId, ctx.project().getId(), run.getStatus(), outcome.rawBlocks().size(), saved.size(),
+                issueCount, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
         return view(run);
     }
-
-    private static final Pattern SELECTED_WORD = Pattern.compile("selection:word:([0-9/]+):[0-9]+-([0-9/]+):[0-9]+");
-    private static final Pattern WORD_BLOCK = Pattern.compile("body/([0-9]+(?:/[rc]?[0-9]+)*)");
 
     private List<ExtractedRequirement> omitRetainedSelections(String documentId, List<ExtractedRequirement> extracted,
                                                               List<RawBlock> rawBlocks) {

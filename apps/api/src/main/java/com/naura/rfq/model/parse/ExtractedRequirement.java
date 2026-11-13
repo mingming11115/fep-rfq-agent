@@ -23,15 +23,15 @@ public record ExtractedRequirement(
         String reviewReasons,
         List<SourceRef> sourceRefs) {
 
+    public static final String VALID = "VALID";
+    public static final String NEEDS_REVIEW = "NEEDS_REVIEW";
+
     public ExtractedRequirement(int order, int blockIndex, String sectionPath, String customerClauseNo,
             String title, int level, String parentClauseNo, String originalText, String requirementText,
             String metricsJson, String conditionsText, String obligation, String extractionStatus, String reviewReasons) {
         this(order, blockIndex, sectionPath, customerClauseNo, title, level, parentClauseNo, originalText, requirementText,
                 metricsJson, conditionsText, obligation, extractionStatus, reviewReasons, null);
     }
-
-    public static final String VALID = "VALID";
-    public static final String NEEDS_REVIEW = "NEEDS_REVIEW";
 
     public boolean needsReview() {
         return NEEDS_REVIEW.equals(extractionStatus);

@@ -55,6 +55,8 @@ class MatchEvaluator {
     private record Source(String id, int version, long revision, boolean shared, boolean synced, String syncStamp, JsonNode payload) {}
     private record Scope(Map<String, Source> sources, boolean unknown) {}
     private record Candidate(Source source, double similarity) {}
+    private record SourceRow(String id, int version, long revision, String project, String scope, boolean synced,
+            String syncStamp, JsonNode payload) {}
 
     Evaluation evaluate(Input input) {
         var result = json.createObjectNode().put("conclusion", "待确认").put("knowledgeGap", false);
@@ -250,9 +252,6 @@ class MatchEvaluator {
         }
         return new Scope(sources, unknown);
     }
-
-    private record SourceRow(String id, int version, long revision, String project, String scope, boolean synced,
-            String syncStamp, JsonNode payload) {}
 
     private String scopeStamp(Scope scope) {
         var items = json.createArrayNode();
