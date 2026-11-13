@@ -29,9 +29,14 @@ import org.springframework.stereotype.Component;
 public class WordMarkdownExtractor {
     private static final Pattern SOURCE_ID = Pattern.compile("S([0-9]{1,9})");
     private static final String PROMPT = """
-        从客户 RFQ Markdown 中抽取可逐条应答的要求。把属于同一义务的正文、表格数据、表头单位、
-        适用条件和脚注拼成一条完整的 requirementText。保留原语言、指标、单位和限制条件，不补写缺失内容。
+        从客户 RFQ Markdown 中抽取可逐条应答的要求。属于同一义务的正文、表头单位、适用条件和脚注
+        拼成一条完整的 requirementText。保留原语言、指标、单位和限制条件，不补写缺失内容。
         不同义务分别输出，使用原文顺序和原文条款号，没有编号时使用空字符串。
+        表格按行处理：Markdown 表格的每一行是一条独立要求，必须单独输出为一条 requirement，
+        sourceRefs 只引用该行自身的来源 ID，不要把整张表格的多行合并成一条 requirementText。
+        仅当同一行内部被拆成多个单元格，或原文用合并单元格明确表示一个指标跨多行时，才把这几行
+        拼成一条，并在 requirementText 中保留行与行的对应关系。
+        表头行本身不是要求，其中的单位、口径与列名按需并入它所描述的每一行。
         specification 可填写原文逐字出现的规格表达，没有时使用空字符串。
         每个来源由 [S数字] 标记。sourceRefs 必须列出支撑该条款的所有来源 ID（例如 ["S3","S7"]），
         只使用原文给出的 ID。表格单位或脚注用于解释条款时也必须引用。
@@ -226,6 +231,7 @@ public class WordMarkdownExtractor {
                     }
                 }
                 var sources = sourceIndices.stream().map(blocks::get).toList();
+                logMergedTableRows(sourceIndices);
                 // Prefer a native paragraph or row for the default jump when the clause also cites an image or note.
                 var ordered = sources.stream().sorted(Comparator.comparingInt(
                         block -> tableHeaders.contains(block.index()) ? 3 : sourcePriority(block)))
@@ -253,6 +259,27 @@ public class WordMarkdownExtractor {
             }
             return new ExtractionResult(requirements, extractor, issues);
         }
+
+        /** 同一表格的多行被并进一条条款时留痕，用于核查提示词的逐行约束是否生效。 */
+        private void logMergedTableRows(Set<Integer> sourceIndices) {
+            var rowsByTable = sourceIndices.stream()
+                    .map(blocks::get)
+                    .filter(RawBlock::isTable)
+                    .map(block -> tableKey(block.anchor()))
+                    .filter(key -> !key.isEmpty())
+                    .collect(Collectors.groupingBy(key -> key, Collectors.counting()));
+            rowsByTable.forEach((table, rows) -> {
+                if (rows > 1) {
+                    log.warn("document.parse.word.table.merged table={} rows={}", table, rows);
+                }
+            });
+        }
+    }
+
+    /** 表格行的锚点形如 body/5/r3，去掉行号后的前缀标识同一张表。 */
+    private static String tableKey(String anchor) {
+        int row = anchor.lastIndexOf("/r");
+        return row < 0 ? "" : anchor.substring(0, row);
     }
 
     private static int sourceIndex(JsonNode value) {
