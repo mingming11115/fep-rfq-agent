@@ -223,7 +223,7 @@ public class HistoryModelExtractor {
             String metrics = spec.isBlank() ? null : json.createObjectNode().put("specification", spec).toString();
             customer = new ExtractedRequirement(order, source.source(), source.sectionPath(), number.isBlank() ? null : number,
                     title.isBlank() ? requirement : title, 1, null, requirement, requirement, metrics,
-                    quote(row, "customerConditions", source), "unknown", ExtractedRequirement.NEEDS_REVIEW, "LLM 抽取，需核对原文");
+                    quote(row, "customerConditions", source), "unknown", "LLM 抽取，需核对原文");
         }
         return new HistoryClause(source.anchor(), number, source.sectionPath(), requirement, answer,
                 quote(row, "conditions", source, answerSource), quote(row, "evidence", source, answerSource),

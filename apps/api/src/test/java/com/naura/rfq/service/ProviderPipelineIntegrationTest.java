@@ -105,7 +105,7 @@ class ProviderPipelineIntegrationTest {
             .header("Authorization", "Bearer " + token)).andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString()).path("data");
         assertThat(blocks.path(0).path("provenance").asText()).isEqualTo("ocr");
-        assertThat(blocks.path(0).path("processingStatus").asText()).isEqualTo("NEEDS_REVIEW");
+        assertThat(blocks.path(0).path("processingStatus").asText()).isEqualTo("PARSE_ISSUE");
     }
     @Test void modelOutageUsesRulesAndPersistsDegradation() throws Exception {
         llmFailure = true;

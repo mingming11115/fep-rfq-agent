@@ -206,7 +206,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         }
         return new ExtractedRequirement(clause.order(), clause.blockIndex(), clause.sectionPath(), clause.customerClauseNo(),
                 clause.title(), clause.level(), clause.parentClauseNo(), clause.originalText(), summary, clause.metricsJson(),
-                clause.conditionsText(), clause.obligation(), ExtractedRequirement.NEEDS_REVIEW, reason);
+                clause.conditionsText(), clause.obligation(), reason);
     }
 
     /** For callers that already have source-specific rule results. */
@@ -440,7 +440,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             ordered.add(new ExtractedRequirement(ordered.size(), r.blockIndex(), r.sectionPath(),
                 r.customerClauseNo(), r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(),
-                r.metricsJson(), r.conditionsText(), r.obligation(), r.extractionStatus(), r.reviewReasons()));
+                r.metricsJson(), r.conditionsText(), r.obligation(), r.reviewReasons()));
         }
         String used = modelUsed ? "llm:" + config.getModel() : rules.name();
         if (modelUsed && !issues.isEmpty()) {
@@ -490,7 +490,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             covered.add(index);
             results.add(new ExtractedRequirement(results.size(), index, source.sectionPath(), null, item, 1, null,
-                quote, description, metricsJson, null, "unknown", ExtractedRequirement.NEEDS_REVIEW, "模型抽取，需核对原文及条件"));
+                quote, description, metricsJson, null, "unknown", "模型抽取，需核对原文及条件"));
         }
         for (JsonNode index : response.path("ignoredBlockIndexes")) {
             if (!index.isIntegralNumber() || !sources.containsKey(index.asInt()) || covered.contains(index.asInt()) || !ignored.add(index.asInt())) {

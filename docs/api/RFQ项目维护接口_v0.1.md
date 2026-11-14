@@ -66,7 +66,7 @@ POST `/projects/{id}/restorations`
 
 仅 CANCELLED 可以恢复，且必须存在可识别的 archivedFromStage。恢复原阶段并清除当前归档字段；历史归档/恢复操作继续保存在审计中。旧记录缺少原阶段时返回 409，不猜测其业务状态。
 
-本轮没有通用阶段修改接口。DRAFT/PARSING 沿用既有创建/上传动作；REVIEWING/APPROVED/EXPORTED 留给对应业务流程维护，不能通过 PATCH 或归档请求自行声称批准/导出。
+本轮没有通用阶段修改接口。DRAFT/PARSING 沿用既有创建/上传动作；PARSING → REVIEWING 由条款比对全部完成自动推进（界面文案为「解析比对中 → 评审确认中」，不提供手工改阶段入口）；REVIEWING/APPROVED/EXPORTED 留给对应业务流程维护，不能通过 PATCH 或归档请求自行声称批准/导出。
 
 ## 5. 项目查询和响应
 

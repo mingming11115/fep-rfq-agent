@@ -17,7 +17,7 @@ test('presentation demo has one RFQ per stage and all fifteen processing-status 
   const before = legacy();
   const next = cleanup.tidyDemoState(before);
   assert.deepEqual(next.projects.map(p => getProjectSummary(next, p.id, 'demo-sales').stage).sort(),
-    ['待上传', '解析中', '评审中', '审批完成', '已导出'].sort());
+    ['待上传', '解析比对中', '评审确认中', '审批完成', '已导出'].sort());
   assert.deepEqual(responseCardStats(next.requirementsByProject['RFQ-001'], next.reviewsByProject['RFQ-001']),
     {all: 15, pending: 5, confirmed: 5, waiting: 5});
   for (const status of ['pending', 'waiting', 'confirmed'])
@@ -128,7 +128,7 @@ test('cleanup fills stages absent from an older browser demo with valid syntheti
   before.snapshotsByProject['RFQ-003'] = [];
   const next = cleanup.tidyDemoState(before);
   assert.deepEqual(next.projects.map(p => getProjectSummary(next, p.id, 'demo-sales').stage).sort(),
-    ['待上传', '解析中', '评审中', '审批完成', '已导出'].sort());
+    ['待上传', '解析比对中', '评审确认中', '审批完成', '已导出'].sort());
 });
 
 test('a workspace containing only another BU does not receive demo projects', () => {

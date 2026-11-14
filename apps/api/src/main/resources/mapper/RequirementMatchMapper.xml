@@ -50,6 +50,19 @@
         <include refid="requirementFilter"/>
     </select>
 
+    <select id="countPendingMatches" resultType="long">
+        select count(*) from requirement r
+        where r.project_id=#{projectId} and r.extraction_status &lt;&gt; 'EXCLUDED'
+            and coalesce(nullif(r.requirement_text,''),nullif(r.original_text,'')) is not null
+            <if test="excludedDocumentIds != null and excludedDocumentIds.size() > 0">
+                and r.document_id not in
+                <foreach collection="excludedDocumentIds" item="documentId" open="(" separator="," close=")">#{documentId}</foreach>
+            </if>
+            and not exists (select 1 from requirement_match_run run
+                join requirement_match_result result on result.run_id=run.id
+                where run.requirement_id=r.id and run.current_run=1 and run.status='completed')
+    </select>
+
     <select id="listRequirementIds" resultType="string">
         select r.id from requirement r left join document_block source on source.id=r.block_id
         <include refid="requirementFilter"/>

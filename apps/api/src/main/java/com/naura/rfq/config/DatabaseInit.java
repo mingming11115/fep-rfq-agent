@@ -58,6 +58,8 @@ class DatabaseInit {
     private static final String V22_END = "-- RFQ_MIGRATION_V22_END";
     private static final String V23_START = "-- RFQ_MIGRATION_V23\n";
     private static final String V23_END = "-- RFQ_MIGRATION_V23_END";
+    private static final String V24_START = "-- RFQ_MIGRATION_V24\n";
+    private static final String V24_END = "-- RFQ_MIGRATION_V24_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -113,8 +115,12 @@ class DatabaseInit {
         var capabilityIndex = resource("V23__capability_index_sync.sql",
                 sql.substring(sql.indexOf(V23_START) + V23_START.length(), sql.indexOf(V23_END)),
                 "classpath:db/init.sql#V23");
+        var singleExtractionStatus = resource("V24__normalize_requirement_extraction_status.sql",
+                sql.substring(sql.indexOf(V24_START) + V24_START.length(), sql.indexOf(V24_END)),
+                "classpath:db/init.sql#V24");
         var resources = List.of(baseline, standardReplies, history, capability, match, workflow,
-                replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs, capabilityIndex);
+                replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs,
+                capabilityIndex, singleExtractionStatus);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {

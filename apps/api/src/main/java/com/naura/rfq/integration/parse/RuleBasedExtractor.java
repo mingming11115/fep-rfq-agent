@@ -151,7 +151,6 @@ public class RuleBasedExtractor implements RequirementExtractor {
                 metrics.isEmpty() ? null : writeJson(metrics),
                 null,
                 obligationOf(body),
-                reasons.isEmpty() ? ExtractedRequirement.VALID : ExtractedRequirement.NEEDS_REVIEW,
                 reasons.isEmpty() ? null : String.join("；", reasons));
     }
 
@@ -201,7 +200,6 @@ public class RuleBasedExtractor implements RequirementExtractor {
                     metricsJson,
                     null,
                     obligationOf(joined),
-                    ExtractedRequirement.NEEDS_REVIEW,
                     String.join("；", reasons),
                     rowRefs(block, rowIndex, cells)));
         }
@@ -234,7 +232,6 @@ public class RuleBasedExtractor implements RequirementExtractor {
                 item.isBlank() ? titleOf(description) : item, level,
                 number == null || block.isTable() ? null : parentOf(number), original, description,
                 metricsJson(specification, metrics), conditions.isBlank() ? null : conditions, obligationOf(body),
-                reviewReasons.isEmpty() ? ExtractedRequirement.VALID : ExtractedRequirement.NEEDS_REVIEW,
                 reviewReasons.isEmpty() ? null : String.join("；", reviewReasons));
     }
 

@@ -1,4 +1,5 @@
 import {getProjectSummary} from './projectSelectors.js';
+import {PROJECT_STAGE_LABELS} from './projectStage.js';
 import {createDemoState} from './data.js';
 import {upgradePrototypeState} from './stateMigration.js';
 import {selectResponseCards, RESPONSE_STATUS_LABELS} from './responseCardQueue.js';
@@ -8,8 +9,11 @@ const cleanupVersion = 4;
 const conclusions = ['Comply', '有条件 Comply', '不满足', '不适用', '待确认'];
 const processingStates = [['pending', RESPONSE_STATUS_LABELS.pending, 'P'], ['waiting', RESPONSE_STATUS_LABELS.waiting, 'R'], ['confirmed', RESPONSE_STATUS_LABELS.confirmed, 'C']];
 const preferredProjects = {
-  待上传: 'RFQ-DEMO-UPLOAD', 解析中: 'RFQ-DEMO-PARSING',
-  评审中: 'RFQ-001', 审批完成: 'RFQ-002', 已导出: 'RFQ-003',
+  [PROJECT_STAGE_LABELS.DRAFT]: 'RFQ-DEMO-UPLOAD',
+  [PROJECT_STAGE_LABELS.PARSING]: 'RFQ-DEMO-PARSING',
+  [PROJECT_STAGE_LABELS.REVIEWING]: 'RFQ-001',
+  [PROJECT_STAGE_LABELS.APPROVED]: 'RFQ-002',
+  [PROJECT_STAGE_LABELS.EXPORTED]: 'RFQ-003',
 };
 const projectMaps = ['requirementsByProject', 'reviewsByProject', 'snapshotsByProject',
   'documentsByProject', 'exportScopesByProject', 'commentsByProject', 'membersByProject',
@@ -64,7 +68,7 @@ export function tidyDemoState(previous) {
   }
 
   const retainedRows = new Map(), retainedReviews = new Map();
-  for (const project of state.projects.filter(p => p.buId === 'BU-DEMO' && getProjectSummary(state, p.id, 'demo-sales').stage === '评审中')) {
+  for (const project of state.projects.filter(p => p.buId === 'BU-DEMO' && getProjectSummary(state, p.id, 'demo-sales').stage === PROJECT_STAGE_LABELS.REVIEWING)) {
     const rows = [...(state.requirementsByProject[project.id] || [])], reviews = [...(state.reviewsByProject[project.id] || [])];
     const files = [...(state.documentsByProject[project.id] || [])];
     const exampleId = fallback.requirementsByProject[project.id]?.length ? project.id : 'RFQ-001';
@@ -152,7 +156,7 @@ export function tidyStoredDemo(storage, previous) {
   }
   storage.setItem(`fep-rfq-demo-before-cleanup-v${cleanupVersion}`, JSON.stringify({savedAt: new Date().toISOString(), state: previous, related}));
   for (const project of next.projects) {
-    const reviewDemo = project.buId === 'BU-DEMO' && getProjectSummary(next, project.id, 'demo-sales').stage === '评审中';
+    const reviewDemo = project.buId === 'BU-DEMO' && getProjectSummary(next, project.id, 'demo-sales').stage === PROJECT_STAGE_LABELS.REVIEWING;
     if (!reviewDemo && JSON.stringify(previous.requirementsByProject[project.id]) === JSON.stringify(next.requirementsByProject[project.id])) { continue; }
     storage.setItem(`fep-rfq-documents:${project.id}`, JSON.stringify({
       files: next.documentsByProject[project.id], parsed: next.requirementsByProject[project.id],

@@ -49,7 +49,7 @@ test('previously parsed demo projects receive a persistent parsing preview witho
   old.requirementsByProject['RFQ-001'][0].draft='保留人工应答';
   const next=upgradePrototypeState(old,demo),pid='RFQ-DEMO-PARSING';
   assert.ok(selectProjects(next,{actorId:'demo-sales'}).some(project=>project.id===pid),'SR can find the parsing example in My RFQ');
-  assert.equal(getProjectSummary(next,pid,'demo-sales').stage,'解析中');
+  assert.equal(getProjectSummary(next,pid,'demo-sales').stage,'解析比对中');
   assert.equal(getProjectSourceSummary(next,pid).status,'parsing');
   assert.equal(next.documentsByProject[pid][0].parseStage,'comparing');
   assert.equal(next.documentsByProject[pid][0].demoParsePreview,true);
@@ -71,7 +71,7 @@ test('legacy loading keeps edited examples, failed sources and user projects wit
   old.documentsByProject={...old.documentsByProject,'RFQ-002':[{id:'old-file',purpose:'要求来源',status:'失败'}]};
   const next=upgradePrototypeState(old,demo);
   assert.equal(next.projects.length,old.projects.length+1);
-  assert.equal(getProjectSummary(next,'RFQ-002','demo-sales').stage,'解析中');
+  assert.equal(getProjectSummary(next,'RFQ-002','demo-sales').stage,'解析比对中');
   assert.equal(next.requirementsByProject.CUSTOM[0].draft,'保留用户答复');
   assert.equal(next.requirementsByProject['RFQ-001'][0].draft,'旧演示中的人工答复');
   next.requirementsByProject['RFQ-002'][0].draft='更新演示后的人工答复';

@@ -1,6 +1,7 @@
 import {canAccessProject} from './personnelDomain.js';
 import {isFinalReviewApproved} from './finalReviewDomain.js';
 import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
+import {PROJECT_STAGE_LABELS} from './projectStage.js';
 export function selectAccessibleState(state,actorId){
  const projects=(state.projects||[]).filter(p=>canAccessProject(state,actorId,p.id)),ids=new Set(projects.map(p=>p.id)),next={...state,projects,analysisRuns:(state.analysisRuns||[]).filter(r=>ids.has(r.projectId))};
  for(const key of ['requirementsByProject','reviewsByProject','snapshotsByProject','documentsByProject','commentsByProject','membersByProject','exportScopesByProject'])next[key]=Object.fromEntries(Object.entries(state[key]||{}).filter(([id])=>ids.has(id)));
@@ -29,7 +30,7 @@ export function getProjectSummary(state,projectId,actorId) {
   const parsing=sources.some(f=>['排队中','处理中','失败'].includes(f.status));
   const snapshot=latestSnapshot(snapshots);
   const approved=finished&&!parsing&&snapshot?.status==='已批准'&&(!state.accountsById||isFinalReviewApproved(snapshot))&&current(snapshot);
-  const backendStage=state.dataSource==='mysql'?{DRAFT:'待上传',PARSING:'解析中',REVIEWING:'评审中',APPROVED:'审批完成',EXPORTED:'已导出',CANCELLED:'已删除'}[state.projects?.find(project=>project.id===projectId)?.backendStage]:undefined;
-  const stage=backendStage||(parsing?'解析中':approved?(snapshot.exportedAt?'已导出':'审批完成'):rows.length?'评审中':sources.length?'解析中':'待上传');
+  const backendStage=state.dataSource==='mysql'?PROJECT_STAGE_LABELS[state.projects?.find(project=>project.id===projectId)?.backendStage]:undefined;
+  const stage=backendStage||(parsing?PROJECT_STAGE_LABELS.PARSING:approved?(snapshot.exportedAt?PROJECT_STAGE_LABELS.EXPORTED:PROJECT_STAGE_LABELS.APPROVED):rows.length?PROJECT_STAGE_LABELS.REVIEWING:sources.length?PROJECT_STAGE_LABELS.PARSING:PROJECT_STAGE_LABELS.DRAFT);
   return {stage,pending,total:rows.length,confirmed:rows.filter(r=>r.status==='已确认'&&!r.needsReview).length,reviews:open.filter(r=>r.kind!=='clarification').length,clarifications:open.filter(r=>r.kind==='clarification').length,rechecks:rows.filter(r=>r.needsReview||r.status==='待复核'||r.sourceRevision||r.sourceCorrected).length};
 }

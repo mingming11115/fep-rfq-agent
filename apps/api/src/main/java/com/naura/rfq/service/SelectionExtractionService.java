@@ -119,7 +119,7 @@ public class SelectionExtractionService {
             row.setRequirementText(requirement);
             row.setMetricsJson(candidate.metricsJson());
             row.setSourceRefsJson(SourceRef.encode(references));
-            row.setExtractionStatus(ExtractedRequirement.VALID);
+            row.setExtractionStatus("VALID");
             row.setVersion(0L);
             row.setCreatedAt(Instant.now());
             requirements.insert(row);

@@ -17,9 +17,11 @@ import com.naura.rfq.mapper.RequirementMapper;
 import com.naura.rfq.model.dto.RequirementMatchRequest;
 import com.naura.rfq.model.entity.CustomerDocument;
 import com.naura.rfq.model.entity.Project;
+import com.naura.rfq.model.entity.ProjectStage;
 import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -108,10 +110,17 @@ public class RequirementMatchService {
     void parsed(Project project, CustomerDocument document, List<Requirement> rows) {
         matchRecords.supersedeGenerated(project.getId(), document.getId());
         Policy policy = policy(project.getBuId());
+        int queued = 0;
         for (var requirement : rows) {
             if (ready(requirement)) {
                 enqueue(new Scope(project, document, requirement), policy, "parse", null);
+                queued++;
             }
+        }
+        // 条款存在但都无需比对（如已被排除）时不会再有比对收尾回调，直接判定阶段；
+        // 未识别到任何条款则保持解析比对中，交由人工补录或重试解析。
+        if (!rows.isEmpty() && queued == 0) {
+            advanceToReview(project);
         }
     }
 
@@ -252,7 +261,7 @@ public class RequirementMatchService {
             return view(project, requirement, run, detail);
         }
         return json.createObjectNode().put("requirementId", requirement.getId()).put("documentId", requirement.getDocumentId())
-                .put("parseRunId", requirement.getParseRunId()).put("status", ready(requirement) ? "not_run" : "needs_review");
+                .put("parseRunId", requirement.getParseRunId()).put("status", ready(requirement) ? "not_run" : "excluded");
     }
 
     @Transactional(readOnly = true)
@@ -469,7 +478,31 @@ public class RequirementMatchService {
         }
         progress.put("failureCount", failures);
         int updated = matchRecords.finish(run.id(), run.leaseToken(), state, delay == 0 ? null : delay, progress.toString());
-        return updated == 1 ? new Finished(state, delay, progress) : null;
+        if (updated != 1) {
+            return null;
+        }
+        advanceToReview(project);
+        return new Finished(state, delay, progress);
+    }
+
+    /**
+     * 条款比对收尾后推进项目阶段：解析比对中 → 评审确认中。
+     * 仅当项目仍停留在解析比对中、且已无待比对条款时推进，避免覆盖归档或更后阶段。
+     * 解析与比对共用项目行锁，进入本方法时 project 行已持有写锁。
+     */
+    private void advanceToReview(Project project) {
+        if (project == null || !ProjectStage.awaitingMatch(project.getStage())) {
+            return;
+        }
+        // 被替换原件的历史条款已退出工作范围，不参与"是否比对完"的判定。
+        if (matchRecords.countPendingMatches(project.getId(), work.inactiveDocuments(project.getId())) > 0) {
+            return;
+        }
+        project.setStage(ProjectStage.REVIEWING.name());
+        project.setUpdatedAt(Instant.now());
+        projects.update(project);
+        log.info("project.stage.advanced projectId={} from={} to={}", project.getId(), ProjectStage.PARSING,
+                ProjectStage.REVIEWING);
     }
 
     private ObjectNode view(Project project, Requirement requirement, Run run, boolean detail) {
@@ -598,7 +631,8 @@ public class RequirementMatchService {
     }
 
     private boolean ready(Requirement requirement) {
-        return "VALID".equals(requirement.getExtractionStatus()) && !text(requirement).isBlank();
+        // 抽取不再产出复核状态：除人工删除的条款（EXCLUDED）外，有正文即可参与比对。
+        return !"EXCLUDED".equals(requirement.getExtractionStatus()) && !text(requirement).isBlank();
     }
 
     private ObjectNode snapshot(Requirement requirement) {

@@ -8,7 +8,7 @@ import {Modal} from './ui';
 const matches = matchClient();
 const statusLabels = {
   queued:'排队中', running:'比对中', retry_wait:'等待重试', blocked:'等待处理', completed:'已完成',
-  failed:'失败', superseded:'已失效', needs_review:'原文待核对', not_run:'未执行',
+  failed:'失败', superseded:'已失效', excluded:'已排除', not_run:'未执行',
   hit:'命中', miss:'未命中', not_applicable:'不适用',
 };
 const reasons = {

@@ -30,7 +30,7 @@ test('BU overview aggregates current BU progress and excludes terminal tasks and
  const result=selectors.selectBuDashboard(fixture(),{now});
  assert.deepEqual(result.stats,{projects:2,active:2,overdueProjects:1,pendingTasks:3,overdueTasks:1,totalRequirements:3,confirmedRequirements:1,confirmationRate:33,enabledMembers:2});
  assert.deepEqual(result.projects.map(p=>p.id),['P','Q']);
- assert.deepEqual(result.stages.map(s=>[s.label,s.count]),[['待上传',1],['解析中',0],['评审中',1],['审批完成',0],['已导出',0]]);
+ assert.deepEqual(result.stages.map(s=>[s.label,s.count]),[['待上传',1],['解析比对中',0],['评审确认中',1],['审批完成',0],['已导出',0]]);
  assert.deepEqual(result.workload.map(m=>[m.userId,m.pending,m.overdue]),[['tech',2,0],['sr',1,1]]);
  assert.deepEqual(result.taskGroups.map(g=>g.count),[1,2,0]);
  const serialized=JSON.stringify(result);
@@ -98,6 +98,6 @@ test('current project stages use valid final review and exported projects leave 
  const exported=result.projects.find(p=>p.stage==='已导出');assert.equal(exported.overdue,false);
  s.requirementsByProject[exported.id][0].draft='应答变更';
  const changed=selectors.selectBuDashboard(s,{buId:'BU-DEMO',now});
- assert.equal(changed.projects.find(p=>p.id===exported.id).stage,'评审中');
+ assert.equal(changed.projects.find(p=>p.id===exported.id).stage,'评审确认中');
  assert.equal(changed.stats.active,6);
 });

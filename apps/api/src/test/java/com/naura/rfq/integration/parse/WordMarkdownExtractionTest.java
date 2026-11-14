@@ -216,8 +216,8 @@ class WordMarkdownExtractionTest {
         assertThat(merged.originalText()).isEqualTo("须支持自动上料\n额定负载 5 kg");
         assertThat(merged.requirementText()).isEqualTo("须在额定负载 5 kg 时支持自动上料");
         assertThat(json.readTree(merged.metricsJson()).path("specification").asText()).isEqualTo("5 kg");
-        assertThat(result.requirements().get(1).extractionStatus()).isEqualTo(ExtractedRequirement.NEEDS_REVIEW);
         assertThat(result.requirements().get(1).sourceRefs()).isEmpty();
+        assertThat(result.requirements().get(1).reviewReasons()).contains("引用缺失");
         assertThat(result.issues()).anyMatch(issue -> issue.contains("body/8"));
     }
 

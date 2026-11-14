@@ -262,7 +262,7 @@ public class WordMarkdownExtractor {
                 requirements.add(new ExtractedRequirement(requirements.size(), primary == null ? -1 : primary.index(),
                         primary == null ? "" : primary.sectionPath(), candidate.path("customerClauseNo").asText(""),
                         candidate.path("title").asText(""), 1, null, original, requirement,
-                        metrics, null, null, ExtractedRequirement.NEEDS_REVIEW, reason, refs));
+                        metrics, null, null, reason, refs));
             }
         }
 

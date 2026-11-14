@@ -70,7 +70,7 @@ public class RequirementService {
         if (request.reviewReasons() != null) {
             requirement.setReviewReasons(request.reviewReasons());
         }
-        // A human edit resolves the extraction flag; downstream answer confirmation is separate.
+        // 人工编辑后条款一律按有效处理；历史数据中残留的复核状态在此一并归正。
         requirement.setExtractionStatus("VALID");
         // where 里带旧 version，影响行数为 0 说明在读和写之间被人抢先改过。
         if (requirements.updateWithVersion(requirement) == 0) {

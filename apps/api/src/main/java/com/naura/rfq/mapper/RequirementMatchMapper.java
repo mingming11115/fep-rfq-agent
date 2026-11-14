@@ -1,5 +1,6 @@
 package com.naura.rfq.mapper;
 
+import java.util.Collection;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -19,6 +20,10 @@ public interface RequirementMatchMapper {
 
     long countRequirements(@Param("projectId") String projectId, @Param("documentId") String documentId,
             @Param("parseRunId") String parseRunId);
+
+    /** 统计项目内仍需比对的条款数量；已退出工作范围的原件不计入，用于判定是否可以进入评审确认。 */
+    long countPendingMatches(@Param("projectId") String projectId,
+            @Param("excludedDocumentIds") Collection<String> excludedDocumentIds);
 
     List<String> listRequirementIds(@Param("projectId") String projectId, @Param("documentId") String documentId,
             @Param("parseRunId") String parseRunId, @Param("size") int size, @Param("offset") long offset);

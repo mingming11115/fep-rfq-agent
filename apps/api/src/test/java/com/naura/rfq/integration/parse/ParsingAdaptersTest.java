@@ -377,7 +377,7 @@ class ParsingAdaptersTest {
             assertThat(result.issues()).isEmpty();
             assertThat(result.requirements()).singleElement().satisfies(r -> {
                 assertThat(r.originalText()).isEqualTo(first);
-                assertThat(r.needsReview()).isTrue();
+                assertThat(r.reviewReasons()).contains("核对");
             });
         } finally { s.stop(0); }
     }

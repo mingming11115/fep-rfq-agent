@@ -1,9 +1,10 @@
 import {canManageBu,getPersonnelContext,personName} from './personnelDomain.js';
 import {getProjectSummary} from './projectSelectors.js';
+import {PROJECT_STAGE_ORDER} from './projectStage.js';
 import {isTaskPending,isTaskOverdue} from './taskDomain.js';
 import {getBuApprovalMetrics} from './buApprovalMetrics.js';
 
-const stages=['待上传','解析中','评审中','审批完成','已导出'];
+const stages=PROJECT_STAGE_ORDER;
 const taskGroups=[
  {label:'起草与修改',kinds:['draft','response-revise']},
  {label:'条款确认',kinds:['confirm','recheck']},

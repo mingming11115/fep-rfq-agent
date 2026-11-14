@@ -95,7 +95,7 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
         {[[preview.oldName,preview.before],[preview.newName,preview.after]].map(([name,rows],index) => <section key={index}>
           <h3>{index ? '新版' : '原件'}　{name}（{rows.length} 条）</h3>
           <ol>{rows.map(row => <li key={row.id}><strong>{row.clause} {row.title}</strong><p>{row.original}</p>
-            {row.status !== 'VALID' && <Tag color="orange">条款待核对</Tag>}</li>)}</ol>
+            {row.status === 'EXCLUDED' && <Tag color="orange">条款已排除</Tag>}</li>)}</ol>
         </section>)}
       </div>
       {canEdit && preview.status === 'pending' && <Input.TextArea aria-label="范围核对说明" placeholder="说明来源完整性、影响范围和处理原因"

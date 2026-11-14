@@ -171,7 +171,7 @@ public class HistoryExtractor {
                     original.customerClauseNo(), extracted.title(), original.level(), original.parentClauseNo(),
                     extracted.originalText(), extracted.requirementText(),
                     extracted.metricsJson() == null ? original.metricsJson() : extracted.metricsJson(),
-                    original.conditionsText(), original.obligation(), extracted.extractionStatus(), extracted.reviewReasons());
+                    original.conditionsText(), original.obligation(), extracted.reviewReasons());
             enriched.add(new HistoryClause(clause.key(), clause.clauseNo(), clause.section(), customer.requirementText(),
                     clause.answer(), clause.conditions(), clause.evidence(), clause.feedback(), clause.requirementAnchor(),
                     clause.answerAnchor(), clause.issues(), customer));

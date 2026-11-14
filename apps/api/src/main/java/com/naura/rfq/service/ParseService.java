@@ -287,8 +287,7 @@ public class ParseService {
         Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, outcome.rawBlocks());
         List<Requirement> saved = persistRequirements(ctx.document(), ctx.run().getId(), extracted, sourceBlocks);
 
-        long reviewCount = extracted.stream().filter(ExtractedRequirement::needsReview).count();
-        int issueCount = (int) reviewCount + issues.size();
+        int issueCount = issues.size();
 
         ParseRun run = ctx.run();
         run.setTotalBlocks(outcome.rawBlocks().size());
@@ -303,7 +302,7 @@ public class ParseService {
             ctx.document().setStatus(CustomerDocument.STATUS_PARTIAL);
         } else if (issueCount > 0) {
             run.setStatus(ParseRun.PARTIAL);
-            run.setMessage(join(issues, reviewCount + " 条条款需要人工核对"));
+            run.setMessage(join(issues, "解析完成，存在 " + issueCount + " 项识别提示"));
             ctx.document().setStatus(CustomerDocument.STATUS_PARTIAL);
         } else {
             run.setStatus(ParseRun.COMPLETED);
@@ -319,7 +318,7 @@ public class ParseService {
         }
         matches.parsed(ctx.project(), ctx.document(), saved);
         audit.successInBu(ctx.actorId(), ctx.project().getBuId(), "解析客户文件", "document", documentId,
-                "提取 " + saved.size() + " 条条款，待核对 " + issueCount + " 条，抽取器 " + run.getExtractor());
+                "提取 " + saved.size() + " 条条款，识别提示 " + issueCount + " 项，抽取器 " + run.getExtractor());
         log.info("document.parse.result parseRunId={} documentId={} projectId={} status={} blocks={} requirements={} issues={} durationMs={}",
                 run.getId(), documentId, ctx.project().getId(), run.getStatus(), outcome.rawBlocks().size(), saved.size(),
                 issueCount, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
@@ -383,8 +382,8 @@ public class ParseService {
     }
 
     /**
-     * 来源复核：将每条候选条款与其来源块对齐；来源块缺失时仅放行显式标记需复核的条款，
-     * 否则视为数据异常抛出；来源块带问题标记时将该问题并入条款的复核原因并强制置为 NEEDS_REVIEW。
+     * 来源复核：将每条候选条款与其来源块对齐；来源块缺失时仅放行显式标注无来源的条款，
+     * 否则视为数据异常抛出；来源块带问题标记时将该问题并入条款的复核提示，条款仍按可用处理。
      */
     private List<ExtractedRequirement> withSourceReview(List<ExtractedRequirement> candidates, List<RawBlock> source) {
         Map<Integer, RawBlock> byIndex = new HashMap<>(); source.forEach(b -> byIndex.put(b.index(), b));
@@ -392,7 +391,7 @@ public class ParseService {
         for (var r : candidates) {
             RawBlock block = byIndex.get(r.blockIndex());
             if (block == null) {
-                if (r.sourceRefs() != null && r.sourceRefs().isEmpty() && r.needsReview()) {
+                if (r.sourceRefs() != null && r.sourceRefs().isEmpty()) {
                     reviewed.add(r);
                     continue;
                 }
@@ -401,7 +400,7 @@ public class ParseService {
             if (block.issue() == null) { reviewed.add(r); continue; }
             reviewed.add(new ExtractedRequirement(r.order(), r.blockIndex(), r.sectionPath(), r.customerClauseNo(),
                 r.title(), r.level(), r.parentClauseNo(), r.originalText(), r.requirementText(), r.metricsJson(),
-                r.conditionsText(), r.obligation(), ExtractedRequirement.NEEDS_REVIEW,
+                r.conditionsText(), r.obligation(),
                 (r.reviewReasons() == null ? "" : r.reviewReasons() + "；") + block.issue(), r.sourceRefs()));
         }
         return reviewed;
@@ -437,7 +436,7 @@ public class ParseService {
             block.setContent(raw.text());
             block.setSourceAnchor(raw.anchor());
             block.setProvenance(raw.provenance());
-            block.setProcessingStatus(raw.issue() != null ? "NEEDS_REVIEW" : raw.isTable() ? "TABLE" : "READ");
+            block.setProcessingStatus(raw.issue() != null ? "PARSE_ISSUE" : raw.isTable() ? "TABLE" : "READ");
             blocks.insert(block);
             sourceBlocks.put(raw.index(), block);
         }
@@ -446,7 +445,7 @@ public class ParseService {
 
     /**
      * 持久化抽取出的条款：每条条款先落一条摘录块（excerpt，来源指向对应原始块），
-     * 再落 Requirement 记录；来源缺失时摘录标记为 NEEDS_REVIEW、来源记为 model。
+     * 再落 Requirement 记录；来源缺失时摘录按解析提示处理、来源记为 model。
      *
      * @return 已落库的 Requirement 列表，顺序与抽取结果一致
      */
@@ -466,7 +465,7 @@ public class ParseService {
             excerpt.setContent(candidate.originalText());
             excerpt.setSourceAnchor(source == null ? null : source.getSourceAnchor());
             excerpt.setProvenance(source == null ? "model" : source.getProvenance());
-            excerpt.setProcessingStatus(source == null ? "NEEDS_REVIEW" : source.getProcessingStatus());
+            excerpt.setProcessingStatus(source == null ? "PARSE_ISSUE" : source.getProcessingStatus());
             blocks.insert(excerpt);
 
             Requirement requirement = new Requirement();
@@ -484,7 +483,6 @@ public class ParseService {
             }
             requirement.setRequirementText(candidate.requirementText());
             requirement.setMetricsJson(candidate.metricsJson());
-            requirement.setExtractionStatus(candidate.extractionStatus());
             requirement.setReviewReasons(truncate(candidate.reviewReasons(), 900));
             requirements.insert(requirement);
             saved.add(requirement);
