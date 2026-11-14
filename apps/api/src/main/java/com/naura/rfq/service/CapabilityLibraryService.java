@@ -101,7 +101,8 @@ public class CapabilityLibraryService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Imported importExcel(CurrentUser user, String buId, String projectId, MultipartFile file) {
-        access.requireCapabilityWriter(user, buId, false, false);
+        // 上传对 BU 成员开放，导入结果一律进入待审核，由 BU 管理员批准发布。
+        access.requireBuMember(user, buId);
         String project = catalog.scopeProject(user, buId, projectId);
         var parsed = excel.parse(file);
         catalog.lockBu(buId);
@@ -116,7 +117,7 @@ public class CapabilityLibraryService {
             payload.putObject("importSource").put("filename", parsed.filename()).put("sha256", parsed.sha256())
                     .put("sheet", parsed.sheet()).put("row", row.number());
             try {
-                var result = storeDraft(user, buId, project, payload, fingerprint, true);
+                var result = storeDraft(user, buId, project, payload, fingerprint, true, true);
                 if (result.path("duplicate").asBoolean()) {
                     skipped.add(row.number());
                 } else {
@@ -145,14 +146,16 @@ public class CapabilityLibraryService {
     @Transactional(readOnly = true)
     public List<ObjectNode> published(CurrentUser user, String buId, CapabilityLibraryRequest.Lookup input) {
         String project = catalog.scopeProject(user, buId, input.projectId());
-        return matchingVersions(buId, project, input).stream().filter(row -> row.path("eligible").asBoolean()).toList();
+        return matchingVersions(buId, project, List.of(), input).stream().filter(row -> row.path("eligible").asBoolean()).toList();
     }
 
-    List<ObjectNode> matchingVersions(String buId, String project, CapabilityLibraryRequest.Lookup input) {
+    List<ObjectNode> matchingVersions(String buId, String project, List<String> groupScope, CapabilityLibraryRequest.Lookup input) {
+        // 共享能力按项目绑定分组的范围（自身与全部上级，含根分组）过滤；未分组资料视同根分组。
         return knowledgeRecords.listPublishedCapabilities(buId, project, input.modelId(), input.metricCode()).stream()
                 .map(catalog::decodeRow)
                 .filter(row -> clean(row.project()).isBlank() || Objects.equals(project, row.project()))
                 .filter(row -> matches(row.payload(), input) && active(row) && hasExplicitScope(row))
+                .filter(row -> !clean(row.project()).isBlank() || KnowledgeGroupService.withinScope(row.payload(), groupScope))
                 .map(row -> view(buId, row)).toList();
     }
 
@@ -194,7 +197,7 @@ public class CapabilityLibraryService {
         requireState(EDITABLE.contains(row.status()), "只有草稿或退回的能力版本可以提交");
         requireState(hasExplicitScope(row), "请从新候选入口确认能力范围后再提交");
         requireComplete(buId, row.projectId(), row.payload());
-        row.payload().put("status", "待审核").put("submitterId", user.id()).put("submittedAt", Instant.now().toString());
+        markPending(row.payload(), user);
         return catalog.update(user, buId, Table.CAPABILITY, row, "提交能力审核", reason);
     }
 
@@ -270,6 +273,11 @@ public class CapabilityLibraryService {
 
     private ObjectNode storeDraft(CurrentUser user, String buId, String project, ObjectNode payload, String fingerprint,
             boolean validate) {
+        return storeDraft(user, buId, project, payload, fingerprint, validate, false);
+    }
+
+    private ObjectNode storeDraft(CurrentUser user, String buId, String project, ObjectNode payload, String fingerprint,
+            boolean validate, boolean pendingReview) {
         var existing = knowledgeRecords.findCapabilityByFingerprint(buId, fingerprint).stream().map(catalog::decodeRow).toList();
         if (!existing.isEmpty()) {
             catalog.requireReadable(user, buId, existing.get(0));
@@ -282,10 +290,17 @@ public class CapabilityLibraryService {
         }
         String id = Ids.next("CAP");
         resetDraft(payload, user);
+        if (pendingReview) {
+            markPending(payload, user);
+        }
         catalog.identity(payload, buId, id, 1, project);
         knowledgeRecords.insertCapabilityDraft(buId, id, project, scope(project), payload.toString(), fingerprint);
-        catalog.log(user, buId, Table.CAPABILITY, id, 1, "新增能力草稿", "");
+        catalog.log(user, buId, Table.CAPABILITY, id, 1, pendingReview ? "导入能力候选待审批" : "新增能力草稿", "");
         return payload.put("duplicate", false);
+    }
+
+    private void markPending(ObjectNode payload, CurrentUser user) {
+        payload.put("status", "待审核").put("submitterId", user.id()).put("submittedAt", Instant.now().toString());
     }
 
     private void resetDraft(ObjectNode payload, CurrentUser user) {

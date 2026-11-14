@@ -17,6 +17,8 @@ public class HistoryRecallScope {
     @Autowired
     private HistoryDocumentMapper historyDocuments;
     @Autowired
+    private KnowledgeGroupService groups;
+    @Autowired
     private ObjectMapper json;
 
     public record Choice(String id, String name, String version, String status) {}
@@ -42,7 +44,11 @@ public class HistoryRecallScope {
     }
 
     List<String> groupDocuments(String bu, String project, String groupId) {
-        return historyDocuments.listScopedByGroup(bu, project, groupId).stream()
+        var scopeIds = groups.scopeIds(bu, groupId);
+        if (scopeIds.isEmpty()) {
+            return List.of();
+        }
+        return historyDocuments.listScopedByGroup(bu, project, scopeIds).stream()
                 .filter(row -> visible(parse(row.payload()), project)).map(HistoryDocumentMapper.RecallDocument::id).toList();
     }
 

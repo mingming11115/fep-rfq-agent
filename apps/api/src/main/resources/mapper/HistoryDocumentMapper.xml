@@ -97,8 +97,10 @@
         select id,payload from history_document
         where bu_id=#{bu} and ((project_id is null and scope='BU共享') or (project_id=#{project} and scope='仅当前项目'))
             and case when json_type(payload-&gt;'$.groupIds')='ARRAY'
-                then json_contains(payload-&gt;'$.groupIds',json_quote(#{groupId}))
-                else payload-&gt;&gt;'$.groupId'=#{groupId} end
+                then (json_length(payload-&gt;'$.groupIds')=0
+                    or <foreach collection="groupIds" item="id" separator=" or ">json_contains(payload-&gt;'$.groupIds',json_quote(#{id}))</foreach>)
+                else (coalesce(payload-&gt;&gt;'$.groupId','')=''
+                    or payload-&gt;&gt;'$.groupId' in <foreach collection="groupIds" item="id" open="(" separator="," close=")">#{id}</foreach>) end
     </select>
 
     <select id="listRecallChoices" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$RecallChoice">

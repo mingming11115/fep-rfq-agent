@@ -323,7 +323,8 @@ public class RequirementMatchService {
         var snapshot = snapshot(requirement);
         return !work.retired(project.getId(), requirement.getDocumentId())
                 && reference.path("inputFingerprint").asText().equals(digest(snapshot.toString()))
-                && evaluator.referenceAvailable(new MatchEvaluator.Input(project.getBuId(), project.getId(), snapshot, DEFAULT_ORDER), reference);
+                && evaluator.referenceAvailable(new MatchEvaluator.Input(project.getBuId(), project.getId(),
+                        project.getGroupId(), snapshot, DEFAULT_ORDER), reference);
     }
 
     JsonNode readableResponse(Project project, JsonNode response) {
@@ -598,8 +599,7 @@ public class RequirementMatchService {
                 && !work.retired(project.getId(), document.getId())
                 && project.getBuId().equals(run.input().bu()) && requirement.getDocumentId().equals(run.document())
                 && document.getVersion() == run.documentVersion() && Objects.equals(requirement.getParseRunId(), run.parseRun())
-                && run.fingerprint().equals(digest(runSnapshot(requirement, document,
-                        run.input().historyGroupId().isEmpty() ? null : project.getGroupId()).toString()));
+                && run.fingerprint().equals(digest(runSnapshot(requirement, document, project.getGroupId()).toString()));
     }
 
     private Scope lockForUser(CurrentUser user, String id) {
@@ -646,6 +646,10 @@ public class RequirementMatchService {
 
     private ObjectNode runSnapshot(Requirement requirement, CustomerDocument document, String groupId) {
         var input = snapshot(requirement);
+        // 项目绑定分组是三个知识库共同的可比对范围，写入输入快照使分组变更能触发重算。
+        if (groupId != null && !groupId.isBlank()) {
+            input.put("groupId", groupId);
+        }
         var historyIds = document.historyRecallIds();
         if (!historyIds.isEmpty()) {
             input.set("historyDocumentIds", json.valueToTree(historyIds));
@@ -693,10 +697,12 @@ public class RequirementMatchService {
         if (row == null) {
             return null;
         }
+        JsonNode snapshot = parse(row.inputSnapshot());
         return new Run(row.id(), row.requirementId(), row.documentId(), row.documentVersion(), row.parseRunId(),
                 row.requirementVersion(), row.policyVersion(), row.inputFingerprint(), row.currentRun(),
                 row.status(), row.leaseToken(), row.attempts(), parse(row.progress()),
-                new MatchEvaluator.Input(row.buId(), row.projectId(), parse(row.inputSnapshot()), order(row.matchOrder())));
+                new MatchEvaluator.Input(row.buId(), row.projectId(), snapshot.path("groupId").asText(), snapshot,
+                        order(row.matchOrder())));
     }
 
     private List<String> order(String value) {

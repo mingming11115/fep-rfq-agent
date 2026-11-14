@@ -65,3 +65,8 @@
  .workspace-todo{padding:16px}
  .rfq-ant-table .ant-pro-table-list-toolbar-container{gap:8px;flex-wrap:wrap}
 }
+/* Knowledge group tree: the muted status tag sits at the row end so long names never orphan it. */
+.knowledge-group-directory .ant-tree-title,.generic-directory-card .ant-tree-title{display:block;min-width:0}
+.kg-group-node{display:flex;align-items:center;gap:8px;min-width:0}
+.kg-group-node-name{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.ant-tag.kg-group-tag{flex:none;margin:0;padding:0 5px;border-color:transparent;border-radius:3px;background:#f2f3f5;color:var(--muted);font-size:11px;font-weight:400;line-height:16px}

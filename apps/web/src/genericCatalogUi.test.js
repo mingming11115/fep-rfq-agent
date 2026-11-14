@@ -5,7 +5,7 @@ import {mkdir} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
-test('generic catalog renders BU directory, configuration dialog and field editor',async t=>{
+test('generic catalog renders BU directory without field configuration entry',async t=>{
  // Use rc-overflow's RAF fallback so its Node MessagePorts do not keep the test alive.
  const originalChannel=globalThis.MessageChannel;
  globalThis.MessageChannel=undefined;
@@ -16,7 +16,7 @@ test('generic catalog renders BU directory, configuration dialog and field edito
  const {default:Page}=await import(pathToFileURL(output));const {createRoot}=await import('react-dom/client');const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
  const context={actorId:'admin',buId:'A',state:{actorRole:'BU管理员',accountsById:{admin:{id:'admin',enabled:true,managedBuIds:['A']}},businessUnits:[{id:'A'}],buPersonnelByBuId:{A:[]}}};
  try{await act(async()=>root.render(React.createElement(Page,{context,legacyCatalog:{models:[{id:'M',buId:'A',name:'设备'}],processes:[]},capabilities:[],onLegacy:()=>{}})));
- assert.match(host.textContent,/设备/);const button=[...host.querySelectorAll('button')].find(b=>b.textContent.includes('配置名称与字段'));assert.equal(button.disabled,false);await act(async()=>button.click());assert.ok(document.querySelector('[aria-label="配置名称"]'));assert.ok(document.querySelector('[aria-label="字段类型"]'));assert.match(document.body.textContent,/添加字段/);
+ assert.match(host.textContent,/设备/);assert.ok(![...host.querySelectorAll('button')].some(b=>b.textContent.includes('名称与字段')),'字段配置入口已移除');
 
  await act(async()=>{document.querySelector('.ant-modal-close')?.click();});
  localStorage.setItem('rfq.reference.models.v1:A',JSON.stringify([{id:'M',buId:'A',name:'设备',code:'M',revision:'R1',config:'标准',version:1}]));

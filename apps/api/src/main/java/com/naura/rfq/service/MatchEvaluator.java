@@ -39,10 +39,12 @@ class MatchEvaluator {
     @Autowired
     private CapabilityMatch capability;
     @Autowired
+    private KnowledgeGroupService groups;
+    @Autowired
     private HistoryRecallScope historyRecall;
     private final MatchTextScorer scorer = new MatchTextScorer();
 
-    record Input(String bu, String project, JsonNode snapshot, List<String> order) {
+    record Input(String bu, String project, String groupId, JsonNode snapshot, List<String> order) {
         String historyGroupId() { return snapshot.path("historyGroupId").asText(); }
 
         List<String> historyDocumentIds() {
@@ -67,7 +69,7 @@ class MatchEvaluator {
         for (String library : input.order()) {
             ObjectNode stage;
             if (CAPABILITY.equals(library)) {
-                stage = capability.evaluate(input.bu(), input.project(), input.snapshot().path("context"));
+                stage = capability.evaluate(input.bu(), input.project(), input.groupId(), input.snapshot().path("context"));
                 stamp.put(library, digest(stage.toString()));
             } else {
                 Scope scope = scope(input, library);
@@ -113,7 +115,7 @@ class MatchEvaluator {
         while (fields.hasNext()) {
             var entry = fields.next();
             String actual = CAPABILITY.equals(entry.getKey())
-                    ? digest(capability.evaluate(input.bu(), input.project(), input.snapshot().path("context")).toString())
+                    ? digest(capability.evaluate(input.bu(), input.project(), input.groupId(), input.snapshot().path("context")).toString())
                     : scopeStamp(scope(input, entry.getKey()));
             if (!entry.getValue().asText().equals(actual)) {
                 return false;
@@ -125,7 +127,7 @@ class MatchEvaluator {
     boolean referenceAvailable(Input input, JsonNode reference) {
         String library = reference.path("library").asText();
         if (CAPABILITY.equals(library)) {
-            var current = capability.evaluate(input.bu(), input.project(), input.snapshot().path("context"));
+            var current = capability.evaluate(input.bu(), input.project(), input.groupId(), input.snapshot().path("context"));
             return reference.path("capabilityFingerprint").asText().equals(digest(current.toString()));
         }
         if (!STANDARD.equals(library) && !HISTORY.equals(library)) {
@@ -229,6 +231,9 @@ class MatchEvaluator {
             }
         }
         String fileFilter = String.join(",", selected);
+        // 项目绑定的分组决定可比对范围：自身与全部上级（含根分组）挂载的资料参与比对，未分组资料视同根分组。
+        // 显式指定历史文件时以用户选择为准，不再按分组裁剪。
+        List<String> scopeIds = selected.isEmpty() ? groups.scopeIds(input.bu(), input.groupId()) : List.of();
         var sources = new LinkedHashMap<String, Source>();
         boolean unknown = false;
         for (var source : knowledgeRecords.listPublishedSources(history, input.bu(), input.project(), fileFilter)) {
@@ -244,6 +249,9 @@ class MatchEvaluator {
             }
             boolean shared = row.project() == null && sourceProject.isBlank() && "BU共享".equals(row.scope());
             boolean project = history && input.project().equals(row.project()) && "仅当前项目".equals(row.scope());
+            if (shared && !KnowledgeGroupService.withinScope(row.payload(), scopeIds)) {
+                continue;
+            }
             if (!"有效".equals(validity) || !shared && !project
                     || sources.putIfAbsent(row.id(), new Source(row.id(), row.version(), row.revision(), shared,
                             row.synced(), row.syncStamp(), row.payload())) != null) {

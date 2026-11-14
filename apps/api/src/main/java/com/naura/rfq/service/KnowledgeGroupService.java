@@ -132,6 +132,48 @@ public class KnowledgeGroupService {
         return path;
     }
 
+    /**
+     * 项目绑定分组可比对的知识范围：该分组自身及其全部上级（含根分组）。
+     * 挂在根分组的资料因此对所有下级分组的项目生效。
+     * 分组为空、不属于当前 BU 或已从目录移除时返回空列表，表示不按分组过滤。
+     */
+    static List<String> ancestors(ObjectNode catalog, String groupId) {
+        if (groupId == null || groupId.isBlank()) {
+            return List.of();
+        }
+        var nodes = new HashMap<String, JsonNode>();
+        catalog.path("nodes").forEach(node -> nodes.put(node.path("id").asText(), node));
+        var ids = new ArrayList<String>();
+        var seen = new HashSet<String>();
+        for (var node = nodes.get(groupId); node != null && seen.add(node.path("id").asText());
+                node = nodes.get(node.path("parentId").asText())) {
+            ids.add(node.path("id").asText());
+        }
+        return List.copyOf(ids);
+    }
+
+    /**
+     * 资料是否落在知识范围内：未关联分组（视同根分组）或与范围有交集时命中。
+     * 范围为空表示项目未绑定分组，不做分组过滤。
+     */
+    static boolean withinScope(JsonNode payload, List<String> scopeIds) {
+        if (scopeIds.isEmpty()) {
+            return true;
+        }
+        var groups = new ArrayList<String>();
+        payload.path("groupIds").forEach(item -> groups.add(item.asText()));
+        String legacy = payload.path("groupId").asText("");
+        if (groups.isEmpty() && !legacy.isBlank()) {
+            groups.add(legacy);
+        }
+        return groups.isEmpty() || groups.stream().anyMatch(scopeIds::contains);
+    }
+
+    /** 读取指定 BU 的目录并计算分组范围，供比对与召回使用。 */
+    List<String> scopeIds(String bu, String groupId) {
+        return groupId == null || groupId.isBlank() ? List.of() : ancestors(catalog(bu), groupId);
+    }
+
     JsonNode groupIds(String bu, List<String> requested, JsonNode previous) {
         if (requested == null || requested.size() > 100) {
             throw new BusinessException(400, "分组关联格式无效");

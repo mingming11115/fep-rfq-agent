@@ -63,6 +63,14 @@ class KnowledgePublicationAccess {
         }
     }
 
+    void requireBuMember(CurrentUser user, String buId) {
+        guard.requireBu(user, buId);
+        var profile = profiles.findByBuIdAndUserId(buId, user.id());
+        if (profile != null && !profile.isEnabled()) {
+            throw new BusinessException(403, "当前账号已在所属 BU 停用");
+        }
+    }
+
     void requireWriter(CurrentUser user, String buId, boolean review) {
         guard.requireBu(user, buId);
         var profile = profiles.findByBuIdAndUserId(buId, user.id());

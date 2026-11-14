@@ -64,6 +64,8 @@ class CapabilityMatch {
     @Autowired
     private CapabilityLibraryService library;
     @Autowired
+    private KnowledgeGroupService groups;
+    @Autowired
     private ObjectMapper json;
 
     void validate(String bu, Context context) {
@@ -87,7 +89,7 @@ class CapabilityMatch {
         }
     }
 
-    ObjectNode evaluate(String bu, String project, JsonNode context) {
+    ObjectNode evaluate(String bu, String project, String groupId, JsonNode context) {
         var stage = json.createObjectNode();
         if (context.path("capabilityApplicable").isBoolean() && !context.path("capabilityApplicable").asBoolean()) {
             return stage.put("status", "not_applicable");
@@ -97,6 +99,8 @@ class CapabilityMatch {
             return stage.put("status", "blocked").put("reason", "MISSING_CAPABILITY_INPUT");
         }
         var checks = stage.putArray("checks");
+        // 一次比对内共用同一份分组范围，避免逐设备、逐指标重复读取目录。
+        var groupScope = groups.scopeIds(bu, groupId);
         boolean found = false, unresolved = false, contradicted = false, unavailable = false;
         int checkCount = 0;
         Set<String> limits = new HashSet<>();
@@ -114,7 +118,7 @@ class CapabilityMatch {
                         text(device, "processId"), device.path("processVersion").asInt(), text(device, "config"),
                         text(metric, "metricCode"), project);
                 boolean supports = false, refutes = false, needsReview = false, invalidEvidence = false, hasEligible = false;
-                for (ObjectNode row : library.matchingVersions(bu, project, lookup)) {
+                for (ObjectNode row : library.matchingVersions(bu, project, groupScope, lookup)) {
                     if (!row.path("eligible").asBoolean()) {
                         invalidEvidence = true;
                         continue;

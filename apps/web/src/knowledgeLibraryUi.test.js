@@ -93,7 +93,7 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
         data={...clause,status:'已发布',revision:1,indexStatus:'queued',indexOperation:'upsert'};resources.historyClauses=[data];break;
       case base+'/history-rfq/documents/D/delete':
         resources.historyDocuments=[];resources.historyClauses=[];data={...historyDoc,status:'已删除'};break;
-      case base+'/capability-library/capabilities/import':resources.capabilities=[capability];data={items:[capability],skippedRows:[],errors:[]};break;
+      case base+'/capability-library/capabilities/import':resources.capabilities=[{...capability,status:'待审核'}];data={items:[{...capability,status:'待审核'}],skippedRows:[],errors:[]};break;
       case base+'/capability-library/capabilities/C/versions/1/submit':data={...capability,status:'待审核',revision:1};resources.capabilities=[data];break;
       default:throw new Error(`unexpected request: ${path}`);
     }
@@ -239,13 +239,11 @@ test('MySQL knowledge tabs import through the API and render server-reviewed rec
     await render('capabilities');
     await click('Excel 上传',host);
     await attach('选择导入文件','能力.xlsx');
-    await click('导入为草稿');
+    await click('导入并提交审批');
     await click('完成');
     assert.match(host.textContent,/实际导入的能力/);
-    await click('提交审核',host);
-    await click('确认提交审核');
     assert.match(host.querySelector('.generic-detail-card .ant-table-tbody').textContent,/待审核/);
-    assert.equal(calls.filter(([,method])=>method==='POST').length,11);
+    assert.equal(calls.filter(([,method])=>method==='POST').length,10);
     assert.deepEqual(Object.keys(localStorage),['fep-rfq-auth']);
   }finally{
     releaseHistoryImport();

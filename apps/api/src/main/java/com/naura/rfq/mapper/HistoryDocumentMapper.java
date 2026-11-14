@@ -54,7 +54,7 @@ public interface HistoryDocumentMapper {
             @Param("ids") List<String> ids);
 
     List<RecallDocument> listScopedByGroup(@Param("bu") String bu, @Param("project") String project,
-            @Param("groupId") String groupId);
+            @Param("groupIds") List<String> groupIds);
 
     List<RecallChoice> listRecallChoices(@Param("bu") String bu, @Param("project") String project);
 
