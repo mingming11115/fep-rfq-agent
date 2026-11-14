@@ -168,6 +168,32 @@ class WordMarkdownExtractionTest {
     }
 
     @Test
+    void fullDocumentTableUsesTheDataRowAsPrimarySourceWhenTheHeaderIsCited() throws Exception {
+        String markdown = """
+                | Item [S0] | 额定负载 (kg) |
+                | --- | --- |
+                | [S1] | 5 |
+                """;
+        var blocks = List.of(RawBlock.table(0, List.of(List.of("Item", "额定负载 (kg)")), "", "body/0/r0"),
+                RawBlock.table(1, List.of(List.of("", "5")), "", "body/0/r1"));
+        var content = new WordMarkdownReader.Content(markdown, blocks, java.util.Set.of(0, 1), List.of());
+        var output = json.readTree("""
+                {"requirements":[{"customerClauseNo":"","title":"额定负载 (kg)",
+                    "requirementText":"额定负载为 5 kg。","specification":"5","sourceRefs":["S1","S0"]}],
+                    "ignoredSourceRefs":[]}
+                """);
+        var extractor = new WordMarkdownExtractor(new ParseIntegrationProperties(false), new ParseHttpClient(json),
+                new RuleBasedExtractor(json));
+
+        var result = extractor.validate(output, content, "markitdown+llm:test");
+
+        assertThat(result.requirements()).singleElement().satisfies(clause -> {
+            assertThat(clause.blockIndex()).isEqualTo(1);
+            assertThat(clause.sourceRefs()).extracting(SourceRef::anchor).containsExactly("body/0/r1", "body/0/r0");
+        });
+    }
+
+    @Test
     void referencesUseOriginalWordPositionsAndRejectInventedAndMissingMarkers() throws Exception {
         var content = WordMarkdownReader.mapMarkdown("RFQX0END 正文\n| RFQX1END | 5 kg |\nRFQX2END RFQX2END", "RFQX",
                 List.of(RawBlock.paragraph(0, "须支持自动上料", "", null, "body/2"),
