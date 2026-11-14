@@ -43,12 +43,10 @@ rfq:
     # Opt-in: request/response bodies carry customer clause text, so keep it off outside troubleshooting.
     # When on, logs external.call.payload (truncated to 4000 chars per direction).
     log-payload: ${RFQ_STANDARD_REPLY_INDEX_LOG_PAYLOAD:false}
-    datasets:
-      "[BU-FEP]": rfq.fep.standard-reply
-    history-datasets:
-      "[BU-FEP]": rfq.fep.history-clause
-    capability-datasets:
-      "[BU-FEP]": rfq.fep.capability-boundary
+    # One dataset per library, shared by every BU; BU isolation is the bu_id field filter on each record.
+    dataset: ${RFQ_STANDARD_REPLY_INDEX_DATASET:rfq.fep.standard-reply}
+    history-dataset: ${RFQ_STANDARD_REPLY_INDEX_HISTORY_DATASET:rfq.fep.history-clause}
+    capability-dataset: ${RFQ_STANDARD_REPLY_INDEX_CAPABILITY_DATASET:rfq.fep.capability-boundary}
   match:
     worker-enabled: ${RFQ_MATCH_WORKER_ENABLED:false}
     poll-interval-ms: ${RFQ_MATCH_POLL_INTERVAL_MS:3000}

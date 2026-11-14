@@ -53,7 +53,7 @@ class StandardReplyIndexClientTest {
         });
         server.start();
         var settings = new StandardReplyIndexProperties("http://127.0.0.1:" + server.getAddress().getPort(),
-            "test-index-key", Map.of(BU, DATASET));
+            "test-index-key", DATASET);
         client = new StandardReplyIndexClient(json, settings);
     }
 
@@ -99,7 +99,7 @@ class StandardReplyIndexClientTest {
         var properties = new MapConfigurationPropertySource(Map.of(
             prefix + ".base-url", "http://127.0.0.1:" + server.getAddress().getPort(),
             prefix + ".api-key", "test-index-key",
-            prefix + ".capability-datasets[BU-FEP]", dataset));
+            prefix + ".capability-dataset", dataset));
         var settings = new Binder(properties).bind(prefix, Bindable.of(StandardReplyIndexProperties.class)).get();
         var capabilityClient = new StandardReplyIndexClient(json, settings);
         replies = List.of(new Reply(404, "{\"error\":{\"code\":\"DATASET_NOT_FOUND\"}}"),
@@ -160,25 +160,26 @@ class StandardReplyIndexClientTest {
     }
 
     @Test
-    void refusesDatasetSharingBetweenBusinessUnits() {
+    void refusesDatasetSharingBetweenLibraries() {
         assertThatThrownBy(() -> new StandardReplyIndexProperties("https://knowledge.example.test", "test-key",
-            Map.of("BU-A", DATASET, "BU-B", DATASET)))
-            .isInstanceOf(IllegalArgumentException.class);
+            DATASET, DATASET, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new StandardReplyIndexProperties("https://knowledge.example.test", "test-key",
-            Map.of(BU, DATASET), Map.of(BU, DATASET))).isInstanceOf(IllegalArgumentException.class);
+            DATASET, null, DATASET)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void bracketedConfigurationPreservesTheExactBusinessUnitId() {
+    void bindsOneDatasetPerLibraryWithoutBusinessUnitKeys() {
         String prefix = "rfq.standard-reply-index";
         var properties = new MapConfigurationPropertySource(Map.of(
             prefix + ".base-url", "http://knowledge.internal/api/v1/",
             prefix + ".api-key", "test-index-key",
-            prefix + ".datasets[BU-A]", DATASET,
-            prefix + ".history-datasets[BU-A]", "rfq.a.history-clause"));
+            prefix + ".dataset", DATASET,
+            prefix + ".history-dataset", "rfq.a.history-clause"));
         var settings = new Binder(properties).bind(prefix, Bindable.of(StandardReplyIndexProperties.class)).get();
-        assertThat(settings.datasets()).containsExactlyEntriesOf(Map.of(BU, DATASET));
-        assertThat(settings.historyDatasets()).containsExactlyEntriesOf(Map.of(BU, "rfq.a.history-clause"));
+        assertThat(settings.dataset()).isEqualTo(DATASET);
+        assertThat(settings.historyDataset()).isEqualTo("rfq.a.history-clause");
+        assertThat(settings.capabilityDataset()).isNull();
+        assertThat(settings.datasetFor(Library.HISTORY_RFQ)).isEqualTo("rfq.a.history-clause");
         assertThat(settings.endpoint("/ingestion-jobs/test")).isEqualTo("http://knowledge.internal/api/v1/ingestion-jobs/test");
     }
 

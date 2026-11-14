@@ -8,8 +8,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.integration.standardreply.Library;
 import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
@@ -42,19 +40,15 @@ public class StandardReplyIndexWorker {
             return;
         }
         for (Library library : Library.values()) {
-            sync(library, settings.datasets(library));
+            sync(library, settings.datasetFor(library));
         }
     }
 
-    private void sync(Library library, Map<String, String> datasets) {
-        if (datasets.isEmpty()) {
+    private void sync(Library library, String dataset) {
+        if (dataset == null) {
             return;
         }
-        for (Key key : dueEntries(library, datasets)) {
-            String dataset = datasets.get(key.buId());
-            if (dataset == null) {
-                continue;
-            }
+        for (Key key : indexRecords.listDue(library)) {
             String token = UUID.randomUUID().toString();
             if (claim(library, key, token)) {
                 Work work = read(library, key, token);
@@ -63,10 +57,6 @@ public class StandardReplyIndexWorker {
                 }
             }
         }
-    }
-
-    private List<Key> dueEntries(Library library, Map<String, String> datasets) {
-        return indexRecords.listDue(library, datasets.keySet());
     }
 
     private boolean claim(Library library, Key key, String token) {

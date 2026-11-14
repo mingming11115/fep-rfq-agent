@@ -51,8 +51,7 @@ public class StandardReplyIndexClient {
     }
 
     public SearchResult search(String buId, boolean history, String query, List<String> ids) {
-        var datasets = history ? settings.historyDatasets() : settings.datasets();
-        String dataset = datasets.get(buId);
+        String dataset = history ? settings.historyDataset() : settings.dataset();
         if (dataset == null || !settings.enabled()) {
             throw new SearchFailure("INDEX_NOT_CONFIGURED", false);
         }
@@ -64,7 +63,8 @@ public class StandardReplyIndexClient {
         filter.addObject().put("field", "bu_id").put("op", "eq").put("value", buId);
         var values = filter.addObject().put("field", "id").put("op", "in").putArray("value");
         ids.forEach(values::add);
-        body.putObject("result_options").put("include_matched_chunks", false).putArray("return_fields").add("record_version");
+        body.putObject("result_options").put("include_matched_chunks", false)
+                .putArray("return_fields").add("record_version").add("title").add("requirement_text");
         Reply result;
         try {
             result = request("search", "/semantic-datasets/" + dataset + ":search", body);
@@ -111,7 +111,7 @@ public class StandardReplyIndexClient {
 
     Delivery submit(String dataset, String replyId, String operation, JsonNode payload, Instant updatedAt) {
         Library library = Arrays.stream(Library.values())
-                .filter(candidate -> settings.datasets(candidate).containsValue(dataset))
+                .filter(candidate -> dataset != null && dataset.equals(settings.datasetFor(candidate)))
                 .findFirst().orElseThrow(() -> new Failure("DATASET_NOT_CONFIGURED", false));
         var body = json.createObjectNode();
         ObjectNode record = body.putArray("records").addObject();
@@ -191,7 +191,7 @@ public class StandardReplyIndexClient {
         advanced.putObject("field_types").put("title", "text").put("requirement_text", "text")
             .put("bu_id", "keyword").put("record_version", "integer");
         advanced.putArray("filter_fields").add("bu_id").add("record_version");
-        advanced.putArray("return_fields").add("record_version");
+        advanced.putArray("return_fields").add("record_version").add("title").add("requirement_text");
     }
 
     private Reply request(String operation, String path, ObjectNode body) {

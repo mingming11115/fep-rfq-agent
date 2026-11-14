@@ -30,9 +30,7 @@
 
     <select id="listDue" resultType="com.naura.rfq.mapper.KnowledgeIndexMapper$Key">
         select bu_id,reply_id from <include refid="table"/>
-        where bu_id in
-        <foreach collection="buIds" item="buId" open="(" separator="," close=")">#{buId}</foreach>
-            and <include refid="due"/>
+        where <include refid="due"/>
         order by next_attempt_at,bu_id,reply_id limit 16
     </select>
 

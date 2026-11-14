@@ -178,10 +178,10 @@ npm run dev:api
 
 同一版本由另一位具有 `knowledge-publish` 资格的本 BU 管理员审核。修订生成新草稿，批准新版本后替代原发布版本。审核通过与索引同步分别记录。导入的 BU 共享标准回复在发布和撤销时登记同步任务，数据库事务提交后由后台发送。
 
-索引同步使用 `RFQ_STANDARD_REPLY_INDEX_BASE_URL` 和 `RFQ_STANDARD_REPLY_INDEX_API_KEY`，并在 Spring 配置中为每个 BU 指定独立数据集，例如 `rfq.standard-reply-index.datasets[BU-FEP]=rfq.fep.standard-reply`。缺少配置的 BU 将保留待处理任务。配置示例使用测试环境地址和服务端密钥注入。
+索引同步使用 `RFQ_STANDARD_REPLY_INDEX_BASE_URL` 和 `RFQ_STANDARD_REPLY_INDEX_API_KEY`。三个库各配置一个数据集标识并跨 BU 共用，例如 `rfq.standard-reply-index.dataset=rfq.fep.standard-reply`；BU 隔离由记录里的 `bu_id` 字段过滤保证，不再按 BU 拆分数据集。未配置数据集的库，其同步任务保留在队列中。配置示例使用测试环境地址和服务端密钥注入。
 
 ```sh
-export SPRING_APPLICATION_JSON='{"rfq":{"standard-reply-index":{"datasets":{"[BU-FEP]":"rfq.fep.standard-reply"}}}}'
+export SPRING_APPLICATION_JSON='{"rfq":{"standard-reply-index":{"dataset":"rfq.fep.standard-reply"}}}'
 ```
 
 ## 本机运行与验证
@@ -238,7 +238,7 @@ ONLYOFFICE 使用 `.env.example` 中的 `ONLYOFFICE_*` 配置和 `docker compose
 
 `POST /api/rfq/projects/{projectId}/snapshots/{snapshotId}/history-rfq` 从数据库内指定的已批准定稿快照生成历史候选，保存快照与来源文件版本。候选默认仅当前项目可见，具备发布资格的本 BU 管理员可传 `shareWithBu=true` 生成 BU 共享候选。该接口独立于 RFQ 正式导出。
 
-历史条款提交后，由另一位具备 `knowledge-publish` 资格的本 BU 管理员审核。BU 共享和仅当前项目的条款发布后，都由 `history_rfq_index_sync` 异步同步条款标题和要求文本供向量化，撤销后登记索引删除。项目范围条款仍按项目权限读取。历史数据集与标准回复数据集分开配置，例如 `rfq.standard-reply-index.history-datasets[BU-FEP]=rfq.fep.history-clause`。索引连接复用上面的服务地址和密钥，缺少历史数据集配置时同步任务保留在队列中。
+历史条款提交后，由另一位具备 `knowledge-publish` 资格的本 BU 管理员审核。BU 共享和仅当前项目的条款发布后，都由 `history_rfq_index_sync` 异步同步条款标题和要求文本供向量化，撤销后登记索引删除。项目范围条款仍按项目权限读取。历史数据集与标准回复数据集分开配置，例如 `rfq.standard-reply-index.history-dataset=rfq.fep.history-clause`。索引连接复用上面的服务地址和密钥，缺少历史数据集配置时同步任务保留在队列中。
 
 现有前端解析页仍调用 `POST /api/rfq/history/parse`。服务端入库、审核与快照候选目前通过上述接口触发。
 

@@ -2,7 +2,6 @@ package com.naura.rfq.mapper;
 
 import com.naura.rfq.integration.standardreply.Library;
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.apache.ibatis.annotations.Mapper;
@@ -17,7 +16,7 @@ public interface KnowledgeIndexMapper {
     Optional<SyncStatus> findStatus(@Param("library") Library library, @Param("buId") String buId,
             @Param("replyId") String replyId, @Param("version") int version);
 
-    List<Key> listDue(@Param("library") Library library, @Param("buIds") Collection<String> buIds);
+    List<Key> listDue(@Param("library") Library library);
 
     int claim(@Param("library") Library library, @Param("buId") String buId, @Param("replyId") String replyId,
             @Param("token") String token);

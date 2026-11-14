@@ -121,12 +121,14 @@ flowchart TD
 
 RFQ 为每个知识条目维护当前发布版本及有效区间。修订稿审核期间继续使用仍有效的上一发布版本。导入的草稿保存在 RFQ，审核发布后才加入索引同步队列。发布和撤销在同一事务更新业务记录与索引同步队列。初次调用 `:ingest` 时提交 `dataset_config` 及首批已发布记录。后续提交完整投影。撤销、失效或移出范围时，RFQ 先取消可用资格，再发 `op: delete`。
 
+三类知识库各自对应一个 `dataset_key`（`dataset` / `history-dataset` / `capability-dataset`），跨 BU 共用同一数据集；BU 隔离由记录内的 `bu_id` 过滤字段承担，不再按 BU 拆分数据集。
+
 同一 `source_id` 串行同步，使用单调递增且重试时保持不变的 UTC `updated_at`，记录期望版本、同步事件、`job_id` 和已确认版本。超时重放同一事件。收到 `202` 后轮询任务，`partial_success` 按记录确认成功和重试失败。记录成功但 RFQ 已有更新的期望版本时，旧任务回执只保留审计。周期性对账检查授权范围内应入库的版本是否均已确认。索引就绪后才用于判定当前范围的命中或无可用候选。[入库与任务契约](../api/knowledge-platform-semantic-api-reference-v1.md#3-数据集入库接口)
 
 ### 3.2 查询范围与回源校验
 
 1. RFQ 先根据项目与 BU、来源授权、当前发布版本及有效性计算可供该项目共享的 `source_id` 集合。首期自动任务使用项目共享范围，个人专属资料进入人工补证。范围必须由后端使用结构化授权数据计算。资源只配置了展示标签、缺审批或无法解析授权时，按待补齐处理。
-2. 使用 `POST /api/v1/semantic-datasets/{dataset_key}:search`，传 `mode=hybrid`、`query` 和高级 `filter`。过滤条件为 `bu_id eq <BU>` 与 `id in <授权 ID 集合>`。用 `result_options` 返回 `record_version` 并关闭 `include_matched_chunks`，按配置的 `top_k` 召回候选。已确认范围为空可按该级无可用候选处理。授权 ID 数量超过平台约定上限时标记待处理，首期按受控数据规模运行。
+2. 使用 `POST /api/v1/semantic-datasets/{dataset_key}:search`，传 `mode=hybrid`、`query` 和高级 `filter`。过滤条件为 `bu_id eq <BU>` 与 `id in <授权 ID 集合>`。用 `result_options` 返回 `record_version`、`title` 与 `requirement_text` 并关闭 `include_matched_chunks`，按配置的 `top_k` 召回候选。已确认范围为空可按该级无可用候选处理。授权 ID 数量超过平台约定上限时标记待处理，首期按受控数据规模运行。
 3. 以 `source_id + record_version` 回查精确记录，再校验发布状态、有效性、证据权限及项目共享资格。读取结果、采用建议和提交确认前，按当时权限和引用有效性重新校验。权限变化后，只返回通用不可用原因。候选版本与 RFQ 当前发布版本不一致，或授权范围内仍有待索引版本时，按索引未就绪处理。
 4. 在授权范围已完整覆盖、索引就绪、检索及后续校验都成功的前提下，`200 + hits: []` 或候选均未达到该级规则才记为未命中。这个结果基于已约定的召回配置。超时、`429`、依赖故障可重试，鉴权和契约错误进入配置排查。日志保留知识中台 `request_id`、`index_version`、耗时与错误码。新索引版本和评分策略的效果需用同一验证集回归。
 

@@ -69,8 +69,8 @@ class StandardReplyIndexWorkerIntegrationTest {
         server.start();
         try {
             var settings = new StandardReplyIndexProperties("http://127.0.0.1:" + server.getAddress().getPort(),
-                "test-index-key", library == Library.STANDARD_REPLY ? Map.of(bu, dataset) : Map.of(),
-                Map.of(), library == Library.CAPABILITY ? Map.of(bu, dataset) : Map.of());
+                "test-index-key", library == Library.STANDARD_REPLY ? dataset : null, null,
+                library == Library.CAPABILITY ? dataset : null);
             var worker = new StandardReplyIndexWorker(indexRecords, json, settings, new StandardReplyIndexClient(json, settings));
             var data = json.createObjectNode().put("title", "标题").put("requirement_text", "要求")
                 .put("bu_id", bu).put("record_version", 1);
