@@ -133,6 +133,16 @@ test('not-applicable replies allow an empty remark while non-compliance need not
   assert.equal(call('requirementValidation', validRow({ conclusion: '不满足', evidence: '' })).length, 0);
 });
 
+test('other conclusions require a manual conclusion text and a reply', () => {
+  const missing = call('confirmationValidation', validRow({ conclusion: '其他', conclusionText: '', draft: '' }));
+  assert.ok(missing.some(issue => /自定义结论/.test(issue)), 'the manual conclusion text is mandatory');
+  const confirmed = call('confirmRequirement', validRow({ conclusion: '其他', conclusionText: '部分满足，替代方案待客户确认', draft: '本项部分满足，替代方案待确认后答复。' }));
+  assert.equal(confirmed.status, '已确认');
+  const issues = call('getExportIssues', [confirmed], []);
+  assert.deepEqual(issues, []);
+  assert.equal(call('toCsv', [confirmed]).split('\r\n')[1].includes('其他：部分满足，替代方案待客户确认'), true);
+});
+
 test('changing confirmed requirements invalidates confirmation without mutating the previous version', () => {
   const row = Object.freeze(validRow({ status: '已确认', version: 3, confirmedAt: '2026-10-20T08:00:00.000Z' }));
   for (const patch of [

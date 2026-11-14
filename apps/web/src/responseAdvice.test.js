@@ -193,3 +193,10 @@ test('unrecognized conclusions remain available under pending annotations',()=>{
  assert.deepEqual(notes.map(note=>note.row.id),['unknown','missing']);
  assert.ok(notes.every(note=>note.annotation.conclusion==='待确认'));
 });
+
+test('other conclusions keep the manual conclusion text in the source annotation',()=>{
+ const annotation=model.buildSourceResponseAnnotation({id:'other',conclusion:'其他',conclusionText:'部分满足，替代方案待确认'});
+ assert.equal(annotation.conclusion,'其他');
+ assert.equal(annotation.wording,'其他：部分满足，替代方案待确认');
+ assert.ok(model.SOURCE_ANNOTATION_CONCLUSIONS.includes('其他'));
+});

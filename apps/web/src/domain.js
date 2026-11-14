@@ -1,8 +1,8 @@
 import { canReviewWithoutManualConfirmation, captureSystemRecommendation, getUnconfirmedComplyRows } from './responseRecommendation.js';
-import { answerRemark, normalizeResponseRemark } from './responseFields.js';
+import { answerRemark, conclusionDisplay, conclusionText, normalizeResponseRemark, OTHER_CONCLUSION } from './responseFields.js';
 
-const FINAL_CONCLUSIONS = new Set(['Comply', '有条件 Comply', '不满足', '不适用']);
-const MATERIAL_FIELDS = ['original', 'conclusion', 'evidence', 'owner'];
+const FINAL_CONCLUSIONS = new Set(['Comply', '有条件 Comply', '不满足', '不适用', OTHER_CONCLUSION]);
+const MATERIAL_FIELDS = ['original', 'conclusion', 'conclusionText', 'evidence', 'owner'];
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
 
 export function mergeAnswerConditions(draft = '', conditions = '') {
@@ -45,6 +45,7 @@ export function confirmationValidation(row) {
   if (row.removedFromSource && row.conclusion !== '不适用') { issues.push('客户新版已删除此条款，请确认不适用范围处置'); }
   if (!hasText(row.original)) { issues.push('请填写客户要求原文'); }
   if (!FINAL_CONCLUSIONS.has(row.conclusion)) { issues.push('请选择明确的最终结论，待确认不能作为最终处置'); }
+  if (row.conclusion === OTHER_CONCLUSION && !hasText(conclusionText(row))) { issues.push('结论选择「其他」时，请填写自定义结论'); }
   return issues;
 }
 
@@ -116,6 +117,6 @@ function csvCell(value) {
 
 export function toCsv(rows) {
   const header = '条款,客户要求,应答结论,对外答复,确认状态';
-  return [header, ...rows.map((row) => [row.clause, row.original, row.conclusion,
+  return [header, ...rows.map((row) => [row.clause, row.original, conclusionDisplay(row),
     mergeAnswerConditions(row.draft, row.conditions), row.status].map(csvCell).join(','))].join('\r\n');
 }

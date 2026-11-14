@@ -156,7 +156,7 @@ class MatchDeviationService {
 
     private String answerFingerprint(JsonNode response) {
         var fields = json.createArrayNode();
-        for (String field : List.of("conclusion", "draft", "conditions", "evidence", "reason")) fields.add(response.path(field).asText(""));
+        for (String field : List.of("conclusion", "conclusionText", "draft", "conditions", "evidence", "reason")) fields.add(response.path(field).asText(""));
         var ref = response.path("matchReference");
         return MatchEvaluator.digest(fields.add(ref.path("runId").asText()).add(ref.path("candidateId").asText()).toString());
     }

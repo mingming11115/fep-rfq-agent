@@ -40,7 +40,7 @@ for(const fileType of ['docx','pdf'])test(`${fileType} response annotations focu
     assert.ok(filterTrigger(),'conclusion filters have a compact trigger');
     assert.equal(panel().querySelectorAll('input[type="checkbox"]').length,0,'closed filters do not occupy inline space');
     assert.ok(filterTrigger().textContent.includes('全部结论'));
-    await click(filterTrigger());assert.equal(filterMenu().querySelectorAll('input[type="checkbox"]').length,5);
+    await click(filterTrigger());assert.equal(filterMenu().querySelectorAll('input[type="checkbox"]').length,6);
     menuButton('清空').focus();await click(menuButton('清空'));assert.deepEqual(ids(),[]);assert.ok(filterTrigger().textContent.includes('已选 0 类'));
     assert.ok(document.activeElement===filterMenu().querySelector('input'),'bulk filtering keeps keyboard focus in the popup');
     await click(filterMenu().querySelector('[aria-label="显示 Comply 标注"]'));
@@ -82,7 +82,7 @@ for(const fileType of ['docx','pdf'])test(`${fileType} response annotations focu
     assert.deepEqual(ids(),['R2']);assert.ok(panel().textContent.includes('Edited condition'));assert.ok(!panel().textContent.includes('Saved reason'));assert.equal(rows[1].reason,'Saved reason');
     await click(filterTrigger());
     await click(filterMenu().querySelector('[aria-label="显示 有条件 Comply 标注"]'));assert.deepEqual(ids(),[],'a filtered current clause does not fall back to a different clause');
-    assert.ok(filterTrigger().textContent.includes('已选 4 类'));await closeFilter();
+    assert.ok(filterTrigger().textContent.includes('已选 5 类'));await closeFilter();
     assert.ok(panel().textContent.includes('当前条款没有符合筛选的应答标注'));
     await click(button('查看全部标注'));assert.deepEqual(ids(),['R1'],'all scope still honors the conclusion filter');
     props={...props,selectedAnchor:{...anchor,requirementId:'MISSING'}};await render();

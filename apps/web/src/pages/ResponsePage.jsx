@@ -36,7 +36,7 @@ import { flushSync } from 'react-dom';
 import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions } from '../domain';
-import { answerRemark } from '../responseFields';
+import { answerRemark, conclusionDisplay, OTHER_CONCLUSION } from '../responseFields';
 import { matchClient } from '../requirementMatchClient';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
@@ -56,8 +56,14 @@ const uid = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}-${Ma
 const timestamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
 const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { console.error('读取应答页本地数据失败'); return fallback; } };
 const matches = matchClient();
-const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: mergeAnswerConditions(row?.draft, row?.conditions), remark: answerRemark(row), evidence: row?.evidence || '' });
-const formFields = ['original', 'conclusion', 'draft', 'remark', 'evidence'];
+const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: mergeAnswerConditions(row?.draft, row?.conditions), remark: answerRemark(row), evidence: row?.evidence || '', conclusionText: row?.conclusion === OTHER_CONCLUSION ? row?.conclusionText || '' : '' });
+const formFields = ['original', 'conclusion', 'conclusionText', 'draft', 'remark', 'evidence'];
+// 自定义结论只在结论为「其他」时下发，标准结论不携带该字段。
+const answerPatch = (value) => {
+  if (value.conclusion === OTHER_CONCLUSION) { return { ...value, conclusionText: String(value.conclusionText || '').trim() }; }
+  const { conclusionText, ...rest } = value;
+  return rest;
+};
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
 function Notice({ children, warning = false, loading = false }) {
   const Icon = loading ? LoaderCircle : AlertCircle;
@@ -379,7 +385,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   async function saveDraft(remarkOverride, choiceOverride) {
     if (!active || !canEdit) { toast('当前身份不能修改应答草稿'); return false; }
     if (conflicted) { setError('条目版本已变化，请保留当前输入并返回核对最新版本，不能覆盖保存。'); setModal('conflict'); return false; }
-    const patch = { ...form, ...(remarkOverride ? { remark: remarkOverride } : {}) };
+    const patch = answerPatch({ ...form, ...(remarkOverride ? { remark: remarkOverride } : {}) });
     if(cardBusyRef.current) { return false; }
     cardBusyRef.current=true;setCardBusy(true);
     try { if (await onUpdateRequirement(active.id, patch,baseline.current.version||1,choiceOverride ?? matchChoice) === false) { return false; } }
@@ -414,10 +420,10 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     cardBusyRef.current = true; setCardBusy(true); setError('');
     const nextId = databaseBacked && active.restoredFromVersion && active.status !== '已确认'
       ? active.id : nextResponseCard(cardRows, active.id, deferredCards)?.id;
-    if (dirty && databaseBacked) { return finishConfirmation(active, nextId, form); }
+    if (dirty && databaseBacked) { return finishConfirmation(active, nextId, answerPatch(form)); }
     if (dirty) {
       const expected = { ...form };
-      if (await onUpdateRequirement(active.id, expected,baseline.current.version||1) === false) { cardBusyRef.current = false; setCardBusy(false); setError('草稿保存失败，当前输入已保留。'); return; }
+      if (await onUpdateRequirement(active.id, answerPatch(expected),baseline.current.version||1) === false) { cardBusyRef.current = false; setCardBusy(false); setError('草稿保存失败，当前输入已保留。'); return; }
       addActivity('修改后确认', '保存当前应答修改并确认条目');
       setForm(expected); clearDirty(); setPendingConfirmation({ id: active.id, expected, nextId });
     } else { finishConfirmation(active, nextId); }
@@ -466,7 +472,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   }
   async function batchConfirm() {
     if (cardBusyRef.current || !selectedRows.length) { return; }
-    const draft = dirtyRef.current ? form : null;
+    const draft = dirtyRef.current ? answerPatch(form) : null;
     cardBusyRef.current = true;
     setCardBusy(true);
     setError('');
@@ -698,8 +704,21 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           <div className="field response-wide">
             <span><i className="response-required">*</i>人工最终结论</span>
             <Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit}
-              onChange={event=>edit('conclusion',event.target.value)} options={['Comply','有条件 Comply','不满足','不适用']}/>
+              onChange={event=>{const value=event.target.value;edit('conclusion',value);if(value!==OTHER_CONCLUSION) { edit('conclusionText',''); }}}
+              options={['Comply','有条件 Comply','不满足','不适用',OTHER_CONCLUSION]}/>
           </div>
+          {form.conclusion === OTHER_CONCLUSION && <>
+            <Field label="自定义结论" required wide>
+              <UiInput aria-label="自定义结论" value={form.conclusionText} readOnly={!canEdit} maxLength={60}
+                onChange={event=>edit('conclusionText',event.target.value)}
+                placeholder="填写非标准结论，如：部分满足，替代方案待客户确认"/>
+            </Field>
+            <Field label="对外答复" required wide>
+              <UiTextArea aria-label="对外答复" value={form.draft} readOnly={!canEdit}
+                onChange={event=>edit('draft',event.target.value)}
+                placeholder="填写该条款的正式答复"/>
+            </Field>
+          </>}
           {form.conclusion === '不适用' && <Field label="备注" wide>
             <UiTextArea aria-label="备注" value={form.remark} readOnly={!canEdit} onChange={event=>edit('remark',event.target.value)} placeholder="填写备注（选填）"/>
           </Field>}
@@ -766,7 +785,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason)) { setModal(null); }}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal)) { setModal(null); }}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{mergeAnswerConditions(active.pendingReviewProposal.proposal.draft, active.pendingReviewProposal.proposal.conditions)}</p><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
     {modal === 'confirm' && <Modal title={dirty ? '修改后确认当前条目' : '确认当前条目应答'} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={!canConfirm || !!pendingConfirmation} onClick={confirmOne}>{pendingConfirmation ? '保存后确认中…' : '确认本条'}</UiButton></>}>
       <div className="response-modal-title"><span>条款 {active.clause}{!databaseBacked && ` · V${active.version || 1}`}</span><h3>{active.title}</h3></div>
-      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.remark]] : []), ...(form.conclusion !== 'Comply' ? [['推荐话术', form.draft]] : [])]}/>
+      <Description rows={[["最终结论", conclusionDisplay(form)], ...(form.conclusion === '不适用' ? [['备注', form.remark]] : []), ...(form.conclusion !== 'Comply' ? [[form.conclusion === OTHER_CONCLUSION ? '对外答复' : '推荐话术', form.draft]] : [])]}/>
       <Notice>确认会记录当前应答和来源。请先完成未关闭的评审，并填写明确结论。</Notice>
       <label className="response-checkbox"><UiCheckbox type="checkbox" checked={confirmNext} onChange={(e) => setConfirmNext(e.target.checked)} />确认后跳转下一未完成条目</label>{error && <p className="response-error" role="alert">{error}</p>}
     </Modal>}

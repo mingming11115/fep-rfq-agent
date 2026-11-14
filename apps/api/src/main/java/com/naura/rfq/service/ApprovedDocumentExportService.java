@@ -206,9 +206,10 @@ public class ApprovedDocumentExportService {
         if ("Comply".equals(conclusion)) {
             return;
         }
-        if (!Set.of("有条件 Comply", "不满足", "不适用").contains(conclusion) || ResponseService.answerDraft(response).isBlank()
-                || "有条件 Comply".equals(conclusion) && response.path("evidence").asText().isBlank()) {
-            throw new BusinessException(409, "定稿需要完整答复，有条件应答还须提供依据");
+        if (!Set.of("有条件 Comply", "不满足", "不适用", "其他").contains(conclusion) || ResponseService.answerDraft(response).isBlank()
+                || "有条件 Comply".equals(conclusion) && response.path("evidence").asText().isBlank()
+                || "其他".equals(conclusion) && response.path("conclusionText").asText("").isBlank()) {
+            throw new BusinessException(409, "定稿需要完整答复，有条件应答还须提供依据，结论为「其他」时还须填写自定义结论");
         }
     }
 
@@ -323,7 +324,7 @@ public class ApprovedDocumentExportService {
         }
         return ResponseService.answerDraft(row).equals(ResponseService.answerDraft(response))
                 && ResponseService.answerRemark(row).equals(ResponseService.answerRemark(response))
-                && List.of("conclusion", "evidence", "status", "confirmedAt", "confirmedBy")
+                && List.of("conclusion", "conclusionText", "evidence", "status", "confirmedAt", "confirmedBy")
                         .stream().allMatch(field -> fieldValue(row.path(field)).equals(fieldValue(response.path(field))));
     }
 
@@ -336,8 +337,15 @@ public class ApprovedDocumentExportService {
     private static String answerText(JsonNode row) {
         String clause = row.path("clause").asText("");
         String draft = ResponseService.answerDraft(row);
-        return (clause.isBlank() ? "" : "条款 " + clause + "\n") + "结论：" + row.path("conclusion").asText()
+        return (clause.isBlank() ? "" : "条款 " + clause + "\n") + "结论：" + conclusionText(row)
                 + (draft.isBlank() ? "" : "\n答复：" + draft);
+    }
+
+    private static String conclusionText(JsonNode row) {
+        String conclusion = row.path("conclusion").asText();
+        if (!"其他".equals(conclusion)) { return conclusion; }
+        String detail = row.path("conclusionText").asText("").trim();
+        return detail.isBlank() ? conclusion : conclusion + "：" + detail;
     }
 
     private ExportFile exportDocument(CurrentUser user, String sourceId, List<Note> notes, boolean wordInBody) throws IOException {

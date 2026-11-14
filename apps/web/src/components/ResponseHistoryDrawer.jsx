@@ -3,7 +3,7 @@ import { Alert, List, Skeleton, Tag, Tooltip } from 'antd';
 import { UiButton } from './AntContent';
 import { Drawer, EmptyState, Modal } from './ui';
 import { loadResponseHistory } from '../responseClient';
-import { normalizeResponseRemark } from '../responseFields';
+import { conclusionDisplay, normalizeResponseRemark } from '../responseFields';
 import './response-history.css';
 
 const fields = [
@@ -105,8 +105,8 @@ export default function ResponseHistoryDrawer({ requirement, canRestore, dirty, 
                 {(comparing ? [latest, selected] : [selected]).map(entry => <section key={entry.key}>
                   <h3>{entry.key === latest?.key ? `最近确认 ${entry.label}` : entry.label}</h3>
                   <dl>{fields.map(([key, label]) => {
-                    const value = entry.item[key] || '';
-                    const changed = comparing && (latest.item[key] || '') !== (selected.item[key] || '');
+                    const value = key === 'conclusion' ? conclusionDisplay(entry.item) : entry.item[key] || '';
+                    const changed = comparing && (key === 'conclusion' ? conclusionDisplay(latest.item) : latest.item[key] || '') !== value;
                     return <div key={key} className={changed ? 'is-changed' : undefined}><dt>{label}{changed && <small> · 有变化</small>}</dt><dd>{value || '—'}</dd></div>;
                   })}</dl>
                 </section>)}

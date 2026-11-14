@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ResponseService {
     private static final String CONFIRMATION = "confirmation";
     private static final String CHECKPOINT = "checkpoint";
-    private static final List<String> ANSWER_FIELDS = List.of("conclusion", "draft", "remark", "evidence");
+    private static final List<String> ANSWER_FIELDS = List.of("conclusion", "conclusionText", "draft", "remark", "evidence");
     private static final List<String> SOURCE_FIELDS = List.of("original", "sourceDocumentId", "sourceRequirementText");
     private static final List<String> RESTORE_FIELDS = List.of("restoredFromVersion", "restoredBy", "restoredById", "restoredAt");
 
@@ -230,8 +230,11 @@ public class ResponseService {
             if(requirement.getOriginalText()==null||requirement.getOriginalText().isBlank()) {
                 throw new BusinessException(400,"客户要求原文不能为空");
             }
-            if(!Set.of("Comply","有条件 Comply","不满足","不适用").contains(row.path("conclusion").asText())) {
+            if(!Set.of("Comply","有条件 Comply","不满足","不适用","其他").contains(row.path("conclusion").asText())) {
                 throw new BusinessException(400,"请选择明确的最终结论");
+            }
+            if("其他".equals(row.path("conclusion").asText()) && row.path("conclusionText").asText("").isBlank()) {
+                throw new BusinessException(400,"结论选择「其他」时请填写自定义结论");
             }
             if(row.path("removedFromSource").asBoolean()&&!row.path("conclusion").asText().equals("不适用")) {
                 throw new BusinessException(400,"已删除条款须确认不适用");
@@ -323,7 +326,7 @@ public class ResponseService {
     private static boolean sameAnswerFields(JsonNode left, JsonNode right) {
         return answerDraft(left).equals(answerDraft(right))
                 && answerRemark(left).equals(answerRemark(right))
-                && sameFields(left, right, List.of("conclusion", "evidence"));
+                && sameFields(left, right, List.of("conclusion", "conclusionText", "evidence"));
     }
 
     static String answerRemark(JsonNode response) {

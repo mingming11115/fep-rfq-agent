@@ -7,7 +7,7 @@ import {getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../c
 import {getEligiblePersonnel,personName} from '../personnelDomain';
 import './response-review.css';
 
-const fieldsFor=(review,row)=>({plan:review.plan||'',impact:review.impact||'',proposedDraft:row.draft||'',proposedConclusion:row.conclusion||'待确认',conditions:row.conditions||'',evidence:row.evidence||'',reason:row.remark??row.reason??''});
+const fieldsFor=(review,row)=>({plan:review.plan||'',impact:review.impact||'',proposedDraft:row.draft||'',proposedConclusion:row.conclusion||'待确认',proposedConclusionText:row.conclusionText||'',conditions:row.conditions||'',evidence:row.evidence||'',reason:row.remark??row.reason??''});
 export default function ResponseReviewPanel({review,row,project,state,actorId,onUpdateReview,onAdoptReview,canEdit=true,onClose,Surface,registerGuard,initialAction}){
  const [form,setForm]=useState(()=>fieldsFor(review,row)),[dirty,setDirty]=useState(false),[error,setError]=useState(''),[note,setNote]=useState(''),[editPeople,setEditPeople]=useState(initialAction==='reopen'?'reopen':null),[selected,setSelected]=useState(()=>getReviewActorIds(review)),[reason,setReason]=useState(''),[deadline,setDeadline]=useState(review.deadline||project.deadline||''),[leave,setLeave]=useState(null);
  const [keepReason,setKeepReason]=useState('');
@@ -24,6 +24,7 @@ export default function ResponseReviewPanel({review,row,project,state,actorId,on
  function save(action){
   if(conflict){setError('其他评审人已更新内容，请先载入最新版本，当前输入已保留。');return false;}
   if(!action&&!dirty) { return true; }
+  if(form.proposedConclusion==='其他'&&!String(form.proposedConclusionText||'').trim()){setError('结论选择「其他」时，请填写自定义结论。');return false;}
   const next=onUpdateReview(review.id,{...(dirty?form:{}),...(action?{action}:{}),note},baseline.current.version,baseline.current.round);
   if(next===false) { return false; }
   baseline.current={version:next.version||1,round:next.round||1};mark(false);setError('');setNote('');return true;
@@ -39,7 +40,8 @@ export default function ResponseReviewPanel({review,row,project,state,actorId,on
   {conflict&&<div className="response-error" role="alert">评审内容已更新，当前输入尚未覆盖新版本。<UiButton className="text-link" onClick={()=>{setForm(fieldsFor(review,row));baseline.current={version:review.version||1,round:review.round||1};mark(false);setError('');}}>放弃当前输入并载入最新版本</UiButton></div>}
   {row.pendingReviewProposal&&<section className="review-response-notice"><strong>历史评审建议待核对</strong><p>当前应答：{row.draft}</p><p>评审建议：{row.pendingReviewProposal.proposal?.draft}</p>{editable&&<><UiButton className="btn btn-primary" disabled={dirty} onClick={()=>onAdoptReview?.(row.id,row.pendingReviewProposal)}>采用评审建议</UiButton><label className="field"><span>保留当前应答的原因</span><UiTextArea className="input" value={keepReason} onChange={e=>setKeepReason(e.target.value)}/></label><UiButton className="btn" disabled={dirty||!keepReason.trim()} onClick={()=>onAdoptReview?.(row.id,row.pendingReviewProposal,keepReason)}>保留当前应答并记录原因</UiButton></>}</section>}
   <fieldset disabled={!editable} className="review-response-fields"><div className="form-grid">
-   <label className="field"><span>最终结论</span><UiSelect className="select" aria-label="评审最终结论" value={form.proposedConclusion} onChange={e=>change('proposedConclusion',e.target.value)}>{['待确认','Comply','有条件 Comply','不满足','不适用'].map(v=><option key={v}>{v}</option>)}</UiSelect></label>
+   <label className="field"><span>最终结论</span><UiSelect className="select" aria-label="评审最终结论" value={form.proposedConclusion} onChange={e=>change('proposedConclusion',e.target.value)}>{['待确认','Comply','有条件 Comply','不满足','不适用','其他'].map(v=><option key={v}>{v}</option>)}</UiSelect></label>
+   {form.proposedConclusion==='其他'&&<label className="field response-wide"><span>自定义结论</span><UiInput className="input" aria-label="评审自定义结论" maxLength={60} value={form.proposedConclusionText} onChange={e=>change('proposedConclusionText',e.target.value)} placeholder="填写非标准结论，如：部分满足，替代方案待客户确认"/></label>}
    <label className="field response-wide"><span>回复话术</span><UiTextArea className="input flow-textarea" aria-label="回复话术" value={form.proposedDraft} onChange={e=>change('proposedDraft',e.target.value)}/></label>
    {form.proposedConclusion==='不适用'&&<label className="field response-wide"><span>备注</span><UiTextArea className="input" aria-label="评审备注" value={form.reason} onChange={e=>change('reason',e.target.value)}/></label>}
   </div></fieldset>

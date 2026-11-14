@@ -11,7 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { FileText, AlertCircle, ArrowRight, Download } from "../components/icons";
 import { Modal, Drawer } from '../components/ui';
 import { getExportIssues, makeSnapshot, mergeAnswerConditions } from '../domain';
-import { answerRemark, normalizeResponseRemark } from '../responseFields';
+import { answerRemark, conclusionDisplay, normalizeResponseRemark } from '../responseFields';
 import { api } from '../authClient';
 import { downloadCraftBlob } from '../craftClient';
 import {getUnconfirmedComplyRows} from '../responseRecommendation';
@@ -168,7 +168,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
       setExporting(false);
     }
   }
-  function snapshotTable(snapshot) { const priority=new Set(snapshot.unconfirmedComplyIds||[]),rows=[...(snapshot.rows||[])].sort((a,b)=>Number(priority.has(b.id))-Number(priority.has(a.id)));return <div className="table-wrap flow-snapshot-table"><BusinessTable className="data-table"><thead><tr><th>条款</th><th>客户要求</th><th>最终结论</th><th>冻结答复</th><th>人工确认</th><th>版本</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td>{r.clause}</td><td>{r.original}</td><td><Badge value={r.conclusion} /></td><td>{mergeAnswerConditions(r.draft, r.conditions)}</td><td>{priority.has(r.id)?'未人工确认 · 系统推荐Comply':r.status==='已确认'?'已人工确认':r.status}</td><td>V{r.version || 1}</td></tr>)}</tbody></BusinessTable></div>; }
+  function snapshotTable(snapshot) { const priority=new Set(snapshot.unconfirmedComplyIds||[]),rows=[...(snapshot.rows||[])].sort((a,b)=>Number(priority.has(b.id))-Number(priority.has(a.id)));return <div className="table-wrap flow-snapshot-table"><BusinessTable className="data-table"><thead><tr><th>条款</th><th>客户要求</th><th>最终结论</th><th>冻结答复</th><th>人工确认</th><th>版本</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td>{r.clause}</td><td>{r.original}</td><td><Badge value={conclusionDisplay(r)} /></td><td>{mergeAnswerConditions(r.draft, r.conditions)}</td><td>{priority.has(r.id)?'未人工确认 · 系统推荐Comply':r.status==='已确认'?'已人工确认':r.status}</td><td>V{r.version || 1}</td></tr>)}</tbody></BusinessTable></div>; }
 
   const actionDialog = action && <Modal
     title={{ submit: '发起最终评审', approve: '通过本方最终评审', reject: '退回应答快照' }[action]}
@@ -225,7 +225,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
           <tbody>{previewRows.slice((page - 1) * 6, page * 6).map(row => <tr key={row.id}>
             <td>{row.clause || '—'}</td>
             <td className="flow-preview-requirement">{row.original}</td>
-            <td><Badge value={row.conclusion}/></td>
+            <td><Badge value={conclusionDisplay(row)}/></td>
             <td className="flow-preview-reply">{mergeAnswerConditions(row.draft, row.conditions) || '—'}</td>
             <td>{row.status && <Badge value={exportCheck.valid && latest.unconfirmedComplyIds?.includes(row.id) ? '最终评审已通过（未逐条人工确认）' : row.status}/>}</td>
           </tr>)}</tbody>
