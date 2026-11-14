@@ -9,6 +9,7 @@ import org.slf4j.event.Level;
 
 @Slf4j
 public final class ExternalCallLog {
+    private static final int MAX_PAYLOAD_CHARS = 4000;
     private final String callId = Ids.next("EXT");
     private final String service;
     private final String operation;
@@ -39,6 +40,17 @@ public final class ExternalCallLog {
         }
         log.error("external.call.failed callId={} service={} operation={} errorType={} durationMs={}",
             callId, service, operation, cause.getClass().getSimpleName(), durationMs());
+    }
+
+    /** Opt-in body logging: only called when the caller enables it, payloads hold customer content. */
+    public void payload(String direction, String body) {
+        String text = body == null ? "" : body.replace('\r', ' ').replace('\n', ' ');
+        int total = text.length();
+        if (total > MAX_PAYLOAD_CHARS) {
+            text = text.substring(0, MAX_PAYLOAD_CHARS) + "...(truncated, totalChars=" + total + ")";
+        }
+        log.info("external.call.payload callId={} service={} operation={} direction={} body={}",
+            callId, service, operation, direction, text);
     }
 
     private long durationMs() {

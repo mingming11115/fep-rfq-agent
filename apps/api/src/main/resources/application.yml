@@ -40,6 +40,9 @@ rfq:
     base-url: ${RFQ_STANDARD_REPLY_INDEX_BASE_URL:}
     api-key: ${RFQ_STANDARD_REPLY_INDEX_API_KEY:}
     poll-interval-ms: ${RFQ_STANDARD_REPLY_INDEX_POLL_INTERVAL_MS:5000}
+    # Opt-in: request/response bodies carry customer clause text, so keep it off outside troubleshooting.
+    # When on, logs external.call.payload (truncated to 4000 chars per direction).
+    log-payload: ${RFQ_STANDARD_REPLY_INDEX_LOG_PAYLOAD:false}
     datasets:
       "[BU-FEP]": rfq.fep.standard-reply
     history-datasets:
@@ -50,6 +53,11 @@ rfq:
     worker-enabled: ${RFQ_MATCH_WORKER_ENABLED:false}
     poll-interval-ms: ${RFQ_MATCH_POLL_INTERVAL_MS:3000}
     low-confidence-threshold: ${RFQ_MATCH_LOW_CONFIDENCE_THRESHOLD:0}
+  http-log:
+    # One INFO line per /api request. enabled=false silences them entirely;
+    # slow-ms>0 keeps only slow, failed and 4xx/5xx requests in the access log.
+    enabled: ${RFQ_HTTP_LOG_ENABLED:true}
+    slow-ms: ${RFQ_HTTP_LOG_SLOW_MS:0}
   storage-type: ${RFQ_STORAGE_TYPE:local}
   storage-dir: ${RFQ_STORAGE_DIR:${rfq.data-dir:data}/rfq-files}
   minio:

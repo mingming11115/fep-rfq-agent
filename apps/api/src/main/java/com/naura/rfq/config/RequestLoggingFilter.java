@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.slf4j.event.Level;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,11 @@ import org.springframework.web.servlet.HandlerMapping;
 public class RequestLoggingFilter extends OncePerRequestFilter {
     static final String REQUEST_ID_HEADER = "X-Request-Id";
     private static final String REQUEST_ID_KEY = "requestId";
+
+    @Value("${rfq.http-log.enabled:true}")
+    private boolean accessLogEnabled;
+    @Value("${rfq.http-log.slow-ms:0}")
+    private long slowMs;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -53,9 +59,11 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             String route = handler instanceof HandlerMethod && pattern != null ? pattern.toString() : "unmatched";
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
             try {
-                log.atLevel(aborted || status >= 500 ? Level.WARN : Level.INFO)
-                        .log("http.request method={} route={} status={} durationMs={} aborted={}",
-                                request.getMethod(), route, status, durationMs, aborted);
+                if (shouldLog(status, durationMs, aborted)) {
+                    log.atLevel(aborted || status >= 500 ? Level.WARN : Level.INFO)
+                            .log("http.request method={} route={} status={} durationMs={} aborted={}",
+                                    request.getMethod(), route, status, durationMs, aborted);
+                }
             } finally {
                 if (previousId == null) {
                     MDC.remove(REQUEST_ID_KEY);
@@ -64,5 +72,12 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                 }
             }
         }
+    }
+
+    private boolean shouldLog(int status, long durationMs, boolean aborted) {
+        if (!accessLogEnabled) {
+            return false;
+        }
+        return slowMs <= 0 || aborted || status >= 400 || durationMs >= slowMs;
     }
 }

@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.regex.Pattern;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -38,6 +40,8 @@ public class StandardReplyIndexClient {
     private ObjectMapper json;
     @Autowired
     private StandardReplyIndexProperties settings;
+    @Value("${rfq.standard-reply-index.log-payload:false}")
+    private boolean logPayload;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
         .followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -203,11 +207,17 @@ public class StandardReplyIndexClient {
         }
         var request = builder.build();
         var call = new ExternalCallLog("semantic_index", operation, request, null);
+        if (logPayload && body != null) {
+            call.payload("request", body.toString());
+        }
         CompletableFuture<HttpResponse<byte[]>> pending = null;
         try {
             pending = http.sendAsync(request, info -> new LimitedBody());
             var response = pending.get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             call.response(response.statusCode(), response.body().length);
+            if (logPayload) {
+                call.payload("response", new String(response.body(), StandardCharsets.UTF_8));
+            }
             JsonNode parsed;
             try {
                 parsed = json.readTree(response.body());

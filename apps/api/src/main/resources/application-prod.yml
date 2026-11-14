@@ -6,3 +6,8 @@ logging:
   level:
     root: INFO
     com.naura.rfq: INFO
+
+rfq:
+  http-log:
+    # Production keeps the requestId plumbing but not one log line per request.
+    enabled: ${RFQ_HTTP_LOG_ENABLED:false}
