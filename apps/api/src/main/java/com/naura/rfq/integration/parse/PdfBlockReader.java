@@ -8,10 +8,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,12 +23,15 @@ import org.springframework.stereotype.Component;
  * silently dropping content.
  */
 @Component
-@lombok.RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class PdfBlockReader implements DocumentBlockReader {
 
-    private final OcrClient ocr;
-    private final MineruPdfReader mineru;
+    @Autowired
+    private OcrClient ocr;
+    @Autowired
+    private MineruPdfReader mineru;
 
     private static final int MAX_PARAGRAPH_CHARS = 1200;
 
@@ -56,9 +62,11 @@ public class PdfBlockReader implements DocumentBlockReader {
             }
             return recoverMineruImages(file, blocks);
         } catch (InterruptedException exception) {
+            log.error("MinerU 解析 PDF 被中断", exception);
             Thread.currentThread().interrupt();
             throw new DocumentReadException("PDF 解析已中断", exception);
         } catch (Exception exception) {
+            log.error("MinerU 解析 PDF 失败", exception);
             String reason = exception instanceof DocumentReadException ? exception.getMessage() : ParseHttpClient.reason(exception);
             log.warn("document.parse.mineru.fallback reason={}", reason);
             var blocks = read(file, historyLines);

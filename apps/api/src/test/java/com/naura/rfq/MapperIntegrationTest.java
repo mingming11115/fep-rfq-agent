@@ -1,12 +1,16 @@
 package com.naura.rfq;
 
 import com.naura.rfq.mapper.AppUserMapper;
+import com.naura.rfq.mapper.CustomerDocumentMapper;
+import com.naura.rfq.mapper.DemoDocumentMapper;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.mapper.RequirementMapper;
 import com.naura.rfq.model.entity.AppUser;
 import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.model.query.PageQuery;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -30,6 +34,21 @@ class MapperIntegrationTest {
 
     @Autowired
     private RequirementMapper requirements;
+
+    @Autowired
+    private CustomerDocumentMapper documents;
+
+    @Autowired
+    private DemoDocumentMapper demoDocuments;
+
+    @Test
+    void readsDemoDocumentBlobAndRejectsMismatchedLength() throws Exception {
+        var document = documents.findById("MYSQL-DEMO-001-DOC").orElseThrow();
+        byte[] content = demoDocuments.findContent(document.getId(), document.getSizeBytes()).orElseThrow();
+        assertThat(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content)))
+                .isEqualTo(document.getSha256());
+        assertThat(demoDocuments.findContent(document.getId(), document.getSizeBytes() + 1)).isEmpty();
+    }
 
     @Test
     void mapsSnakeCaseColumnsToCamelCaseFields() {

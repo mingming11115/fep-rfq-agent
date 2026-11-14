@@ -1,5 +1,9 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.Table;
+import com.naura.rfq.mapper.RequirementMatchMapper;
+import com.naura.rfq.mapper.ResponseMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,10 +24,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,21 +35,36 @@ import static com.naura.rfq.service.MatchEvaluator.DEFAULT_ORDER;
 import static com.naura.rfq.service.MatchEvaluator.digest;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class RequirementMatchService {
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final RequirementMapper requirements;
-    private final AccessGuard access;
-    private final KnowledgePublicationAccess publicationAccess;
-    private final AuditService audit;
-    private final CapabilityMatch capability;
-    private final MatchEvaluator evaluator;
-    private final MatchDeviationService deviations;
-    private final ProjectWorkScope work;
+    @Autowired
+    private RequirementMatchMapper matchRecords;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private KnowledgePublicationAccess publicationAccess;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private CapabilityMatch capability;
+    @Autowired
+    private MatchEvaluator evaluator;
+    @Autowired
+    private MatchDeviationService deviations;
+    @Autowired
+    private ProjectWorkScope work;
     @Value("${rfq.match.low-confidence-threshold:0}")
     private double lowConfidenceThreshold;
 
@@ -58,7 +76,6 @@ public class RequirementMatchService {
             long policyVersion, String fingerprint, boolean current, String status, String leaseToken, int attempts,
             JsonNode progress, MatchEvaluator.Input input) {}
     record Finished(String status, int retrySeconds, ObjectNode progress) {}
-    private record Result(JsonNode stamp, JsonNode payload) {}
 
     public Policy policy(CurrentUser user, String bu) {
         access.requireBu(user, bu);
@@ -83,24 +100,13 @@ public class RequirementMatchService {
             return before;
         }
         long version = before.version() + 1;
-        jdbc.update("""
-                insert into bu_match_policy(bu_id,match_order,version,changed_by,changed_at)
-                values (?,?,?,?,utc_timestamp(6)) as desired
-                on duplicate key update match_order=desired.match_order,version=desired.version,
-                    changed_by=desired.changed_by,changed_at=desired.changed_at
-                """, bu, json.valueToTree(request.matchOrder()).toString(), version, user.id());
+        matchRecords.upsertPolicy(bu, json.valueToTree(request.matchOrder()).toString(), version, user.id());
         audit.successInBu(user.id(), bu, "配置条款比对顺序", "bu_match_policy", bu, String.join(" → ", request.matchOrder()));
         return policy(bu);
     }
 
     void parsed(Project project, CustomerDocument document, List<Requirement> rows) {
-        jdbc.update("""
-                update requirement_match_run set current_run=null,status='superseded',lease_token=null,lease_until=null,next_attempt_at=null
-                where project_id=? and document_id=? and current_run=1
-                    and not exists (select 1 from requirement selected
-                        where selected.id=requirement_match_run.requirement_id
-                        and selected.parse_run_id is null and selected.block_id is null and selected.source_refs_json is not null)
-                """, project.getId(), document.getId());
+        matchRecords.supersedeGenerated(project.getId(), document.getId());
         Policy policy = policy(project.getBuId());
         for (var requirement : rows) {
             if (ready(requirement)) {
@@ -122,7 +128,7 @@ public class RequirementMatchService {
         var scope = lockForUser(user, id);
         requireMatchEditor(user, scope.project());
         String key = "manual:" + request.requestId();
-        var prior = runWhere("where requirement_id=? and request_key=?", id, key);
+        var prior = decodeRun(matchRecords.findByRequest(id, key));
         if (prior != null) {
             return new Accepted(prior.id(), prior.status());
         }
@@ -203,11 +209,7 @@ public class RequirementMatchService {
                 }
             }
         }
-        jdbc.update("""
-                insert into requirement_match_input(requirement_id,source_fingerprint,version,payload)
-                values (?,?,?,?) as desired on duplicate key update source_fingerprint=desired.source_fingerprint,
-                    version=desired.version,payload=desired.payload
-                """, id, sourceFingerprint(requirement), before.version() + 1, payload.toString());
+        matchRecords.upsertInput(id, sourceFingerprint(requirement), before.version() + 1, payload.toString());
         var run = enqueue(scope, policy(bu), "input", null);
         audit.successInBu(user.id(), bu, "确认条款比对输入", "requirement", id, run.runId());
         return contextView(requirement, context(id)).put("runId", run.runId());
@@ -221,14 +223,8 @@ public class RequirementMatchService {
             throw new BusinessException(404, "项目原件不存在");
         }
         int safePage = Math.max(1, page), safeSize = Math.min(100, Math.max(1, size));
-        String filter = " where r.project_id=? and r.extraction_status <> 'EXCLUDED'"
-                + " and (? is null or r.document_id=?) and (? is null or r.parse_run_id=?)";
-        long count = jdbc.queryForObject("select count(*) from requirement r" + filter,
-                Long.class, projectId, documentId, documentId, parseRunId, parseRunId);
-        var items = jdbc.query("select r.id from requirement r left join document_block source on source.id = r.block_id"
-                        + filter + " order by r.document_id, coalesce(source.block_index, 2147483647), r.id limit ? offset ?",
-                (rs, n) -> rs.getString("id"), projectId, documentId, documentId, parseRunId, parseRunId,
-                safeSize, (long) (safePage - 1) * safeSize).stream().map(id -> {
+        long count = matchRecords.countRequirements(projectId, documentId, parseRunId);
+        var items = matchRecords.listRequirementIds(projectId, documentId, parseRunId, safeSize, (long) (safePage - 1) * safeSize).stream().map(id -> {
                     return currentView(project, requirement(id), false);
                 }).toList();
         return PageView.of(items, count, safePage, safeSize);
@@ -243,8 +239,7 @@ public class RequirementMatchService {
         if (deviation != null) {
             view.set("deviation", deviation);
         }
-        var reference = jdbc.query("select json_extract(payload,'$.matchReference') from requirement_response where requirement_id=? and json_contains_path(payload,'one','$.matchReference')",
-                (row, n) -> parse(row.getString(1)), id).stream().findFirst().orElse(json.nullNode());
+        var reference = responseRecords.findMatchReference(id).stream().map(this::parse).findFirst().orElse(json.nullNode());
         if (reference.isObject()) {
             view.put("referenceInvalid", !referenceAvailable(project, requirement, reference));
         }
@@ -252,7 +247,7 @@ public class RequirementMatchService {
     }
 
     private ObjectNode currentView(Project project, Requirement requirement, boolean detail) {
-        var run = runWhere("where requirement_id=? and current_run=1", requirement.getId());
+        var run = decodeRun(matchRecords.findCurrent(requirement.getId()));
         if (run != null) {
             return view(project, requirement, run, detail);
         }
@@ -262,7 +257,7 @@ public class RequirementMatchService {
 
     @Transactional(readOnly = true)
     public ObjectNode detail(CurrentUser user, String id, String runId) {
-        var run = runWhere("where id=? and requirement_id=?", runId, id);
+        var run = decodeRun(matchRecords.findRunForRequirement(runId, id));
         if (run == null) {
             throw new BusinessException(404, "比对轮次不存在");
         }
@@ -272,7 +267,7 @@ public class RequirementMatchService {
 
     private ObjectNode completed(Project project, Requirement requirement, String runId) {
         publicationAccess.lockBu(project.getBuId());
-        var run = runWhere("where id=? and requirement_id=? and current_run=1", runId, requirement.getId());
+        var run = decodeRun(matchRecords.findCurrentRunForRequirement(runId, requirement.getId()));
         if (run != null) {
             var view = view(project, requirement, run, true);
             if (view.path("result").isObject()) {
@@ -293,9 +288,7 @@ public class RequirementMatchService {
                 .put("candidateId", candidateId).put("inputFingerprint", digest(snapshot(requirement).toString()))
                 .put("workVersion", deviations.workVersion(project.getId()));
         if ("capability".equals(library) && "capability".equals(candidateId) && !"待确认".equals(result.path("conclusion").asText())) {
-            String capabilityStamp = jdbc.queryForObject("""
-                    select json_unquote(json_extract(scope_stamp,'$.capability')) from requirement_match_result where run_id=?
-                    """, String.class, runId);
+            String capabilityStamp = matchRecords.findCapabilityStamp(runId);
             reference.put("capabilityFingerprint", capabilityStamp);
             var sources = reference.putArray("sources");
             for (var check : stage.path("checks")) {
@@ -340,34 +333,33 @@ public class RequirementMatchService {
         String library = reference.path("library").asText();
         if ("capability".equals(library)) {
             for (var candidate : reference.path("sources")) {
-                if (!readableSource(project, "capability_record", candidate.path("id").asText(), candidate.path("version").asInt())) {
+                if (!readableSource(project, Table.CAPABILITY, candidate.path("id").asText(), candidate.path("version").asInt())) {
                     return false;
                 }
                 for (var evidence : candidate.path("evidenceRefs")) {
-                    if (!readableSource(project, "evidence_record", evidence.path("id").asText(), evidence.path("version").asInt())) {
+                    if (!readableSource(project, Table.EVIDENCE, evidence.path("id").asText(), evidence.path("version").asInt())) {
                         return false;
                     }
                 }
             }
             return !reference.path("sources").isEmpty();
         }
-        String table = switch (library) {
-            case "standard_reply" -> "`standard-reply-record`";
-            case "history_rfq" -> "`history-rfq-record`";
-            default -> "";
+        Table table = switch (library) {
+            case "standard_reply" -> Table.STANDARD_REPLY;
+            case "history_rfq" -> Table.HISTORY;
+            default -> null;
         };
-        return !table.isEmpty() && readableSource(project, table, reference.path("candidateId").asText(), reference.path("version").asInt());
+        return table != null && readableSource(project, table, reference.path("candidateId").asText(), reference.path("version").asInt());
     }
 
-    private boolean readableSource(Project project, String table, String id, int version) {
-        return jdbc.query("select project_id,scope,payload from " + table + " where bu_id=? and id=? and version=?",
-                (row, n) -> {
-                    String scope = row.getString("scope");
-                    String owner = row.getString("project_id");
-                    String origin = KnowledgePublicationAccess.recordProjectId(parse(row.getString("payload")));
-                    return (origin.isBlank() || project.getId().equals(origin))
-                            && (owner == null && "BU共享".equals(scope) || project.getId().equals(owner) && "仅当前项目".equals(scope));
-                }, project.getBuId(), id, version).stream().findFirst().orElse(false);
+    private boolean readableSource(Project project, Table table, String id, int version) {
+        return knowledgeRecords.findResource(table, project.getBuId(), id, version).map(row -> {
+            String scope = row.scope();
+            String owner = row.projectId();
+            String origin = KnowledgePublicationAccess.recordProjectId(parse(row.payload()));
+            return (origin.isBlank() || project.getId().equals(origin))
+                    && (owner == null && "BU共享".equals(scope) || project.getId().equals(owner) && "仅当前项目".equals(scope));
+        }).orElse(false);
     }
 
     void requireReference(Project project, Requirement requirement, JsonNode reference) {
@@ -381,12 +373,7 @@ public class RequirementMatchService {
     }
 
     List<String> adoptedAfter(String cursor) {
-        return jdbc.queryForList("""
-                select requirement_id from requirement_response
-                where requirement_id>? and json_contains_path(payload,'one','$.matchReference')
-                and not json_contains_path(payload,'one','$.matchReferenceInvalidatedAt')
-                order by requirement_id limit 25
-                """, String.class, cursor);
+        return responseRecords.listAdoptedAfter(cursor);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -407,8 +394,7 @@ public class RequirementMatchService {
             return;
         }
         publicationAccess.lockBu(project.getBuId());
-        var response = jdbc.query("select payload from requirement_response where requirement_id=? for update",
-                (row, n) -> parse(row.getString(1)), id).stream().findFirst().orElse(json.nullNode());
+        var response = responseRecords.lockResponseByRequirement(id).stream().map(this::parse).findFirst().orElse(json.nullNode());
         if (!(response instanceof ObjectNode row) || row.has("matchReferenceInvalidatedAt") || !row.hasNonNull("matchReference")
                 || referenceAvailable(project, requirement, row.path("matchReference"))) {
             return;
@@ -417,30 +403,21 @@ public class RequirementMatchService {
         row.put("status", "待复核").put("version", row.path("version").asLong(1) + 1).put("confirmationReason", reason)
                 .put("matchReferenceInvalidatedAt", java.time.Instant.now().toString());
         row.remove(List.of("confirmedAt", "confirmedBy", "confirmedById"));
-        jdbc.update("update requirement_response set payload=?,updated_at=current_timestamp where requirement_id=?", row.toString(), id);
+        responseRecords.updateResponse(id, row.toString());
         deviations.record(project, requirement, row.path("matchReference").path("runId").asText(), "source_invalidated", reason);
     }
 
     List<String> due() {
-        return jdbc.query("select id from requirement_match_run where " + DUE + " order by next_attempt_at,id limit 4",
-                (rs, n) -> rs.getString(1));
+        return matchRecords.listDue();
     }
 
-    private static final String DUE = """
-            current_run=1 and status in ('queued','running','retry_wait','blocked') and next_attempt_at<=utc_timestamp(6)
-            and (lease_until is null or lease_until<=utc_timestamp(6))
-            """;
-
     Run claim(String id, String token) {
-        int changed = jdbc.update("""
-                update requirement_match_run set status='running',lease_token=?,lease_until=timestampadd(second,90,utc_timestamp(6)),
-                    attempts=least(attempts+1,1000000) where id=? and
-                """ + DUE, token, id);
-        return changed == 1 ? runWhere("where id=? and lease_token=?", id, token) : null;
+        int changed = matchRecords.claim(id, token);
+        return changed == 1 ? decodeRun(matchRecords.findClaimed(id, token)) : null;
     }
 
     boolean active(Run job) {
-        var run = runWhere("where id=? and lease_token=? and current_run=1", job.id(), job.leaseToken());
+        var run = decodeRun(matchRecords.findCurrentClaimed(job.id(), job.leaseToken()));
         return run != null && currentInput(projects.findById(job.input().project()).orElse(null),
                 documents.findById(job.document()).orElse(null), requirements.findById(job.requirement()).orElse(null), run);
     }
@@ -450,8 +427,7 @@ public class RequirementMatchService {
         var project = projects.findByIdForUpdate(job.input().project()).orElse(null);
         var document = documents.findByIdForUpdate(job.document()).orElse(null);
         var requirement = requirements.findByIdForUpdate(job.requirement()).orElse(null);
-        var run = runWhere("where id=? and lease_token=? and current_run=1 and lease_until>utc_timestamp(6) for update",
-                job.id(), job.leaseToken());
+        var run = decodeRun(matchRecords.lockActiveClaim(job.id(), job.leaseToken()));
         if (run == null) {
             return null;
         }
@@ -469,8 +445,7 @@ public class RequirementMatchService {
                 delay = 5;
                 progress.put("reason", "MATCH_SCOPE_CHANGED");
             } else {
-                jdbc.update("insert into requirement_match_result(run_id,scope_stamp,payload) values (?,?,?)",
-                        run.id(), outcome.stamp().toString(), outcome.result().toString());
+                matchRecords.insertResult(run.id(), outcome.stamp().toString(), outcome.result().toString());
                 if (outcome.result().path("knowledgeGap").asBoolean()) {
                     deviations.record(project, requirement, run.id(), "knowledge_gap", "三个知识库均未命中");
                 }
@@ -493,10 +468,7 @@ public class RequirementMatchService {
             delay = Math.max(delay, 5 << (failures - 1));
         }
         progress.put("failureCount", failures);
-        int updated = jdbc.update("""
-                update requirement_match_run set status=?,next_attempt_at=timestampadd(second,?,utc_timestamp(6)),
-                    lease_token=null,lease_until=null,progress=? where id=? and lease_token=?
-                """, state, delay == 0 ? null : delay, progress.toString(), run.id(), run.leaseToken());
+        int updated = matchRecords.finish(run.id(), run.leaseToken(), state, delay == 0 ? null : delay, progress.toString());
         return updated == 1 ? new Finished(state, delay, progress) : null;
     }
 
@@ -523,18 +495,17 @@ public class RequirementMatchService {
             }
             return view;
         }
-        var result = jdbc.query("select scope_stamp,payload from requirement_match_result where run_id=?",
-                (rs, n) -> new Result(parse(rs.getString(1)), parse(rs.getString(2))), run.id()).stream().findFirst().orElse(null);
-        if (result == null || !evaluator.stillCurrent(run.input(), result.stamp())) {
+        var result = matchRecords.findResult(run.id());
+        if (result == null || !evaluator.stillCurrent(run.input(), parse(result.scopeStamp()))) {
             return view.put("status", "blocked").put("reason", "MATCH_SCOPE_CHANGED");
         }
+        var payload = parse(result.payload());
         if (detail) {
-            view.set("result", result.payload());
-        }
-        else {
-            view.put("matchedLibrary", result.payload().path("matchedLibrary").asText(null))
-                    .put("conclusion", result.payload().path("conclusion").asText()).put("knowledgeGap", result.payload().path("knowledgeGap").asBoolean());
-            view.set("stages", publicProgress(result.payload()).path("stages"));
+            view.set("result", payload);
+        } else {
+            view.put("matchedLibrary", payload.path("matchedLibrary").asText(null))
+                    .put("conclusion", payload.path("conclusion").asText()).put("knowledgeGap", payload.path("knowledgeGap").asBoolean());
+            view.set("stages", publicProgress(payload).path("stages"));
         }
         return view;
     }
@@ -567,7 +538,7 @@ public class RequirementMatchService {
                 ? List.of(MatchEvaluator.HISTORY) : policy.matchOrder();
         String fingerprint = digest(input.toString());
         if (requestKey == null) {
-            var current = runWhere("where requirement_id=? and current_run=1", requirement.getId());
+            var current = decodeRun(matchRecords.findCurrent(requirement.getId()));
             if (current != null && current.fingerprint().equals(fingerprint) && current.policyVersion() == policy.version()) {
                 return new Accepted(current.id(), current.status());
             }
@@ -579,22 +550,14 @@ public class RequirementMatchService {
         var progress = json.createObjectNode();
         var stages = progress.putObject("stages");
         order.forEach(library -> stages.putObject(library).put("status", "not_run"));
-        jdbc.update("""
-                insert into requirement_match_run(id,bu_id,project_id,requirement_id,requirement_version,document_id,document_version,
-                    parse_run_id,input_fingerprint,policy_version,match_order,input_snapshot,request_key,trigger_reason,current_run,
-                    status,next_attempt_at,progress)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'queued',utc_timestamp(6),?)
-                """, id, scope.project().getBuId(), scope.project().getId(), requirement.getId(), requirement.getVersion(),
+        matchRecords.insertRun(id, scope.project().getBuId(), scope.project().getId(), requirement.getId(), requirement.getVersion(),
                 scope.document().getId(), scope.document().getVersion(), requirement.getParseRunId(), fingerprint, policy.version(),
                 json.valueToTree(order).toString(), input.toString(), requestKey, reason, progress.toString());
         return new Accepted(id, "queued");
     }
 
     private void supersede(String requirementId) {
-        jdbc.update("""
-                update requirement_match_run set current_run=null,status='superseded',lease_token=null,lease_until=null,next_attempt_at=null
-                where requirement_id=? and current_run=1
-                """, requirementId);
+        matchRecords.supersedeRequirement(requirementId);
     }
 
     private boolean currentInput(Project project, CustomerDocument document, Requirement requirement, Run run) {
@@ -675,9 +638,9 @@ public class RequirementMatchService {
     }
 
     private SavedContext context(String id) {
-        return jdbc.query("select version,source_fingerprint,payload from requirement_match_input where requirement_id=?",
-                (rs, n) -> new SavedContext(rs.getLong(1), rs.getString(2), parse(rs.getString(3))), id)
-                .stream().findFirst().orElse(new SavedContext(0, "", json.nullNode()));
+        var row = matchRecords.findInput(id);
+        return row == null ? new SavedContext(0, "", json.nullNode())
+                : new SavedContext(row.version(), row.sourceFingerprint(), parse(row.payload()));
     }
 
     private ObjectNode contextView(Requirement requirement, SavedContext saved) {
@@ -687,19 +650,19 @@ public class RequirementMatchService {
     }
 
     private Policy policy(String bu) {
-        return jdbc.query("select match_order,version,changed_by,changed_at from bu_match_policy where bu_id=?",
-                (rs, n) -> new Policy(order(rs.getString(1)), rs.getLong(2), rs.getString(3), rs.getString(4)), bu)
-                .stream().findFirst().orElse(new Policy(DEFAULT_ORDER, 0, null, null));
+        var row = matchRecords.findPolicy(bu);
+        return row == null ? new Policy(DEFAULT_ORDER, 0, null, null)
+                : new Policy(order(row.matchOrder()), row.version(), row.changedBy(), row.changedAt());
     }
 
-    private Run runWhere(String where, Object... parameters) {
-        return jdbc.query("select * from requirement_match_run " + where, (rs, n) -> new Run(rs.getString("id"),
-                rs.getString("requirement_id"), rs.getString("document_id"), rs.getInt("document_version"), rs.getString("parse_run_id"),
-                rs.getLong("requirement_version"), rs.getLong("policy_version"), rs.getString("input_fingerprint"),
-                rs.getBoolean("current_run"), rs.getString("status"), rs.getString("lease_token"), rs.getInt("attempts"),
-                parse(rs.getString("progress")), new MatchEvaluator.Input(rs.getString("bu_id"), rs.getString("project_id"),
-                parse(rs.getString("input_snapshot")), order(rs.getString("match_order")))), parameters)
-                .stream().findFirst().orElse(null);
+    private Run decodeRun(RequirementMatchMapper.RunRow row) {
+        if (row == null) {
+            return null;
+        }
+        return new Run(row.id(), row.requirementId(), row.documentId(), row.documentVersion(), row.parseRunId(),
+                row.requirementVersion(), row.policyVersion(), row.inputFingerprint(), row.currentRun(),
+                row.status(), row.leaseToken(), row.attempts(), parse(row.progress()),
+                new MatchEvaluator.Input(row.buId(), row.projectId(), parse(row.inputSnapshot()), order(row.matchOrder())));
     }
 
     private List<String> order(String value) {

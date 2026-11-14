@@ -29,14 +29,9 @@ public class ParseIntegrationProperties {
         return llmEnabled;
     }
 
-    public boolean historyLlmEnabled() {
-        return history.llmEnabled == null ? llmEnabled : history.llmEnabled;
-    }
-
     @Getter @Setter
     public static class History {
         private boolean rulesEnabled = true;
-        private Boolean llmEnabled;
     }
 
     @Getter @Setter

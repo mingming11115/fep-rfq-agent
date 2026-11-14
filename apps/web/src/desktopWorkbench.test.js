@@ -68,15 +68,22 @@ test('manual clause navigation updates the card and source selection while a tra
     await h.render();
     const frame = node.querySelector('iframe');
     const card = node.querySelector('.response-current-card');
-    card.animate = () => {
+    const heading = card.querySelector('h2');
+    const titleMotions = [];
+    card.animate = () => assert.fail('Manual navigation must keep the full card steady');
+    heading.animate = (keyframes) => {
       let finish;
       const finished = new Promise(resolve => { finish = resolve; });
+      titleMotions.push(keyframes);
       return { finished, cancel: finish };
     };
 
     for (const [label, row] of [['下一条', second], ['下一条', third], ['上一条', second]]) {
+      const motionCount = titleMotions.length;
       await click(button(label));
-      assert.equal(card.querySelector('h2').textContent, row.title);
+      assert.equal(heading.textContent, row.title);
+      assert.equal(titleMotions.length, motionCount + 1);
+      assert.ok(titleMotions.at(-1).every(({ opacity }) => opacity === undefined || opacity === 1));
       assert.equal(h.navigations.at(-1)?.[1], row.id);
       assert.equal(node.querySelector('[data-response-note]')?.dataset.responseNote, row.id);
       assert.equal(button('下一条').disabled, false);

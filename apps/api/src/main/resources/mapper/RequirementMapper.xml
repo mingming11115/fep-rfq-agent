@@ -94,4 +94,21 @@
         where id=#{id} and version=#{version}
     </update>
 
+    <select id="hasResponseArtifacts" resultType="boolean">
+        with generated_requirements as (
+            select id,project_id from requirement where document_id=#{documentId}
+            and (parse_run_id is not null or block_id is not null or source_refs_json is null)
+        )
+        select exists(
+            select 1 from generated_requirements r join requirement_response a on a.requirement_id=r.id
+            union all
+            select 1 from generated_requirements r join response_confirmation_history h on h.requirement_id=r.id
+            union all
+            select 1 from generated_requirements r join response_review v on v.project_id=r.project_id
+                and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id
+            union all
+            select 1 from response_snapshot where project_id=#{projectId}
+                and json_search(payload,'one',#{documentId},null,'$.rows[*].sourceFileId') is not null
+        )
+    </select>
 </mapper>

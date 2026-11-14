@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.DatabaseBootstrapMapper">
+
+    <select id="hasTable" resultType="boolean">
+        select exists (select 1 from information_schema.tables
+                       where table_schema=database() and table_name=#{table})
+    </select>
+
+    <select id="hasColumn" resultType="boolean">
+        select exists (select 1 from information_schema.columns
+                       where table_schema=database() and table_name=#{table} and column_name=#{column})
+    </select>
+
+    <select id="hasCompletedSeed" resultType="boolean">
+        select exists (select 1 from rfq_demo_seed where id=#{id} and initialized_at is not null)
+    </select>
+
+    <select id="hasUsers" resultType="boolean">
+        select exists (select 1 from app_user)
+    </select>
+
+    <select id="hasSeedOtherThan" resultType="boolean">
+        select exists (select 1 from rfq_demo_seed where id&lt;&gt;#{id})
+    </select>
+
+    <insert id="lockSeed">
+        insert into rfq_demo_seed (id) values (#{id}) on duplicate key update id=id
+    </insert>
+</mapper>

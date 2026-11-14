@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.ResponseMapper">
+
+    <select id="findConfig" resultType="string">
+        select payload from project_response_config where project_id=#{projectId}
+    </select>
+
+    <select id="findResponse" resultType="string">
+        select payload from requirement_response where requirement_id=#{requirementId} and project_id=#{projectId}
+    </select>
+
+    <select id="lockResponse" resultType="string" useCache="false" flushCache="true">
+        select payload from requirement_response where requirement_id=#{requirementId} and project_id=#{projectId} for update
+    </select>
+
+    <select id="findResponseByRequirement" resultType="string">
+        select payload from requirement_response where requirement_id=#{requirementId}
+    </select>
+
+    <select id="lockResponseByRequirement" resultType="string" useCache="false" flushCache="true">
+        select payload from requirement_response where requirement_id=#{requirementId} for update
+    </select>
+
+    <select id="listResponses" resultType="string">
+        select payload from requirement_response where project_id=#{projectId}
+    </select>
+
+    <select id="listOrderedResponses" resultType="string">
+        select payload from requirement_response where project_id=#{projectId} order by requirement_id
+    </select>
+
+    <select id="listReviews" resultType="string">
+        select payload from response_review where project_id=#{projectId}
+    </select>
+
+    <select id="listOrderedReviews" resultType="string">
+        select payload from response_review where project_id=#{projectId} order by id
+    </select>
+
+    <select id="lockReviews" resultType="string" useCache="false" flushCache="true">
+        select payload from response_review where project_id=#{projectId} for update
+    </select>
+
+    <select id="findReview" resultType="string">
+        select payload from response_review where project_id=#{projectId} and id=#{id}
+    </select>
+
+    <select id="findSnapshot" resultType="string">
+        select payload from response_snapshot where project_id=#{projectId} and id=#{id}
+    </select>
+
+    <select id="listSnapshots" resultType="string">
+        select payload from response_snapshot where project_id=#{projectId} order by id
+    </select>
+
+    <select id="findHistoryEntry" resultType="string">
+        select payload from response_confirmation_history where requirement_id=#{requirementId} and project_id=#{projectId} and kind=#{kind} and entry_version=#{version}
+    </select>
+
+    <select id="listHistory" resultType="string">
+        select payload from response_confirmation_history where requirement_id=#{requirementId} and project_id=#{projectId} and kind=#{kind} order by entry_version desc
+    </select>
+
+    <select id="findLatestHistory" resultType="string">
+        select payload from response_confirmation_history where requirement_id=#{requirementId} and project_id=#{projectId} and kind=#{kind} order by entry_version desc limit 1
+    </select>
+
+    <select id="findMatchReference" resultType="string">
+        select json_extract(payload,'$.matchReference') from requirement_response
+        where requirement_id=#{requirementId} and json_contains_path(payload,'one','$.matchReference')
+    </select>
+
+    <select id="listAdoptedAfter" resultType="string">
+        select requirement_id from requirement_response
+        where requirement_id&gt;#{cursor} and json_contains_path(payload,'one','$.matchReference')
+            and not json_contains_path(payload,'one','$.matchReferenceInvalidatedAt')
+        order by requirement_id limit 25
+    </select>
+
+    <select id="listPendingDeviations" resultType="string">
+        select payload from response_review where project_id=#{projectId}
+            and json_unquote(json_extract(payload,'$.kind'))='deviation'
+            and json_unquote(json_extract(payload,'$.status'))='待处理'
+            and cast(json_unquote(json_extract(payload,'$.workVersion')) as unsigned)=#{workVersion}
+    </select>
+
+    <insert id="upsertResponse">
+        insert into requirement_response(requirement_id,project_id,payload) values (#{requirementId},#{projectId},#{payload})
+        on duplicate key update payload=values(payload),updated_at=current_timestamp
+    </insert>
+
+    <update id="updateResponse">
+        update requirement_response set payload=#{payload},updated_at=current_timestamp where requirement_id=#{requirementId}
+    </update>
+
+    <insert id="insertHistory">
+        insert into response_confirmation_history(requirement_id,project_id,kind,entry_version,payload)
+        values (#{requirementId},#{projectId},#{kind},#{version},#{payload})
+    </insert>
+
+    <insert id="upsertConfig">
+        insert into project_response_config(project_id,payload) values (#{projectId},#{payload}) as desired
+        on duplicate key update payload=desired.payload,updated_at=current_timestamp
+    </insert>
+
+    <insert id="insertSnapshot">
+        insert into response_snapshot(id,project_id,payload) values (#{id},#{projectId},#{payload})
+    </insert>
+
+    <update id="updateSnapshot">
+        update response_snapshot set payload=#{payload} where project_id=#{projectId} and id=#{id}
+    </update>
+
+    <insert id="upsertReview">
+        insert into response_review(id,project_id,payload) values (#{id},#{projectId},#{payload}) as desired
+        on duplicate key update payload=desired.payload
+    </insert>
+
+    <update id="cancelOpenReviews">
+        update response_review set payload=json_set(payload,'$.status','已取消','$.supersededByWorkVersion',#{workVersion})
+        where project_id=#{projectId} and json_unquote(json_extract(payload,'$.requirementId'))=#{requirementId}
+            and json_unquote(json_extract(payload,'$.status')) not in ('已关闭','已取消')
+    </update>
+
+    <update id="resetConfirmation">
+        update requirement_response set payload=json_set(
+            json_remove(payload,'$.confirmedAt','$.confirmedBy','$.confirmedById'),
+            '$.status','待确认','$.version',cast(json_unquote(json_extract(payload,'$.version')) as unsigned)+1,
+            '$.confirmationReason',#{reason},'$.sourceRevision',cast('true' as json))
+        where project_id=#{projectId} and requirement_id=#{requirementId}
+    </update>
+</mapper>

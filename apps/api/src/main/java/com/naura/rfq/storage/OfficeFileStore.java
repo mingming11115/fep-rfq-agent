@@ -2,27 +2,43 @@ package com.naura.rfq.storage;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.OfficeProperties;
+import jakarta.annotation.PostConstruct;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 @Component
 @Slf4j
+@NoArgsConstructor
 public class OfficeFileStore {
     public record Document(String id, String name, String fileType, String projectId, String fileId,
                            String sourceVersion, String accessHash, String key, long revision,
                            String savedAt, String lastError, String digest, String lastCallback, java.util.List<String> processedCallbacks) {
         public Document { processedCallbacks = processedCallbacks == null ? java.util.List.of() : java.util.List.copyOf(processedCallbacks); }
     }
-    private final Path root;
-    private final ObjectMapper json;
+    private Path root;
+    @Autowired
+    private OfficeProperties properties;
+    @Autowired
+    private ObjectMapper json;
+
     public OfficeFileStore(OfficeProperties properties, ObjectMapper json) {
-        this.root = properties.storageDir().toAbsolutePath().normalize(); this.json = json;
+        this.properties = properties;
+        this.json = json;
+        initialize();
     }
+
+    @PostConstruct
+    private void initialize() {
+        root = properties.storageDir().toAbsolutePath().normalize();
+    }
+
     public Document read(String id) {
         try { return json.readValue(directory(id).resolve("metadata.json").toFile(), Document.class); }
         catch (java.io.IOException e) {

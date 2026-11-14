@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -33,13 +34,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/craft")
 @Slf4j
 public class CraftDocumentController {
-    private final OfficeDocumentService service;
-    private final OfficeFileStore store;
-    private final OfficeProperties properties;
-
-    public CraftDocumentController(OfficeDocumentService service, OfficeFileStore store, OfficeProperties properties) {
-        this.service = service; this.store = store; this.properties = properties;
-    }
+    @Autowired
+    private OfficeDocumentService service;
+    @Autowired
+    private OfficeFileStore store;
+    @Autowired
+    private OfficeProperties properties;
 
     @PostMapping("/documents")
     public ResponseEntity<?> upload(@RequestParam MultipartFile file,
@@ -47,31 +47,46 @@ public class CraftDocumentController {
                                     @RequestParam(defaultValue = "") String projectId,
                                     @RequestParam(defaultValue = "") String fileId,
                                     @RequestParam(defaultValue = "") String sourceVersion) throws IOException {
-        byte[] original = read(file), latest = review == null ? null : read(review);
-        var metadata = service.uploadCraft(file.getOriginalFilename(), original,
-                review == null ? null : review.getOriginalFilename(), latest, projectId, fileId, sourceVersion);
-        return metadata(metadata);
+        try {
+            byte[] original = read(file), latest = review == null ? null : read(review);
+            var metadata = service.uploadCraft(file.getOriginalFilename(), original,
+                    review == null ? null : review.getOriginalFilename(), latest, projectId, fileId, sourceVersion);
+            return metadata(metadata);
+        } catch (Exception exception) {
+            log.error("Request failed in upload", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/documents/{id}")
     public ResponseEntity<?> document(@PathVariable String id,
                                       @RequestHeader(value = "X-Craft-Access", required = false) String access) {
-        return metadata(service.metadata(store.authorize(id, access)));
+        try {
+            return metadata(service.metadata(store.authorize(id, access)));
+        } catch (Exception exception) {
+            log.error("Request failed in document", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/documents/{id}/download")
     public ResponseEntity<?> download(@PathVariable String id,
                                       @RequestHeader(value = "X-Craft-Access", required = false) String access,
                                       @RequestParam(defaultValue = "review") String kind) {
-        var doc = store.authorize(id, access);
-        if (!kind.equals("original") && !kind.equals("review")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "下载版本无效");
+        try {
+            var doc = store.authorize(id, access);
+            if (!kind.equals("original") && !kind.equals("review")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "下载版本无效");
+            }
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(doc.name(), StandardCharsets.UTF_8).build().toString())
+                    .contentType(MediaType.parseMediaType(doc.fileType().equals("pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                    .body(new FileSystemResource(store.file(doc, kind.equals("original"))));
+        } catch (Exception exception) {
+            log.error("Request failed in download", exception);
+            throw exception;
         }
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(doc.name(), StandardCharsets.UTF_8).build().toString())
-                .contentType(MediaType.parseMediaType(doc.fileType().equals("pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
-                .body(new FileSystemResource(store.file(doc, kind.equals("original"))));
     }
 
     @PutMapping("/documents/{id}/review")
@@ -79,21 +94,26 @@ public class CraftDocumentController {
                                   @RequestHeader(value = "X-Craft-Access", required = false) String access,
                                   @RequestHeader(value = "If-Match", required = false) String ifMatch,
                                   HttpServletRequest request) throws IOException {
-        // Reject absent capabilities before reading an untrusted binary body.
-        store.authorize(id, access);
-        long revision = revision(ifMatch);
-        MediaType type;
-        try { type = MediaType.parseMediaType(request.getContentType() == null ? "" : request.getContentType()); }
-        catch (IllegalArgumentException e) {
-            log.error("工艺文档的媒体类型无效 errorType={}", e.getClass().getSimpleName());
-            throw binaryRequired();
+        try {
+            // Reject absent capabilities before reading an untrusted binary body.
+            store.authorize(id, access);
+            long revision = revision(ifMatch);
+            MediaType type;
+            try { type = MediaType.parseMediaType(request.getContentType() == null ? "" : request.getContentType()); }
+            catch (IllegalArgumentException e) {
+                log.error("工艺文档的媒体类型无效 errorType={}", e.getClass().getSimpleName());
+                throw binaryRequired();
+            }
+            if (!type.getType().equals("application") || !type.getSubtype().equals("octet-stream")) {
+                throw binaryRequired();
+            }
+            byte[] bytes;
+            try (var input = request.getInputStream()) { bytes = read(input, request.getContentLengthLong()); }
+            return metadata(service.saveCraftReview(id, access, revision, bytes));
+        } catch (Exception exception) {
+            log.error("Request failed in save", exception);
+            throw exception;
         }
-        if (!type.getType().equals("application") || !type.getSubtype().equals("octet-stream")) {
-            throw binaryRequired();
-        }
-        byte[] bytes;
-        try (var input = request.getInputStream()) { bytes = read(input, request.getContentLengthLong()); }
-        return metadata(service.saveCraftReview(id, access, revision, bytes));
     }
 
     private byte[] read(MultipartFile part) throws IOException {

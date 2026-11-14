@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.HistoryDocumentMapper">
+
+    <select id="listFamily" resultType="string">
+        select payload from history_document where bu_id=#{buId}
+            and (id=#{parent} or payload-&gt;&gt;'$.familyId'=#{family})
+    </select>
+
+    <update id="enqueueParse">
+        update history_document set payload=#{payload},parse_due_at=utc_timestamp(6),parse_token=null
+        where bu_id=#{buId} and id=#{id} and version=1
+    </update>
+
+    <select id="findDueParse" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$ParseKey">
+        select bu_id,id from history_document where parse_due_at&lt;=utc_timestamp(6)
+        order by parse_due_at,bu_id,id limit 1
+    </select>
+
+    <update id="claimParse">
+        update history_document set parse_token=#{token},parse_due_at=timestampadd(minute,5,utc_timestamp(6))
+        where bu_id=#{buId} and id=#{id} and version=1 and parse_due_at&lt;=utc_timestamp(6)
+    </update>
+
+    <select id="findParseOriginals" resultType="string">
+        select originals from history_document where bu_id=#{buId} and id=#{id} and version=1 and parse_token=#{token}
+    </select>
+
+    <update id="renewParse">
+        update history_document set parse_due_at=timestampadd(minute,5,utc_timestamp(6))
+        where bu_id=#{buId} and id=#{id} and version=1 and parse_token=#{token}
+    </update>
+
+    <select id="lockParseSource" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$ParseSource" useCache="false" flushCache="true">
+        select project_id,payload from history_document where bu_id=#{buId} and id=#{id} and version=1 and parse_token=#{token} for update
+    </select>
+
+    <update id="finishParse">
+        update history_document set payload=#{payload},parse_due_at=null,parse_token=null
+        where bu_id=#{buId} and id=#{id} and version=1
+    </update>
+
+    <select id="lockClauses" resultType="string" useCache="false" flushCache="true">
+        select payload from `history-rfq-record`
+        where bu_id=#{buId} and payload-&gt;&gt;'$.documentId'=#{id}
+        order by id,version for update
+    </select>
+
+    <select id="lockActiveClauses" resultType="string" useCache="false" flushCache="true">
+        select payload from `history-rfq-record`
+        where bu_id=#{buId} and payload-&gt;&gt;'$.documentId'=#{id}
+            and coalesce(payload-&gt;&gt;'$.status','')&lt;&gt;'已删除'
+        order by id,version for update
+    </select>
+
+    <update id="markDeleted">
+        update history_document set payload=#{payload},fingerprint=null,parse_due_at=null,parse_token=null
+        where bu_id=#{buId} and id=#{id}
+    </update>
+
+    <update id="updatePayload">
+        update history_document set payload=#{payload} where bu_id=#{buId} and id=#{id}
+    </update>
+
+    <select id="findLatestSource" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$DocumentSource">
+        select project_id,scope,payload,originals from history_document where bu_id=#{buId} and id=#{id} order by version desc limit 1
+    </select>
+
+    <select id="findLatestOriginals" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$DocumentOriginals">
+        select project_id,scope,originals from history_document where bu_id=#{buId} and id=#{id} order by version desc limit 1
+    </select>
+
+    <select id="findLatestScope" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$DocumentScope">
+        select project_id,scope from history_document where bu_id=#{buId} and id=#{id} order by version desc limit 1
+    </select>
+
+    <select id="findDeletedIds" resultType="string">
+        select id from history_document where bu_id=#{buId} and id=#{id} and payload-&gt;&gt;'$.status'='已删除'
+    </select>
+
+    <select id="lockByFingerprint" resultType="string" useCache="false" flushCache="true">
+        select payload from history_document where bu_id=#{buId} and fingerprint=#{fingerprint} for update
+    </select>
+
+    <insert id="insert">
+        insert into history_document(bu_id,id,version,project_id,scope,payload,fingerprint,originals,parse_due_at)
+        values (#{buId},#{id},1,#{projectId},#{scope},#{payload},#{fingerprint},#{originals},if(#{parsing},utc_timestamp(6),null))
+    </insert>
+
+    <select id="listScopedByIds" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$RecallDocument">
+        select id,payload from history_document
+        where bu_id=#{bu} and ((project_id is null and scope='BU共享') or (project_id=#{project} and scope='仅当前项目'))
+            and id in <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="listScopedByGroup" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$RecallDocument">
+        select id,payload from history_document
+        where bu_id=#{bu} and ((project_id is null and scope='BU共享') or (project_id=#{project} and scope='仅当前项目'))
+            and case when json_type(payload-&gt;'$.groupIds')='ARRAY'
+                then json_contains(payload-&gt;'$.groupIds',json_quote(#{groupId}))
+                else payload-&gt;&gt;'$.groupId'=#{groupId} end
+    </select>
+
+    <select id="listRecallChoices" resultType="com.naura.rfq.mapper.HistoryDocumentMapper$RecallChoice">
+        select d.id,d.payload,
+            exists(select 1 from `history-rfq-record` r
+                where r.bu_id=d.bu_id and r.project_id &lt;=&gt; d.project_id and r.scope=d.scope
+                  and r.payload-&gt;&gt;'$.documentId'=d.id
+                  and r.payload-&gt;&gt;'$.status'='已发布' and r.payload-&gt;&gt;'$.validity'='有效') as published,
+            exists(select 1 from `history-rfq-record` r
+                left join history_rfq_index_sync s on s.bu_id=r.bu_id and s.reply_id=r.id
+                where d.project_id is null and r.bu_id=d.bu_id and r.project_id is null and r.scope=d.scope
+                  and r.payload-&gt;&gt;'$.documentId'=d.id
+                  and r.payload-&gt;&gt;'$.status'='已发布' and r.payload-&gt;&gt;'$.validity'='有效'
+                  and (s.synced_at is null or s.operation&lt;&gt;'upsert' or s.version&lt;&gt;r.version)) as syncing
+        from history_document d
+        where d.bu_id=#{bu} and ((d.project_id is null and d.scope='BU共享')
+            or (d.project_id=#{project} and d.scope='仅当前项目'))
+        order by d.id
+    </select>
+</mapper>

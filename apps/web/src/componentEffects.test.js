@@ -33,7 +33,7 @@ test('pane proportions are scoped and corrupt or blocked storage falls back safe
  assert.equal(helpers.readPaneShare({getItem(){throw Error('blocked');}},a,60),60);
  assert.doesNotThrow(()=>helpers.savePaneShare({setItem(){throw Error('blocked');}},a,60));
 });
-test('metric changes finish at the newest value and respect reduced motion',async()=>{
+test('metric changes finish at the newest value with system reduced motion on or off',async()=>{
  const window=new Window({url:'http://localhost'}),frames=new Map();let id=0,reduced=false;
  Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,Element:window.Element,IS_REACT_ACT_ENVIRONMENT:true,
   requestAnimationFrame:callback=>{frames.set(++id,callback);return id;},cancelAnimationFrame:id=>frames.delete(id),matchMedia:()=>({matches:reduced})});
@@ -49,6 +49,8 @@ test('metric changes finish at the newest value and respect reduced motion',asyn
   await paint(30);assert.equal(host.firstChild.getAttribute('aria-label'),'30');
   await tick(0);await tick(130);assert.ok(Number(host.textContent)>30&&Number(host.textContent)<100);
   await paint(10);await tick(200);await tick(600);assert.equal(host.textContent,'10');
-  reduced=true;await paint(0);assert.equal(host.textContent,'0');assert.equal(frames.size,0);
+  reduced=true;await paint(0);assert.equal(host.textContent,'10');
+  await tick(600);await tick(680);assert.ok(Number(host.textContent)>0&&Number(host.textContent)<10);
+  await tick(900);assert.equal(host.textContent,'0');assert.equal(frames.size,0);
  }finally{await act(async()=>root.unmount());delete globalThis.matchMedia;await window.happyDOM.close();}
 });

@@ -12,5 +12,7 @@ public interface ProjectMemberMapper {
     Optional<ProjectMember> find(@Param("projectId") String projectId, @Param("userId") String userId);
     List<ProjectMember> findPage(@Param("projectId") String projectId, @Param("q") PageQuery query);
     long count(@Param("projectId") String projectId);
+    List<String> findEnabledUserIds(@Param("projectId") String projectId);
+
     int upsert(ProjectMember member);
 }

@@ -14,16 +14,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
-    private final SessionService sessions;
-    private final JwtService jwtService;
-    private final BusinessUnitMapper businessUnits;
+    @Autowired
+    private SessionService sessions;
+    @Autowired
+    private JwtService jwtService;
+    @Autowired
+    private BusinessUnitMapper businessUnits;
 
     public LoginResult login(LoginRequest request) {
         AppUser account = sessions.authenticate(request.username(), request.password())

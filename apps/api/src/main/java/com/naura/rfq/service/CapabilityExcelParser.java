@@ -13,24 +13,24 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 class CapabilityExcelParser {
     private static final int MAX_BYTES = 5 * 1024 * 1024;
     private static final int MAX_ROWS = 1000;
     private static final List<String> HEADERS = List.of("机型ID", "机型版本", "工艺ID", "工艺版本", "配置基线", "指标编码",
             "指标名称", "运算符", "下限", "上限", "含下限", "含上限", "单位", "值类型", "适用条件", "限制", "证据ID", "证据版本", "证据位置");
-    private final Validator validator;
+    @Autowired
+    private Validator validator;
 
     record Row(int number, Draft data) {}
     record Error(int rowNumber, String message) {}

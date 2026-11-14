@@ -13,7 +13,9 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipInputStream;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,12 +25,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Service
 @EnableConfigurationProperties(OfficeProperties.class)
 @Slf4j
+@NoArgsConstructor
 public class OfficeDocumentService {
     public static final String CLAUSE_PLUGIN = "asc.{B221C509-E18C-4D97-A387-22F57E505A68}";
-    private final OfficeProperties properties;
-    private final OfficeFileStore store;
-    private final OfficeJwt jwt;
-    private final ObjectMapper json;
+    @Autowired
+    private OfficeProperties properties;
+    @Autowired
+    private OfficeFileStore store;
+    @Autowired
+    private OfficeJwt jwt;
+    @Autowired
+    private ObjectMapper json;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
     private final Map<String, Object> locks = new ConcurrentHashMap<>();
     public OfficeDocumentService(OfficeProperties p, OfficeFileStore s, OfficeJwt j, ObjectMapper json) { properties = p; store = s; jwt = j; this.json = json; }

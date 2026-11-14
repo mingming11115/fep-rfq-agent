@@ -1,5 +1,10 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.HistoryDocumentMapper;
+import com.naura.rfq.mapper.HistoryDocumentMapper.ParseKey;
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.Table;
+import com.naura.rfq.mapper.ResponseMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,9 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Isolation;
@@ -29,16 +33,27 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class HistoryRfqService {
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final PlatformTransactionManager transactions;
-    private final KnowledgePublicationAccess access;
-    private final DocumentStorage storage;
-    private final HistoryParseService parser;
-    private final AuditService audit;
-    private final KnowledgeGroupService groups;
+    @Autowired
+    private HistoryDocumentMapper historyDocuments;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private PlatformTransactionManager transactions;
+    @Autowired
+    private KnowledgePublicationAccess access;
+    @Autowired
+    private DocumentStorage storage;
+    @Autowired
+    private HistoryParseService parser;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private KnowledgeGroupService groups;
 
     public record Intake(ObjectNode document, List<ObjectNode> clauses, boolean duplicate) {}
     public record Original(String name, String contentType, byte[] bytes) {}
@@ -121,10 +136,7 @@ public class HistoryRfqService {
         }
         String family = current.path("familyId").asText(parent);
         int currentNumber = current.path("versionNumber").asInt(1);
-        var versions = jdbc.query("""
-                select payload from history_document where bu_id=?
-                and (id=? or payload->>'$.familyId'=?)
-                """, (row, n) -> decode(row.getString("payload")), scope.buId(), parent, family);
+        var versions = historyDocuments.listFamily(scope.buId(), parent, family).stream().map(this::decode).toList();
         if (versions.stream().anyMatch(row -> row.path("versionNumber").asInt(1) > currentNumber
                 && !"已删除".equals(row.path("status").asText()))) {
             throw new BusinessException(409, "该版本已有后续版本，请从最新版本继续");
@@ -155,42 +167,28 @@ public class HistoryRfqService {
         var document = source.payload();
         if ("failed".equals(document.path("parseStatus").asText())) {
             document.put("parseStatus", "parsing").put("revision", revision + 1).remove("error");
-            jdbc.update("""
-                    update history_document set payload=?,parse_due_at=utc_timestamp(6),parse_token=null
-                    where bu_id=? and id=? and version=1
-                    """, document.toString(), buId, id);
+            historyDocuments.enqueueParse(buId, id, document.toString());
             return new Intake(document, List.of(), false);
         }
         return queueParse(user, source.scope(), files, "reparse:" + id + ":" + revision, source, revision, "重新解析原件");
     }
 
     ParseJob claimParse() {
-        var key = jdbc.query("""
-                select bu_id,id from history_document where parse_due_at<=utc_timestamp(6)
-                order by parse_due_at,bu_id,id limit 1
-                """, (row, n) -> new ParseKey(row.getString("bu_id"), row.getString("id"))).stream().findFirst().orElse(null);
+        var key = historyDocuments.findDueParse();
         if (key == null) {
             return null;
         }
         String token = UUID.randomUUID().toString();
-        int claimed = jdbc.update("""
-                update history_document set parse_token=?,parse_due_at=timestampadd(minute,5,utc_timestamp(6))
-                where bu_id=? and id=? and version=1 and parse_due_at<=utc_timestamp(6)
-                """, token, key.buId(), key.id());
+        int claimed = historyDocuments.claimParse(key.buId(), key.id(), token);
         if (claimed == 0) {
             return null;
         }
-        var originals = jdbc.query("""
-                select originals from history_document where bu_id=? and id=? and version=1 and parse_token=?
-                """, (row, n) -> decode(row.getString("originals")), key.buId(), key.id(), token);
+        var originals = historyDocuments.findParseOriginals(key.buId(), key.id(), token).stream().map(this::decode).toList();
         return originals.isEmpty() ? null : new ParseJob(key, token, originals.get(0));
     }
 
     void renewParse(ParseJob job) {
-        jdbc.update("""
-                update history_document set parse_due_at=timestampadd(minute,5,utc_timestamp(6))
-                where bu_id=? and id=? and version=1 and parse_token=?
-                """, job.key().buId(), job.key().id(), job.token());
+        historyDocuments.renewParse(job.key().buId(), job.key().id(), job.token());
     }
 
     void parse(ParseJob job) {
@@ -206,6 +204,7 @@ public class HistoryRfqService {
             }
             parsed = parser.extract(sources);
         } catch (IOException | RuntimeException failure) {
+            log.error("历史 RFQ 解析任务失败 documentId={}", job.key().id(), failure);
             log.warn("历史 RFQ 解析失败 documentId={} errorType={}", job.key().id(), failure.getClass().getSimpleName());
             error = failure instanceof BusinessException ? failure.getMessage() : "解析失败，请重试";
         }
@@ -215,11 +214,9 @@ public class HistoryRfqService {
     private void finishParse(ParseKey key, String token, HistoryParseView parsed, String error) {
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             access.lockBu(key.buId());
-            var source = jdbc.query("""
-                    select project_id,payload from history_document where bu_id=? and id=? and version=1 and parse_token=? for update
-                    """, (row, n) -> new SourceDocument(new Scope(key.buId(), row.getString("project_id")),
-                    (ObjectNode) decode(row.getString("payload")), json.nullNode()), key.buId(), key.id(), token)
-                    .stream().findFirst().orElse(null);
+            var source = historyDocuments.lockParseSource(key.buId(), key.id(), token)
+                    .map(row -> new SourceDocument(new Scope(key.buId(), row.projectId()),
+                            (ObjectNode) decode(row.payload()), json.nullNode())).orElse(null);
             if (source == null) {
                 return;
             }
@@ -230,10 +227,7 @@ public class HistoryRfqService {
             } else {
                 applyParse(source.scope(), document, parsed);
             }
-            jdbc.update("""
-                    update history_document set payload=?,parse_due_at=null,parse_token=null
-                    where bu_id=? and id=? and version=1
-                    """, document.toString(), key.buId(), key.id());
+            historyDocuments.finishParse(key.buId(), key.id(), document.toString());
         });
     }
 
@@ -262,18 +256,13 @@ public class HistoryRfqService {
         access.lockBu(bu);
         var document = sourceDocument(user, bu, id).payload();
         requireRevision(document, revision);
-        var clauses = jdbc.query("""
-                select payload from `history-rfq-record`
-                where bu_id=? and payload->>'$.documentId'=?
-                order by id,version for update
-                """, (row, n) -> decode(row.getString("payload")), bu, id);
+        var clauses = historyDocuments.lockClauses(bu, id).stream().map(this::decode).toList();
         if (clauses.stream().anyMatch(clause -> "待审核".equals(clause.path("status").asText())
                 || ("已发布".equals(clause.path("status").asText()) && !"被替代".equals(clause.path("validity").asText())))) {
             throw new BusinessException(409, "请先退回待审核条款，并撤销当前已发布条款，再删除文档");
         }
         document.put("status", "已删除").put("revision", revision + 1);
-        jdbc.update("update history_document set payload=?,fingerprint=null,parse_due_at=null,parse_token=null where bu_id=? and id=?",
-                document.toString(), bu, id);
+        historyDocuments.markDeleted(bu, id, document.toString());
         audit.successInBu(user.id(), bu, "删除历史 RFQ 文档", "history_document", id, "");
         return document;
     }
@@ -296,7 +285,7 @@ public class HistoryRfqService {
             document.set("groupIds", groups.groupIds(bu, request.groupIds(), document.path("groupIds")));
         }
         document.put("revision", request.revision() + 1);
-        jdbc.update("update history_document set payload=? where bu_id=? and id=?", document.toString(), bu, id);
+        historyDocuments.updatePayload(bu, id, document.toString());
         audit.successInBu(user.id(), bu, "维护历史 RFQ 文档信息", "history_document", id, "");
         return document;
     }
@@ -329,8 +318,8 @@ public class HistoryRfqService {
         if (!id.matches("HK-[A-Za-z0-9-]{1,80}")) {
             throw new BusinessException(400, "补录操作编号无效");
         }
-        var duplicate = jdbc.query("select payload from `history-rfq-record` where bu_id=? and id=? and version=1",
-                (row, n) -> (ObjectNode) decode(row.getString(1)), bu, id).stream().findFirst().orElse(null);
+        var duplicate = knowledgeRecords.findVersion(Table.HISTORY, bu, id, 1).stream()
+                .map(row -> (ObjectNode) decode(row.payload())).findFirst().orElse(null);
         if (duplicate != null) {
             if (!documentId.equals(duplicate.path("documentId").asText()) || !user.id().equals(duplicate.path("createdById").asText())) {
                 throw new BusinessException(409, "条款编号已使用");
@@ -351,10 +340,9 @@ public class HistoryRfqService {
     }
 
     private SourceDocument sourceDocument(CurrentUser user, String bu, String id) {
-        var source = jdbc.query("select project_id,scope,payload,originals from history_document where bu_id=? and id=? order by version desc limit 1",
-                (row, n) -> new SourceDocument(new Scope(bu, row.getString("project_id")),
-                        (ObjectNode) decode(row.getString("payload")), row.getString("originals") == null ? json.nullNode() : decode(row.getString("originals"))), bu, id)
-                .stream().findFirst().orElseThrow(() -> new BusinessException(404, "历史 RFQ 文档不存在"));
+        var source = historyDocuments.findLatestSource(bu, id)
+                .map(row -> new SourceDocument(new Scope(bu, row.projectId()), (ObjectNode) decode(row.payload()),
+                        row.originals() == null ? json.nullNode() : decode(row.originals()))).orElseThrow(() -> new BusinessException(404, "历史 RFQ 文档不存在"));
         access.requireScope(user, bu, source.scope().projectId(), source.payload().path("scope").asText(source.scope().name()));
         String origin = KnowledgePublicationAccess.recordProjectId(source.payload());
         if (!origin.isBlank()) {
@@ -388,8 +376,7 @@ public class HistoryRfqService {
         access.requireWriter(user, buId, shareWithBu);
         var scope = new Scope(buId, shareWithBu ? null : projectId);
         String fingerprint = "snapshot:" + snapshotId + (shareWithBu ? ":BU" : ":PROJECT");
-        var snapshot = jdbc.query("select payload from response_snapshot where project_id=? and id=?",
-                (row, n) -> decode(row.getString("payload")), projectId, snapshotId).stream().findFirst()
+        var snapshot = responseRecords.findSnapshot(projectId, snapshotId).stream().map(this::decode).findFirst()
                 .orElseThrow(() -> new BusinessException(404, "定稿快照不存在"));
         if (!ApprovedDocumentExportService.approved(snapshot) || !snapshot.path("rows").isArray() || snapshot.path("rows").isEmpty()) {
             throw new BusinessException(409, "需要有条款的已批准定稿快照");
@@ -422,9 +409,7 @@ public class HistoryRfqService {
             case "answer" -> 1;
             default -> throw new BusinessException(400, "原件类型必须是 main 或 answer");
         };
-        var document = jdbc.query("select project_id,scope,originals from history_document where bu_id=? and id=? order by version desc limit 1",
-                (row, n) -> new DocumentOriginals(row.getString("project_id"), row.getString("scope"),
-                        row.getString("originals")), buId, id).stream().findFirst()
+        var document = historyDocuments.findLatestOriginals(buId, id)
                 .orElseThrow(() -> new BusinessException(404, "历史 RFQ 文档不存在"));
         access.requireScope(user, buId, document.projectId(), document.scope());
         if (document.originals() == null) {
@@ -455,11 +440,7 @@ public class HistoryRfqService {
             List<ObjectNode> clauses, JsonNode originals) {
         String id = document.path("id").asText();
         boolean parsing = "parsing".equals(document.path("parseStatus").asText());
-        jdbc.update("""
-                insert into history_document(bu_id,id,version,project_id,scope,payload,fingerprint,originals,parse_due_at)
-                values (?,?,1,?,?,?,?,?,if(?,utc_timestamp(6),null))
-                """,
-                scope.buId(), id, scope.projectId(), scope.name(), document.toString(), fingerprint,
+        historyDocuments.insert(scope.buId(), id, scope.projectId(), scope.name(), document.toString(), fingerprint,
                 originals == null ? null : originals.toString(), parsing);
         for (ObjectNode clause : clauses) {
             insertClause(scope, clause);
@@ -470,20 +451,15 @@ public class HistoryRfqService {
     }
 
     private void insertClause(Scope scope, ObjectNode clause) {
-        jdbc.update("insert into `history-rfq-record`(bu_id,id,version,project_id,scope,payload) values (?,?,1,?,?,?)",
-                scope.buId(), clause.path("id").asText(), scope.projectId(), scope.name(), clause.toString());
+        knowledgeRecords.insertVersion(Table.HISTORY, scope.buId(), clause.path("id").asText(), 1,
+                scope.projectId(), scope.name(), clause.toString());
     }
 
     private Intake existing(Scope scope, String fingerprint) {
-        return jdbc.query("select payload from history_document where bu_id=? and fingerprint=? for update",
-                (row, n) -> (ObjectNode) decode(row.getString("payload")), scope.buId(), fingerprint).stream().findFirst()
-                .map(document -> new Intake(document, jdbc.query("""
-                        select payload from `history-rfq-record`
-                        where bu_id=? and json_unquote(json_extract(payload,'$.documentId'))=?
-                          and coalesce(payload->>'$.status','')<>'已删除'
-                        order by id,version for update
-                        """, (row, n) -> (ObjectNode) decode(row.getString("payload")),
-                        scope.buId(), document.path("id").asText()), true)).orElse(null);
+        return historyDocuments.lockByFingerprint(scope.buId(), fingerprint)
+                .map(payload -> (ObjectNode) decode(payload))
+                .map(document -> new Intake(document, historyDocuments.lockActiveClauses(scope.buId(), document.path("id").asText())
+                        .stream().map(payload -> (ObjectNode) decode(payload)).toList(), true)).orElse(null);
     }
 
     private ObjectNode document(CurrentUser user, Scope scope, String id, String name, String sourceType) {
@@ -546,7 +522,5 @@ public class HistoryRfqService {
     }
 
     private record StoredOriginal(String name, DocumentStorage.StoredFile file) {}
-    private record ParseKey(String buId, String id) {}
     record ParseJob(ParseKey key, String token, JsonNode originals) {}
-    private record DocumentOriginals(String projectId, String scope, String originals) {}
 }

@@ -72,9 +72,3 @@
   transition: left 320ms cubic-bezier(.22,.61,.36,1), right 320ms cubic-bezier(.22,.61,.36,1), width 320ms cubic-bezier(.22,.61,.36,1), transform 320ms cubic-bezier(.22,.61,.36,1);
   will-change: left, width;
 }
-@media (prefers-reduced-motion: reduce) {
-  /* Keep the explicitly requested tab indicator motion without enabling other animations. */
-  .rfq-theme .ant-tabs-top > .ant-tabs-nav .ant-tabs-ink-bar {
-    transition-duration: 320ms !important;
-  }
-}

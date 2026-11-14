@@ -12,7 +12,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -29,27 +30,44 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
+@Slf4j
 public class DocumentController {
-    private final DocumentService service;
-    private final DocumentReplacementService replacements;
+    @Autowired
+    private DocumentService service;
+    @Autowired
+    private DocumentReplacementService replacements;
 
     @PostMapping("/projects/{projectId}/documents/{documentId}/replacement")
     public ApiResponse<ObjectNode> uploadReplacement(@PathVariable String projectId, @PathVariable String documentId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) List<String> historyDocumentIds) throws IOException {
-        return ApiResponse.success(replacements.upload(CurrentUserHolder.require(), projectId, documentId, file, historyDocumentIds));
+        try {
+            return ApiResponse.success(replacements.upload(CurrentUserHolder.require(), projectId, documentId, file, historyDocumentIds));
+        } catch (Exception exception) {
+            log.error("Request failed in uploadReplacement", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/projects/{projectId}/document-replacements/{documentId}")
     public ApiResponse<ObjectNode> replacementImpact(@PathVariable String projectId, @PathVariable String documentId) {
-        return ApiResponse.success(replacements.preview(CurrentUserHolder.require(), projectId, documentId));
+        try {
+            return ApiResponse.success(replacements.preview(CurrentUserHolder.require(), projectId, documentId));
+        } catch (Exception exception) {
+            log.error("Request failed in replacementImpact", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/projects/{projectId}/document-replacements/{documentId}/activate")
     public ApiResponse<ObjectNode> activateReplacement(@PathVariable String projectId, @PathVariable String documentId,
             @RequestBody DocumentReplacementService.Activation request) {
-        return ApiResponse.success(replacements.activate(CurrentUserHolder.require(), projectId, documentId, request));
+        try {
+            return ApiResponse.success(replacements.activate(CurrentUserHolder.require(), projectId, documentId, request));
+        } catch (Exception exception) {
+            log.error("Request failed in activateReplacement", exception);
+            throw exception;
+        }
     }
 
     public record CancelReplacement(String reason) {}
@@ -57,8 +75,13 @@ public class DocumentController {
     @PostMapping("/projects/{projectId}/document-replacements/{documentId}/cancel")
     public ApiResponse<Boolean> cancelReplacement(@PathVariable String projectId, @PathVariable String documentId,
             @RequestBody CancelReplacement request) {
-        replacements.cancel(CurrentUserHolder.require(), projectId, documentId, request.reason());
-        return ApiResponse.success(true);
+        try {
+            replacements.cancel(CurrentUserHolder.require(), projectId, documentId, request.reason());
+            return ApiResponse.success(true);
+        } catch (Exception exception) {
+            log.error("Request failed in cancelReplacement", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/projects/{projectId}/documents")
@@ -66,42 +89,72 @@ public class DocumentController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sort) {
-        return ApiResponse.success(service.list(CurrentUserHolder.require(), projectId, page, size, sort));
+        try {
+            return ApiResponse.success(service.list(CurrentUserHolder.require(), projectId, page, size, sort));
+        } catch (Exception exception) {
+            log.error("Request failed in list", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/documents/{documentId}")
     public ApiResponse<DocumentView> detail(@PathVariable String documentId) {
-        return ApiResponse.success(service.detail(CurrentUserHolder.require(), documentId));
+        try {
+            return ApiResponse.success(service.detail(CurrentUserHolder.require(), documentId));
+        } catch (Exception exception) {
+            log.error("Request failed in detail", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/projects/{projectId}/documents")
     public ApiResponse<DocumentView> upload(@PathVariable String projectId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) List<String> historyDocumentIds) throws IOException {
-        return ApiResponse.success(service.upload(CurrentUserHolder.require(), projectId, file, historyDocumentIds));
+        try {
+            return ApiResponse.success(service.upload(CurrentUserHolder.require(), projectId, file, historyDocumentIds));
+        } catch (Exception exception) {
+            log.error("Request failed in upload", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/projects/{projectId}/history-recall-options")
     public ApiResponse<List<HistoryRecallScope.Choice>> historyRecallOptions(@PathVariable String projectId) {
-        return ApiResponse.success(service.historyRecallChoices(CurrentUserHolder.require(), projectId));
+        try {
+            return ApiResponse.success(service.historyRecallChoices(CurrentUserHolder.require(), projectId));
+        } catch (Exception exception) {
+            log.error("Request failed in historyRecallOptions", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/projects/{projectId}/documents/sample")
     public ApiResponse<DocumentView> uploadSample(@PathVariable String projectId) throws Exception {
-        return ApiResponse.success(service.uploadSample(CurrentUserHolder.require(), projectId));
+        try {
+            return ApiResponse.success(service.uploadSample(CurrentUserHolder.require(), projectId));
+        } catch (Exception exception) {
+            log.error("Request failed in uploadSample", exception);
+            throw exception;
+        }
     }
 
     @GetMapping("/documents/{documentId}/download")
     public ResponseEntity<Resource> download(@PathVariable String documentId) throws IOException {
-        var download = service.download(CurrentUserHolder.require(), documentId);
-        return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
-                .header("X-Content-Type-Options", "nosniff")
-                .header("Content-Disposition", ContentDisposition.attachment()
-                        .filename(download.name(), StandardCharsets.UTF_8).build().toString())
-                .contentType(MediaType.parseMediaType(download.contentType()))
-                .contentLength(download.sizeBytes())
-                .eTag("\"" + download.sha256().toLowerCase(Locale.ROOT) + "\"")
-                .body(new ByteArrayResource(download.content()));
+        try {
+            var download = service.download(CurrentUserHolder.require(), documentId);
+            return ResponseEntity.ok()
+                    .header("Cache-Control", "no-store")
+                    .header("X-Content-Type-Options", "nosniff")
+                    .header("Content-Disposition", ContentDisposition.attachment()
+                            .filename(download.name(), StandardCharsets.UTF_8).build().toString())
+                    .contentType(MediaType.parseMediaType(download.contentType()))
+                    .contentLength(download.sizeBytes())
+                    .eTag("\"" + download.sha256().toLowerCase(Locale.ROOT) + "\"")
+                    .body(new ByteArrayResource(download.content()));
+        } catch (Exception exception) {
+            log.error("Request failed in download", exception);
+            throw exception;
+        }
     }
 }

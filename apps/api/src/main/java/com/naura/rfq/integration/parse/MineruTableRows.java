@@ -8,8 +8,10 @@ import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.html.HTML;
 import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.parser.ParserDelegator;
+import lombok.extern.slf4j.Slf4j;
 
 /** Reads MinerU's HTML table as text, expanding spans into the RFQ table grid. */
+@Slf4j
 final class MineruTableRows extends HTMLEditorKit.ParserCallback {
     private static final int MAX_COLUMNS = 256;
     private static final int MAX_CELLS = 100_000;
@@ -113,6 +115,7 @@ final class MineruTableRows extends HTMLEditorKit.ParserCallback {
         try {
             return Math.max(1, Math.min(MAX_CELLS, Integer.parseInt(value.toString().strip())));
         } catch (NumberFormatException ignored) {
+            log.error("解析 MinerU 表格跨行跨列属性失败", ignored);
             return 1;
         }
     }

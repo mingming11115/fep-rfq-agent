@@ -1,11 +1,13 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.Table;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue;
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import com.naura.rfq.integration.standardreply.StandardReplyImportParser;
 import com.naura.rfq.integration.standardreply.StandardReplyImportParser.RowError;
 import com.naura.rfq.mapper.ProjectMapper;
@@ -16,30 +18,35 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class StandardReplyService {
     private static final Set<String> EDITABLE = Set.of("草稿", "退回");
-    private static final String SELECT = "select id, version, revision, project_id, scope, payload from `standard-reply-record`";
 
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final AccessGuard guard;
-    private final KnowledgePublicationAccess publicationAccess;
-    private final KnowledgeIndexQueue index;
-    private final ProjectMapper projects;
-    private final AuditService audit;
-    private final StandardReplyImportParser importer;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private AccessGuard guard;
+    @Autowired
+    private KnowledgePublicationAccess publicationAccess;
+    @Autowired
+    private KnowledgeIndexQueue index;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private StandardReplyImportParser importer;
 
     public record ImportResult(List<ObjectNode> items, List<Integer> skippedRows, List<RowError> errors) {}
 
@@ -75,8 +82,7 @@ public class StandardReplyService {
 
     public ObjectNode version(CurrentUser user, String buId, String id, int version) {
         guard.requireBu(user, buId);
-        var record = find(jdbc.query(SELECT + " where bu_id=? and id=? and version=?", this::map,
-                buId, id, version), version);
+        var record = find(knowledgeRecords.findVersion(Table.STANDARD_REPLY, buId, id, version).stream().map(this::map).toList(), version);
         requireReadable(user, buId, record);
         return withIndexStatus(buId, record);
     }
@@ -240,7 +246,7 @@ public class StandardReplyService {
     }
 
     private List<Reply> lockChain(String buId, String id) {
-        return jdbc.query(SELECT + " where bu_id=? and id=? order by version for update", this::map, buId, id);
+        return knowledgeRecords.lockVersions(Table.STANDARD_REPLY, buId, id).stream().map(this::map).toList();
     }
 
     private Reply checkedVersion(CurrentUser user, String buId, List<Reply> chain, int version, long revision) {
@@ -255,11 +261,11 @@ public class StandardReplyService {
                 .orElseThrow(() -> new BusinessException(404, "标准回复版本不存在"));
     }
 
-    private Reply map(java.sql.ResultSet result, int rowNumber) throws java.sql.SQLException {
+    private Reply map(KnowledgeRecordMapper.VersionRow row) {
         try {
-            var payload = (ObjectNode) json.readTree(result.getString("payload"));
-            return new Reply(result.getString("id"), result.getInt("version"), result.getLong("revision"),
-                    result.getString("project_id"), result.getString("scope"), payload);
+            var payload = (ObjectNode) json.readTree(row.payload());
+            return new Reply(row.id(), row.version(), row.revision(),
+                    row.projectId(), row.scope(), payload);
         } catch (JsonProcessingException ex) {
             log.error("解析标准回复记录失败 errorType={}", ex.getClass().getSimpleName());
             throw new IllegalStateException("标准回复记录格式异常", ex);
@@ -267,17 +273,15 @@ public class StandardReplyService {
     }
 
     private void insert(String buId, String id, int version, String projectId, String scope, ObjectNode payload) {
-        jdbc.update("insert into `standard-reply-record`(bu_id,id,version,project_id,scope,payload) values (?,?,?,?,?,?)",
-                buId, id, version, projectId, scope, payload.toString());
+        knowledgeRecords.insertVersion(Table.STANDARD_REPLY, buId, id, version, projectId, scope, payload.toString());
     }
 
     private ObjectNode saveAction(CurrentUser user, String buId, Reply record, String action, String reason) {
         long revision = record.revision() + 1;
         record.payload().put("revision", revision);
         addHistory(record.payload(), user, action, reason);
-        int changed = jdbc.update("update `standard-reply-record` set payload=?,revision=? "
-                        + "where bu_id=? and id=? and version=? and revision=?",
-                record.payload().toString(), revision, buId, record.id(), record.version(), record.revision());
+        int changed = knowledgeRecords.updateVersion(Table.STANDARD_REPLY, buId, record.id(), record.version(),
+                revision, record.revision(), record.payload().toString());
         requireState(changed == 1, "标准回复已变更，请刷新后再操作");
         audit(user, buId, record.id(), record.version(), action, reason);
         return withIndexStatus(buId, new Reply(record.id(), record.version(), revision, record.projectId(), record.scope(), record.payload()));

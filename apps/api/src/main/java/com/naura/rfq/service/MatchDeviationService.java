@@ -1,5 +1,6 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.ResponseMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -10,30 +11,33 @@ import com.naura.rfq.security.CurrentUser;
 import com.naura.rfq.mapper.UserBuRoleMapper;
 import java.time.Instant;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 class MatchDeviationService {
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final AuditService audit;
-    private final ProjectWorkScope work;
-    private final ConfirmationAssignmentService assignments;
-    private final UserBuRoleMapper roles;
+    @Autowired
+    private ResponseMapper responseRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private ProjectWorkScope work;
+    @Autowired
+    private ConfirmationAssignmentService assignments;
+    @Autowired
+    private UserBuRoleMapper roles;
 
     long workVersion(String project) {
         return work.version(project);
     }
 
     ObjectNode find(Project project, Requirement requirement) {
-        return jdbc.query("select payload from response_review where project_id=? and id=?",
-                (row, n) -> parse(row.getString(1)), project.getId(), id(project, requirement))
-                .stream().findFirst().orElse(null);
+        return responseRecords.findReview(project.getId(), id(project, requirement)).stream().map(this::parse)
+                .findFirst().orElse(null);
     }
 
     // Every write is serialized by the caller's project lock.
@@ -147,8 +151,7 @@ class MatchDeviationService {
     }
 
     private JsonNode response(String requirement) {
-        return jdbc.query("select payload from requirement_response where requirement_id=?",
-                (row, n) -> parse(row.getString(1)), requirement).stream().findFirst().orElseGet(json::createObjectNode);
+        return responseRecords.findResponseByRequirement(requirement).stream().map(this::parse).findFirst().orElseGet(json::createObjectNode);
     }
 
     private String answerFingerprint(JsonNode response) {
@@ -159,12 +162,7 @@ class MatchDeviationService {
     }
 
     void carryForward(Project project, long version) {
-        for (var old : jdbc.query("""
-                select payload from response_review where project_id=?
-                and json_unquote(json_extract(payload,'$.kind'))='deviation'
-                and json_unquote(json_extract(payload,'$.status'))='待处理'
-                and cast(json_unquote(json_extract(payload,'$.workVersion')) as unsigned)=?
-                """, (row, n) -> parse(row.getString(1)), project.getId(), version - 1)) {
+        for (var old : responseRecords.listPendingDeviations(project.getId(), version - 1).stream().map(this::parse).toList()) {
             var next = old.deepCopy().put("id", "MATCH-DEV:" + version + ":" + old.path("requirementId").asText())
                     .put("workVersion", version).put("version", 0).put("carriedFrom", old.path("id").asText());
             old.put("status", "已取消").put("supersededByWorkVersion", version);
@@ -175,10 +173,7 @@ class MatchDeviationService {
 
     private void save(Project project, ObjectNode item) {
         item.put("version", item.path("version").asLong() + 1);
-        jdbc.update("""
-                insert into response_review(id,project_id,payload) values (?,?,?) as desired
-                on duplicate key update payload=desired.payload
-                """, item.path("id").asText(), project.getId(), item.toString());
+        responseRecords.upsertReview(item.path("id").asText(), project.getId(), item.toString());
     }
 
     private String id(Project project, Requirement requirement) {

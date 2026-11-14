@@ -10,15 +10,49 @@ import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 class CapabilityMatch {
     private record Unit(String dimension, BigDecimal factor) {}
+    private record Interval(BigDecimal lower, BigDecimal upper, boolean lowerClosed, boolean upperClosed) {
+        Interval scale(BigDecimal factor) {
+            return new Interval(lower == null ? null : lower.multiply(factor), upper == null ? null : upper.multiply(factor), lowerClosed, upperClosed);
+        }
+
+        boolean contains(Interval other) {
+            return atLeast(lower, lowerClosed, other.lower, other.lowerClosed)
+                    && atLeast(negate(upper), upperClosed, negate(other.upper), other.upperClosed);
+        }
+
+        boolean disjoint(Interval other) {
+            return before(upper, upperClosed, other.lower, other.lowerClosed) || before(other.upper, other.upperClosed, lower, lowerClosed);
+        }
+
+        private static boolean atLeast(BigDecimal bound, boolean closed, BigDecimal other, boolean otherClosed) {
+            if (bound == null) {
+                return true;
+            }
+            if (other == null) {
+                return false;
+            }
+            int cmp = other.compareTo(bound);
+            return cmp > 0 || cmp == 0 && (closed || !otherClosed);
+        }
+
+        private static boolean before(BigDecimal end, boolean endClosed, BigDecimal start, boolean startClosed) {
+            if (end == null || start == null) {
+                return false;
+            }
+            int cmp = end.compareTo(start);
+            return cmp < 0 || cmp == 0 && !(endClosed && startClosed);
+        }
+
+        private static BigDecimal negate(BigDecimal value) { return value == null ? null : value.negate(); }
+    }
     private static final Map<String, Unit> UNITS = Map.ofEntries(
             Map.entry("μm", unit("length", "0.000001")), Map.entry("µm", unit("length", "0.000001")),
             Map.entry("um", unit("length", "0.000001")), Map.entry("mm", unit("length", "0.001")),
@@ -27,8 +61,10 @@ class CapabilityMatch {
             Map.entry("MPa", unit("pressure", "1000000")), Map.entry("bar", unit("pressure", "100000")),
             Map.entry("s", unit("time", "1")), Map.entry("min", unit("time", "60")), Map.entry("h", unit("time", "3600")),
             Map.entry("g", unit("mass", "0.001")), Map.entry("kg", unit("mass", "1")), Map.entry("t", unit("mass", "1000")));
-    private final CapabilityLibraryService library;
-    private final ObjectMapper json;
+    @Autowired
+    private CapabilityLibraryService library;
+    @Autowired
+    private ObjectMapper json;
 
     void validate(String bu, Context context) {
         if (context.devices() == null) {
@@ -170,42 +206,6 @@ class CapabilityMatch {
                     ? new Interval(lower, upper, lc, uc) : null;
             default -> null;
         };
-    }
-
-    private record Interval(BigDecimal lower, BigDecimal upper, boolean lowerClosed, boolean upperClosed) {
-        Interval scale(BigDecimal factor) {
-            return new Interval(lower == null ? null : lower.multiply(factor), upper == null ? null : upper.multiply(factor), lowerClosed, upperClosed);
-        }
-
-        boolean contains(Interval other) {
-            return atLeast(lower, lowerClosed, other.lower, other.lowerClosed)
-                    && atLeast(negate(upper), upperClosed, negate(other.upper), other.upperClosed);
-        }
-
-        boolean disjoint(Interval other) {
-            return before(upper, upperClosed, other.lower, other.lowerClosed) || before(other.upper, other.upperClosed, lower, lowerClosed);
-        }
-
-        private static boolean atLeast(BigDecimal bound, boolean closed, BigDecimal other, boolean otherClosed) {
-            if (bound == null) {
-                return true;
-            }
-            if (other == null) {
-                return false;
-            }
-            int cmp = other.compareTo(bound);
-            return cmp > 0 || cmp == 0 && (closed || !otherClosed);
-        }
-
-        private static boolean before(BigDecimal end, boolean endClosed, BigDecimal start, boolean startClosed) {
-            if (end == null || start == null) {
-                return false;
-            }
-            int cmp = end.compareTo(start);
-            return cmp < 0 || cmp == 0 && !(endClosed && startClosed);
-        }
-
-        private static BigDecimal negate(BigDecimal value) { return value == null ? null : value.negate(); }
     }
 
     private static Unit unit(String dimension, String factor) { return new Unit(dimension, new BigDecimal(factor)); }

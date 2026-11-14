@@ -10,20 +10,24 @@ import com.naura.rfq.security.CurrentUser;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class ProjectMaintenanceService {
-    private final ProjectMapper projects;
-    private final ProjectMemberMapper members;
-    private final ProjectAccessService projectAccess;
-    private final AccessGuard access;
-    private final AuditService audit;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private ProjectMemberMapper members;
+    @Autowired
+    private ProjectAccessService projectAccess;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
 
     public record PatchCommand(long version,String reason,String name,boolean hasCustomer,String customer,
             boolean hasDeadline,LocalDate deadline) {}

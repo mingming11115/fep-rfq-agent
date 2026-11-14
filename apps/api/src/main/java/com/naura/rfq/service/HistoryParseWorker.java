@@ -1,6 +1,6 @@
 package com.naura.rfq.service;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -8,9 +8,9 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class HistoryParseWorker {
-    private final HistoryRfqService history;
+    @Autowired
+    private HistoryRfqService history;
     private volatile HistoryRfqService.ParseJob active;
 
     @Value("${rfq.history-parse.worker-enabled:true}")

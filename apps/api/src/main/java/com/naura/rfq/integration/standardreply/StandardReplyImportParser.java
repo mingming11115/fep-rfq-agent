@@ -41,23 +41,6 @@ public class StandardReplyImportParser {
         }
     }
 
-    private enum Field {
-        TITLE("回复标题", "title", 200),
-        REQUIREMENT("客户要求", "requirement", 4000),
-        ANSWER("标准回复", "answer", 8000),
-        CONDITIONS("适用条件", "conditions", 2000);
-
-        private final String label;
-        private final String alias;
-        private final int maxLength;
-
-        Field(String label, String alias, int maxLength) {
-            this.label = label;
-            this.alias = alias;
-            this.maxLength = maxLength;
-        }
-    }
-
     public ParsedImport parse(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "请选择非空的标准回复文件");

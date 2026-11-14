@@ -1,16 +1,17 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
 import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue;
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import com.naura.rfq.model.dto.CapabilityLibraryRequest;
 import com.naura.rfq.security.CurrentUser;
 import com.naura.rfq.service.CapabilityCatalog.Row;
-import com.naura.rfq.service.CapabilityCatalog.Table;
+import com.naura.rfq.mapper.Table;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -23,9 +24,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,18 +35,23 @@ import static com.naura.rfq.service.CapabilityCatalog.clean;
 import static com.naura.rfq.service.CapabilityCatalog.scope;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class CapabilityLibraryService {
     private static final Set<String> EDITABLE = Set.of("草稿", "退回");
     private static final Set<String> VALUE_TYPES = Set.of("保证值", "典型值", "单次测试值");
     private static final List<String> BASELINE_FIELDS = List.of("modelId", "modelVersion", "processId", "processVersion", "config", "metricCode");
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final KnowledgePublicationAccess access;
-    private final CapabilityCatalog catalog;
-    private final CapabilityExcelParser excel;
-    private final KnowledgeIndexQueue index;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private KnowledgePublicationAccess access;
+    @Autowired
+    private CapabilityCatalog catalog;
+    @Autowired
+    private CapabilityExcelParser excel;
+    @Autowired
+    private KnowledgeIndexQueue index;
 
     public record ImportError(int rowNumber, String message) {}
     public record Imported(List<ObjectNode> items, List<Integer> skippedRows, List<ImportError> errors) {}
@@ -144,13 +149,8 @@ public class CapabilityLibraryService {
     }
 
     List<ObjectNode> matchingVersions(String buId, String project, CapabilityLibraryRequest.Lookup input) {
-        return catalog.rows(Table.CAPABILITY, """
-                where bu_id=? and (project_id is null or project_id=?)
-                  and json_unquote(json_extract(payload,'$.status'))='已发布'
-                  and json_unquote(json_extract(payload,'$.modelId'))=?
-                  and json_unquote(json_extract(payload,'$.metricCode'))=?
-                order by id,version desc
-                """, buId, project, input.modelId(), input.metricCode()).stream()
+        return knowledgeRecords.listPublishedCapabilities(buId, project, input.modelId(), input.metricCode()).stream()
+                .map(catalog::decodeRow)
                 .filter(row -> clean(row.project()).isBlank() || Objects.equals(project, row.project()))
                 .filter(row -> matches(row.payload(), input) && active(row) && hasExplicitScope(row))
                 .map(row -> view(buId, row)).toList();
@@ -270,7 +270,7 @@ public class CapabilityLibraryService {
 
     private ObjectNode storeDraft(CurrentUser user, String buId, String project, ObjectNode payload, String fingerprint,
             boolean validate) {
-        var existing = catalog.rows(Table.CAPABILITY, "where bu_id=? and source_fingerprint=?", buId, fingerprint);
+        var existing = knowledgeRecords.findCapabilityByFingerprint(buId, fingerprint).stream().map(catalog::decodeRow).toList();
         if (!existing.isEmpty()) {
             catalog.requireReadable(user, buId, existing.get(0));
             return existing.get(0).payload().put("duplicate", true);
@@ -283,9 +283,7 @@ public class CapabilityLibraryService {
         String id = Ids.next("CAP");
         resetDraft(payload, user);
         catalog.identity(payload, buId, id, 1, project);
-        jdbc.update("""
-                insert into capability_record(bu_id,id,version,project_id,scope,payload,source_fingerprint) values (?,?,1,?,?,?,?)
-                """, buId, id, project, scope(project), payload.toString(), fingerprint);
+        knowledgeRecords.insertCapabilityDraft(buId, id, project, scope(project), payload.toString(), fingerprint);
         catalog.log(user, buId, Table.CAPABILITY, id, 1, "新增能力草稿", "");
         return payload.put("duplicate", false);
     }
@@ -459,7 +457,7 @@ public class CapabilityLibraryService {
     }
 
     private List<Row> chain(String buId, String id) {
-        return catalog.rows(Table.CAPABILITY, "where bu_id=? and id=? order by version desc", buId, id);
+        return knowledgeRecords.listCapabilityVersions(buId, id).stream().map(catalog::decodeRow).toList();
     }
 
     private Row checked(CurrentUser user, String buId, String id, int version, Long revision) {

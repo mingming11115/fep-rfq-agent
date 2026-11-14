@@ -10,7 +10,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -31,12 +32,14 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/rfq")
-@RequiredArgsConstructor
+@Slf4j
 public class HistoryRfqController {
     private static final String LIBRARY = "/business-units/{buId}/history-rfq";
     private static final String CLAUSE = LIBRARY + "/clauses/{id}/versions/{version}";
-    private final HistoryRfqService intake;
-    private final HistoryRfqReviewService review;
+    @Autowired
+    private HistoryRfqService intake;
+    @Autowired
+    private HistoryRfqReviewService review;
 
     public record ReviewRequest(@NotNull @PositiveOrZero Long revision, @Size(max = 900) String reason) {}
 
@@ -45,26 +48,46 @@ public class HistoryRfqController {
             @RequestParam(required = false) MultipartFile responseFile, @RequestParam(required = false) String projectId,
             @RequestParam(defaultValue = "false") boolean shareWithBu, @RequestParam(required = false) String previousDocumentId,
             @RequestParam(required = false) Long revision, @RequestParam(required = false) String changeNote) throws IOException {
-        return ApiResponse.success(intake.upload(CurrentUserHolder.require(), buId, file, responseFile, projectId, shareWithBu,
-                previousDocumentId, revision, changeNote));
+        try {
+            return ApiResponse.success(intake.upload(CurrentUserHolder.require(), buId, file, responseFile, projectId, shareWithBu,
+                    previousDocumentId, revision, changeNote));
+        } catch (Exception exception) {
+            log.error("Request failed in importFile", exception);
+            throw exception;
+        }
     }
 
     @PatchMapping(LIBRARY + "/documents/{id}")
     public ApiResponse<ObjectNode> editDocument(@PathVariable String buId, @PathVariable String id,
             @RequestBody HistoryRfqService.DocumentEdit request) {
-        return ApiResponse.success(intake.editDocument(CurrentUserHolder.require(), buId, id, request));
+        try {
+            return ApiResponse.success(intake.editDocument(CurrentUserHolder.require(), buId, id, request));
+        } catch (Exception exception) {
+            log.error("Request failed in editDocument", exception);
+            throw exception;
+        }
     }
 
     @PostMapping(LIBRARY + "/documents/{id}/clauses")
     public ApiResponse<ObjectNode> manualClause(@PathVariable String buId, @PathVariable String id,
             @RequestBody HistoryRfqService.Manual request) {
-        return ApiResponse.success(intake.addManual(CurrentUserHolder.require(), buId, id, request));
+        try {
+            return ApiResponse.success(intake.addManual(CurrentUserHolder.require(), buId, id, request));
+        } catch (Exception exception) {
+            log.error("Request failed in manualClause", exception);
+            throw exception;
+        }
     }
 
     @PostMapping(LIBRARY + "/documents/manual")
     public ApiResponse<HistoryRfqService.Intake> manualDocument(@PathVariable String buId,
             @RequestBody HistoryRfqService.ManualDocument request) {
-        return ApiResponse.success(intake.createManual(CurrentUserHolder.require(), buId, request));
+        try {
+            return ApiResponse.success(intake.createManual(CurrentUserHolder.require(), buId, request));
+        } catch (Exception exception) {
+            log.error("Request failed in manualDocument", exception);
+            throw exception;
+        }
     }
 
     public record Reparse(long revision) {}
@@ -72,49 +95,84 @@ public class HistoryRfqController {
     @PostMapping(LIBRARY + "/documents/{id}/delete")
     public ApiResponse<ObjectNode> deleteDocument(@PathVariable String buId, @PathVariable String id,
             @Valid @RequestBody ReviewRequest request) {
-        return ApiResponse.success(intake.deleteDocument(CurrentUserHolder.require(), buId, id, request.revision()));
+        try {
+            return ApiResponse.success(intake.deleteDocument(CurrentUserHolder.require(), buId, id, request.revision()));
+        } catch (Exception exception) {
+            log.error("Request failed in deleteDocument", exception);
+            throw exception;
+        }
     }
 
     @PostMapping(LIBRARY + "/documents/{id}/reparse")
     public ApiResponse<HistoryRfqService.Intake> reparse(@PathVariable String buId, @PathVariable String id,
             @RequestBody Reparse request) {
-        return ApiResponse.success(intake.reparse(CurrentUserHolder.require(), buId, id, request.revision()));
+        try {
+            return ApiResponse.success(intake.reparse(CurrentUserHolder.require(), buId, id, request.revision()));
+        } catch (Exception exception) {
+            log.error("Request failed in reparse", exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/projects/{projectId}/snapshots/{snapshotId}/history-rfq")
     public ApiResponse<HistoryRfqService.Intake> fromSnapshot(@PathVariable String projectId, @PathVariable String snapshotId,
             @RequestParam(defaultValue = "false") boolean shareWithBu) {
-        return ApiResponse.success(intake.fromSnapshot(CurrentUserHolder.require(), projectId, snapshotId, shareWithBu));
+        try {
+            return ApiResponse.success(intake.fromSnapshot(CurrentUserHolder.require(), projectId, snapshotId, shareWithBu));
+        } catch (Exception exception) {
+            log.error("Request failed in fromSnapshot", exception);
+            throw exception;
+        }
     }
 
     @GetMapping(LIBRARY + "/documents/{id}/original")
     public ResponseEntity<byte[]> original(@PathVariable String buId, @PathVariable String id,
             @RequestParam(defaultValue = "main") String part) throws IOException {
-        var original = intake.original(CurrentUserHolder.require(), buId, id, part);
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(original.contentType()))
-                .cacheControl(CacheControl.noStore())
-                .header("X-Content-Type-Options", "nosniff")
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(original.name(), StandardCharsets.UTF_8).build().toString())
-                .body(original.bytes());
+        try {
+            var original = intake.original(CurrentUserHolder.require(), buId, id, part);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(original.contentType()))
+                    .cacheControl(CacheControl.noStore())
+                    .header("X-Content-Type-Options", "nosniff")
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            ContentDisposition.attachment().filename(original.name(), StandardCharsets.UTF_8).build().toString())
+                    .body(original.bytes());
+        } catch (Exception exception) {
+            log.error("Request failed in original", exception);
+            throw exception;
+        }
     }
 
     @GetMapping(CLAUSE)
     public ApiResponse<ObjectNode> version(@PathVariable String buId, @PathVariable String id, @PathVariable int version) {
-        return ApiResponse.success(review.version(CurrentUserHolder.require(), buId, id, version));
+        try {
+            return ApiResponse.success(review.version(CurrentUserHolder.require(), buId, id, version));
+        } catch (Exception exception) {
+            log.error("Request failed in version", exception);
+            throw exception;
+        }
     }
 
     @PatchMapping(CLAUSE)
     public ApiResponse<ObjectNode> updateDraft(@PathVariable String buId, @PathVariable String id, @PathVariable int version,
             @Valid @RequestBody HistoryRfqDraftRequest request) {
-        return ApiResponse.success(review.updateDraft(CurrentUserHolder.require(), buId, id, version, request));
+        try {
+            return ApiResponse.success(review.updateDraft(CurrentUserHolder.require(), buId, id, version, request));
+        } catch (Exception exception) {
+            log.error("Request failed in updateDraft", exception);
+            throw exception;
+        }
     }
 
     @PostMapping(CLAUSE + "/{action:submit|publish|return|revoke|revise|delete}")
     public ApiResponse<ObjectNode> transition(@PathVariable String buId, @PathVariable String id, @PathVariable int version,
             @PathVariable String action, @Valid @RequestBody ReviewRequest request) {
-        return ApiResponse.success(review.transition(CurrentUserHolder.require(), buId, id, version, request.revision(),
-                action, request.reason()));
+        try {
+            return ApiResponse.success(review.transition(CurrentUserHolder.require(), buId, id, version, request.revision(),
+                    action, request.reason()));
+        } catch (Exception exception) {
+            log.error("Request failed in transition", exception);
+            throw exception;
+        }
     }
 }

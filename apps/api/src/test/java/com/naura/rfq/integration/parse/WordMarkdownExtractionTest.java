@@ -18,16 +18,20 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 class WordMarkdownExtractionTest {
     private final ObjectMapper json = new ObjectMapper();
 
     @ParameterizedTest
     @ValueSource(strings = {"local-limit", "context-length", "output-length", "large-full", "auth-error"})
-    void retriesLengthLimitsWithOverlappingSourcesAndKeepsOneBoundaryClause(String limit) throws Exception {
+    void retriesLengthLimitsWithOverlappingSourcesAndKeepsOneBoundaryClause(String limit, CapturedOutput logs) throws Exception {
         String prefix = limit.equals("large-full") ? "长".repeat(101_000) : "";
         var content = WordMarkdownReader.mapMarkdown(prefix + """
                 简介 RFQX0END
@@ -93,6 +97,9 @@ class WordMarkdownExtractionTest {
             if (limit.equals("auth-error")) {
                 assertThatThrownBy(() -> extractor.extract(content, "RUN")).isInstanceOf(DocumentReadException.class);
                 assertThat(requests).containsExactly(content.markdown());
+                assertThat(logs.getAll())
+                        .contains("document.parse.word.llm.failed parseRunId=RUN errorType=RemoteStatusException reason=HTTP 401")
+                        .doesNotContain("Invalid API key", "设备必须自动上料");
                 return;
             }
             var result = extractor.extract(content, "RUN");

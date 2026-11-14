@@ -22,6 +22,10 @@ public record RawBlock(
         @JsonIgnore ParagraphLayout paragraphLayout,
         @JsonIgnore MineruTable mineruTable) {
 
+    public static final String PARAGRAPH = "paragraph";
+    public static final String TABLE = "table";
+    public static final String IMAGE = "image";
+
     public record ParagraphLayout(int textStartTwips, int headingLevel, BigInteger listId, int listLevel) { }
     public record MineruTable(String html, int pageIndex, List<Integer> sourceRows, List<List<String>> sourceCells) { }
 
@@ -40,10 +44,6 @@ public record RawBlock(
             String sectionPath, String clauseNo, String anchor) {
         this(index, type, text, tableRows, sectionPath, clauseNo, anchor, "native", null);
     }
-
-    public static final String PARAGRAPH = "paragraph";
-    public static final String TABLE = "table";
-    public static final String IMAGE = "image";
 
     public static RawBlock paragraph(int index, String text, String sectionPath, String clauseNo, String anchor) {
         return new RawBlock(index, PARAGRAPH, text, List.of(), sectionPath, clauseNo, anchor);

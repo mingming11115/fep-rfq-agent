@@ -21,6 +21,24 @@ final class AlignedHistoryAnswers {
     private static final Pattern EXPLANATION = Pattern.compile("^[,，。:：;；(（—–-].*");
     private static final Pattern TABLE_ROW = Pattern.compile("/r\\d+$");
 
+    private record Scope(Scope parent, ParagraphLayout layout, String number, String anchor) {
+        boolean heading() {
+            return layout.headingLevel() > 0;
+        }
+
+        boolean contains(ParagraphLayout child, String childNumber) {
+            if (layout.listId() != null && layout.listId().equals(child.listId())) {
+                return child.listLevel() > layout.listLevel();
+            }
+            if (!number.isBlank() && !childNumber.isBlank()) {
+                return childNumber.startsWith(number + ".");
+            }
+            return child.textStartTwips() > layout.textStartTwips();
+        }
+    }
+
+    private record Reply(String text, String anchor) { }
+
     private AlignedHistoryAnswers() { }
 
     static String answerText(String text) {
@@ -129,22 +147,4 @@ final class AlignedHistoryAnswers {
         }
         return nearest;
     }
-
-    private record Scope(Scope parent, ParagraphLayout layout, String number, String anchor) {
-        boolean heading() {
-            return layout.headingLevel() > 0;
-        }
-
-        boolean contains(ParagraphLayout child, String childNumber) {
-            if (layout.listId() != null && layout.listId().equals(child.listId())) {
-                return child.listLevel() > layout.listLevel();
-            }
-            if (!number.isBlank() && !childNumber.isBlank()) {
-                return childNumber.startsWith(number + ".");
-            }
-            return child.textStartTwips() > layout.textStartTwips();
-        }
-    }
-
-    private record Reply(String text, String anchor) { }
 }

@@ -12,13 +12,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Extracts historical customer requirements and verbatim supplier answers directly from source blocks. */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class HistoryModelExtractor {
     private static final String PROMPT = """
@@ -34,10 +37,14 @@ public class HistoryModelExtractor {
          "answer":"Comply","answerSource":0}],"metadata":{"model":"原文机型"}}
         """;
     private static final List<String> METADATA_FIELDS = List.of("customer", "projectName", "model", "config", "date", "fileVersion");
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
-    private final HybridRequirementExtractor model;
-    private final ObjectMapper json;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
+    @Autowired
+    private HybridRequirementExtractor model;
+    @Autowired
+    private ObjectMapper json;
 
     private record Source(int source, String anchor, String text, String sectionPath, String tableHeader,
             Integer textStartTwips, Integer headingLevel) { }
@@ -186,9 +193,11 @@ public class HistoryModelExtractor {
             }
             return true;
         } catch (InterruptedException exception) {
+            log.error("历史 RFQ 的 LLM 解析被中断", exception);
             Thread.currentThread().interrupt();
             throw new BusinessException(503, "历史 RFQ 的 LLM 解析已中断");
         } catch (Exception exception) {
+            log.error("历史 RFQ 的 LLM 批次解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
             log.warn("history.parse.llm.failed firstAnchor={} reason={}", anchor, reason);
             issues.add(anchor + "：历史 RFQ 的 LLM 批次解析失败，" + reason);

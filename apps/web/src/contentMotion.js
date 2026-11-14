@@ -1,8 +1,7 @@
 const activeAnimations = new WeakMap();
 const easing = 'cubic-bezier(0.2, 0, 0, 1)';
 
-export function playContentMotion(element, { kind = 'panel', direction = 1, duration,
-  reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false } = {}) {
+export function playContentMotion(element, { kind = 'panel', direction = 1, duration, reducedMotion = false } = {}) {
   if (!element) { return null; }
   activeAnimations.get(element)?.cancel();
   activeAnimations.delete(element);
@@ -13,6 +12,7 @@ export function playContentMotion(element, { kind = 'panel', direction = 1, dura
     panel: { from: { opacity: 0.4, transform: 'translateY(3px)' }, duration: 150 },
     tab: { from: { opacity: 0.4, transform: `translateX(${offset}px)` }, duration: 150 },
     'rfq-tab': { from: { opacity: 0.82 }, duration: 120 },
+    'clause-title': { from: { opacity: 1, transform: 'translateY(3px)' }, duration: 120 },
     view: { from: { opacity: 0.35, transform: 'translateY(4px)' }, duration: 180 },
     'card-in': { from: { opacity: 0 }, duration: 160 },
     'card-out': { to: { opacity: 0 }, duration: 140 },

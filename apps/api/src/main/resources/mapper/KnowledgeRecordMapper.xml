@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.KnowledgeRecordMapper">
+
+    <sql id="table">
+        <choose>
+            <when test="table.name() == 'MODEL'">model_definition</when>
+            <when test="table.name() == 'PROCESS'">process_definition</when>
+            <when test="table.name() == 'EVIDENCE'">evidence_record</when>
+            <when test="table.name() == 'CAPABILITY'">capability_record</when>
+            <when test="table.name() == 'HISTORY'">`history-rfq-record`</when>
+            <when test="table.name() == 'STANDARD_REPLY'">`standard-reply-record`</when>
+            <when test="table.name() == 'HISTORY_DOCUMENT'">history_document</when>
+        </choose>
+    </sql>
+
+    <sql id="columns">
+        id,version,
+        <choose>
+            <when test="table.name() == 'MODEL' or table.name() == 'PROCESS'">0</when>
+            <otherwise>revision</otherwise>
+        </choose> as revision,project_id,scope,payload
+    </sql>
+
+    <select id="findVersion" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$VersionRow">
+        select <include refid="columns"/> from <include refid="table"/> where bu_id=#{buId} and id=#{id} and version=#{version}
+    </select>
+
+    <select id="lockVersions" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$VersionRow" useCache="false" flushCache="true">
+        select <include refid="columns"/> from <include refid="table"/> where bu_id=#{buId} and id=#{id} order by version for update
+    </select>
+
+    <select id="findLatest" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$VersionRow">
+        select <include refid="columns"/> from <include refid="table"/> where bu_id=#{buId} and id=#{id} order by version desc limit 1
+    </select>
+
+    <select id="listCapabilityVersions" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$VersionRow">
+        select id,version,revision,project_id,scope,payload from capability_record where bu_id=#{buId} and id=#{id} order by version desc
+    </select>
+
+    <select id="findCapabilityByFingerprint" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$VersionRow">
+        select id,version,revision,project_id,scope,payload from capability_record where bu_id=#{buId} and source_fingerprint=#{fingerprint}
+    </select>
+
+    <select id="listPublishedCapabilities" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$VersionRow">
+        select id,version,revision,project_id,scope,payload from capability_record
+        where bu_id=#{buId} and (project_id is null or project_id=#{projectId})
+          and json_unquote(json_extract(payload,'$.status'))='已发布'
+          and json_unquote(json_extract(payload,'$.modelId'))=#{modelId}
+          and json_unquote(json_extract(payload,'$.metricCode'))=#{metricCode}
+        order by id,version desc
+    </select>
+
+    <select id="findResource" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$Resource">
+        select project_id,scope,payload from <include refid="table"/> where bu_id=#{buId} and id=#{id} and version=#{version}
+    </select>
+
+    <select id="lockResource" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$Resource" useCache="false" flushCache="true">
+        select project_id,scope,payload from <include refid="table"/> where bu_id=#{buId} and id=#{id} and version=#{version} for update
+    </select>
+
+    <select id="listPayloads" resultType="string">
+        select payload from <include refid="table"/> where bu_id=#{buId} order by id,version
+    </select>
+
+    <select id="listHistoryClauses" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$IndexedClause">
+        select r.payload,s.operation,s.synced_at is not null as synced,s.last_error is not null as has_error
+        from `history-rfq-record` r left join history_rfq_index_sync s
+            on s.bu_id=r.bu_id and s.reply_id=r.id and s.version=r.version
+        where r.bu_id=#{buId} and not exists (select 1 from history_document d where d.bu_id=r.bu_id
+            and d.id=r.payload-&gt;&gt;'$.documentId' and d.payload-&gt;&gt;'$.status'='已删除')
+        order by r.id,r.version
+    </select>
+
+    <select id="listPublishedSources" resultType="com.naura.rfq.mapper.KnowledgeRecordMapper$PublishedSource">
+        select r.id,r.version,r.revision,r.project_id,r.scope,r.payload,
+               (s.synced_at is not null and s.operation='upsert' and s.version=r.version) as synced,
+               s.updated_at as sync_stamp
+        from <choose><when test="history">`history-rfq-record`</when><otherwise>`standard-reply-record`</otherwise></choose> r
+        left join <choose><when test="history">history_rfq_index_sync</when><otherwise>standard_reply_index_sync</otherwise></choose> s on s.bu_id=r.bu_id and s.reply_id=r.id
+        where r.bu_id=#{buId} and (r.project_id is null or r.project_id=#{projectId})
+          and json_unquote(json_extract(r.payload,'$.status'))='已发布'
+          and (#{fileFilter}='' or find_in_set(r.payload-&gt;&gt;'$.documentId',#{fileFilter})&gt;0)
+        order by r.id,r.version
+    </select>
+
+    <select id="findGroupCatalog" resultType="string">
+        select payload from knowledge_group_catalog where bu_id=#{buId}
+    </select>
+
+    <insert id="insertVersion">
+        insert into <include refid="table"/>(bu_id,id,version,project_id,scope,payload)
+        values (#{buId},#{id},#{version},#{projectId},#{scope},#{payload})
+    </insert>
+
+    <insert id="insertCapabilityDraft">
+        insert into capability_record(bu_id,id,version,project_id,scope,payload,source_fingerprint)
+        values (#{buId},#{id},1,#{projectId},#{scope},#{payload},#{fingerprint})
+    </insert>
+
+    <update id="updateVersion">
+        update <include refid="table"/> set payload=#{payload},revision=#{revision}
+        where bu_id=#{buId} and id=#{id} and version=#{version} and revision=#{previousRevision}
+    </update>
+
+    <update id="updatePayload">
+        update <include refid="table"/> set payload=#{payload} where bu_id=#{buId} and id=#{id} and version=#{version}
+    </update>
+
+    <insert id="upsertGroupCatalog">
+        insert into knowledge_group_catalog(bu_id,payload) values (#{buId},#{payload}) as desired
+        on duplicate key update payload=desired.payload
+    </insert>
+</mapper>

@@ -1,5 +1,6 @@
 package com.naura.rfq.integration.parse;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.ExtractedRequirement;
@@ -15,19 +16,27 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class WordMarkdownExtractor {
     private static final Pattern SOURCE_ID = Pattern.compile("S([0-9]{1,9})");
     private static final String PROMPT = """
-        从客户 RFQ Markdown 中抽取可逐条应答的要求。把属于同一义务的正文、表格数据、表头单位、
-        适用条件和脚注拼成一条完整的 requirementText。保留原语言、指标、单位和限制条件，不补写缺失内容。
+        从客户 RFQ Markdown 中抽取可逐条应答的要求。属于同一义务的正文、表头单位、适用条件和脚注
+        拼成一条完整的 requirementText。保留原语言、指标、单位和限制条件，不补写缺失内容。
         不同义务分别输出，使用原文顺序和原文条款号，没有编号时使用空字符串。
+        表格按行处理：Markdown 表格的每一行是一条独立要求，必须单独输出为一条 requirement，
+        sourceRefs 只引用该行自身的来源 ID，不要把整张表格的多行合并成一条 requirementText。
+        仅当同一行内部被拆成多个单元格，或原文用合并单元格明确表示一个指标跨多行时，才把这几行
+        拼成一条，并在 requirementText 中保留行与行的对应关系。
+        表头行本身不是要求，其中的单位、口径与列名按需并入它所描述的每一行。
         specification 可填写原文逐字出现的规格表达，没有时使用空字符串。
         每个来源由 [S数字] 标记。sourceRefs 必须列出支撑该条款的所有来源 ID（例如 ["S3","S7"]），
         只使用原文给出的 ID。表格单位或脚注用于解释条款时也必须引用。
@@ -36,9 +45,12 @@ public class WordMarkdownExtractor {
         {"requirements":[{"customerClauseNo":"","title":"","requirementText":"","specification":"","sourceRefs":["S0"]}],"ignoredSourceRefs":[]}
         """;
 
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
-    private final RuleBasedExtractor rules;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
+    @Autowired
+    private RuleBasedExtractor rules;
 
     public boolean enabled() {
         return properties.llmEnabled();
@@ -64,6 +76,7 @@ public class WordMarkdownExtractor {
                     var response = request(content.markdown(), PROMPT, config, runId);
                     return validate(response, content, extractor);
                 } catch (LengthLimitException exception) {
+                    log.error("Word 模型响应超出长度限制", exception);
                     log.info("document.parse.word.llm.batching parseRunId={} reason={}", runId, exception.getMessage());
                 }
             } else {
@@ -71,11 +84,20 @@ public class WordMarkdownExtractor {
             }
             return extractBatches(content, config, runId, maxChars, extractor);
         } catch (DocumentReadException exception) {
+            log.error("Word 模型抽取失败", exception);
+            log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
+                    runId, exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
         } catch (Exception exception) {
+            log.error("Word 模型抽取失败", exception);
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+            Throwable cause = ParseHttpClient.unwrap(exception);
+            String reason = cause instanceof JsonProcessingException ? "模型响应 JSON 无法解析"
+                    : ParseHttpClient.reason(exception);
+            log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
+                    runId, cause.getClass().getSimpleName(), reason);
             throw new DocumentReadException("Word 模型抽取失败，请检查模型配置或重试", exception);
         }
     }
@@ -87,6 +109,7 @@ public class WordMarkdownExtractor {
         try {
             response = http.post(config, request, runId);
         } catch (Exception exception) {
+            log.error("调用 Word 模型接口失败", exception);
             if (ParseHttpClient.requestExceedsLengthLimit(exception)) {
                 throw new LengthLimitException("input_length_limit");
             }
@@ -131,6 +154,7 @@ public class WordMarkdownExtractor {
             }
             validation.add(request(batch.markdown(), prompt, config, runId), batch.visible(), primary);
         } catch (LengthLimitException exception) {
+            log.error("Word 模型批次超出模型长度上限", exception);
             if (end - start > 1) {
                 int middle = start + (end - start) / 2;
                 int smaller = Math.min(batchChars, batch.markdown().length() - 1);
@@ -144,6 +168,7 @@ public class WordMarkdownExtractor {
                     validation.add(request(core.markdown(), prompt, config, runId), core.visible(), primary);
                     return;
                 } catch (LengthLimitException ignored) {
+                    log.error("Word 单来源请求仍超出模型长度上限", ignored);
                     // This request already contains just one source unit.
                 }
             }
@@ -206,6 +231,7 @@ public class WordMarkdownExtractor {
                     }
                 }
                 var sources = sourceIndices.stream().map(blocks::get).toList();
+                logMergedTableRows(sourceIndices);
                 // Prefer a native paragraph or row for the default jump when the clause also cites an image or note.
                 var ordered = sources.stream().sorted(Comparator.comparingInt(
                         block -> tableHeaders.contains(block.index()) ? 3 : sourcePriority(block)))
@@ -233,6 +259,27 @@ public class WordMarkdownExtractor {
             }
             return new ExtractionResult(requirements, extractor, issues);
         }
+
+        /** 同一表格的多行被并进一条条款时留痕，用于核查提示词的逐行约束是否生效。 */
+        private void logMergedTableRows(Set<Integer> sourceIndices) {
+            var rowsByTable = sourceIndices.stream()
+                    .map(blocks::get)
+                    .filter(RawBlock::isTable)
+                    .map(block -> tableKey(block.anchor()))
+                    .filter(key -> !key.isEmpty())
+                    .collect(Collectors.groupingBy(key -> key, Collectors.counting()));
+            rowsByTable.forEach((table, rows) -> {
+                if (rows > 1) {
+                    log.warn("document.parse.word.table.merged table={} rows={}", table, rows);
+                }
+            });
+        }
+    }
+
+    /** 表格行的锚点形如 body/5/r3，去掉行号后的前缀标识同一张表。 */
+    private static String tableKey(String anchor) {
+        int row = anchor.lastIndexOf("/r");
+        return row < 0 ? "" : anchor.substring(0, row);
     }
 
     private static int sourceIndex(JsonNode value) {

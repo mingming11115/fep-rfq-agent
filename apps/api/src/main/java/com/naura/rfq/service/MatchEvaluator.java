@@ -1,5 +1,6 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,13 +16,11 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 class MatchEvaluator {
     static final String STANDARD = "standard_reply";
@@ -31,11 +30,16 @@ class MatchEvaluator {
     private static final int MAX_SEARCH_IDS = 100;
     // Leave time to save the result inside the 90-second worker lease (8 seconds per search).
     private static final int MAX_SCOPED_SEARCH_IDS = 8 * MAX_SEARCH_IDS;
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final StandardReplyIndexClient search;
-    private final CapabilityMatch capability;
-    private final HistoryRecallScope historyRecall;
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private StandardReplyIndexClient search;
+    @Autowired
+    private CapabilityMatch capability;
+    @Autowired
+    private HistoryRecallScope historyRecall;
     private final MatchTextScorer scorer = new MatchTextScorer();
 
     record Input(String bu, String project, JsonNode snapshot, List<String> order) {
@@ -51,6 +55,8 @@ class MatchEvaluator {
     private record Source(String id, int version, long revision, boolean shared, boolean synced, String syncStamp, JsonNode payload) {}
     private record Scope(Map<String, Source> sources, boolean unknown) {}
     private record Candidate(Source source, double similarity) {}
+    private record SourceRow(String id, int version, long revision, String project, String scope, boolean synced,
+            String syncStamp, JsonNode payload) {}
 
     Evaluation evaluate(Input input) {
         var result = json.createObjectNode().put("conclusion", "待确认").put("knowledgeGap", false);
@@ -223,22 +229,11 @@ class MatchEvaluator {
             }
         }
         String fileFilter = String.join(",", selected);
-        String table = history ? "`history-rfq-record`" : "`standard-reply-record`";
-        String index = history ? "history_rfq_index_sync" : "standard_reply_index_sync";
         var sources = new LinkedHashMap<String, Source>();
         boolean unknown = false;
-        for (var row : jdbc.query("""
-                select r.id,r.version,r.revision,r.project_id,r.scope,r.payload,
-                       (s.synced_at is not null and s.operation='upsert' and s.version=r.version) as synced,
-                       s.updated_at as sync_stamp
-                from %s r left join %s s on s.bu_id=r.bu_id and s.reply_id=r.id
-                where r.bu_id=? and (r.project_id is null or r.project_id=?)
-                  and json_unquote(json_extract(r.payload,'$.status'))='已发布'
-                  and (?='' or find_in_set(r.payload->>'$.documentId',?)>0)
-                order by r.id,r.version
-                """.formatted(table, index), (rs, n) -> new SourceRow(rs.getString("id"), rs.getInt("version"),
-                rs.getLong("revision"), rs.getString("project_id"), rs.getString("scope"), rs.getBoolean("synced"),
-                rs.getString("sync_stamp"), parse(rs.getString("payload"))), input.bu(), input.project(), fileFilter, fileFilter)) {
+        for (var source : knowledgeRecords.listPublishedSources(history, input.bu(), input.project(), fileFilter)) {
+            var row = new SourceRow(source.id(), source.version(), source.revision(), source.projectId(),
+                    source.scope(), source.synced(), source.syncStamp(), parse(source.payload()));
             String validity = text(row.payload(), "validity");
             if (List.of("已撤销", "被替代", "已过期", "已失效").contains(validity)) {
                 continue;
@@ -257,9 +252,6 @@ class MatchEvaluator {
         }
         return new Scope(sources, unknown);
     }
-
-    private record SourceRow(String id, int version, long revision, String project, String scope, boolean synced,
-            String syncStamp, JsonNode payload) {}
 
     private String scopeStamp(Scope scope) {
         var items = json.createArrayNode();

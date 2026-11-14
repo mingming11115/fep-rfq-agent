@@ -35,8 +35,6 @@ public class Project {
     private String archivedBy;
     private String archiveReason;
 
-    public boolean isArchived() { return "CANCELLED".equals(stage); }
-
     /** 乐观锁版本号。JPA 会自动置 0，MyBatis 下由构造默认值承担同一职责。 */
     private Long version = 0L;
 
@@ -45,4 +43,6 @@ public class Project {
     private Instant createdAt = Instant.now();
 
     private Instant updatedAt = Instant.now();
+
+    public boolean isArchived() { return "CANCELLED".equals(stage); }
 }

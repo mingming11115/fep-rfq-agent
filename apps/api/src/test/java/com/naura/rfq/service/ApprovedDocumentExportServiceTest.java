@@ -40,7 +40,7 @@ import java.util.regex.Pattern;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.naura.rfq.mapper.ResponseMapper;
 
 class ApprovedDocumentExportServiceTest {
     @Test void importedApprovalsExportNativeCommentsAndRejectChangedResponses() throws Exception {
@@ -63,7 +63,7 @@ class ApprovedDocumentExportServiceTest {
             document.setId(documentId);
             document.setStatus("PARSED");
 
-            var jdbc = mock(JdbcTemplate.class);
+            var responseRecords = mock(ResponseMapper.class);
             var projects = mock(ProjectMapper.class);
             var documents = mock(CustomerDocumentMapper.class);
             var requirements = mock(RequirementMapper.class);
@@ -72,13 +72,13 @@ class ApprovedDocumentExportServiceTest {
             var users = mock(AppUserMapper.class);
             var roles = mock(UserBuRoleMapper.class);
             var originals = mock(DocumentService.class);
-            var exporter = new ApprovedDocumentExportService(jdbc, json, projects, documents, requirements, blocks,
+            var exporter = new ApprovedDocumentExportService(responseRecords, json, projects, documents, requirements, blocks,
                     profiles, users, roles, mock(AccessGuard.class), originals, mock(RequirementMatchService.class), mock(ProjectWorkScope.class));
             when(projects.findById(projectId)).thenReturn(Optional.of(project));
             when(documents.findByProjectIdOrderByCreatedAtDesc(projectId)).thenReturn(List.of(document));
-            when(jdbc.queryForList(startsWith("select payload from response_snapshot"), eq(String.class), eq(projectId)))
+            when(responseRecords.listSnapshots(projectId))
                     .thenReturn(List.of(snapshot.toString()));
-            when(jdbc.queryForList(startsWith("select payload from project_response_config"), eq(String.class), eq(projectId)))
+            when(responseRecords.findConfig(projectId))
                     .thenReturn(rows(sql, "project_response_config").stream()
                             .filter(row -> projectId.equals(row.get("project_id"))).map(row -> row.get("payload")).toList());
             var profile = new BuMemberProfile();
@@ -127,7 +127,7 @@ class ApprovedDocumentExportServiceTest {
             var responses = rows(sql, "requirement_response").stream()
                     .filter(row -> projectId.equals(row.get("project_id")))
                     .map(row -> row.get("payload")).toList();
-            when(jdbc.queryForList(startsWith("select payload from requirement_response"), eq(String.class), eq(projectId)))
+            when(responseRecords.listResponses(projectId))
                     .thenReturn(responses);
             when(originals.download(actor, documentId)).thenReturn(new DocumentDownload(bytes.toByteArray(), "客户.docx",
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes.size(), "unused"));
@@ -154,13 +154,13 @@ class ApprovedDocumentExportServiceTest {
                 }
                 currentResponses.add(response.toString());
             }
-            when(jdbc.queryForList(startsWith("select payload from requirement_response"), eq(String.class), eq(projectId)))
+            when(responseRecords.listResponses(projectId))
                     .thenReturn(currentResponses);
             var notes = exporter.validateContents(project, snapshot, true);
             assertThat(notes.get(documentId).get(0).text())
                     .isEqualTo("条款 " + comply.path("clause").asText() + "\n结论：Comply");
 
-            when(jdbc.queryForList(startsWith("select payload from requirement_response"), eq(String.class), eq(projectId)))
+            when(responseRecords.listResponses(projectId))
                     .thenReturn(responses);
             sourceRows.get(0).setOriginalText("已经修改的原文");
             assertThatThrownBy(() -> exporter.download(actor, projectId, snapshotId, true))

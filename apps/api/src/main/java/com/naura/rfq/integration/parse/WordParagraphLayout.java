@@ -9,11 +9,13 @@ import java.util.Objects;
 import java.util.TreeSet;
 import java.util.function.Function;
 import javax.xml.namespace.QName;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTInd;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPrBase;
 
+@Slf4j
 final class WordParagraphLayout {
     private static final int DEFAULT_TAB_TWIPS = 720;
     private static final String WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -135,6 +137,7 @@ final class WordParagraphLayout {
         try {
             return value instanceof String text ? Integer.valueOf(text) : null;
         } catch (NumberFormatException ignored) {
+            log.error("解析 Word 段落缩进属性值失败", ignored);
             return null;
         }
     }

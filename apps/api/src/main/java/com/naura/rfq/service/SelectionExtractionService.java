@@ -16,7 +16,7 @@ import com.naura.rfq.model.parse.SourceRef;
 import com.naura.rfq.model.vo.RequirementView;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,19 +26,29 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
-@RequiredArgsConstructor
+@Slf4j
 public class SelectionExtractionService {
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final DocumentService originals;
-    private final RequirementMapper requirements;
-    private final HybridRequirementExtractor extractor;
-    private final AccessGuard access;
-    private final ProjectWorkScope work;
-    private final RequirementMatchService matches;
-    private final AuditService audit;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private DocumentService originals;
+    @Autowired
+    private RequirementMapper requirements;
+    @Autowired
+    private HybridRequirementExtractor extractor;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private ProjectWorkScope work;
+    @Autowired
+    private RequirementMatchService matches;
+    @Autowired
+    private AuditService audit;
 
     public record Selection(String text, Integer page, String wordRange) {}
     public record Candidate(String id, String customerClauseNo, String sectionPath, String title,
@@ -152,6 +162,7 @@ public class SelectionExtractionService {
             var original = originals.download(user, document.getId());
             AnnotatedOriginal.requireSelectedText(original.content(), anchor, selection.text());
         } catch (IOException | BusinessException exception) {
+            log.error("校验选中文字与原件内容失败", exception);
             throw new BusinessException(409, "选中文字与当前原件位置不一致，请打开原件重新选择");
         }
     }

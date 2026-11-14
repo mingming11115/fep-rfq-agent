@@ -15,20 +15,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 @Primary
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class HybridRequirementExtractor implements RequirementExtractor {
-    private final RuleBasedExtractor rules;
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
-    private final ObjectMapper json;
+    @Autowired
+    private RuleBasedExtractor rules;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
+    @Autowired
+    private ObjectMapper json;
 
     private static final Pattern TABLE_SEPARATOR = Pattern.compile("\\h*\\|\\h*");
     private static final Pattern QUOTE_WHITESPACE = Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
@@ -165,6 +172,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             return accepted.size();
         } catch (Exception exception) {
+            log.error("Word 条款总结批次失败", exception);
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -194,7 +202,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     public Map<String, String> extractWordHistoryAnswers(List<WordAnswerTarget> targets, List<String> issues) {
         var config = properties.getLlm();
-        if (!properties.historyLlmEnabled() || targets.isEmpty()) {
+        if (!properties.llmEnabled() || targets.isEmpty()) {
             return Map.of();
         }
         if (config.getModel().isBlank()) {
@@ -263,9 +271,11 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             return accepted;
         } catch (InterruptedException exception) {
+            log.error("历史答复模型批次被中断", exception);
             Thread.currentThread().interrupt();
             issues.add(label + " 已中断");
         } catch (Exception exception) {
+            log.error("历史答复模型批次解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
             log.warn("document.parse.llm.history_answers.fallback anchor={} reason={}", batch.get(0).anchor(), reason);
             issues.add(label + " 未返回可用结果，" + reason);
@@ -275,7 +285,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     public Map<String, String> extractMineruHistoryAnswers(RawBlock block, List<HistoryAnswerTarget> clauses, List<String> issues) {
         var config = properties.getLlm();
-        if (!properties.historyLlmEnabled() || clauses.isEmpty()) {
+        if (!properties.llmEnabled() || clauses.isEmpty()) {
             return Map.of();
         }
         var table = block.mineruTable();
@@ -305,9 +315,11 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             }
             return accepted;
         } catch (InterruptedException exception) {
+            log.error("历史答复模型解析被中断", exception);
             Thread.currentThread().interrupt();
             issues.add(block.anchor() + "：历史答复模型已中断");
         } catch (Exception exception) {
+            log.error("历史答复模型解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
             log.warn("document.parse.llm.history_answers.fallback blockIndex={} reason={}", block.index(), reason);
             issues.add(block.anchor() + "：历史答复模型未返回可用结果，" + reason);
@@ -344,7 +356,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, boolean fallbackToRules) {
         var config = properties.getLlm();
-        if (!(fallbackToRules ? properties.llmEnabled() : properties.historyLlmEnabled())) {
+        if (!properties.llmEnabled()) {
             log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
             return new ExtractionResult(fallbackToRules ? rules.extract(blocks) : List.of(), rules.name(), List.of());
         }

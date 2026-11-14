@@ -5,6 +5,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,16 +13,20 @@ import java.util.Date;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
 public class JwtService {
 
-    private final SecretKey key;
-    private final Duration ttl;
+    @Autowired
+    private AuthProperties properties;
+    private SecretKey key;
+    private Duration ttl;
 
-    public JwtService(AuthProperties properties) {
+    @PostConstruct
+    private void initialize() {
         this.key = Keys.hmacShaKeyFor(properties.jwtSecret().getBytes(StandardCharsets.UTF_8));
         this.ttl = Duration.ofMinutes(properties.tokenTtlMinutes());
     }

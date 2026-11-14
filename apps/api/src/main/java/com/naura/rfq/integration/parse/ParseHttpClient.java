@@ -22,19 +22,23 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Bounded response and whole-request deadline, including request upload and response body. */
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class ParseHttpClient {
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
     private static final Set<String> LENGTH_CODES = Set.of("context_length_exceeded", "context_window_exceeded",
             "max_context_length_exceeded", "input_too_long", "prompt_too_long", "request_too_large");
-    private final ObjectMapper json;
+    @Autowired
+    private ObjectMapper json;
     private final ConcurrentHashMap<Duration, HttpClient> clients = new ConcurrentHashMap<>();
 
     public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String parseRunId) throws Exception {
@@ -87,6 +91,7 @@ public class ParseHttpClient {
             pending = client.sendAsync(request, info -> new LimitedBody());
             response = pending.get(Math.max(1, timeout.toMillis()), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            log.error("调用解析服务请求失败", e);
             call.failed(e);
             throw e;
         } finally {
@@ -104,6 +109,7 @@ public class ParseHttpClient {
         try {
             return json.readTree(response.body());
         } catch (java.io.IOException e) {
+            log.error("读取解析服务的响应 JSON 失败", e);
             call.failed(e);
             throw e;
         }
@@ -130,6 +136,7 @@ public class ParseHttpClient {
                     || message.contains("context window exceeded") || message.contains("prompt is too long")
                     || message.contains("input is too long");
         } catch (java.io.IOException e) {
+            log.error("读取解析服务的错误响应内容失败", e);
             return false;
         }
     }
@@ -153,9 +160,7 @@ public class ParseHttpClient {
         return value;
     }
     public static String reason(Exception e) {
-        Throwable reason = e;
-        while (reason.getCause() != null && (reason instanceof java.util.concurrent.ExecutionException
-                || reason instanceof java.util.concurrent.CompletionException)) reason = reason.getCause();
+        Throwable reason = unwrap(e);
         if (reason instanceof java.util.concurrent.TimeoutException || reason instanceof java.net.http.HttpTimeoutException) {
             return "请求超时";
         }
@@ -164,6 +169,16 @@ public class ParseHttpClient {
         }
         return "配置、连接或响应校验失败";
     }
+
+    static Throwable unwrap(Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null && (cause instanceof java.util.concurrent.ExecutionException
+                || cause instanceof java.util.concurrent.CompletionException)) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
     private static class RemoteStatusException extends Exception {
         private final int status;
         private final boolean lengthError;

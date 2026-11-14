@@ -30,6 +30,8 @@ public interface RequirementMapper {
 
     int deleteByProjectId(@Param("projectId") String projectId);
 
+    boolean hasResponseArtifacts(@Param("documentId") String documentId, @Param("projectId") String projectId);
+
     int insert(Requirement requirement);
 
     /** 乐观锁：where 带 version 条件并自增，返回 0 表示已被他人改动。 */

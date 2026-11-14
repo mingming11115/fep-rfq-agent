@@ -20,9 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
-import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,8 +27,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HistoryExtractorTest {
     private final ObjectMapper json = new ObjectMapper();
     private final RuleBasedExtractor rules = new RuleBasedExtractor(json);
-    private final ParseIntegrationProperties properties = new ParseIntegrationProperties(false);
-    private final HistoryExtractor history = withClient(new ParseHttpClient(json));
+    private ParseIntegrationProperties properties = new ParseIntegrationProperties(false);
+    private HistoryExtractor history() {
+        return withClient(new ParseHttpClient(json));
+    }
 
     private HistoryExtractor withClient(ParseHttpClient client) {
         return withClient(properties, client);
@@ -42,9 +41,8 @@ class HistoryExtractorTest {
         return new HistoryExtractor(rules, model, properties, new HistoryModelExtractor(properties, client, model, json));
     }
 
-    @Test void historyRulesCanRunWithTheSharedModelEnabledButHistoryModelDisabled() {
-        var properties = new ParseIntegrationProperties(true);
-        properties.getHistory().setLlmEnabled(false);
+    @Test void historyRulesCanRunWithTheSharedModelDisabled() {
+        var properties = new ParseIntegrationProperties(false);
         properties.getLlm().setModel("shared-test");
         var parser = withClient(properties, new ParseHttpClient(json) {
             @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) {
@@ -55,7 +53,7 @@ class HistoryExtractorTest {
         assertThat(result.clauses()).extracting(HistoryClause::clauseNo).containsExactly("1");
     }
 
-    @Test void historyModelCanExtractAnAnswerWithoutRulesOrTheSharedModelSwitch() {
+    @Test void historyModelCanExtractAnAnswerWithoutRules() {
         historySettings(false, true);
         properties.getLlm().setModel("history-test");
         var parser = withClient(new ParseHttpClient(json) {
@@ -86,7 +84,7 @@ class HistoryExtractorTest {
 
     @Test void historyRejectsParsingWhenBothExtractorsAreDisabled() {
         historySettings(false, false);
-        assertThatThrownBy(() -> history.extract(List.of(), List.of())).hasMessageContaining("至少启用");
+        assertThatThrownBy(() -> history().extract(List.of(), List.of())).hasMessageContaining("至少启用");
     }
 
     @ParameterizedTest
@@ -145,10 +143,8 @@ class HistoryExtractorTest {
     }
 
     private void historySettings(boolean rulesEnabled, boolean llmEnabled) {
-        var source = new MapConfigurationPropertySource(Map.of(
-                "rfq.parse.integrations.history.rules-enabled", rulesEnabled,
-                "rfq.parse.integrations.history.llm-enabled", llmEnabled));
-        new Binder(source).bind("rfq.parse.integrations", Bindable.ofInstance(properties));
+        properties = new ParseIntegrationProperties(llmEnabled);
+        properties.getHistory().setRulesEnabled(rulesEnabled);
     }
 
     @Test void wordTabAlignsComplianceWithItsHeadingOrClause(@TempDir Path dir) throws Exception {
@@ -168,7 +164,7 @@ class HistoryExtractorTest {
             doc.write(output);
         }
         var blocks = new DocxBlockReader(new OcrClient(properties, new ParseHttpClient(json))).read(file);
-        var result = history.extract(blocks, List.of());
+        var result = history().extract(blocks, List.of());
         assertThat(result.clauses()).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
                 .containsExactly(tuple("1.1", "Comply", "main:body/3"), tuple("1.2", "Comply", "main:body/3"),
                         tuple("1.3", "Conditional Comply", "main:body/5"), tuple("1.4", "Comply", "main:body/3"),
@@ -190,7 +186,7 @@ class HistoryExtractorTest {
             doc.write(output);
         }
         var blocks = new DocxBlockReader(new OcrClient(properties, new ParseHttpClient(json))).read(file);
-        var result = history.extract(blocks, List.of());
+        var result = history().extract(blocks, List.of());
         assertThat(result.clauses()).extracting(HistoryClause::clauseNo, HistoryClause::answer, HistoryClause::answerAnchor)
                 .containsExactly(tuple("1.1", "Comply", "main:body/2"),
                         tuple("2.1", "Not Applicable", "main:body/5"), tuple("2.2", "Comply", "main:body/7"));
@@ -248,7 +244,7 @@ class HistoryExtractorTest {
                         "Comply，另有 380 V 选配。", "需模块 S")),
                 "技术规格", "body/1");
 
-        var parsed = history.extract(List.of(table), List.of());
+        var parsed = history().extract(List.of(table), List.of());
         assertThat(parsed.clauses()).hasSize(1);
         var clause = json.valueToTree(parsed.clauses().get(0));
         assertThat(clause.path("customerClauseNo").asText()).isEqualTo(normal.customerClauseNo());
@@ -267,7 +263,7 @@ class HistoryExtractorTest {
     }
 
     @Test void modelSelectsHistoricalAnswerCellsWithoutRewritingTheirContent() {
-        properties.getHistory().setLlmEnabled(true);
+        historySettings(true, true);
         properties.getLlm().setModel("test-model");
         var requirement = "上料模块须支持 300 mm 硅晶圆，并兼容标准 FOUP。";
         var table = RawBlock.table(0, List.of(List.of("No", "项目Item", "规格", "Description", "Rev"),
@@ -308,7 +304,7 @@ class HistoryExtractorTest {
     }
 
     @Test void rejectsModelSelectionsOutsideEligibleCellsAndRetainsKnownAnswers() {
-        properties.getHistory().setLlmEnabled(true);
+        historySettings(true, true);
         properties.getLlm().setModel("test-model");
         var ambiguous = RawBlock.table(0, List.of(List.of("No", "Description", "Rev"),
                 List.of("1", "设备应支持晶圆。", "Comply")), "", "body/1");
@@ -344,7 +340,7 @@ class HistoryExtractorTest {
                 List.of("1", "设备应支持晶圆。", "Comply", "Not Comply"),
                 List.of("2", "设备应记录报警。", "Comply", "")), "", "body/1");
 
-        assertThat(history.extract(List.of(table), List.of()).clauses()).extracting(HistoryClause::answer)
+        assertThat(history().extract(List.of(table), List.of()).clauses()).extracting(HistoryClause::answer)
                 .containsExactly("Not Comply", "");
     }
 
@@ -352,7 +348,7 @@ class HistoryExtractorTest {
         var original = "2.1 设备应支持 300 mm 晶圆。";
         var primary = RawBlock.paragraph(0, original, "技术规格", null, "p0");
         var answer = RawBlock.paragraph(0, "2.1 已验证", "", null, "p0");
-        var clause = json.valueToTree(history.extract(List.of(primary), List.of(answer)).clauses().get(0));
+        var clause = json.valueToTree(history().extract(List.of(primary), List.of(answer)).clauses().get(0));
         assertThat(clause.path("originalText").asText()).isEqualTo(original);
         assertThat(clause.path("requirementText").asText()).isEqualTo("设备应支持 300 mm 晶圆。");
         assertThat(clause.path("level").asInt()).isEqualTo(2);
@@ -362,7 +358,7 @@ class HistoryExtractorTest {
     }
 
     @Test void modelFailureKeepsTheRuleResultAndCompanionAnswer() {
-        properties.getHistory().setLlmEnabled(true);
+        historySettings(true, true);
         properties.getLlm().setModel("test-model");
         var parser = withClient(new ParseHttpClient(json) {
             @Override public JsonNode post(ParseIntegrationProperties.Endpoint settings, Object body, String runId) {

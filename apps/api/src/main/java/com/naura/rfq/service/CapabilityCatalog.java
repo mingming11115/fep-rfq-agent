@@ -1,5 +1,7 @@
 package com.naura.rfq.service;
 
+import com.naura.rfq.mapper.KnowledgeRecordMapper;
+import com.naura.rfq.mapper.Table;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -11,36 +13,25 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class CapabilityCatalog {
     static final String SHARED = "BU共享";
     static final String PROJECT = "仅当前项目";
-    private final JdbcTemplate jdbc;
-    private final ObjectMapper json;
-    private final KnowledgePublicationAccess access;
-    private final AuditService audit;
-
-    enum Table {
-        MODEL("model_definition", false), PROCESS("process_definition", false),
-        EVIDENCE("evidence_record", true), CAPABILITY("capability_record", true), HISTORY("`history-rfq-record`", true);
-
-        final String name;
-        final boolean hasRevision;
-
-        Table(String name, boolean hasRevision) {
-            this.name = name;
-            this.hasRevision = hasRevision;
-        }
-    }
+    @Autowired
+    private KnowledgeRecordMapper knowledgeRecords;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private KnowledgePublicationAccess access;
+    @Autowired
+    private AuditService audit;
 
     record Row(String id, int version, long revision, String projectId, String scope, ObjectNode payload) {
         String status() { return payload.path("status").asText(); }
@@ -143,8 +134,7 @@ public class CapabilityCatalog {
     ObjectNode insert(CurrentUser user, String buId, Table table, String id, int version, String projectId,
             ObjectNode payload, String action) {
         identity(payload, buId, id, version, projectId);
-        jdbc.update("insert into " + table.name + "(bu_id,id,version,project_id,scope,payload) values (?,?,?,?,?,?)",
-                buId, id, version, projectId, scope(projectId), payload.toString());
+        knowledgeRecords.insertVersion(table, buId, id, version, projectId, scope(projectId), payload.toString());
         log(user, buId, table, id, version, action, "");
         return payload;
     }
@@ -163,8 +153,8 @@ public class CapabilityCatalog {
         payload.withArray("history").addObject().put("date", Instant.now().toString()).put("actorId", user.id())
                 .put("action", action).put("reason", reason)
                 .put("text", user.displayName() + " " + action + (reason.isBlank() ? "" : "：" + reason));
-        int count = jdbc.update("update " + table.name + " set payload=?,revision=? where bu_id=? and id=? and version=? and revision=?",
-                payload.toString(), row.revision() + 1, buId, row.id(), row.version(), row.revision());
+        int count = knowledgeRecords.updateVersion(table, buId, row.id(), row.version(), row.revision() + 1,
+                row.revision(), payload.toString());
         if (count != 1) {
             throw new BusinessException(409, "记录已变更，请刷新");
         }
@@ -173,12 +163,12 @@ public class CapabilityCatalog {
     }
 
     void log(CurrentUser user, String buId, Table table, String id, int version, String action, String reason) {
-        audit.successInBu(user.id(), buId, action, table.name, id.length() <= 64 ? id : null,
+        audit.successInBu(user.id(), buId, action, table.auditType(), id.length() <= 64 ? id : null,
                 id + " V" + version + (reason.isBlank() ? "" : " · " + reason));
     }
 
     Row row(Table table, String buId, String id, int version) {
-        return rows(table, "where bu_id=? and id=? and version=?", buId, id, version).stream().findFirst().orElse(null);
+        return knowledgeRecords.findVersion(table, buId, id, version).stream().map(this::decodeRow).findFirst().orElse(null);
     }
 
     Row required(Table table, String buId, String id, int version) {
@@ -189,11 +179,8 @@ public class CapabilityCatalog {
         return row;
     }
 
-    List<Row> rows(Table table, String filter, Object... parameters) {
-        String revision = table.hasRevision ? "revision" : "0";
-        return jdbc.query("select id,version,project_id,scope,payload," + revision + " as row_revision from " + table.name + " " + filter,
-                (result, n) -> new Row(result.getString("id"), result.getInt("version"), result.getLong("row_revision"),
-                        result.getString("project_id"), result.getString("scope"), decode(result.getString("payload"))), parameters);
+    Row decodeRow(KnowledgeRecordMapper.VersionRow row) {
+        return new Row(row.id(), row.version(), row.revision(), row.projectId(), row.scope(), decode(row.payload()));
     }
 
     void lockBu(String buId) {
@@ -222,7 +209,7 @@ public class CapabilityCatalog {
         if (id == null) {
             return 1;
         }
-        var latest = rows(table, "where bu_id=? and id=? order by version desc limit 1", buId, id).stream().findFirst()
+        var latest = knowledgeRecords.findLatest(table, buId, id).stream().map(this::decodeRow).findFirst()
                 .orElseThrow(() -> new BusinessException(404, "记录不存在"));
         requireReadable(user, buId, latest);
         if (expected != latest.version()) {

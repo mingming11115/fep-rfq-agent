@@ -17,25 +17,31 @@ import com.naura.rfq.support.document.SampleRfqBuilder;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class DocumentService {
 
     private static final List<String> SUPPORTED = List.of(".docx", ".pdf");
 
-    private final ProjectMapper projects;
-    private final CustomerDocumentMapper documents;
-    private final DocumentStorage storage;
-    private final AccessGuard access;
-    private final AuditService audit;
-    private final SampleRfqBuilder sampleBuilder;
-    private final HistoryRecallScope historyRecall;
+    @Autowired
+    private ProjectMapper projects;
+    @Autowired
+    private CustomerDocumentMapper documents;
+    @Autowired
+    private DocumentStorage storage;
+    @Autowired
+    private AccessGuard access;
+    @Autowired
+    private AuditService audit;
+    @Autowired
+    private SampleRfqBuilder sampleBuilder;
+    @Autowired
+    private HistoryRecallScope historyRecall;
 
     public List<HistoryRecallScope.Choice> historyRecallChoices(CurrentUser user, String projectId) {
         var project = requireProject(projectId);

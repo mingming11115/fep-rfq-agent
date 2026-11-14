@@ -4,16 +4,21 @@ import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.RawBlock;
 import java.util.Base64;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class OcrClient {
-    private final ParseIntegrationProperties properties;
-    private final ParseHttpClient http;
+    @Autowired
+    private ParseIntegrationProperties properties;
+    @Autowired
+    private ParseHttpClient http;
 
     public boolean enabled() { return properties.getOcr().isEnabled(); }
     public int maxImages() { return Math.max(0, properties.getOcr().getMaxImages()); }

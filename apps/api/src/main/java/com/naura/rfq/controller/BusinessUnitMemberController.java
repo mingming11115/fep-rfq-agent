@@ -4,7 +4,8 @@ import com.naura.rfq.common.api.ApiResponse;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.AdminService;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,14 +20,20 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/rfq/business-units")
-@RequiredArgsConstructor
+@Slf4j
 public class BusinessUnitMemberController {
 
-    private final AdminService admin;
+    @Autowired
+    private AdminService admin;
 
     @GetMapping("/{buId}/members")
     public ApiResponse<List<AdminService.MemberView>> members(@PathVariable String buId) {
-        CurrentUserHolder.require();
-        return ApiResponse.success(admin.membersOf(buId));
+        try {
+            CurrentUserHolder.require();
+            return ApiResponse.success(admin.membersOf(buId));
+        } catch (Exception exception) {
+            log.error("Request failed in members", exception);
+            throw exception;
+        }
     }
 }

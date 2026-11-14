@@ -20,7 +20,6 @@ services:
       RFQ_JWT_SECRET: "${RFQ_JWT_SECRET:-rfq-local-dev-secret-key-please-replace-in-production}"
       RFQ_LLM_ENABLED: "${RFQ_LLM_ENABLED:-false}"
       RFQ_HISTORY_RULES_ENABLED: "${RFQ_HISTORY_RULES_ENABLED:-true}"
-      RFQ_HISTORY_LLM_ENABLED: "${RFQ_HISTORY_LLM_ENABLED:-}"
       RFQ_LLM_URL: "${RFQ_LLM_URL:-}"
       RFQ_LLM_API_KEY: "${RFQ_LLM_API_KEY:-}"
       RFQ_LLM_MODEL: "${RFQ_LLM_MODEL:-}"

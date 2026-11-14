@@ -8,19 +8,22 @@ import com.naura.rfq.model.entity.UserBuRole;
 import com.naura.rfq.security.CurrentUser;
 import java.util.List;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class SessionService {
 
-    private final AppUserMapper users;
-    private final UserBuRoleMapper roles;
-    private final BuMemberProfileMapper profiles;
-    private final PasswordEncoder passwordEncoder;
+    @Autowired
+    private AppUserMapper users;
+    @Autowired
+    private UserBuRoleMapper roles;
+    @Autowired
+    private BuMemberProfileMapper profiles;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public Optional<AppUser> authenticate(String username, String rawPassword) {

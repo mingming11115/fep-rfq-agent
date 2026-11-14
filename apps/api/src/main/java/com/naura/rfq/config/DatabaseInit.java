@@ -1,14 +1,19 @@
 package com.naura.rfq.config;
 
+import com.naura.rfq.mapper.DatabaseBootstrapMapper;
 import java.io.IOException;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import javax.sql.DataSource;
+import lombok.extern.slf4j.Slf4j;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.ResourceProvider;
 import org.flywaydb.core.api.resource.LoadableResource;
+import org.mybatis.spring.SqlSessionFactoryBean;
+import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.flyway.FlywayConfigurationCustomizer;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
@@ -17,13 +22,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.EncodedResource;
-import org.springframework.jdbc.core.ConnectionCallback;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration(proxyBeanMethods = false)
+@Slf4j
 class DatabaseInit {
     private static final String BASELINE_NAME = "B10__rfq_schema.sql";
     private static final String V11_NAME = "V11__standard_reply_records.sql";
@@ -138,24 +143,22 @@ class DatabaseInit {
     FlywayMigrationStrategy initializeDatabase(@Value("${rfq.demo-data.enabled:false}") boolean demoEnabled) {
         return flyway -> {
             var dataSource = flyway.getConfiguration().getDataSource();
-            var jdbc = new JdbcTemplate(dataSource);
-            if (!hasTable(jdbc, flyway.getConfiguration().getTable()) && hasTable(jdbc, "rfq_demo_seed")
-                    && hasTable(jdbc, "rfq_demo_document")
-                    && jdbc.queryForObject("select count(*) from rfq_demo_seed where id=? and initialized_at is not null",
-                        Integer.class, IMPORT_MARKER) == 1) {
-                if (hasTable(jdbc, "standard-reply-record") && hasTable(jdbc, "history-rfq-record")
-                        && hasTable(jdbc, "standard_reply_index_sync")) {
-                    String version = hasColumn(jdbc, "customer_document", "history_document_ids")
-                            ? (hasColumn(jdbc, "requirement", "sort_order") ? "18"
-                                : hasColumn(jdbc, "requirement", "source_refs_json") ? "22"
-                                : hasColumn(jdbc, "history_document", "parse_due_at") ? "21" : "19")
-                            : hasColumn(jdbc, "project", "group_id") ? "17"
-                            : hasTable(jdbc, "rfq_document_replacement") ? "16"
-                            : hasTable(jdbc, "project_work_version") ? "15"
-                            : hasTable(jdbc, "requirement_match_result") ? "14"
-                            : hasColumn(jdbc, "capability_record", "source_fingerprint") ? "13"
-                            : hasTable(jdbc, "history_rfq_index_sync") ? "12" : "11";
-                    if ("22".equals(version) && hasTable(jdbc, "capability_index_sync")) {
+            var bootstrap = bootstrapMapper(dataSource);
+            if (!bootstrap.hasTable(flyway.getConfiguration().getTable()) && bootstrap.hasTable("rfq_demo_seed")
+                    && bootstrap.hasTable("rfq_demo_document") && bootstrap.hasCompletedSeed(IMPORT_MARKER)) {
+                if (bootstrap.hasTable("standard-reply-record") && bootstrap.hasTable("history-rfq-record")
+                        && bootstrap.hasTable("standard_reply_index_sync")) {
+                    String version = bootstrap.hasColumn("customer_document", "history_document_ids")
+                            ? (bootstrap.hasColumn("requirement", "sort_order") ? "18"
+                                : bootstrap.hasColumn("requirement", "source_refs_json") ? "22"
+                                : bootstrap.hasColumn("history_document", "parse_due_at") ? "21" : "19")
+                            : bootstrap.hasColumn("project", "group_id") ? "17"
+                            : bootstrap.hasTable("rfq_document_replacement") ? "16"
+                            : bootstrap.hasTable("project_work_version") ? "15"
+                            : bootstrap.hasTable("requirement_match_result") ? "14"
+                            : bootstrap.hasColumn("capability_record", "source_fingerprint") ? "13"
+                            : bootstrap.hasTable("history_rfq_index_sync") ? "12" : "11";
+                    if ("22".equals(version) && bootstrap.hasTable("capability_index_sync")) {
                         version = "23";
                     }
                     Flyway.configure().configuration(flyway.getConfiguration()).baselineVersion(version).load().baseline();
@@ -164,41 +167,46 @@ class DatabaseInit {
                 }
             }
             flyway.migrate();
-            if (!demoEnabled || alreadySeeded(jdbc)) {
+            if (!demoEnabled || alreadySeeded(bootstrap)) {
                 return;
             }
 
-            jdbc.execute(sql.substring(sql.indexOf(ASSET_SCHEMA) + ASSET_SCHEMA.length(), sql.indexOf("START TRANSACTION;")));
-            var seedScript = new EncodedResource(new ByteArrayResource(sql.substring(
-                sql.indexOf(INSERTS) + INSERTS.length(), sql.indexOf(INSERTS_END)).getBytes(StandardCharsets.UTF_8)),
-                StandardCharsets.UTF_8);
+            executeScript(dataSource, sql.substring(
+                    sql.indexOf(ASSET_SCHEMA) + ASSET_SCHEMA.length(), sql.indexOf("START TRANSACTION;")));
+            String seedScript = sql.substring(sql.indexOf(INSERTS) + INSERTS.length(), sql.indexOf(INSERTS_END));
             new TransactionTemplate(new JdbcTransactionManager(dataSource)).executeWithoutResult(status -> {
-                jdbc.update("insert into rfq_demo_seed (id) values (?) on duplicate key update id=id", SEED_LOCK);
-                if (alreadySeeded(jdbc)) {
-                    return;
+                bootstrap.lockSeed(SEED_LOCK);
+                if (!alreadySeeded(bootstrap)) {
+                    executeScript(dataSource, seedScript);
                 }
-                jdbc.execute((ConnectionCallback<Void>) connection -> {
-                    ScriptUtils.executeSqlScript(connection, seedScript);
-                    return null;
-                });
             });
         };
     }
 
-    private boolean alreadySeeded(JdbcTemplate jdbc) {
-        return jdbc.queryForObject("select exists (select 1 from app_user)", Boolean.class)
-            || jdbc.queryForObject("select exists (select 1 from rfq_demo_seed where id<>?)", Boolean.class, SEED_LOCK);
+    private DatabaseBootstrapMapper bootstrapMapper(DataSource dataSource) {
+        var factory = new SqlSessionFactoryBean();
+        factory.setDataSource(dataSource);
+        factory.setMapperLocations(new ClassPathResource("db/DatabaseBootstrapMapper.xml"));
+        try {
+            return new SqlSessionTemplate(factory.getObject()).getMapper(DatabaseBootstrapMapper.class);
+        } catch (Exception error) {
+            log.error("初始化数据库迁移 Mapper 失败", error);
+            throw new IllegalStateException("无法初始化数据库迁移 Mapper", error);
+        }
     }
 
-    private boolean hasTable(JdbcTemplate jdbc, String table) {
-        return jdbc.queryForObject("select exists (select 1 from information_schema.tables where table_schema=database() and table_name=?)",
-            Boolean.class, table);
+    private boolean alreadySeeded(DatabaseBootstrapMapper bootstrap) {
+        return bootstrap.hasUsers() || bootstrap.hasSeedOtherThan(SEED_LOCK);
     }
 
-    private boolean hasColumn(JdbcTemplate jdbc, String table, String column) {
-        return jdbc.queryForObject("""
-            select exists (select 1 from information_schema.columns
-                           where table_schema=database() and table_name=? and column_name=?)
-            """, Boolean.class, table, column);
+    private void executeScript(DataSource dataSource, String script) {
+        var resource = new EncodedResource(new ByteArrayResource(script.getBytes(StandardCharsets.UTF_8)),
+                StandardCharsets.UTF_8);
+        var connection = DataSourceUtils.getConnection(dataSource);
+        try {
+            ScriptUtils.executeSqlScript(connection, resource);
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 }

@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.integration.ExternalCallLog;
-import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue.Library;
+import com.naura.rfq.integration.standardreply.Library;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -21,18 +21,23 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
+@NoArgsConstructor
 public class StandardReplyIndexClient {
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
     private static final Pattern JOB_ID = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,254}");
     private static final Pattern ERROR_CODE = Pattern.compile("[A-Z][A-Z0-9_]{0,63}");
 
-    private final ObjectMapper json;
-    private final StandardReplyIndexProperties settings;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private StandardReplyIndexProperties settings;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
         .followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -207,6 +212,7 @@ public class StandardReplyIndexClient {
             try {
                 parsed = json.readTree(response.body());
             } catch (IOException e) {
+                log.error("解析知识索引服务的响应 JSON 失败", e);
                 call.failed(e);
                 parsed = null;
             }
@@ -218,16 +224,20 @@ public class StandardReplyIndexClient {
             }
             return new Reply(response.statusCode(), parsed);
         } catch (InterruptedException e) {
+            log.error("知识索引请求被中断", e);
             Thread.currentThread().interrupt();
             call.failed(e);
             throw new Failure("INTERRUPTED", false);
         } catch (java.util.concurrent.TimeoutException e) {
+            log.error("知识索引请求超时", e);
             call.failed(e);
             throw new Failure("REQUEST_TIMEOUT", false);
         } catch (java.util.concurrent.ExecutionException e) {
+            log.error("知识索引请求传输失败", e);
             call.failed(e);
             throw new Failure("TRANSPORT_ERROR", false);
         } catch (RuntimeException e) {
+            log.error("知识索引请求失败", e);
             call.failed(e);
             throw e;
         } finally {
