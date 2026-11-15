@@ -39,6 +39,8 @@ public class ParseIntegrationProperties {
         private String python = "python";
         private Duration timeout = Duration.ofSeconds(60);
         private int maxChars;
+        /** 保留 markitdown 产出的 Markdown，便于核对“先转 md 再解析”的中间结果。 */
+        private boolean savePayload = true;
     }
 
     @Getter @Setter

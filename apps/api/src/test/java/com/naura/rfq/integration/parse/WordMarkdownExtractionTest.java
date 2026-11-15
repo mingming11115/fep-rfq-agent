@@ -257,7 +257,12 @@ class WordMarkdownExtractionTest {
         assertThat(content.blocks().get(5).anchor()).isEqualTo("body/4");
         assertThat(Files.readAllBytes(path)).isEqualTo(original);
         Path payloads = storageRoot.resolve("parse-payloads");
-        assertThat(payloads).doesNotExist();
+        Path saved = payloads.resolve("RUN.md");
+        assertThat(saved).isRegularFile();
+        assertThat(Files.readString(saved)).isEqualTo(content.markdown());
+        config.getWordMarkdown().setSavePayload(false);
+        reader.read(path, 100, "RUN-NO-PAYLOAD");
+        assertThat(payloads.resolve("RUN-NO-PAYLOAD.md")).doesNotExist();
         config.getLlm().setLogPayload(true);
         var loggedContent = reader.read(path, 100, "RUN-PAYLOAD");
         Path payload = payloads.resolve("RUN-PAYLOAD.md");

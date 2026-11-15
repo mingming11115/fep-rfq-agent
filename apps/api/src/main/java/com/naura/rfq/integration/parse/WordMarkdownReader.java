@@ -11,6 +11,7 @@ import com.naura.rfq.model.parse.RawBlock;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -72,7 +73,7 @@ public class WordMarkdownReader {
                 throw new DocumentReadException("Word 来源数量超过上限 " + maxBlocks + "，请拆分文档后重试");
             }
             Content content = mapMarkdown(convert(marked), prefix, sources);
-            if (properties.getLlm().isLogPayload()) {
+            if (properties.getWordMarkdown().isSavePayload() || properties.getLlm().isLogPayload()) {
                 savePayload(runId, content.markdown());
             }
             return content;
@@ -88,7 +89,7 @@ public class WordMarkdownReader {
             Path pending = Files.createTempFile(payloadDirectory, "markdown-", ".tmp");
             try {
                 Files.writeString(pending, markdown);
-                Files.move(pending, target);
+                Files.move(pending, target, StandardCopyOption.REPLACE_EXISTING);
             } finally {
                 Files.deleteIfExists(pending);
             }

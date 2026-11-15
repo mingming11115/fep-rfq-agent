@@ -80,7 +80,7 @@ Java 17 / Spring Boot / MyBatis / MySQL，包含业务鉴权、客户文档上�
 
 ## 模型与 OCR 配置
 
-模型与 OCR 独立配置，默认关闭。项目 DOCX 启用模型后，后端在临时副本的段落、表格行和脚注写入来源标记，再用 MarkItDown 转成 Markdown 并调用模型抽取。模型输出拼接后的 `requirementText` 及引用编号。后端校验引用并保存 `sourceRefs`，条款原文由已验证的来源片段组成。点击条款定位到第一处正文，多个来源可逐个打开。引用无效时标记待核对。转换或模型请求失败时，本次解析失败并保留已有条款。模型关闭时继续使用原有 DOCX 规则解析。
+模型与 OCR 独立配置，默认关闭。项目 DOCX 启用模型后，后端在临时副本的段落、表格行和脚注写入来源标记，再用 MarkItDown 转成 Markdown 并调用模型抽取。转换后的 Markdown 默认保留在 `{storage-dir}/parse-payloads/{parseRunId}.md`，便于核对“先转 Markdown 再解析”的中间结果；不需要时可用 `RFQ_WORD_MARKDOWN_SAVE_PAYLOAD=false` 关闭。模型输出拼接后的 `requirementText` 及引用编号。后端校验引用并保存 `sourceRefs`，条款原文由已验证的来源片段组成。点击条款定位到第一处正文，多个来源可逐个打开。引用无效时标记待核对。转换或模型请求失败时，本次解析失败并保留已有条款。模型关闭时继续使用原有 DOCX 规则解析。
 
 本地运行启用模型前，使用 Python 3.10 或更新版本执行 `python -m pip install -r apps/api/requirements-markitdown.txt`，再将 `RFQ_MARKITDOWN_PYTHON` 指向该解释器。Docker 镜像包含转换依赖。项目 DOCX 默认先发送整份 Markdown。达到已配置的字符限制、网关返回长度限制或模型输出截断时，按来源分批，尽量携带相邻来源和表头。仍超限的批次会缩小后重试。单个来源仍超限时，本次解析失败并保留已有条款。
 
@@ -97,12 +97,13 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 | RFQ_LLM_URL | 空 | **完整** Chat Completions URL，例如内网 `http://model-gateway:8000/v1/chat/completions` |
 | RFQ_LLM_MODEL | 空 | 模型名称，由实际网关提供 |
 | RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |
-| RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后记录 LLM 请求和响应正文，并保存项目 DOCX 转换后的 Markdown。两者均包含 RFQ 原文。 |
+| RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后记录 LLM 请求和响应正文。正文包含 RFQ 原文。 |
 | RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 30s | 连接及整次请求超时 |
 | RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 分批模型请求的字符数与条目数上限 |
 | RFQ_MARKITDOWN_PYTHON | python | 具备 MarkItDown DOCX 依赖的 Python 可执行文件 |
 | RFQ_MARKITDOWN_TIMEOUT | 60s | 单次 Word 转换超时 |
 | RFQ_WORD_MARKDOWN_MAX_CHARS | 0 | Word Markdown 的可选请求字符上限，`0` 由模型网关判断长度，正数允许超限时直接分批 |
+| RFQ_WORD_MARKDOWN_SAVE_PAYLOAD | true | 保留每次 MarkItDown 转换后的 Markdown，写入 `{storage-dir}/parse-payloads/{parseRunId}.md`，便于核对中间结果；文件含 RFQ 原文 |
 | RFQ_OCR_ENABLED | false | OCR 开关 |
 | RFQ_OCR_URL / RFQ_OCR_API_KEY | 空 | 完整 OCR 地址、可选 Bearer 密钥 |
 | RFQ_OCR_CONNECT_TIMEOUT / RFQ_OCR_TIMEOUT | 3s / 30s | OCR 连接及整次请求超时 |
