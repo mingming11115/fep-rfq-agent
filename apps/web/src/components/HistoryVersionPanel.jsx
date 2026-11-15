@@ -11,7 +11,7 @@ function ChangedText({value='',other=''}){
  return <>{value.slice(0,start)}<mark>{value.slice(start,end?value.length-end:undefined)||'（空）'}</mark>{end?value.slice(-end):''}</>;
 }
 
-export default function HistoryVersionPanel({active,documents,clauses,onLocate}){
+export default function HistoryVersionPanel({active,documents,clauses,onLocate,onDelete}){
  const [opened,setOpened]=useState(false),[baseline,setBaseline]=useState(''),[target,setTarget]=useState(active.id),[filter,setFilter]=useState('变化');
  const family=documents.filter(doc=>!doc.legacy&&versionFamily(doc)===versionFamily(active)).sort((a,b)=>(b.revision||1)-(a.revision||1));
  const before=family.find(doc=>doc.id===baseline),after=family.find(doc=>doc.id===target);
@@ -26,7 +26,7 @@ export default function HistoryVersionPanel({active,documents,clauses,onLocate})
  {title:'文件',dataIndex:'name'},{title:'上传人',dataIndex:'uploadedBy'},
  {title:'上传时间',render:(_,doc)=>doc.createdAt?new Date(doc.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'—'},
  {title:'变更说明',render:(_,doc)=>doc.changeNote||'—'},
- {title:'操作',render:(_,doc)=><Button type="link" onClick={()=>onLocate(doc)}>查看该版</Button>}
+ {title:'操作',render:(_,doc)=><Space size={4}><Button type="link" onClick={()=>onLocate(doc)}>查看该版</Button>{onDelete&&onDelete(doc)}</Space>}
  ]}/><Modal title="历史 RFQ 版本比对" open={opened} onCancel={()=>setOpened(false)} footer={<Button onClick={()=>setOpened(false)}>关闭</Button>} width="min(1400px, 96vw)">
  <Space wrap><span>基准版</span><Select aria-label="比对基准版" style={{width:280}} value={baseline||undefined} options={options} onChange={setBaseline}/><span>目标版</span><Select aria-label="比对目标版" style={{width:280}} value={target} options={options} onChange={setTarget}/><Select aria-label="差异筛选" value={filter} style={{width:150}} onChange={setFilter} options={['变化','全部',...kinds,'待核对'].map(value=>({value,label:value}))}/></Space>
  {!ready?<Alert style={{marginTop:16}} type="info" message="请选择两个不同且已完成解析的版本。"/>:<>

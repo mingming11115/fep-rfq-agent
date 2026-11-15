@@ -1,5 +1,30 @@
 const normalized=value=>String(value??'').trim().replace(/\s+/g,' ');
 export const versionFamily=doc=>doc.familyId||doc.id;
+const versionRank=doc=>{
+ const number=Number(doc.versionNumber);
+ if(Number.isFinite(number)&&number>0) { return number; }
+ const label=Number(String(doc.version??'').replace(/[^\d]/g,''));
+ return Number.isFinite(label)&&label>0?label:0;
+};
+// 列表按版本族折叠：同一族只保留最新一版，旧版本经「版本记录」面板查看。
+export function latestFamilyDocuments(documents){
+ const latest=new Map();
+ for(const doc of documents||[]){
+  if(doc.legacy) { latest.set(doc.id,doc); continue; }
+  const family=versionFamily(doc),current=latest.get(family);
+  if(!current||versionRank(doc)>versionRank(current)) { latest.set(family,doc); }
+ }
+ return [...latest.values()];
+}
+export function historyVersionCounts(documents){
+ const counts=new Map();
+ for(const doc of documents||[]){
+  if(doc.legacy) { continue; }
+  const family=versionFamily(doc);
+  counts.set(family,(counts.get(family)||0)+1);
+ }
+ return counts;
+}
 export function latestHistoryClauses(rows){
  const latest=new Map();
  for(const row of rows)if(!latest.has(row.id)||Number(row.version)>Number(latest.get(row.id).version)) { latest.set(row.id,row); }

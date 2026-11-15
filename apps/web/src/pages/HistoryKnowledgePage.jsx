@@ -13,7 +13,7 @@ import {historyFiles} from '../historyFiles';
 import './history-knowledge.css';
 import HistoryVersionPanel from '../components/HistoryVersionPanel';
 import HistoryOriginalPreview from '../components/HistoryOriginalPreview';
-import {versionFamily} from '../historyVersions';
+import {historyVersionCounts,latestFamilyDocuments,versionFamily} from '../historyVersions';
 import {ALL_GROUPS} from '../groupResources';
 import {createKnowledgeLibraryClient,libraryPermissions} from '../knowledgeLibraryClient';
 import {useLibraryMutation} from '../useLibraryMutation';
@@ -73,8 +73,11 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const allDocuments=[...importedDocuments.values(),...storedDocuments.filter(doc=>!importedDocuments.has(doc.id))];
  const documents=allDocuments.filter(doc=>!groupScope||groupScope.matches('history',doc))
   .sort((a,b)=>(Date.parse(b.createdAt)||0)-(Date.parse(a.createdAt)||0));
+ const listedDocuments=latestFamilyDocuments(documents);
+ const familyVersionCounts=historyVersionCounts(documents);
+ const archivedVersionCount=documents.length-listedDocuments.length;
  const active=documents.find(doc=>doc.id===activeId);
- const listDocuments=[...viewerImports.filter(job=>!job.document),...documents];
+ const listDocuments=[...viewerImports.filter(job=>!job.document),...listedDocuments];
  useEffect(()=>{
   if(!databaseBacked) { return; }
   for(const job of imports){
@@ -325,7 +328,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    <small className="history-subtext">{doc.uploadedBy||'历史知识'} · {date(doc.createdAt)}</small>
   </div>},
   {title:'客户／项目',key:'project',render:(_,doc)=><>{doc.metadata?.customer||'待补充'}<small className="history-subtext">{doc.metadata?.projectName||'—'}</small></>},
-  {title:'文件版本',dataIndex:'version',width:100,render:value=>value||'—'},
+  {title:'文件版本',dataIndex:'version',width:130,render:(value,doc)=><>{value||'—'}{!doc.legacy&&!doc.importState&&(familyVersionCounts.get(versionFamily(doc))||1)>1&&<Tag style={{marginLeft:6}}>{familyVersionCounts.get(versionFamily(doc))} 版</Tag>}</>},
   {title:'解析状态',width:150,render:(_,doc)=>{
    if(doc.importState==='failed'){
     return <><Tag color="error">导入失败</Tag><small className="history-missing">{doc.error}</small></>;
@@ -368,8 +371,8 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    <UiButton className="btn-primary" disabled={!actor.canEdit} onClick={()=>{setFiles(databaseBacked?{projectId:active?.projectId}:active&&!active.legacy?{previousDocumentId:active.id}:{});setUploading(true);setError('');}}><UploadIcon size={16}/>上传历史 RFQ</UiButton>
   </Space>}/>
   {error&&<Alert type="error" showIcon closable onClose={()=>setError('')} message={error}/>}
-  {!active?<section className="panel history-document-panel"><div className="history-toolbar"><Input.Search aria-label="搜索历史文档和条款" placeholder="搜索文档、客户、项目、要求或历史答复" value={query} onChange={event=>{setQuery(event.target.value);setDocumentPage(1);}} allowClear/><span>共 {listDocuments.length} 份文档</span></div><Table columns={documentColumns} dataSource={filterHistoryDocuments(listDocuments,readableClauses,query)} rowKey="id" scroll={{x:1050}} pagination={{current:documentPage,onChange:setDocumentPage,defaultPageSize:10,showSizeChanger:true}} locale={{emptyText:<Empty description="暂无历史 RFQ，上传文件后自动解析为条款草稿"/>}}/></section>:<>
-   <HistoryVersionPanel key={active.id} active={active} documents={documents} clauses={readableClauses} onLocate={(doc,row)=>{setActiveId(doc.id);setQuery('');setFilter('all');if(row) { editClause(row); } else { setEditing(null); }}}/>
+  {!active?<section className="panel history-document-panel"><div className="history-toolbar"><Input.Search aria-label="搜索历史文档和条款" placeholder="搜索文档、客户、项目、要求或历史答复" value={query} onChange={event=>{setQuery(event.target.value);setDocumentPage(1);}} allowClear/><span>共 {listDocuments.length} 份 RFQ{archivedVersionCount>0?` · 含 ${archivedVersionCount} 个历史版本`:''}</span></div><Table columns={documentColumns} dataSource={filterHistoryDocuments(listDocuments,readableClauses,query)} rowKey="id" scroll={{x:1050}} pagination={{current:documentPage,onChange:setDocumentPage,defaultPageSize:10,showSizeChanger:true}} locale={{emptyText:<Empty description="暂无历史 RFQ，上传文件后自动解析为条款草稿"/>}}/></section>:<>
+   <HistoryVersionPanel key={active.id} active={active} documents={documents} clauses={readableClauses} onDelete={documentDeleteButton} onLocate={(doc,row)=>{setActiveId(doc.id);setQuery('');setFilter('all');if(row) { editClause(row); } else { setEditing(null); }}}/>
    <section className="panel history-metadata-panel"><div className="history-section-heading"><h2>文档信息</h2><Space>{<Button disabled={!actor.canEdit} onClick={()=>{setMetadata({...structuredClone(active),version:active.version||'V1',groupIds:groupScope?.groups('history',active)||active.groupIds||[]});setError('');}}>编辑文档信息</Button>}{(databaseBacked?active.sourceType==='history-upload':!active.legacy&&!active.manual)&&<Button onClick={download}><Download size={14}/>下载原件</Button>}</Space></div><Descriptions column={{xs:1,sm:2,lg:3}} items={[...Object.entries(labels).map(([key,label])=>({key,label,children:active.metadata?.[key]||'待补充'})),{key:'version',label:'文件版本',children:active.version||'—'}]}/></section>
    {(pending||interrupted||active.parseStatus==='failed')&&<Alert type={pending?'info':'warning'} showIcon message={pending?'原件已保存，正在解析条款。':interrupted?'上次解析未完成，原件已保留，可以重试。':active.error||'解析失败，原件已保留'} action={!pending&&<Button disabled={!actor.canEdit||saving} onClick={databaseBacked?reparse:()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重试历史 RFQ 解析失败', error); return fail(error); })}>重试解析</Button>}/>}
    <div className="history-counts">{[{key:'all',label:'全部条款',count:rows.length},{key:'missing',label:'缺少答复',count:rows.filter(row=>!row.answer?.trim()).length},{key:'待审核',label:'待审核',count:rows.filter(row=>row.status==='待审核').length},{key:'已发布',label:'已发布',count:rows.filter(row=>row.status==='已发布').length}].map(item=><button key={item.key} className={filter===item.key?'active':''} onClick={()=>changeFilter(item.key)}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>

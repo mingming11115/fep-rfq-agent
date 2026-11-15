@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compareHistoryVersions,versionFamily} from './historyVersions.js';
+import {compareHistoryVersions,historyVersionCounts,latestFamilyDocuments,versionFamily} from './historyVersions.js';
 const row=(id,no,requirement,answer='满足',extra={})=>({id,version:1,clauseNo:no,requirement,answer,...extra});
 test('legacy documents each form their own family',()=>assert.equal(versionFamily({id:'old'}),'old'));
 test('matches renumbered requirements and flags changed numeric requirements',()=>{
@@ -17,4 +17,23 @@ test('compares latest internal revision and conditions without mutating history'
  assert.equal(compareHistoryVersions(old,[row('b','1','要求','新')])[0].kind,'未变化');
  assert.equal(compareHistoryVersions(old,[row('b','1','要求','新',{conditions:'附加条件'})])[0].kind,'答复变更');
  assert.equal(old.length,2);
+});
+test('document list shows one row per version family and keeps the newest version',()=>{
+ const documents=[
+  {id:'D3',familyId:'D1',version:'V3',versionNumber:3,previousDocumentId:'D2'},
+  {id:'D1',version:'V1',versionNumber:1},
+  {id:'D2',familyId:'D1',version:'V2',versionNumber:2,previousDocumentId:'D1'},
+  {id:'S1',version:'V1'},
+  {id:'legacy:["a"]',legacy:true,version:'—'},
+ ];
+ const listed=latestFamilyDocuments(documents);
+ assert.deepEqual(listed.map(doc=>doc.id),['D3','S1','legacy:["a"]']);
+ assert.equal(documents.length-listed.length,2);
+ assert.equal(historyVersionCounts(documents).get('D1'),3);
+ assert.equal(historyVersionCounts(documents).has('legacy:["a"]'),false);
+ assert.equal(documents.length,5);
+});
+test('version family falls back to the version label when versionNumber is missing',()=>{
+ const listed=latestFamilyDocuments([{id:'A',version:'V1'},{id:'B',familyId:'A',version:'V2'}]);
+ assert.deepEqual(listed.map(doc=>doc.id),['B']);
 });
