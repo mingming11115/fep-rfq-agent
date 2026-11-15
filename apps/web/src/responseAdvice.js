@@ -1,7 +1,7 @@
 import {compareParameter} from './rfqWorkflow.js';
 import {answerRemark} from './responseFields.js';
 
-const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','其他':'其他','待确认':'待确认'};
+const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','待确认':'待确认'};
 export const SOURCE_ANNOTATION_CONCLUSIONS=Object.keys(conclusionLabels);
 const operators={'<=':'≤','>=':'≥','=':'='};
 
@@ -17,10 +17,6 @@ export function buildSourceResponseAnnotation(row = {}, response = row) {
   const conclusion = Object.hasOwn(conclusionLabels, value) ? value : '待确认';
   if (conclusion === 'Comply') { return { kind: 'comply', label: 'Comply', conclusion, wording: '' }; }
   if (conclusion === '待确认') { return { kind: 'pending', label: '待确认', conclusion, wording: '' }; }
-  if (conclusion === '其他') {
-    const detail = String(current.conclusionText || '').trim();
-    return { kind: 'recommendation', label: '其他', conclusion, wording: detail ? `其他：${detail}` : '' };
-  }
   return {
     kind: 'recommendation', label: '推荐话术', conclusion,
     wording: generateRecommendedWording({ ...current, conclusion }),
@@ -29,11 +25,16 @@ export function buildSourceResponseAnnotation(row = {}, response = row) {
 
 export function generateRecommendedWording(row = {}) {
   const conclusion = String(row.conclusion || '').trim();
-  if (!['有条件 Comply', '不满足', '不适用'].includes(conclusion)) { return ''; }
+  if (!['Comply', '有条件 Comply', '不满足', '不适用'].includes(conclusion)) { return ''; }
   const text = (value) => String(value || '').trim().replace(/[。；;]+$/, '');
   const subject = `针对${row.clause ? `条款 ${row.clause} ` : ''}${row.title ? `“${row.title}”` : '本项要求'}`;
   const conditions = text(row.conditions), remark = text(answerRemark(row));
   const context = [conditions && `适用条件：${conditions}。`, remark && `说明：${remark}。`];
+  if (conclusion === 'Comply') { return [
+    `${subject}，本项按满足处理。`,
+    ...context,
+    '如本项目配置、材料或验收条件发生变化，将重新核对本项应答。',
+  ].filter(Boolean).join('\n'); }
   if (conclusion === '有条件 Comply') { return [
     `${subject}，本项按有条件响应处理。`,
     ...context,

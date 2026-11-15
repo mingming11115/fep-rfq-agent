@@ -65,8 +65,11 @@ test('the same report is listed once while references to different pages stay di
  assert.equal(pages.evidence,'报告 V1；第4页；报告 V1；第5页');
 });
 
-test('Comply has no recommended exception wording',()=>{
- assert.equal(model.generateRecommendedWording({...row,conclusion:'Comply'}),'');
+test('Comply also gets a recommended wording that points at the supporting evidence',()=>{
+ const text=model.generateRecommendedWording({...row,conclusion:'Comply'});
+ assert.ok(text.includes('本项按满足处理'));
+ assert.ok(text.includes('配置、材料或验收条件发生变化'));
+ assert.equal(model.generateRecommendedWording({...row,conclusion:'待确认'}),'');
 });
 test('conditional wording retains the actual conditions and reason without changing the saved answer',()=>{
  const input={...row,clause:'2.1',conclusion:'有条件 Comply',conditions:'客户提供样品并完成1.2 mm材料试切',reason:'选配X需双方确认',draft:'原人工答复'};
@@ -192,11 +195,4 @@ test('unrecognized conclusions remain available under pending annotations',()=>{
  const notes=model.selectSourceResponseAnnotations([{id:'unknown',conclusion:'未评估'},{id:'missing'}],{conclusions:['待确认']});
  assert.deepEqual(notes.map(note=>note.row.id),['unknown','missing']);
  assert.ok(notes.every(note=>note.annotation.conclusion==='待确认'));
-});
-
-test('other conclusions keep the manual conclusion text in the source annotation',()=>{
- const annotation=model.buildSourceResponseAnnotation({id:'other',conclusion:'其他',conclusionText:'部分满足，替代方案待确认'});
- assert.equal(annotation.conclusion,'其他');
- assert.equal(annotation.wording,'其他：部分满足，替代方案待确认');
- assert.ok(model.SOURCE_ANNOTATION_CONCLUSIONS.includes('其他'));
 });
