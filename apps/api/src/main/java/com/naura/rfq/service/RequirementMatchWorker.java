@@ -89,15 +89,19 @@ public class RequirementMatchWorker {
         }
         var stageProgress = stages.path(stage);
         String reason = progress.path("reason").asText(stageProgress.path("reason").asText("-"));
+        // Deployment runs at INFO, so DEBUG lines would never reach the log file: keep every outcome visible.
         Level level = switch (finished.status()) {
-            case "failed", "retry_wait" -> Level.WARN;
-            case "blocked" -> job.attempts() == 1 ? Level.WARN : Level.DEBUG;
-            default -> Level.DEBUG;
+            case "failed" -> Level.ERROR;
+            case "retry_wait" -> Level.WARN;
+            case "blocked" -> job.attempts() == 1 ? Level.WARN : Level.INFO;
+            default -> Level.INFO;
         };
         log.atLevel(level).log("requirement.match.result runId={} requirementId={} documentId={} parseRunId={} projectId={}"
-                        + " status={} stage={} reason={} attempt={} retryInSeconds={} durationMs={} platformRequestId={} indexVersion={}",
+                        + " status={} stage={} reason={} attempt={} failureCount={} retryInSeconds={} durationMs={}"
+                        + " platformRequestId={} indexVersion={}",
                 job.id(), job.requirement(), job.document(), job.parseRun(), job.input().project(), finished.status(), stage,
-                reason, job.attempts(), finished.retrySeconds(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
+                reason, job.attempts(), progress.path("failureCount").asInt(0), finished.retrySeconds(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
                 stageProgress.path("platformRequestId").asText("-"), stageProgress.path("indexVersion").asText("-"));
     }
 
