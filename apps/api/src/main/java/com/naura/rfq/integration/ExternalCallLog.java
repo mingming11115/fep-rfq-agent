@@ -19,8 +19,9 @@ public final class ExternalCallLog {
         this.service = service;
         this.operation = operation;
         long requestBytes = request.bodyPublisher().map(HttpRequest.BodyPublisher::contentLength).orElse(0L);
-        log.info("external.call.request callId={} service={} operation={} method={} host={} requestBytes={} parseRunId={}",
-            callId, service, operation, request.method(), request.uri().getHost(), requestBytes, parseRunId);
+        log.info("external.call.request callId={} service={} operation={} method={} host={} path={} requestBytes={} parseRunId={}",
+            callId, service, operation, request.method(), request.uri().getHost(),
+            request.uri().getRawPath(), requestBytes, parseRunId);
     }
 
     public String callId() {
