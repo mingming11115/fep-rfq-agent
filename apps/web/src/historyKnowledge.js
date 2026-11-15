@@ -75,7 +75,6 @@ export function transitionHistoryClauses(clauses,ids,action,actor,reason='') {
    if(!editable) { throw new Error('仅草稿或退回条款可以删除'); }
   }else if(action==='approve'||action==='return'){
    if(row.status!=='待审核') { throw new Error('仅待审核条款可以审核'); }
-   if(row.submitterId===actor.id) { throw new Error('同一版本不得自审，请由其他 BU 审核人员处理'); }
   }
  }
  if(action==='return'&&!text(reason)) { throw new Error('请填写退回原因'); }

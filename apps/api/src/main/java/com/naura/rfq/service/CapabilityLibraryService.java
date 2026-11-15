@@ -202,7 +202,7 @@ public class CapabilityLibraryService {
     }
 
     private ObjectNode publish(CurrentUser user, String buId, Row row, String reason) {
-        requireIndependent(user, row);
+        requireReviewable(row);
         var chain = chain(buId, row.id());
         requireState(chain.get(0).version() == row.version(), "只能发布最新版本");
         requireState(hasExplicitScope(row), "能力版本缺少明确的共享范围");
@@ -238,7 +238,7 @@ public class CapabilityLibraryService {
     }
 
     private ObjectNode returnDraft(CurrentUser user, String buId, Row row, String reason) {
-        requireIndependent(user, row);
+        requireReviewable(row);
         requireReason(reason);
         row.payload().put("status", "退回");
         return catalog.update(user, buId, Table.CAPABILITY, row, "退回能力草稿", reason);
@@ -485,14 +485,11 @@ public class CapabilityLibraryService {
         return row;
     }
 
-    private void requireIndependent(CurrentUser user, Row row) {
+    /** BU 管理员可以审核本 BU 任意能力版本，包括本人提交的版本，因此这里只校验状态与提交记录。 */
+    private void requireReviewable(Row row) {
         requireState("待审核".equals(row.status()), "只有待审核的能力版本可以审核");
-        String submitter = row.payload().path("submitterId").asText();
-        if (submitter.isBlank()) {
+        if (row.payload().path("submitterId").asText().isBlank()) {
             throw new BusinessException(409, "该版本缺少有效提交记录");
-        }
-        if (submitter.equals(user.id())) {
-            throw new BusinessException(403, "同一能力版本不得自审");
         }
     }
 

@@ -130,7 +130,7 @@ export function KnowledgePage({ toast, actorRole = 'SR', navigate, logEvent,perm
     },cause=>setError(cause.message));
   }
   let sourcedForm; try { sourcedForm = prepareKnowledgeSource(form,sourceOptions);if(groupScope) { sourcedForm.groupIds=groupScope.validate(form.groupIds||[],groupScope.groups('reply',items.find(r=>r.id===form.id&&r.version===form.version)||{})); } } catch (error) { console.error('校验知识资料来源失败', error); return setError(error.message); } const item = {...sourcedForm, status:'草稿', submitterRole:actorRole,submitterId:actorId, version:form.newVersion ? Math.max(...items.filter((r) => r.id === form.id).map((r) => r.version)) + 1 : form.version, history:[...(form.history || []), {date:today(),text:`${actorRole} 保存${form.newVersion ? '新版本' : ''}草稿`}]}; delete item.newVersion; setItems((all) => all.some((r) => r.id === item.id && r.version === item.version) ? all.map((r) => r.id === item.id && r.version === item.version ? item : r) : [...all, item]); setSelected(`${item.id}:${item.version}`); setForm(null); if(item.type!==tab) { setTab(item.type); } notify(`${item.type === 'history' ? '历史 RFQ 知识' : '标准回复'}草稿已保存；发布前需核对适用条件与来源`); };
-  const requestAction = (item, action) => { if(!(action==='提交审核'?canEdit:canApprove)) { return toast?.('当前身份无此资料操作权限','error'); } if (['提交审核','批准发布'].includes(action) && !item.conditions?.trim()) { return toast?.('缺少适用条件，请先修订补齐', 'error'); } if (['批准发布','撤销','退回'].includes(action) && actorRole !== 'BU管理员') { return toast?.('当前角色无知识批准权，请切换为BU管理员', 'error'); } if (action === '批准发布' && item.submitterId === actorId) { return toast?.('同一版本不得自审，请由独立审批角色处理', 'error'); } setError('');setReview({item,action}); };
+  const requestAction = (item, action) => { if(!(action==='提交审核'?canEdit:canApprove)) { return toast?.('当前身份无此资料操作权限','error'); } if (['提交审核','批准发布'].includes(action) && !item.conditions?.trim()) { return toast?.('缺少适用条件，请先修订补齐', 'error'); } if (['批准发布','撤销','退回'].includes(action) && actorRole !== 'BU管理员') { return toast?.('当前角色无知识批准权，请切换为BU管理员', 'error'); } setError('');setReview({item,action}); };
   const canDelete = item => canEdit && item?.type==='standard' && ['草稿','退回','已撤销'].includes(item.status);
   const canRevoke = item => canApprove && item.status==='已发布' && (!databaseBacked || item.validity!=='被替代');
   const deleteReply = () => {
@@ -351,7 +351,6 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
   const requestAction=(item,action)=>{
     if(!(action==='提交审核'?canEdit:canApprove)) { return; }
     if(['提交审核','批准发布'].includes(action)&&problems(item).length) { return toast?.(`无法${action}：${problems(item).join('、')}`,'error'); }
-    if(action==='批准发布'&&item.submitterId===actorId) { return toast?.('同一版本不能自审，请由另一位有能力发布资格的BU管理员审核。','error'); }
     setError('');setReview({item:{...item,title:`${item.metric} ${item.value}`},action});
   };
   const confirmAction=reason=>{
@@ -364,7 +363,6 @@ export function CapabilitiesPage({toast,project,actorRole='SR',navigate,route,lo
       },cause=>setError(cause.message));
     }
     if(['提交审核','批准发布'].includes(action)&&problems(item).length) { return toast?.(`无法${action}：${problems(item).join('、')}`,'error'); }
-    if(action==='批准发布'&&item.submitterId===actorId) { return toast?.('同一版本不能自审','error'); }
     const status={'提交审核':'待审核','批准发布':'已发布','退回':'退回','撤销':'已撤销'}[action];
     const next={...item,status,validity:action==='批准发布'?'有效':action==='撤销'?'已撤销':item.validity,submitterId:action==='提交审核'?actorId:item.submitterId,refs:(item.refs||[]).map(r=>({...r,needsReview:['批准发布','撤销'].includes(action)})),history:[...(item.history||[]),{date:today(),text:`${actorRole} ${action}${reason?`：${reason}`:''}`}]};
     setItems(all=>all.map(r=>r.id===item.id&&r.version===item.version?next:r.id===item.id&&r.status==='已发布'&&action==='批准发布'?{...r,validity:'被替代'}:r));

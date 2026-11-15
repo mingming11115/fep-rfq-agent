@@ -133,7 +133,7 @@ V1__init.sql 建立身份、BU 隔离、项目、文档、解析与需求抽取�
 
 - `requirement` 表服务"新 RFQ 解析"，与知识库条款是两条业务，不共用。
 - 客户条款号（原编号）保持自由文本：可空、可重复、可跳号；重复或无编号的条款保留为异常，人工关联。
-- 同一原编号构成版本链 `(bu_id, clause_no, version)`；审核规则沿用"同版本不得自审"（`reviewer_id != submitter_id`）与现有知识发布权限。
+- 同一原编号构成版本链 `(bu_id, clause_no, version)`；审核规则为 BU 管理员可审核本 BU 任意版本（含本人提交的版本，此时 `reviewer_id` 与 `submitter_id` 相同），并沿用现有知识发布权限。
 - 重新解析按 `source_anchor` 定位合并，保留人工修改与已提交/发布版本，不静默删除旧条款。
 - 同 BU 同内容（sha256）重复上传提示打开已有文档。
 - 审核流水复用 `audit_event`（`object_type='KNOWLEDGE_CLAUSE'`），不另建表。
@@ -194,7 +194,7 @@ create table knowledge_clause (
     status            varchar(16)  not null default 'DRAFT',-- DRAFT/PENDING_REVIEW/PUBLISHED
     version           int          not null default 1,
     submitter_id      varchar(64)  not null,
-    reviewer_id       varchar(64),                          -- 同版本不得自审
+    reviewer_id       varchar(64),                          -- 审核人，可与 submitter_id 相同
     submitted_at      timestamp,
     reviewed_at       timestamp,
     created_at        timestamp    not null default current_timestamp,

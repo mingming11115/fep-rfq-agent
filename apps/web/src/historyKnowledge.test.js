@@ -17,13 +17,13 @@ test('reparse preserves manually edited fields, submitted versions and stable id
  const removed=history.mergeHistoryParse(doc,[edited],{...result,clauses:[]},actor);
  assert.equal(removed.clauses.length,1);assert.ok(removed.clauses[0].sourceMissing);
 });
-test('missing answers block the entire submit batch; independent approval is required',()=>{
+test('missing answers block the entire submit batch; the BU can review its own submission',()=>{
  const base={id:'K1',documentId:'D1',version:1,status:'草稿',requirement:'要求',answer:'答复',submitterId:'sr'};
  assert.throws(()=>history.transitionHistoryClauses([base,{...base,id:'K2',answer:''}],['K1','K2'],'submit',actor),/答复/);
  assert.equal(base.status,'草稿');
  const submitted=history.transitionHistoryClauses([base],['K1'],'submit',actor);
  assert.equal(submitted[0].status,'待审核');
- assert.throws(()=>history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,canApprove:true}),/自审/);
+ assert.equal(history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,canApprove:true})[0].status,'已发布');
  assert.throws(()=>history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,id:'tech'}),/权限/);
  assert.equal(history.transitionHistoryClauses(submitted,['K1'],'approve',{...actor,id:'bu',canApprove:true})[0].status,'已发布');
 });

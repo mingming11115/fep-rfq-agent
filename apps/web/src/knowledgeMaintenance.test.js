@@ -92,7 +92,7 @@ test('all four roles can create, save, submit and open knowledge imports while p
    await click('提交审核');await click('确认提交审核');
    records=JSON.parse(localStorage.getItem(storageKey));assert.equal(records[0].status,'待审核',role);
    assert.equal(button('批准发布').disabled,role!=='BU管理员',role);
-   if(role==='BU管理员'){await click('批准发布');assert.ok(messages.some(message=>message.includes('不得自审')));assert.equal(JSON.parse(localStorage.getItem(storageKey))[0].status,'待审核');}
+   if(role==='BU管理员'){await click('批准发布');await click('确认批准并发布');assert.equal(JSON.parse(localStorage.getItem(storageKey))[0].status,'已发布','a BU publisher can approve the version it submitted');}
    await click('批量导入');assert.ok(document.querySelector('input[type="file"]'));await click('取消');
   }
   // A different BU approver can publish a colleague's submitted version.

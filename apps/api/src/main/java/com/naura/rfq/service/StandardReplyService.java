@@ -136,7 +136,7 @@ public class StandardReplyService {
     }
 
     private ObjectNode publish(CurrentUser user, String buId, List<Reply> chain, Reply record, String reason) {
-        requireIndependentReview(user, record);
+        requireReviewable(record);
         requireState(!record.payload().path("submitterId").asText().isBlank(), "缺少提交人，请退回后重新提交");
         requireState(isLatestVisible(chain, record), "只能发布最新的待审核版本");
         validateContent(record);
@@ -162,7 +162,7 @@ public class StandardReplyService {
     }
 
     private ObjectNode returnForEdit(CurrentUser user, String buId, Reply record, String reason) {
-        requireIndependentReview(user, record);
+        requireReviewable(record);
         requireReason(reason);
         record.payload().put("status", "退回").put("validity", "待核对");
         return saveAction(user, buId, record, "退回标准回复", reason);
@@ -213,12 +213,9 @@ public class StandardReplyService {
         guard.requireProject(user, project);
     }
 
-    private void requireIndependentReview(CurrentUser user, Reply record) {
+    /** BU 管理员可以审核本 BU 任意版本，包括本人提交的版本，因此这里只校验版本状态。 */
+    private void requireReviewable(Reply record) {
         requireState("待审核".equals(record.status()), "仅待审核版本可以审核");
-        String submitterId = record.payload().path("submitterId").asText();
-        if (user.id().equals(submitterId)) {
-            throw new BusinessException(403, "同一版本不得自审");
-        }
     }
 
     private void validateContent(Reply record) {

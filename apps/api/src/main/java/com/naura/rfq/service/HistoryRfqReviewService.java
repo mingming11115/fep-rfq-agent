@@ -92,7 +92,6 @@ public class HistoryRfqReviewService {
         boolean directPublish = EDITABLE.contains(row.status());
         requireState(directPublish || "待审核".equals(row.status()), "仅草稿、退回或待审核的历史条款可以发布");
         if (!directPublish) {
-            requireIndependentReviewer(user, row);
             requireState(!row.payload().path("submitterId").asText().isBlank(), "缺少提交人，请退回后重新提交");
         }
         requireState(isLatestVisible(chain, row), "只能发布最新版本");
@@ -122,7 +121,6 @@ public class HistoryRfqReviewService {
 
     private ObjectNode returnForEdit(CurrentUser user, String buId, Clause row, String reason) {
         requireState("待审核".equals(row.status()), "仅待审核的历史条款可以审核");
-        requireIndependentReviewer(user, row);
         requireReason(reason);
         row.payload().put("status", "退回");
         return save(user, buId, row, "退回历史 RFQ 条款", reason);
@@ -182,12 +180,6 @@ public class HistoryRfqReviewService {
             project = KnowledgePublicationAccess.recordProjectId(row.payload());
         }
         access.requireScope(user, buId, project, row.scope());
-    }
-
-    private void requireIndependentReviewer(CurrentUser user, Clause row) {
-        if (user.id().equals(row.payload().path("submitterId").asText())) {
-            throw new BusinessException(403, "同一版本不得自审");
-        }
     }
 
     private void requireContent(Clause row) {
