@@ -42,8 +42,10 @@ public class StandardReplyIndexClient {
     private StandardReplyIndexProperties settings;
     @Value("${rfq.standard-reply-index.log-payload:false}")
     private boolean logPayload;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
-        .followRedirects(HttpClient.Redirect.NEVER).build();
+    // Knowledge platform only speaks HTTP/1.1; pin it so plaintext calls skip the h2c upgrade headers
+    // (JDK-8239117) that some servers reject or mishandle for request bodies above a few KB.
+    private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+        .connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
 
     public StandardReplyIndexClient(ObjectMapper json, StandardReplyIndexProperties settings) {
         this.json = json;
