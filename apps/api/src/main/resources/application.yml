@@ -49,9 +49,9 @@ rfq:
     # When on, logs external.call.payload (truncated to 4000 chars per direction).
     log-payload: ${RFQ_STANDARD_REPLY_INDEX_LOG_PAYLOAD:false}
     # One dataset per library, shared by every BU; BU isolation is the bu_id field filter on each record.
-    dataset: ${RFQ_STANDARD_REPLY_INDEX_DATASET:rfq.fep.standard-reply}
-    history-dataset: ${RFQ_STANDARD_REPLY_INDEX_HISTORY_DATASET:rfq.fep.history-clause}
-    capability-dataset: ${RFQ_STANDARD_REPLY_INDEX_CAPABILITY_DATASET:rfq.fep.capability-boundary}
+    dataset: ${RFQ_STANDARD_REPLY_INDEX_DATASET:standard-reply}
+    history-dataset: ${RFQ_STANDARD_REPLY_INDEX_HISTORY_DATASET:rfq-item}
+    capability-dataset: ${RFQ_STANDARD_REPLY_INDEX_CAPABILITY_DATASET:equipment-capability}
   match:
     worker-enabled: ${RFQ_MATCH_WORKER_ENABLED:false}
     poll-interval-ms: ${RFQ_MATCH_POLL_INTERVAL_MS:3000}

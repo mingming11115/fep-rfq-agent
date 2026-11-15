@@ -94,7 +94,7 @@ class StandardReplyIndexClientTest {
 
     @Test
     void ingestsPublishedCapabilityInItsOwnDataset() throws Exception {
-        String dataset = "rfq.fep.capability-boundary";
+        String dataset = "equipment-capability";
         String prefix = "rfq.standard-reply-index";
         var properties = new MapConfigurationPropertySource(Map.of(
             prefix + ".base-url", "http://127.0.0.1:" + server.getAddress().getPort(),
