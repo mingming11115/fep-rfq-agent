@@ -26,3 +26,6 @@
 # Temporary Office lock files and browser artifacts
 ~$*
 /tests/browser/*.png
+
+# Local agent workspace notes
+/.workbuddy/
