@@ -22,6 +22,11 @@ spring:
 logging:
   pattern:
     level: "%5p requestId=%X{requestId:--}"
+  level:
+    # One INFO line per /api request is too noisy; WARN keeps only aborted or 5xx responses.
+    # The filter still sets the requestId MDC and the X-Request-Id header. Re-enable with
+    # --logging.level.com.naura.rfq.config.RequestLoggingFilter=INFO (or RFQ_HTTP_LOG_LEVEL=INFO).
+    com.naura.rfq.config.RequestLoggingFilter: ${RFQ_HTTP_LOG_LEVEL:WARN}
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

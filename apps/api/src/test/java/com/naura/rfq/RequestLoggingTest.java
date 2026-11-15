@@ -10,6 +10,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = RequestLoggingTest.ProbeController.class)
 @Import(RequestLoggingTest.ProbeController.class)
 @ExtendWith(OutputCaptureExtension.class)
+@TestPropertySource(properties = "logging.level.com.naura.rfq.config.RequestLoggingFilter=INFO")
 class RequestLoggingTest {
     @Autowired private MockMvc mvc;
     @MockitoBean private JwtService jwt;
