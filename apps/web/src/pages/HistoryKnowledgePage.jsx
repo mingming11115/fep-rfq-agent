@@ -400,7 +400,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    <label className="history-file-label">历史 RFQ 文件 *</label>
    <div className="history-upload-drop" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();setFiles(value=>({...value,file:event.dataTransfer.files[0]}));}}>
     <FileText size={30}/><p>拖入文件，或点击选择</p>
-    <input aria-label="历史 RFQ 文件" type="file" accept=".docx,.pdf" onChange={event=>setFiles(value=>({...value,file:event.target.files[0]}))}/>
+    <input aria-label="历史 RFQ 文件" type="file" accept=".docx,.pdf" onChange={event=>{const file=event.target.files[0];setFiles(value=>({...value,file}));event.target.value='';}}/>
     {files.file&&<strong>{files.file.name}</strong>}<small>DOCX / PDF，文件不超过 30 MiB</small>
    </div>
    {error&&<Alert type="error" message={error}/>}

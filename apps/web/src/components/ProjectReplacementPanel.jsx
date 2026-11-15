@@ -69,7 +69,7 @@ export default function ProjectReplacementPanel({project, files, actorRole, acto
           setRecallIds(ids);
           setRecallMode(ids.length ? 'selected' : 'default');
         }} options={activeFiles.map(row => ({value:row.id,label:`${row.name} · ${row.version}`}))} style={{minWidth:260}}/>
-      <Input aria-label="新版原件" type="file" accept=".docx,.pdf" key={sourceId} onChange={event => setFile(event.target.files[0] || null)}/>
+      <Input aria-label="新版原件" type="file" accept=".docx,.pdf" key={sourceId} onChange={event => {setFile(event.target.files[0] || null);event.target.value='';}}/>
       <Button disabled={!sourceId || !file || recallMode === 'selected' && !recallIds.length} loading={busy} onClick={() => run(upload)}>登记新版</Button>
     </Space>{sourceId && <HistoryRecallPicker projectId={project.id} groupId={project.groupId} mode={recallMode} ids={recallIds}
       onMode={setRecallMode} onIds={setRecallIds} disabled={busy}/>}</>}

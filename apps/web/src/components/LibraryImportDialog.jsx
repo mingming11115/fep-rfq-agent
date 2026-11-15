@@ -25,7 +25,7 @@ export default function LibraryImportDialog({title,accept,hint,projects,pending=
       {result.errors?.length>0&&<ul>{result.errors.map(row=><li key={row.rowNumber}>第 {row.rowNumber} 行 · {row.message}</li>)}</ul>}
     </Space>:<Space direction="vertical" style={{width:'100%'}}>
       <p>{hint}</p>
-      <input aria-label="选择导入文件" type="file" accept={accept} disabled={busy} onChange={e=>setFile(e.target.files[0]||null)}/>
+      <input aria-label="选择导入文件" type="file" accept={accept} disabled={busy} onChange={e=>{setFile(e.target.files[0]||null);e.target.value='';}}/>
       {projects&&<Select aria-label="导入可见范围" value={projectId} disabled={busy} onChange={setProjectId} style={{width:'100%'}}
         options={[{value:'',label:'BU 共享'},...projects.map(project=>({value:project.id,label:project.name}))]}/>}
     </Space>}
