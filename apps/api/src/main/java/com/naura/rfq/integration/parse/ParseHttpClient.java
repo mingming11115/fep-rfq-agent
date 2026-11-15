@@ -55,7 +55,26 @@ public class ParseHttpClient {
         if (content.startsWith("```")) {
             content = content.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
         }
-        return json.readTree(content);
+        try {
+            return json.readTree(content);
+        } catch (JsonProcessingException failure) {
+            return repairedContent(content, failure);
+        }
+    }
+
+    private JsonNode repairedContent(String content, JsonProcessingException failure) throws JsonProcessingException {
+        String repaired = ModelJsonText.repair(content);
+        if (repaired.equals(content)) {
+            throw failure;
+        }
+        try {
+            JsonNode parsed = json.readTree(repaired);
+            log.info("模型响应 JSON 含非法转义或裸控制字符，已修复后解析");
+            return parsed;
+        } catch (JsonProcessingException error) {
+            log.error("模型响应 JSON 修复后仍无法解析", error);
+            throw error;
+        }
     }
 
     JsonNode postMineru(ParseIntegrationProperties.Mineru settings, String boundary, HttpRequest.BodyPublisher body) throws Exception {
