@@ -456,6 +456,21 @@ create table parse_batch (
 create index idx_parse_batch_run on parse_batch (parse_run_id);
 -- RFQ_MIGRATION_V25_END
 
+-- RFQ_MIGRATION_V26
+-- 项目级比对策略：顺序、分库相似度阈值、分库开关；无记录时沿用 BU 默认顺序与系统阈值。
+create table project_match_policy (
+    project_id varchar(64) primary key,
+    match_order json not null,
+    similarity json not null,
+    enabled json not null,
+    version bigint not null,
+    changed_by varchar(64) not null,
+    changed_at datetime(6) not null
+);
+-- 每轮比对沿用创建时的阈值，避免策略调整改写已完成轮次的判定口径。
+alter table requirement_match_run add column match_thresholds json null;
+-- RFQ_MIGRATION_V26_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

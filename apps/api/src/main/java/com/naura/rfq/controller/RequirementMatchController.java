@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,6 +44,37 @@ public class RequirementMatchController {
             return ApiResponse.success(matches.changePolicy(CurrentUserHolder.require(), buId, request));
         } catch (Exception exception) {
             log.error("Request failed in changePolicy", exception);
+            throw exception;
+        }
+    }
+
+    @GetMapping("/projects/{projectId}/match-policy")
+    public ApiResponse<RequirementMatchService.Policy> projectPolicy(@PathVariable String projectId) {
+        try {
+            return ApiResponse.success(matches.projectPolicy(CurrentUserHolder.require(), projectId));
+        } catch (Exception exception) {
+            log.error("Request failed in projectPolicy", exception);
+            throw exception;
+        }
+    }
+
+    @PutMapping("/projects/{projectId}/match-policy")
+    public ApiResponse<RequirementMatchService.Policy> changeProjectPolicy(@PathVariable String projectId,
+            @Valid @RequestBody RequirementMatchRequest.ProjectPolicy request) {
+        try {
+            return ApiResponse.success(matches.changeProjectPolicy(CurrentUserHolder.require(), projectId, request));
+        } catch (Exception exception) {
+            log.error("Request failed in changeProjectPolicy", exception);
+            throw exception;
+        }
+    }
+
+    @DeleteMapping("/projects/{projectId}/match-policy")
+    public ApiResponse<RequirementMatchService.Policy> resetProjectPolicy(@PathVariable String projectId) {
+        try {
+            return ApiResponse.success(matches.resetProjectPolicy(CurrentUserHolder.require(), projectId));
+        } catch (Exception exception) {
+            log.error("Request failed in resetProjectPolicy", exception);
             throw exception;
         }
     }
@@ -108,17 +140,6 @@ public class RequirementMatchController {
             return ApiResponse.success(matches.saveContext(CurrentUserHolder.require(), id, request));
         } catch (Exception exception) {
             log.error("Request failed in saveContext", exception);
-            throw exception;
-        }
-    }
-
-    @PostMapping("/requirements/{id}/match-runs/{runId}/reject")
-    public ApiResponse<ObjectNode> reject(@PathVariable String id, @PathVariable String runId,
-            @Valid @RequestBody RequirementMatchRequest.Reject request) {
-        try {
-            return ApiResponse.success(matches.reject(CurrentUserHolder.require(), id, runId, request.reason()));
-        } catch (Exception exception) {
-            log.error("Request failed in reject", exception);
             throw exception;
         }
     }

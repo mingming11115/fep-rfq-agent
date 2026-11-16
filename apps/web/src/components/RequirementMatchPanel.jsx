@@ -127,7 +127,7 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
   function openAction(action) {
     setReason('');
     setActionError('');
-    setAction({kind:action,runId:run?.runId,version:deviation?.version});
+    setAction({kind:action,version:deviation?.version});
   }
   async function submitAction() {
     const text = reason.trim();
@@ -137,8 +137,7 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
       if (action.kind === 'detach') {
         if (!await onDetach(text)) { return; }
       } else {
-        const item = action.kind === 'reject' ? await matches.reject(row.id, action.runId, text)
-          : await matches.closeDeviation(row.id, action.version, text);
+        const item = await matches.closeDeviation(row.id, action.version, text);
         onDeviation(item);
       }
       setAction(null);
@@ -153,12 +152,12 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
       <Tag>{run ? statusLabels[run.status] || run.status : error ? '读取失败' : '读取中'}</Tag>
       {canRun && <Button size="small" loading={busy} onClick={retry}>重新比对</Button>}
       {canSetInput && <Button size="small" onClick={() => setInputOpen(true)}>设置比对条件</Button>}
-      {canRun && run?.status === 'completed' && <Button size="small" onClick={() => openAction('reject')}>拒绝本轮结果</Button>}
       {error && <Button size="small" onClick={() => setRefresh(value => value + 1)}>刷新结果</Button>}
     </Space>
     {error && <Alert type="error" message={error} showIcon/>}
     {run?.reason && <p>{reasonLabel(run.reason)}</p>}
-    {run && <ol>{matchStages(run).map(stage => <li key={stage.library}>
+    {run?.result?.skipped && <Alert type="info" showIcon message="本项目已关闭三个知识库比对，条款按人工核对处理"/>}
+    {run && !run.result?.skipped && <ol>{matchStages(run).map(stage => <li key={stage.library}>
       <Space><b>{MATCH_LIBRARIES[stage.library]}</b><Tag>{statusLabels[stage.status] || stage.status}</Tag></Space>
       {stage.reason && <p>{reasonLabel(stage.reason)}</p>}
       {stage.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
@@ -193,7 +192,7 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
     </div>}
     {inputOpen && <MatchInputDialog row={row} resources={resources} client={matches} onClose={() => setInputOpen(false)}
       onSaved={() => { setInputOpen(false); setRun(null); setRefresh(value => value + 1); toast('比对条件已保存，已提交比对'); }}/>}
-    {action && <Modal title={{reject:'拒绝本轮比对结果', close:'关闭偏离事项', detach:'解除采纳依据'}[action.kind]}
+    {action && <Modal title={{close:'关闭偏离事项', detach:'解除采纳依据'}[action.kind]}
       onClose={() => { if (!busy) { setAction(null); } }}
       footer={<Space><Button disabled={busy} onClick={() => setAction(null)}>取消</Button><Button type="primary" loading={busy} onClick={submitAction}>提交</Button></Space>}>
       <Input.TextArea aria-label="处理原因" value={reason} onChange={event => setReason(event.target.value)} maxLength={900}/>

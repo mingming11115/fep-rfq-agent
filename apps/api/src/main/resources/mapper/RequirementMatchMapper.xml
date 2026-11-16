@@ -5,7 +5,7 @@
     <sql id="runColumns">
         id,requirement_id,document_id,document_version,parse_run_id,requirement_version,policy_version,
         input_fingerprint,coalesce(current_run,0) as current_run,status,lease_token,attempts,progress,bu_id,project_id,
-        input_snapshot,match_order
+        input_snapshot,match_order,match_thresholds
     </sql>
 
     <sql id="due">
@@ -98,9 +98,9 @@
 
     <insert id="insertRun">
         insert into requirement_match_run(id,bu_id,project_id,requirement_id,requirement_version,document_id,document_version,
-            parse_run_id,input_fingerprint,policy_version,match_order,input_snapshot,request_key,trigger_reason,current_run,
+            parse_run_id,input_fingerprint,policy_version,match_order,match_thresholds,input_snapshot,request_key,trigger_reason,current_run,
             status,next_attempt_at,progress)
-        values (#{id},#{buId},#{projectId},#{requirementId},#{requirementVersion},#{documentId},#{documentVersion},#{parseRunId},#{fingerprint},#{policyVersion},#{order},#{snapshot},#{requestKey},#{reason},1,'queued',utc_timestamp(6),#{progress})
+        values (#{id},#{buId},#{projectId},#{requirementId},#{requirementVersion},#{documentId},#{documentVersion},#{parseRunId},#{fingerprint},#{policyVersion},#{order},#{thresholds},#{snapshot},#{requestKey},#{reason},1,'queued',utc_timestamp(6),#{progress})
     </insert>
 
     <update id="supersedeRequirement">
@@ -114,6 +114,21 @@
 
     <select id="findPolicy" resultType="com.naura.rfq.mapper.RequirementMatchMapper$PolicyRow">
         select match_order,version,changed_by,changed_at from bu_match_policy where bu_id=#{buId}
+    </select>
+
+    <insert id="upsertProjectPolicy">
+        insert into project_match_policy(project_id,match_order,similarity,enabled,version,changed_by,changed_at)
+        values (#{projectId},#{order},#{similarity},#{enabled},#{version},#{userId},utc_timestamp(6)) as desired
+        on duplicate key update match_order=desired.match_order,similarity=desired.similarity,enabled=desired.enabled,
+            version=desired.version,changed_by=desired.changed_by,changed_at=desired.changed_at
+    </insert>
+
+    <delete id="deleteProjectPolicy">
+        delete from project_match_policy where project_id=#{projectId}
+    </delete>
+
+    <select id="findProjectPolicy" resultType="com.naura.rfq.mapper.RequirementMatchMapper$ProjectPolicyRow">
+        select match_order,similarity,enabled,version,changed_by,changed_at from project_match_policy where project_id=#{projectId}
     </select>
 
     <select id="findByRequest" resultType="com.naura.rfq.mapper.RequirementMatchMapper$RunRow">

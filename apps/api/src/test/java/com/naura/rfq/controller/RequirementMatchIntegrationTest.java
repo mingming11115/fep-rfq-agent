@@ -186,15 +186,59 @@ class RequirementMatchIntegrationTest {
         adoption.putObject("patch").put("draft", "项目历史答复").put("conclusion", "Comply");
         assertThat(request(patch(response).contentType("application/json").content(adoption.toString()), f)
                 .at("/matchReference/version").asInt()).isEqualTo(1);
-        String reject = "/api/rfq/requirements/" + requirement + "/match-runs/" + runId + "/reject";
-        String rejected = "{\"reason\":\"历史条件不适用\"}";
-        var item = request(post(reject).contentType("application/json").content(rejected), f);
-        assertThat(request(post(reject).contentType("application/json").content(rejected), f)).isEqualTo(item);
         jdbc.update("update `history-rfq-record` set payload=json_set(payload,'$.status','已撤销') where bu_id=? and id='H1'", f.bu());
         matches.recheckAdoption(requirement);
         var checked = request(get("/api/rfq/requirements/" + requirement + "/match-result"), f);
         assertThat(checked.path("referenceInvalid").asBoolean()).isTrue();
-        assertThat(checked.at("/deviation/triggers").size()).isEqualTo(2);
+        assertThat(checked.at("/deviation/triggers").size()).isEqualTo(1);
+    }
+
+    @Test void projectPolicyOverridesOrderThresholdsAndLibrarySwitches() throws Exception {
+        var f = fixture();
+        var policy = "/api/rfq/projects/" + f.project() + "/match-policy";
+        var defaults = request(get(policy), f);
+        assertThat(defaults.path("inherited").asBoolean()).isTrue();
+        assertThat(defaults.at("/similarity/standard_reply").asDouble()).isEqualTo(0.80);
+        assertThat(defaults.at("/similarity/history_rfq").asDouble()).isEqualTo(0.74);
+        assertThat(defaults.at("/enabled/capability").asBoolean()).isTrue();
+
+        var saved = request(put(policy).contentType("application/json").content(projectPolicy(0, false).toString()), f);
+        assertThat(saved.path("version").asInt()).isEqualTo(1);
+        assertThat(saved.path("inherited").asBoolean()).isFalse();
+        assertThat(saved.at("/similarity/history_rfq").asDouble()).isEqualTo(0.66);
+
+        String doc = uploadAndParse(f);
+        var run = firstRun(f, doc);
+        assertThat(run.path("matchOrder").size()).isEqualTo(2);
+        assertThat(run.path("matchOrder").get(0).asText()).isEqualTo("history_rfq");
+        assertThat(jdbc.queryForObject("select match_thresholds->>'$.history_rfq' from requirement_match_run where id=?",
+                Double.class, run.path("runId").asText())).isEqualTo(0.66);
+
+        request(put(policy).contentType("application/json").content(projectPolicy(1, false, false, false).toString()), f);
+        request(post("/api/rfq/documents/" + doc + "/parse-runs"), f);
+        var skipped = firstRun(f, doc);
+        assertThat(skipped.path("matchOrder").size()).isZero();
+        makeDue(skipped.path("runId").asText());
+        worker.runOnce();
+        var result = detail(f, skipped.path("requirementId").asText(), skipped.path("runId").asText()).path("result");
+        assertThat(result.path("skipped").asBoolean()).isTrue();
+        assertThat(result.path("conclusion").asText()).isEqualTo("无需比对");
+
+        var reset = request(delete(policy), f);
+        assertThat(reset.path("inherited").asBoolean()).isTrue();
+        assertThat(reset.at("/enabled/capability").asBoolean()).isTrue();
+        assertThat(reset.path("version").asInt()).isZero();
+    }
+
+    private ObjectNode projectPolicy(long version, boolean capability, boolean... textLibraries) {
+        boolean standardReply = textLibraries.length == 0 || textLibraries[0];
+        boolean historyRfq = textLibraries.length < 2 || textLibraries[1];
+        var body = json.createObjectNode().put("version", version);
+        body.set("matchOrder", json.createArrayNode().add("history_rfq").add("standard_reply").add("capability"));
+        body.set("similarity", json.createObjectNode().put("standardReply", 0.86).put("historyRfq", 0.66));
+        body.set("enabled", json.createObjectNode().put("standardReply", standardReply)
+                .put("historyRfq", historyRfq).put("capability", capability));
+        return body;
     }
 
     @Test void waitsForThePublishedIndexVersionThenUsesLocalAnswerAndHidesItAfterRevocation() throws Exception {

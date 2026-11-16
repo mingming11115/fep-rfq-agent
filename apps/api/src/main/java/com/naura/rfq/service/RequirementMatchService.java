@@ -23,7 +23,9 @@ import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,8 @@ import static com.naura.rfq.service.MatchEvaluator.digest;
 @Service
 @Slf4j
 public class RequirementMatchService {
+    private static final Map<String, Boolean> ALL_ENABLED = Map.of(MatchEvaluator.STANDARD, true,
+            MatchEvaluator.HISTORY, true, MatchEvaluator.CAPABILITY, true);
     @Autowired
     private RequirementMatchMapper matchRecords;
     @Autowired
@@ -70,7 +74,13 @@ public class RequirementMatchService {
     @Value("${rfq.match.low-confidence-threshold:0}")
     private double lowConfidenceThreshold;
 
-    public record Policy(List<String> matchOrder, long version, String changedBy, String changedAt) {}
+    public record Policy(List<String> matchOrder, Map<String, Double> similarity, Map<String, Boolean> enabled,
+            long version, String changedBy, String changedAt, boolean inherited) {
+        boolean active(String library) { return !Boolean.FALSE.equals(enabled.get(library)); }
+
+        /** 顺序只对启用的库生效；三库全关时返回空列表，本轮不做比对。 */
+        List<String> activeOrder() { return matchOrder.stream().filter(this::active).toList(); }
+    }
     public record Accepted(String runId, String status) {}
     private record Scope(Project project, CustomerDocument document, Requirement requirement) {}
     private record SavedContext(long version, String sourceFingerprint, JsonNode payload) {}
@@ -107,9 +117,69 @@ public class RequirementMatchService {
         return policy(bu);
     }
 
+    public Policy projectPolicy(CurrentUser user, String projectId) {
+        var project = projects.findById(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
+        access.requireProject(user, project);
+        return policy(project.getBuId(), projectId);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Policy changeProjectPolicy(CurrentUser user, String projectId, RequirementMatchRequest.ProjectPolicy request) {
+        var project = projects.findByIdForUpdate(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
+        access.requireProject(user, project);
+        access.requireActiveProject(project);
+        requirePolicyEditor(user, project);
+        if (!new HashSet<>(request.matchOrder()).equals(Set.copyOf(DEFAULT_ORDER))) {
+            throw new BusinessException(400, "比对顺序必须包含三个不同的库");
+        }
+        Policy before = policy(project.getBuId(), projectId);
+        if (before.version() != request.version()) {
+            throw new BusinessException(409, "比对策略已变更，请刷新");
+        }
+        long version = before.version() + 1;
+        var enabled = Map.of(MatchEvaluator.STANDARD, request.enabled().standardReply(),
+                MatchEvaluator.HISTORY, request.enabled().historyRfq(),
+                MatchEvaluator.CAPABILITY, request.enabled().capability());
+        var similarity = Map.of(MatchEvaluator.STANDARD, request.similarity().standardReply().doubleValue(),
+                MatchEvaluator.HISTORY, request.similarity().historyRfq().doubleValue());
+        matchRecords.upsertProjectPolicy(projectId, json.valueToTree(request.matchOrder()).toString(),
+                json.valueToTree(similarity).toString(), json.valueToTree(enabled).toString(), version, user.id());
+        audit.successInBu(user.id(), project.getBuId(), "配置项目比对策略", "project_match_policy", projectId,
+                policySummary(request.matchOrder(), similarity, enabled));
+        return policy(project.getBuId(), projectId);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Policy resetProjectPolicy(CurrentUser user, String projectId) {
+        var project = projects.findByIdForUpdate(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
+        access.requireProject(user, project);
+        access.requireActiveProject(project);
+        requirePolicyEditor(user, project);
+        matchRecords.deleteProjectPolicy(projectId);
+        audit.successInBu(user.id(), project.getBuId(), "恢复默认比对策略", "project_match_policy", projectId, "沿用 BU 默认顺序与系统阈值");
+        return policy(project.getBuId(), projectId);
+    }
+
+    private void requirePolicyEditor(CurrentUser user, Project project) {
+        boolean buAdmin = user.roles().stream()
+                .anyMatch(role -> project.getBuId().equals(role.buId()) && "BU_ADMIN".equals(role.role()));
+        if (!buAdmin && !Objects.equals(project.getOwnerId(), user.id())) {
+            throw new BusinessException(403, "只有本 BU 管理员或项目负责人可以调整比对策略");
+        }
+    }
+
+    private String policySummary(List<String> order, Map<String, Double> similarity, Map<String, Boolean> enabled) {
+        var parts = new java.util.ArrayList<String>();
+        parts.add("顺序 " + String.join(" → ", order));
+        parts.add(String.format("阈值 标准回复 %.2f / 历史 RFQ %.2f", similarity.get(MatchEvaluator.STANDARD),
+                similarity.get(MatchEvaluator.HISTORY)));
+        parts.add("启用 " + order.stream().filter(library -> !Boolean.FALSE.equals(enabled.get(library))).count() + " 个库");
+        return String.join("；", parts);
+    }
+
     void parsed(Project project, CustomerDocument document, List<Requirement> rows) {
         matchRecords.supersedeGenerated(project.getId(), document.getId());
-        Policy policy = policy(project.getBuId());
+        Policy policy = policy(project.getBuId(), project.getId());
         int queued = 0;
         for (var requirement : rows) {
             if (ready(requirement)) {
@@ -129,7 +199,7 @@ public class RequirementMatchService {
             supersede(requirement.getId());
             return;
         }
-        enqueue(new Scope(project, document, requirement), policy(project.getBuId()), "correction", null);
+        enqueue(new Scope(project, document, requirement), policy(project.getBuId(), project.getId()), "correction", null);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -145,15 +215,7 @@ public class RequirementMatchService {
         if (!ready(scope.requirement())) {
             throw new BusinessException(409, "请先核对条款原文");
         }
-        return enqueue(scope, policy(scope.project().getBuId()), "manual", key);
-    }
-
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public ObjectNode reject(CurrentUser user, String id, String runId, String reason) {
-        var scope = lockForUser(user, id);
-        requireMatchEditor(user, scope.project());
-        completed(scope.project(), scope.requirement(), runId);
-        return deviations.record(scope.project(), scope.requirement(), runId, "rejected", reason.trim());
+        return enqueue(scope, policy(scope.project().getBuId(), scope.project().getId()), "manual", key);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -219,7 +281,7 @@ public class RequirementMatchService {
             }
         }
         matchRecords.upsertInput(id, sourceFingerprint(requirement), before.version() + 1, payload.toString());
-        var run = enqueue(scope, policy(bu), "input", null);
+        var run = enqueue(scope, policy(bu, scope.project().getId()), "input", null);
         audit.successInBu(user.id(), bu, "确认条款比对输入", "requirement", id, run.runId());
         return contextView(requirement, context(id)).put("runId", run.runId());
     }
@@ -324,7 +386,7 @@ public class RequirementMatchService {
         return !work.retired(project.getId(), requirement.getDocumentId())
                 && reference.path("inputFingerprint").asText().equals(digest(snapshot.toString()))
                 && evaluator.referenceAvailable(new MatchEvaluator.Input(project.getBuId(), project.getId(),
-                        project.getGroupId(), snapshot, DEFAULT_ORDER), reference);
+                        project.getGroupId(), snapshot, DEFAULT_ORDER, Map.of()), reference);
     }
 
     JsonNode readableResponse(Project project, JsonNode response) {
@@ -456,17 +518,22 @@ public class RequirementMatchService {
                 progress.put("reason", "MATCH_SCOPE_CHANGED");
             } else {
                 matchRecords.insertResult(run.id(), outcome.stamp().toString(), outcome.result().toString());
-                if (outcome.result().path("knowledgeGap").asBoolean()) {
-                    deviations.record(project, requirement, run.id(), "knowledge_gap", "三个知识库均未命中");
-                }
-                if ("不满足".equals(outcome.result().path("conclusion").asText())) {
-                    deviations.record(project, requirement, run.id(), "capability_contradiction", "能力依据显示不满足，请分派技术评审");
-                }
-                String matched = outcome.result().path("matchedLibrary").asText();
-                var similarity = outcome.result().path("stages").path(matched).path("candidates").path(0).path("businessSimilarity");
-                if (lowConfidenceThreshold > 0 && lowConfidenceThreshold <= 1
-                        && similarity.isNumber() && similarity.asDouble() < lowConfidenceThreshold) {
-                    deviations.record(project, requirement, run.id(), "low_confidence", "候选相似度低于当前配置阈值");
+                // 三库全关的轮次不做比对，也不产生知识缺口或能力矛盾类偏离。
+                if (outcome.result().path("skipped").asBoolean()) {
+                    progress.put("skipped", true);
+                } else {
+                    if (outcome.result().path("knowledgeGap").asBoolean()) {
+                        deviations.record(project, requirement, run.id(), "knowledge_gap", "三个知识库均未命中");
+                    }
+                    if ("不满足".equals(outcome.result().path("conclusion").asText())) {
+                        deviations.record(project, requirement, run.id(), "capability_contradiction", "能力依据显示不满足，请分派技术评审");
+                    }
+                    String matched = outcome.result().path("matchedLibrary").asText();
+                    var similarity = outcome.result().path("stages").path(matched).path("candidates").path(0).path("businessSimilarity");
+                    if (lowConfidenceThreshold > 0 && lowConfidenceThreshold <= 1
+                            && similarity.isNumber() && similarity.asDouble() < lowConfidenceThreshold) {
+                        deviations.record(project, requirement, run.id(), "low_confidence", "候选相似度低于当前配置阈值");
+                    }
                 }
             }
         }
@@ -538,7 +605,8 @@ public class RequirementMatchService {
             view.set("result", payload);
         } else {
             view.put("matchedLibrary", payload.path("matchedLibrary").asText(null))
-                    .put("conclusion", payload.path("conclusion").asText()).put("knowledgeGap", payload.path("knowledgeGap").asBoolean());
+                    .put("conclusion", payload.path("conclusion").asText()).put("knowledgeGap", payload.path("knowledgeGap").asBoolean())
+                    .put("skipped", payload.path("skipped").asBoolean());
             view.set("stages", publicProgress(payload).path("stages"));
         }
         return view;
@@ -568,8 +636,11 @@ public class RequirementMatchService {
     private Accepted enqueue(Scope scope, Policy policy, String reason, String requestKey) {
         var requirement = scope.requirement();
         var input = runSnapshot(requirement, scope.document(), scope.project().getGroupId());
+        var configured = policy.activeOrder();
+        // 指定历史文件或同 Group 检索时只在历史库内比对；库被关闭时整轮不做比对。
         var order = input.has("historyDocumentIds") || input.has("historyGroupId")
-                ? List.of(MatchEvaluator.HISTORY) : policy.matchOrder();
+                ? (configured.contains(MatchEvaluator.HISTORY) ? List.of(MatchEvaluator.HISTORY) : List.<String>of())
+                : configured;
         String fingerprint = digest(input.toString());
         if (requestKey == null) {
             var current = decodeRun(matchRecords.findCurrent(requirement.getId()));
@@ -586,7 +657,8 @@ public class RequirementMatchService {
         order.forEach(library -> stages.putObject(library).put("status", "not_run"));
         matchRecords.insertRun(id, scope.project().getBuId(), scope.project().getId(), requirement.getId(), requirement.getVersion(),
                 scope.document().getId(), scope.document().getVersion(), requirement.getParseRunId(), fingerprint, policy.version(),
-                json.valueToTree(order).toString(), input.toString(), requestKey, reason, progress.toString());
+                json.valueToTree(order).toString(), json.valueToTree(policy.similarity()).toString(), input.toString(), requestKey,
+                reason, progress.toString());
         return new Accepted(id, "queued");
     }
 
@@ -689,8 +761,37 @@ public class RequirementMatchService {
 
     private Policy policy(String bu) {
         var row = matchRecords.findPolicy(bu);
-        return row == null ? new Policy(DEFAULT_ORDER, 0, null, null)
-                : new Policy(order(row.matchOrder()), row.version(), row.changedBy(), row.changedAt());
+        return row == null ? new Policy(DEFAULT_ORDER, MatchEvaluator.DEFAULT_THRESHOLDS, ALL_ENABLED, 0, null, null, true)
+                : new Policy(order(row.matchOrder()), MatchEvaluator.DEFAULT_THRESHOLDS, ALL_ENABLED, row.version(),
+                        row.changedBy(), row.changedAt(), true);
+    }
+
+    /** 项目策略优先；项目没有单独配置时沿用 BU 默认顺序与系统阈值。 */
+    private Policy policy(String bu, String projectId) {
+        var row = projectId == null || projectId.isBlank() ? null : matchRecords.findProjectPolicy(projectId);
+        return row == null ? policy(bu)
+                : new Policy(order(row.matchOrder()), thresholds(row.similarity()), enabled(row.enabled()),
+                        row.version(), row.changedBy(), row.changedAt(), false);
+    }
+
+    private Map<String, Double> thresholds(String value) {
+        var parsed = new LinkedHashMap<>(MatchEvaluator.DEFAULT_THRESHOLDS);
+        parse(value).fields().forEachRemaining(entry -> {
+            if (entry.getValue().isNumber()) {
+                parsed.put(entry.getKey(), entry.getValue().asDouble());
+            }
+        });
+        return Map.copyOf(parsed);
+    }
+
+    private Map<String, Boolean> enabled(String value) {
+        var parsed = new LinkedHashMap<>(ALL_ENABLED);
+        parse(value).fields().forEachRemaining(entry -> {
+            if (entry.getValue().isBoolean()) {
+                parsed.put(entry.getKey(), entry.getValue().asBoolean());
+            }
+        });
+        return Map.copyOf(parsed);
     }
 
     private Run decodeRun(RequirementMatchMapper.RunRow row) {
@@ -702,7 +803,7 @@ public class RequirementMatchService {
                 row.requirementVersion(), row.policyVersion(), row.inputFingerprint(), row.currentRun(),
                 row.status(), row.leaseToken(), row.attempts(), parse(row.progress()),
                 new MatchEvaluator.Input(row.buId(), row.projectId(), snapshot.path("groupId").asText(), snapshot,
-                        order(row.matchOrder())));
+                        order(row.matchOrder()), thresholds(row.matchThresholds())));
     }
 
     private List<String> order(String value) {

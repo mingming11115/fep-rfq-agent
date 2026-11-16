@@ -1,4 +1,5 @@
 import ProjectReplacementPanel from '../components/ProjectReplacementPanel';
+import MatchPolicyPanel from '../components/MatchPolicyPanel';
 import {CapabilitiesPage} from './ReferencePages';
 import KnowledgeGroupWorkspace from '../components/KnowledgeGroupWorkspace';
 import { QueryFilter, ProFormText, ProFormSelect, ProFormDatePicker } from '@ant-design/pro-components';
@@ -75,8 +76,9 @@ export function SettingsPage({ project, requirements = [], members = [], actorRo
   };
   const approvalField = (key, label, options = roles) => <Field key={key} label={label}><Select disabled={!canEdit} label={label} value={approvalDraft[key]} onChange={(value) => setApprovalDraft({ ...approvalDraft, [key]: value })} options={[{ value: '', label: '待配置（保存为草稿）' }, ...options]}/></Field>;
   return <div className="management-page">{embedded?(canEdit&&<div className="project-info-permission"><StatusBadge status="项目管理权限"/></div>):<Heading title="项目设置" description="明确项目范围、确认责任与审批关系，让每一次变更可追溯。" actions={canEdit?<StatusBadge status="项目管理权限"/>:null}/>}
-    <section className="panel"><Tabs value={tab} onChange={(value) => { setTab(value); setError(''); }} items={[["basic", "基本信息"], ["personnel", "人员与最终评审"], ...(appState?.dataSource==='mysql'?[["source-versions","原件换版"]]:[])]}/>
+    <section className="panel"><Tabs value={tab} onChange={(value) => { setTab(value); setError(''); }} items={[["basic", "基本信息"], ["personnel", "人员与最终评审"], ...(appState?.dataSource==='mysql'?[["match-policy","知识库比对策略"],["source-versions","原件换版"]]:[])]}/>
       <div className="panel-body">
+        {tab==='match-policy'&&appState?.dataSource==='mysql'&&<><div className="mg-section-header"><div><h2>知识库比对策略</h2><p>比对顺序、相似度阈值与启用范围按项目单独配置；未配置时沿用 BU 默认顺序与系统阈值。</p></div></div><MatchPolicyPanel projectId={project.id}/><Notice>仅本 BU 管理员或项目负责人可以保存；策略变更只影响之后新建或重跑的轮次。</Notice></>}
         {tab==='source-versions'&&<ProjectReplacementPanel key={project.id} project={project} files={appState.documentsByProject?.[project.id]||[]}
           actorRole={actorRole} actorId={actorId} onReload={onReload} toast={toast}/>}
         {tab==='personnel'&&<ProjectPersonnelPanel appState={appState} project={project} requirements={requirements} actorId={actorId} onPersonnelAction={onPersonnelAction} onConfigureFinalReview={onConfigureFinalReview}/>}

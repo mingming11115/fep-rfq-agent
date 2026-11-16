@@ -27,6 +27,7 @@ class MatchEvaluator {
     static final String HISTORY = "history_rfq";
     static final String CAPABILITY = "capability";
     static final List<String> DEFAULT_ORDER = List.of(STANDARD, HISTORY, CAPABILITY);
+    static final Map<String, Double> DEFAULT_THRESHOLDS = Map.of(STANDARD, 0.80, HISTORY, 0.74);
     private static final int MAX_SEARCH_IDS = 100;
     // Leave time to save the result inside the 90-second worker lease (8 seconds per search).
     private static final int MAX_SCOPED_SEARCH_IDS = 8 * MAX_SEARCH_IDS;
@@ -44,7 +45,21 @@ class MatchEvaluator {
     private HistoryRecallScope historyRecall;
     private final MatchTextScorer scorer = new MatchTextScorer();
 
-    record Input(String bu, String project, String groupId, JsonNode snapshot, List<String> order) {
+    record Input(String bu, String project, String groupId, JsonNode snapshot, List<String> order,
+            Map<String, Double> thresholds) {
+        Input {
+            thresholds = thresholds == null ? Map.of() : Map.copyOf(thresholds);
+        }
+
+        /** 每轮比对沿用创建时的阈值，策略调整不会改写已完成轮次的判定口径。 */
+        double threshold(String library) {
+            Double value = thresholds.get(library);
+            if (value == null || value.isNaN() || value <= 0 || value >= 1) {
+                return DEFAULT_THRESHOLDS.getOrDefault(library, 0.80);
+            }
+            return value;
+        }
+
         String historyGroupId() { return snapshot.path("historyGroupId").asText(); }
 
         List<String> historyDocumentIds() {
@@ -65,6 +80,10 @@ class MatchEvaluator {
         var stages = result.putObject("stages");
         var stamp = json.createObjectNode();
         input.order().forEach(stage -> stages.putObject(stage).put("status", "not_run"));
+        if (input.order().isEmpty()) {
+            // 三个知识库全部关闭时不做任何比对，结论直接标记为无需比对。
+            return new Evaluation("completed", result.put("skipped", true).put("conclusion", "无需比对"), stamp, 0);
+        }
         boolean missingCapability = false;
         for (String library : input.order()) {
             ObjectNode stage;
@@ -105,7 +124,8 @@ class MatchEvaluator {
                 default -> { }
             }
         }
-        result.put("knowledgeGap", !missingCapability && DEFAULT_ORDER.stream()
+        // 未命中口径只看本轮实际启用的库，关闭的库不参与「知识缺口」判定。
+        result.put("knowledgeGap", !missingCapability && input.order().stream()
                 .allMatch(library -> "miss".equals(stages.path(library).path("status").asText())));
         return new Evaluation(missingCapability ? "blocked" : "completed", result, stamp, 0);
     }
@@ -177,7 +197,7 @@ class MatchEvaluator {
         scope.sources().values().stream().filter(source -> !source.shared()).map(Source::id).forEach(ids::add);
         String verified = text(input.snapshot().path("context"), "verifiedConditions");
         String requirement = text(input.snapshot(), "text");
-        double threshold = STANDARD.equals(library) ? 0.80 : 0.74;
+        double threshold = input.threshold(library);
         var candidates = ids.stream().map(scope.sources()::get)
                 .map(source -> new Candidate(source, scorer.score(requirement, text(source.payload(), "requirement"))))
                 .filter(candidate -> candidate.similarity() > threshold)

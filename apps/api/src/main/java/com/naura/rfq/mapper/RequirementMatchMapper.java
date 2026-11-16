@@ -11,6 +11,12 @@ public interface RequirementMatchMapper {
     int upsertPolicy(@Param("buId") String buId, @Param("order") String order, @Param("version") long version,
             @Param("userId") String userId);
 
+    int upsertProjectPolicy(@Param("projectId") String projectId, @Param("order") String order,
+            @Param("similarity") String similarity, @Param("enabled") String enabled,
+            @Param("version") long version, @Param("userId") String userId);
+
+    int deleteProjectPolicy(@Param("projectId") String projectId);
+
     int supersedeGenerated(@Param("projectId") String projectId, @Param("documentId") String documentId);
 
     int supersedeDocument(@Param("projectId") String projectId, @Param("documentId") String documentId);
@@ -46,6 +52,7 @@ public interface RequirementMatchMapper {
             @Param("documentId") String documentId, @Param("documentVersion") int documentVersion,
             @Param("parseRunId") String parseRunId, @Param("fingerprint") String fingerprint,
             @Param("policyVersion") long policyVersion, @Param("order") String order,
+            @Param("thresholds") String thresholds,
             @Param("snapshot") String snapshot, @Param("requestKey") String requestKey,
             @Param("reason") String reason, @Param("progress") String progress);
 
@@ -54,6 +61,8 @@ public interface RequirementMatchMapper {
     InputRow findInput(@Param("requirementId") String requirementId);
 
     PolicyRow findPolicy(@Param("buId") String buId);
+
+    ProjectPolicyRow findProjectPolicy(@Param("projectId") String projectId);
 
     RunRow findByRequest(@Param("requirementId") String requirementId, @Param("requestKey") String requestKey);
 
@@ -75,8 +84,11 @@ public interface RequirementMatchMapper {
 
     record PolicyRow(String matchOrder, long version, String changedBy, String changedAt) {}
 
+    record ProjectPolicyRow(String matchOrder, String similarity, String enabled, long version, String changedBy,
+            String changedAt) {}
+
     record RunRow(String id, String requirementId, String documentId, int documentVersion, String parseRunId,
             long requirementVersion, long policyVersion, String inputFingerprint, boolean currentRun,
             String status, String leaseToken, int attempts, String progress, String buId, String projectId,
-            String inputSnapshot, String matchOrder) {}
+            String inputSnapshot, String matchOrder, String matchThresholds) {}
 }

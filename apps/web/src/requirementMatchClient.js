@@ -2,6 +2,7 @@ import { api } from './authClient.js';
 
 const requirement = id => `/requirements/${encodeURIComponent(id)}`;
 const policy = id => `/business-units/${encodeURIComponent(id)}/match-policy`;
+const projectPolicy = id => `/projects/${encodeURIComponent(id)}/match-policy`;
 
 export const MATCH_LIBRARIES = {
   standard_reply: '标准回复库', history_rfq: '历史 RFQ 库', capability: '能力边界库',
@@ -15,11 +16,13 @@ export function matchClient(client = api) {
       client.post(`${requirement(id)}/match-runs`, { sourceRequirementVersion, requestId }),
     input: id => client.get(`${requirement(id)}/match-input`),
     saveInput: (id, input) => client.put(`${requirement(id)}/match-input`, input),
-    reject: (id, runId, reason) => client.post(`${requirement(id)}/match-runs/${encodeURIComponent(runId)}/reject`, {reason}),
     review: (id, input) => client.post(`${requirement(id)}/match-deviation/review`, input),
     closeDeviation: (id, version, reason) => client.post(`${requirement(id)}/match-deviation/close`, {version, reason}),
     policy: buId => client.get(policy(buId)),
     savePolicy: (buId, input) => client.put(policy(buId), input),
+    projectPolicy: projectId => client.get(projectPolicy(projectId)),
+    saveProjectPolicy: (projectId, input) => client.put(projectPolicy(projectId), input),
+    resetProjectPolicy: projectId => client.delete(projectPolicy(projectId)),
   };
 }
 

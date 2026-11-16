@@ -1,6 +1,8 @@
 package com.naura.rfq.model.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -16,10 +18,16 @@ public final class RequirementMatchRequest {
 
     public record Policy(@NotNull @PositiveOrZero Long version, @NotNull @Size(min = 3, max = 3) List<String> matchOrder) {}
 
+    public record ProjectPolicy(@NotNull @PositiveOrZero Long version, @NotNull @Size(min = 3, max = 3) List<String> matchOrder,
+            @NotNull @Valid Similarity similarity, @NotNull @Valid Enabled enabled) {}
+
+    public record Similarity(@NotNull @DecimalMin("0.50") @DecimalMax("0.99") BigDecimal standardReply,
+            @NotNull @DecimalMin("0.50") @DecimalMax("0.99") BigDecimal historyRfq) {}
+
+    public record Enabled(@NotNull Boolean standardReply, @NotNull Boolean historyRfq, @NotNull Boolean capability) {}
+
     public record Retry(@NotNull @PositiveOrZero Long sourceRequirementVersion,
             @NotBlank @Pattern(regexp = "[A-Za-z0-9_-]{1,64}") String requestId) {}
-
-    public record Reject(@NotBlank @Size(max = 900) String reason) {}
 
     public record CloseDeviation(@NotNull @Positive Long version, @NotBlank @Size(max = 900) String reason) {}
     public record ProfessionalReview(@NotNull @Positive Long version, @NotNull @Size(min = 1, max = 20) List<@NotBlank String> reviewerIds,
