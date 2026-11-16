@@ -104,25 +104,122 @@ class WordMarkdownExtractionTest {
             }
             var result = extractor.extract(content, "RUN");
 
-            if (limit.equals("local-limit")) {
+            if (limit.equals("local-limit") || limit.equals("large-full")) {
                 assertThat(requests).doesNotContain(content.markdown());
             } else {
                 assertThat(requests.get(0)).isEqualTo(content.markdown());
             }
             if (limit.equals("large-full")) {
-                assertThat(requests).containsExactly(content.markdown());
+                // 文件超过单批上限：不再先发整文请求，直接分批。
+                assertThat(requests).hasSize(3);
             } else {
                 assertThat(requests.stream().filter(request -> !request.equals(content.markdown()))
                         .filter(request -> request.contains("[S1]") && request.contains("[S2]"))).hasSize(2);
             }
             assertThat(result.issues()).isEmpty();
+            String firstText = limit.equals("large-full") ? "设备在标准工况下须自动上料" : "标准工况下必须自动上料";
             assertThat(result.requirements()).extracting(ExtractedRequirement::requirementText)
-                    .containsExactly("标准工况下必须自动上料", "必须记录运行时间");
+                    .containsExactly(firstText, "必须记录运行时间");
             assertThat(result.requirements().get(0).sourceRefs()).containsExactly(
                     new SourceRef("body/1", "设备必须自动上料"), new SourceRef("body/2", "限标准工况"));
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void failedBatchDegradesToAnIssueAndKeepsOtherBatches() throws Exception {
+        var content = batchedContent();
+        var requests = new ArrayList<String>();
+        var server = modelServer(exchange -> {
+            String markdown = json.readTree(exchange.getRequestBody()).path("messages").path(1).path("content").asText();
+            requests.add(markdown);
+            if (markdown.contains("[S3]")) {
+                respond(exchange, 500, Map.of("error", Map.of("code", "internal_error", "message", "boom")));
+                return;
+            }
+            respond(exchange, 200, Map.of("choices", List.of(Map.of("finish_reason", "stop",
+                    "message", Map.of("content", json.writeValueAsString(batchResponse(markdown)))))));
+        });
+        var extractor = extractorAt(server);
+        try {
+            var result = extractor.extract(content, "RUN");
+            assertThat(result.requirements()).extracting(ExtractedRequirement::requirementText)
+                    .containsExactly("标准工况下必须自动上料");
+            assertThat(result.issues()).anyMatch(issue -> issue.contains("S2") && issue.contains("批次解析失败"))
+                    .anyMatch(issue -> issue.contains("模型未交代"));
+        } finally {
+            server.stop(0);
+        }
+        assertThat(requests).doesNotContain(content.markdown()).hasSize(2);
+    }
+
+    @Test
+    void allFailedBatchesFailTheWholeParse() throws Exception {
+        var content = batchedContent();
+        var server = modelServer(exchange -> respond(exchange, 500,
+                Map.of("error", Map.of("code", "internal_error", "message", "boom"))));
+        var extractor = extractorAt(server);
+        try {
+            assertThatThrownBy(() -> extractor.extract(content, "RUN"))
+                    .isInstanceOf(DocumentReadException.class).hasMessageContaining("全部失败");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private WordMarkdownReader.Content batchedContent() {
+        return WordMarkdownReader.mapMarkdown("""
+                简介 RFQX0END
+
+                设备必须自动上料 RFQX1END
+
+                限标准工况 RFQX2END
+
+                必须记录运行时间 RFQX3END
+                """, "RFQX", List.of(
+                RawBlock.paragraph(0, "简介", "", null, "body/0"),
+                RawBlock.paragraph(1, "设备必须自动上料", "", null, "body/1"),
+                RawBlock.paragraph(2, "限标准工况", "", null, "body/2"),
+                RawBlock.paragraph(3, "必须记录运行时间", "", null, "body/3")));
+    }
+
+    private Map<String, Object> batchResponse(String markdown) {
+        var requirements = new ArrayList<Map<String, Object>>();
+        var ignored = new ArrayList<String>();
+        if (markdown.contains("[S1]") && markdown.contains("[S2]")) {
+            requirements.add(Map.of("requirementText", "标准工况下必须自动上料", "sourceRefs", List.of("S1", "S2")));
+        }
+        if (markdown.contains("[S3]")) {
+            requirements.add(Map.of("requirementText", "必须记录运行时间", "sourceRefs", List.of("S3")));
+        }
+        if (markdown.contains("[S0]")) {
+            ignored.add("S0");
+        }
+        return Map.of("requirements", requirements, "ignoredSourceRefs", ignored);
+    }
+
+    private void respond(com.sun.net.httpserver.HttpExchange exchange, int status, Object body) throws java.io.IOException {
+        var bytes = json.writeValueAsBytes(body);
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (var output = exchange.getResponseBody()) {
+            output.write(bytes);
+        }
+    }
+
+    private HttpServer modelServer(com.sun.net.httpserver.HttpHandler handler) throws java.io.IOException {
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/model", handler);
+        server.start();
+        return server;
+    }
+
+    private WordMarkdownExtractor extractorAt(HttpServer server) {
+        var config = new ParseIntegrationProperties(false);
+        config.getLlm().setModel("test");
+        config.getWordMarkdown().setMaxChars(44);
+        config.getLlm().setUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/model");
+        return new WordMarkdownExtractor(config, new ParseHttpClient(json), new RuleBasedExtractor(json));
     }
 
     @Test

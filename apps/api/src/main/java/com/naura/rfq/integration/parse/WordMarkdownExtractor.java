@@ -84,8 +84,13 @@ public class WordMarkdownExtractor {
         int configuredMax = properties.getWordMarkdown().getMaxChars();
         int maxChars = configuredMax > 0 ? configuredMax : Integer.MAX_VALUE;
         String extractor = "markitdown+llm:" + config.getModel();
+        int wholeChars = Math.min(Math.max(1, config.getBatchChars()), maxChars);
         try {
-            if (content.markdown().length() <= maxChars) {
+            if (content.markdown().length() > wholeChars) {
+                // 文件超过单批上限直接分批，不先发一次注定超限的整文请求。
+                log.info("document.parse.word.llm.batching parseRunId={} reason=input_exceeds_batch_chars batchChars={}",
+                        runId, wholeChars);
+            } else {
                 try {
                     var response = request(content.markdown(), PROMPT, config, runId);
                     return validate(response, content, extractor);
@@ -93,10 +98,8 @@ public class WordMarkdownExtractor {
                     log.error("Word 模型响应超出长度限制", exception);
                     log.info("document.parse.word.llm.batching parseRunId={} reason={}", runId, exception.getMessage());
                 }
-            } else {
-                log.info("document.parse.word.llm.batching parseRunId={} reason=local_length_limit", runId);
             }
-            return extractBatches(content, config, runId, maxChars, extractor);
+            return extractBatches(content, config, runId, maxChars, wholeChars, extractor);
         } catch (DocumentReadException exception) {
             log.error("Word 模型抽取失败", exception);
             log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
@@ -136,29 +139,41 @@ public class WordMarkdownExtractor {
     }
 
     private ExtractionResult extractBatches(WordMarkdownReader.Content content, ParseIntegrationProperties.Llm config,
-            String runId, int maxChars, String extractor) throws Exception {
+            String runId, int maxChars, int batchChars, String extractor) throws Exception {
         var batches = new WordMarkdownBatches(content.markdown());
         if (batches.size() < 2) {
             throw new DocumentReadException("Word 内容块超出模型长度上限，请拆分文档后重试");
         }
         var validation = new Validation(content, batches.tableHeaders());
-        int batchChars = Math.min(Math.max(1, config.getBatchChars()), Math.min(maxChars, content.markdown().strip().length() - 1));
+        // 末批留一个字符余量，避免批次大小恰好等于整文时被当成单批。
+        batchChars = Math.min(batchChars, Math.min(maxChars, content.markdown().strip().length() - 1));
         int batchBlocks = Math.min(Math.max(1, config.getBatchBlocks()), (batches.size() + 1) / 2);
+        int failed = 0;
+        String lastFailure = null;
         for (int start = 0; start < batches.size();) {
             int end = batches.endOfBatch(start, batchChars, batchBlocks);
-            extractBatch(batches, start, end, batchChars, maxChars, config, runId, validation);
+            String failure = extractBatch(batches, start, end, batchChars, maxChars, config, runId, validation);
+            if (failure != null) {
+                failed++;
+                lastFailure = failure;
+            }
             start = end;
+        }
+        // 单批失败降级为 issue；全部批次都失败才让整次解析失败。
+        if (failed > 0 && validation.isEmpty()) {
+            throw new DocumentReadException("Word 模型批次解析全部失败（" + failed + " 批），最后原因：" + lastFailure);
         }
         return validation.result(extractor + "+batched");
     }
 
-    private void extractBatch(WordMarkdownBatches batches, int start, int end, int batchChars, int maxChars,
+    /** 返回批次失败原因，null 表示本批成功或没有需要抽取的主要来源。 */
+    private String extractBatch(WordMarkdownBatches batches, int start, int end, int batchChars, int maxChars,
             ParseIntegrationProperties.Llm config, String runId, Validation validation) throws Exception {
         var batch = batches.batch(start, end, batchChars, true);
         var primary = new TreeSet<>(batch.primary());
         primary.retainAll(validation.content.availableSources());
         if (primary.isEmpty()) {
-            return;
+            return null;
         }
         String prompt = PROMPT + "\n本批的主要来源为 " + primary.stream().map(id -> "S" + id).collect(Collectors.joining(", "))
                 + "。只输出主要来源在此列表内的条款。其他来源可作为表头、条件或相邻正文引用。";
@@ -167,26 +182,36 @@ public class WordMarkdownExtractor {
                 throw new LengthLimitException("local_length_limit");
             }
             validation.add(request(batch.markdown(), prompt, config, runId), batch.visible(), primary);
+            return null;
         } catch (LengthLimitException exception) {
             log.error("Word 模型批次超出模型长度上限", exception);
             if (end - start > 1) {
                 int middle = start + (end - start) / 2;
                 int smaller = Math.min(batchChars, batch.markdown().length() - 1);
-                extractBatch(batches, start, middle, smaller, maxChars, config, runId, validation);
-                extractBatch(batches, middle, end, smaller, maxChars, config, runId, validation);
-                return;
+                String first = extractBatch(batches, start, middle, smaller, maxChars, config, runId, validation);
+                String second = extractBatch(batches, middle, end, smaller, maxChars, config, runId, validation);
+                return second != null ? second : first;
             }
             var core = batches.batch(start, end, batchChars, false);
             if (core.markdown().length() <= maxChars && !core.markdown().equals(batch.markdown())) {
                 try {
                     validation.add(request(core.markdown(), prompt, config, runId), core.visible(), primary);
-                    return;
+                    return null;
                 } catch (LengthLimitException ignored) {
                     log.error("Word 单来源请求仍超出模型长度上限", ignored);
                     // This request already contains just one source unit.
                 }
             }
-            throw new DocumentReadException("Word 内容块超出模型长度上限（" + primary + "），请拆分文档后重试");
+            return "S" + primary.first() + " 超出模型长度上限";
+        } catch (Exception exception) {
+            if (exception instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            String reason = exception instanceof DocumentReadException detail
+                    ? detail.getMessage() : ParseHttpClient.reason(exception);
+            log.warn("document.parse.word.llm.batch.failed parseRunId={} sources={} reason={}", runId, primary, reason);
+            validation.failed("S" + primary.first(), reason);
+            return "S" + primary.first() + "：" + reason;
         }
     }
 
@@ -264,6 +289,14 @@ public class WordMarkdownExtractor {
                         candidate.path("title").asText(""), 1, null, original, requirement,
                         metrics, null, null, reason, refs));
             }
+        }
+
+        boolean isEmpty() {
+            return requirements.isEmpty();
+        }
+
+        void failed(String firstSource, String reason) {
+            issues.add(firstSource + "：Word 模型批次解析失败，" + reason + "，请核对该部分是否遗漏条款");
         }
 
         ExtractionResult result(String extractor) {
