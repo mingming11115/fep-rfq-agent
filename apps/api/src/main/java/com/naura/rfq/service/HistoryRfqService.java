@@ -200,7 +200,7 @@ public class HistoryRfqService {
             var sources = new ArrayList<HistorySource>();
             for (int i = 0; i < files.size(); i++) {
                 var source = files.get(i);
-                sources.add(parser.readStored(source.file(), source.name(), i == 0 ? "main:" : "answer:"));
+                sources.add(parser.readStored(source.file(), source.name(), i == 0 ? "main:" : "answer:", null));
             }
             parsed = parser.extract(sources);
         } catch (IOException | RuntimeException failure) {

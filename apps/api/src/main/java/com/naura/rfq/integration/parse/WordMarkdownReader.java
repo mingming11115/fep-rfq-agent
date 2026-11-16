@@ -27,7 +27,6 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -38,23 +37,49 @@ public class WordMarkdownReader {
     private ParseIntegrationProperties properties;
     @Autowired
     private DocxBlockReader word;
-    private Path payloadDirectory;
 
-    public WordMarkdownReader(ParseIntegrationProperties properties, DocxBlockReader word, String storageDirectory) {
+    public WordMarkdownReader(ParseIntegrationProperties properties, DocxBlockReader word) {
         this.properties = properties;
         this.word = word;
-        setStorageDirectory(storageDirectory);
-    }
-
-    @Value("${rfq.storage-dir:./data/rfq-files}")
-    private void setStorageDirectory(String storageDirectory) {
-        payloadDirectory = Path.of(storageDirectory).toAbsolutePath().normalize().resolve("parse-payloads");
     }
 
     public record Content(String markdown, List<RawBlock> blocks, Set<Integer> availableSources,
             List<String> issues) { }
 
-    public Content read(Path original, int maxBlocks, String runId)
+    /** 标记与 markitdown 转换的中间产物：markdown 全文、来源标记前缀与来源块。 */
+    record Marked(String markdown, String prefix, List<RawBlock> sources) { }
+
+    /**
+     * 读取 Word 并转成带来源标记的 Markdown；payloadTarget 非空且开关允许时，
+     * 把转换后的 md 落盘到该路径（生产上为原件 source.docx 旁边的 source.md）。
+     */
+    public Content read(Path original, int maxBlocks, Path payloadTarget)
+            throws IOException, DocumentReadException, InterruptedException {
+        Marked marked = convertMarked(original, maxBlocks);
+        Content content = mapMarkdown(marked.markdown(), marked.prefix(), marked.sources());
+        savePayload(content.markdown(), payloadTarget);
+        return content;
+    }
+
+    /**
+     * 与 {@link #read} 使用同一套标记 + markitdown 转换，但只落盘 md 不产出解析内容；
+     * 供历史 RFQ 等「自行读块、仅旁路保留中间结果」的链路复用，与项目 RFQ 解析保持一致。
+     *
+     * @return 落盘的 Markdown 全文（开关关闭或目标为空时不落盘，仅返回转换结果）
+     */
+    public String saveMarkdown(Path original, int maxBlocks, Path payloadTarget)
+            throws IOException, DocumentReadException, InterruptedException {
+        Marked marked = convertMarked(original, maxBlocks);
+        String markdown = mapMarkdown(marked.markdown(), marked.prefix(), marked.sources()).markdown();
+        savePayload(markdown, payloadTarget);
+        return markdown;
+    }
+
+    private boolean savePayloadEnabled() {
+        return properties.getWordMarkdown().isSavePayload() || properties.getLlm().isLogPayload();
+    }
+
+    private Marked convertMarked(Path original, int maxBlocks)
             throws IOException, DocumentReadException, InterruptedException {
         Path marked = Files.createTempFile("rfq-marked-", ".docx");
         try {
@@ -72,32 +97,30 @@ public class WordMarkdownReader {
             if (sources.size() > maxBlocks) {
                 throw new DocumentReadException("Word 来源数量超过上限 " + maxBlocks + "，请拆分文档后重试");
             }
-            Content content = mapMarkdown(convert(marked), prefix, sources);
-            if (properties.getWordMarkdown().isSavePayload() || properties.getLlm().isLogPayload()) {
-                savePayload(runId, content.markdown());
-            }
-            return content;
+            return new Marked(convert(marked), prefix, sources);
         } finally {
             Files.deleteIfExists(marked);
         }
     }
 
-    private void savePayload(String runId, String markdown) {
-        Path target = payloadDirectory.resolve(runId + ".md");
+    private void savePayload(String markdown, Path target) {
+        if (target == null || !savePayloadEnabled()) {
+            return;
+        }
         try {
-            Files.createDirectories(payloadDirectory);
-            Path pending = Files.createTempFile(payloadDirectory, "markdown-", ".tmp");
+            Files.createDirectories(target.toAbsolutePath().getParent());
+            Path pending = Files.createTempFile(target.toAbsolutePath().getParent(), "markdown-", ".tmp");
             try {
                 Files.writeString(pending, markdown);
                 Files.move(pending, target, StandardCopyOption.REPLACE_EXISTING);
             } finally {
                 Files.deleteIfExists(pending);
             }
-            log.info("document.parse.word.markdown.saved parseRunId={} path={}", runId, target);
+            log.info("document.parse.word.markdown.saved path={}", target);
         } catch (IOException exception) {
             log.error("保存 Word Markdown 载荷失败", exception);
-            log.warn("document.parse.word.markdown.save_failed parseRunId={} path={} errorType={}",
-                    runId, target, exception.getClass().getSimpleName());
+            log.warn("document.parse.word.markdown.save_failed path={} errorType={}",
+                    target, exception.getClass().getSimpleName());
         }
     }
 

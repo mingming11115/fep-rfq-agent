@@ -1,10 +1,14 @@
 package com.naura.rfq.service;
 
 import com.naura.rfq.common.exception.BusinessException;
+import com.naura.rfq.common.id.Ids;
+import com.naura.rfq.config.properties.ParseProperties;
 import com.naura.rfq.integration.history.HistoryExtractor;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
 import com.naura.rfq.integration.parse.DocumentReadException;
+import com.naura.rfq.integration.parse.DocxBlockReader;
 import com.naura.rfq.integration.parse.PdfBlockReader;
+import com.naura.rfq.integration.parse.WordMarkdownReader;
 import com.naura.rfq.model.parse.RawBlock;
 import com.naura.rfq.model.vo.HistoryParseView;
 import com.naura.rfq.model.vo.HistorySource;
@@ -12,6 +16,7 @@ import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import com.naura.rfq.storage.DocumentStorage;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -32,15 +37,20 @@ public class HistoryParseService {
     private List<DocumentBlockReader> readers;
     @Autowired
     private HistoryExtractor extractor;
+    @Autowired
+    private WordMarkdownReader wordMarkdownReader;
+    @Autowired
+    private ParseProperties properties;
 
     public HistoryParseView parse(CurrentUser user, MultipartFile file,
             MultipartFile responseFile, String buId) throws IOException {
         access.requireBu(user, buId);
         requireEnabled();
+        String runId = Ids.next("RUN");
         List<HistorySource> sources = new ArrayList<>();
-        sources.add(read(file, "main:"));
+        sources.add(read(file, "main:", previewPayload(runId, "main")));
         if (responseFile != null && !responseFile.isEmpty()) {
-            sources.add(read(responseFile, "answer:"));
+            sources.add(read(responseFile, "answer:", previewPayload(runId, "answer")));
         }
         return extract(sources);
     }
@@ -54,11 +64,11 @@ public class HistoryParseService {
         return new HistoryParseView(result.metadata(), result.clauses(), sources, result.issues());
     }
 
-    private HistorySource read(MultipartFile file, String prefix) throws IOException {
+    private HistorySource read(MultipartFile file, String prefix, Path payloadTarget) throws IOException {
         String name = fileName(file);
         var saved = storage.save("history-" + UUID.randomUUID(), file, extension(name));
         try {
-            return readStored(saved, name, prefix);
+            return readStored(saved, name, prefix, payloadTarget);
         } finally {
             storage.delete(saved.storageRef());
         }
@@ -82,11 +92,21 @@ public class HistoryParseService {
         return extension;
     }
 
-    HistorySource readStored(DocumentStorage.StoredFile saved, String name, String prefix) throws IOException {
+    /**
+     * 读取历史 RFQ 原件并产出原始块；DOCX 额外旁路保存 markitdown 转换后的 md，
+     * 与项目 RFQ 解析保持一致。payloadTarget 显式指定落盘路径（预览解析传 parse-payloads），
+     * 传 null 时默认与原件放一起（原件旁的 source.md）；原件为临时文件（MinIO/演示）时不保存。
+     */
+    HistorySource readStored(DocumentStorage.StoredFile saved, String name, String prefix, Path payloadTarget)
+            throws IOException {
         try (var lease = storage.open(saved.storageRef(), saved.size(), saved.sha256())) {
             var reader = readers.stream().filter(candidate -> candidate.supports(name, null)).findFirst()
                 .orElseThrow(() -> new BusinessException(400, "没有可用的文件读取器"));
             var path = lease.path();
+            if (reader instanceof DocxBlockReader) {
+                saveMarkdownQuietly(path, payloadTarget != null ? payloadTarget
+                        : lease.temporary() ? null : path.resolveSibling("source.md"));
+            }
             List<RawBlock> blocks = reader instanceof PdfBlockReader pdf ? pdf.readForHistory(path) : reader.read(path);
             if (blocks.stream().mapToLong(block -> block.text() == null ? 0 : block.text().length()).sum() > 2_000_000) {
                 throw new BusinessException(413, "文档内容过多，请拆分后上传");
@@ -95,6 +115,26 @@ public class HistoryParseService {
         } catch (DocumentReadException exception) {
             log.error("读取历史 RFQ 原件失败 errorType={}", exception.getClass().getSimpleName());
             throw new BusinessException(400, exception.getMessage());
+        }
+    }
+
+    /** 预览解析的原件是临时文件，读后即删，md 改存 parse-payloads 以便核对。 */
+    private Path previewPayload(String runId, String part) {
+        return storage.resolve("parse-payloads/" + runId + "-" + part + ".md");
+    }
+
+    private void saveMarkdownQuietly(Path original, Path payloadTarget) {
+        if (payloadTarget == null) {
+            return;
+        }
+        try {
+            wordMarkdownReader.saveMarkdown(original, properties.maxBlocks(), payloadTarget);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            log.warn("document.parse.word.markdown.save_failed path={} errorType=Interrupted", payloadTarget);
+        } catch (IOException | DocumentReadException exception) {
+            log.warn("document.parse.word.markdown.save_failed path={} errorType={}",
+                    payloadTarget, exception.getClass().getSimpleName());
         }
     }
 }

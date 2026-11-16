@@ -85,7 +85,7 @@ rfq:
         python: ${RFQ_MARKITDOWN_PYTHON:python}
         timeout: ${RFQ_MARKITDOWN_TIMEOUT:60s}
         max-chars: ${RFQ_WORD_MARKDOWN_MAX_CHARS:0}
-        # 保留转换后的 Markdown 到 {storage-dir}/parse-payloads/{parseRunId}.md
+        # 保留转换后的 Markdown 到原件旁边（source.docx 同目录的 source.md）
         save-payload: ${RFQ_WORD_MARKDOWN_SAVE_PAYLOAD:true}
       llm:
         # The shared switch is rfq.llm.enabled above.

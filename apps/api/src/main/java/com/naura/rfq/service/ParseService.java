@@ -26,6 +26,7 @@ import com.naura.rfq.model.parse.RawBlock;
 import com.naura.rfq.model.parse.SourceRef;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.storage.DocumentStorage;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -192,7 +193,8 @@ public class ParseService {
                 phase = ParsePhase.MARKITDOWN;
                 try (var lease = storage.open(ctx.document().getStorageRef(), ctx.document().getSizeBytes(),
                         ctx.document().getSha256())) {
-                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks(), ctx.run().getId());
+                    Path payloadTarget = lease.temporary() ? null : lease.path().resolveSibling("source.md");
+                    wordMarkdown = wordMarkdownReader.read(lease.path(), properties.maxBlocks(), payloadTarget);
                 }
             }
             List<RawBlock> rawBlocks = wordMarkdown == null ? readBlocks(ctx.document(), reader) : wordMarkdown.blocks();
