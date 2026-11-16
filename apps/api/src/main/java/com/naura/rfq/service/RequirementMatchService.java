@@ -803,7 +803,7 @@ public class RequirementMatchService {
                 row.requirementVersion(), row.policyVersion(), row.inputFingerprint(), row.currentRun(),
                 row.status(), row.leaseToken(), row.attempts(), parse(row.progress()),
                 new MatchEvaluator.Input(row.buId(), row.projectId(), snapshot.path("groupId").asText(), snapshot,
-                        order(row.matchOrder()), thresholds(row.matchThresholds())));
+                        order(row.matchOrder()), thresholds(row.matchThresholds()), row.id(), row.requirementId()));
     }
 
     private List<String> order(String value) {

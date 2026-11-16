@@ -2,12 +2,14 @@ package com.naura.rfq.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.model.dto.CapabilityLibraryRequest.Lookup;
 import com.naura.rfq.model.dto.RequirementMatchRequest.Context;
 import java.math.BigDecimal;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +55,26 @@ class CapabilityMatch {
 
         private static BigDecimal negate(BigDecimal value) { return value == null ? null : value.negate(); }
     }
+    private record MetricOutcome(boolean hasEligible, boolean invalidEvidence, boolean supports, boolean refutes,
+            boolean needsReview) {}
+    private static final class CapabilityCounts {
+        int recalled;
+        int eligible;
+        int ineligible;
+        int supports;
+        int refutes;
+        int review;
+        int noCandidate;
+
+        void assessment(String value) {
+            switch (value) {
+                case "supports" -> supports++;
+                case "refutes" -> refutes++;
+                case "review" -> review++;
+                default -> noCandidate++;
+            }
+        }
+    }
     private static final Map<String, Unit> UNITS = Map.ofEntries(
             Map.entry("μm", unit("length", "0.000001")), Map.entry("µm", unit("length", "0.000001")),
             Map.entry("um", unit("length", "0.000001")), Map.entry("mm", unit("length", "0.001")),
@@ -90,6 +112,10 @@ class CapabilityMatch {
     }
 
     ObjectNode evaluate(String bu, String project, String groupId, JsonNode context) {
+        return evaluate(bu, project, groupId, context, false);
+    }
+
+    ObjectNode evaluate(String bu, String project, String groupId, JsonNode context, boolean diagnostic) {
         var stage = json.createObjectNode();
         if (context.path("capabilityApplicable").isBoolean() && !context.path("capabilityApplicable").asBoolean()) {
             return stage.put("status", "not_applicable");
@@ -101,6 +127,7 @@ class CapabilityMatch {
         var checks = stage.putArray("checks");
         // 一次比对内共用同一份分组范围，避免逐设备、逐指标重复读取目录。
         var groupScope = groups.scopeIds(bu, groupId);
+        var counts = new CapabilityCounts();
         boolean found = false, unresolved = false, contradicted = false, unavailable = false;
         int checkCount = 0;
         Set<String> limits = new HashSet<>();
@@ -111,39 +138,17 @@ class CapabilityMatch {
             }
             for (JsonNode metric : device.path("metrics")) {
                 checkCount++;
-                var check = checks.addObject().put("deviceId", text(device, "deviceId"));
-                check.set("requirement", metric);
-                var evidence = check.putArray("candidates");
-                var lookup = new Lookup(text(device, "modelId"), device.path("modelVersion").asInt(),
-                        text(device, "processId"), device.path("processVersion").asInt(), text(device, "config"),
-                        text(metric, "metricCode"), project);
-                boolean supports = false, refutes = false, needsReview = false, invalidEvidence = false, hasEligible = false;
-                for (ObjectNode row : library.matchingVersions(bu, project, groupScope, lookup)) {
-                    if (!row.path("eligible").asBoolean()) {
-                        invalidEvidence = true;
-                        continue;
-                    }
-                    hasEligible = true;
-                    String assessment = assess(device, metric, row);
-                    var candidate = evidence.addObject().put("id", text(row, "id")).put("version", row.path("version").asInt())
-                            .put("assessment", assessment).put("value", text(row, "value")).put("conditions", text(row, "conditions"))
-                            .put("valueType", text(row, "valueType")).put("limits", text(row, "limits"));
-                    candidate.set("evidenceRefs", row.path("evidenceRefs"));
-                    supports |= "supports".equals(assessment);
-                    refutes |= "refutes".equals(assessment);
-                    needsReview |= "review".equals(assessment);
-                    if ("supports".equals(assessment) && !text(row, "limits").isBlank()) {
-                        limits.add(text(row, "limits"));
-                    }
-                }
-                found |= hasEligible;
-                unavailable |= invalidEvidence;
-                contradicted |= refutes && !supports && !needsReview && !invalidEvidence;
-                unresolved |= !supports || refutes || needsReview || invalidEvidence;
-                check.put("assessment", invalidEvidence ? "evidence_unavailable" : supports && !refutes && !needsReview ? "supports"
-                        : refutes && !supports && !needsReview ? "refutes" : hasEligible ? "review" : "no_candidate");
+                var outcome = evaluateMetric(bu, project, groupScope, device, metric, checks, limits, counts, diagnostic);
+                found |= outcome.hasEligible();
+                unavailable |= outcome.invalidEvidence();
+                contradicted |= outcome.refutes() && !outcome.supports() && !outcome.needsReview() && !outcome.invalidEvidence();
+                unresolved |= !outcome.supports() || outcome.refutes() || outcome.needsReview() || outcome.invalidEvidence();
             }
         }
+        stage.put("recalledCandidates", counts.recalled).put("eligibleCandidates", counts.eligible)
+                .put("ineligibleCandidates", counts.ineligible).put("supportCandidates", counts.supports)
+                .put("refuteCandidates", counts.refutes).put("reviewCandidates", counts.review)
+                .put("noCandidateCount", counts.noCandidate);
         if (!found) {
             return unavailable ? stage.put("status", "blocked").put("reason", "CAPABILITY_EVIDENCE_UNAVAILABLE")
                 : stage.put("status", "miss");
@@ -154,6 +159,71 @@ class CapabilityMatch {
         var restrictions = stage.putArray("restrictions");
         limits.stream().sorted().forEach(restrictions::add);
         return stage;
+    }
+
+    private MetricOutcome evaluateMetric(String bu, String project, List<String> groupScope, JsonNode device,
+            JsonNode metric, ArrayNode checks, Set<String> limits, CapabilityCounts counts, boolean diagnostic) {
+        var check = checks.addObject().put("deviceId", text(device, "deviceId"));
+        check.set("requirement", metric);
+        var evidence = check.putArray("candidates");
+        var lookup = new Lookup(text(device, "modelId"), device.path("modelVersion").asInt(),
+                text(device, "processId"), device.path("processVersion").asInt(), text(device, "config"),
+                text(metric, "metricCode"), project);
+        boolean supports = false, refutes = false, needsReview = false, invalidEvidence = false, hasEligible = false;
+        for (ObjectNode row : library.matchingVersions(bu, project, groupScope, lookup)) {
+            counts.recalled++;
+            if (!row.path("eligible").asBoolean()) {
+                counts.ineligible++;
+                if (diagnostic) {
+                    log.debug("requirement.match.capability.candidate deviceId={} metricCode={} id={} version={}"
+                                    + " assessment=ineligible reason={} validity={} status={} evidenceRefs={}",
+                            text(device, "deviceId"), text(metric, "metricCode"), text(row, "id"), row.path("version").asInt(),
+                            ineligibleReason(row), text(row, "validity"), text(row, "status"), row.path("evidenceRefs").size());
+                }
+                invalidEvidence = true;
+                continue;
+            }
+            counts.eligible++;
+            hasEligible = true;
+            String assessment = assess(device, metric, row);
+            counts.assessment(assessment);
+            var candidate = evidence.addObject().put("id", text(row, "id")).put("version", row.path("version").asInt())
+                    .put("assessment", assessment).put("value", text(row, "value")).put("conditions", text(row, "conditions"))
+                    .put("valueType", text(row, "valueType")).put("limits", text(row, "limits"));
+            candidate.set("evidenceRefs", row.path("evidenceRefs"));
+            if (diagnostic) {
+                log.debug("requirement.match.capability.candidate deviceId={} metricCode={} id={} version={}"
+                                + " assessment={} value={} conditions={}",
+                        text(device, "deviceId"), text(metric, "metricCode"), text(row, "id"), row.path("version").asInt(),
+                        assessment, text(row, "value"), text(row, "conditions"));
+            }
+            supports |= "supports".equals(assessment);
+            refutes |= "refutes".equals(assessment);
+            needsReview |= "review".equals(assessment);
+            if ("supports".equals(assessment) && !text(row, "limits").isBlank()) {
+                limits.add(text(row, "limits"));
+            }
+        }
+        check.put("assessment", invalidEvidence ? "evidence_unavailable" : supports && !refutes && !needsReview ? "supports"
+                : refutes && !supports && !needsReview ? "refutes" : hasEligible ? "review" : "no_candidate");
+        return new MetricOutcome(hasEligible, invalidEvidence, supports, refutes, needsReview);
+    }
+
+    private static String ineligibleReason(JsonNode row) {
+        String validity = text(row, "validity");
+        if (!"已发布".equals(text(row, "status")) || List.of("被替代", "已撤销", "已过期").contains(validity)) {
+            return "NOT_ACTIVE";
+        }
+        if (!"有效".equals(validity)) {
+            return "INVALID_VALIDITY";
+        }
+        if (row.path("lower").isMissingNode() || row.path("upper").isMissingNode()) {
+            return "INVALID_BOUNDS";
+        }
+        if (row.path("evidenceRefs").isEmpty()) {
+            return "MISSING_EVIDENCE";
+        }
+        return "INELIGIBLE";
     }
 
     private String assess(JsonNode device, JsonNode metric, JsonNode row) {
