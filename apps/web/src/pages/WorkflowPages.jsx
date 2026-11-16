@@ -182,6 +182,12 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
       </UiButton>
     </>}>
     {action === 'submit' ? <>
+      <Notice type={unconfirmedComply.length ? 'warning' : 'info'}>
+        <strong>人工确认：</strong>{requirements.filter(row=>row.status==='已确认').length} / {requirements.length} 条已完成确认
+        {unconfirmedComply.length > 0
+          ? <>，其中 <strong>{unconfirmedComply.length} 条系统推荐 Comply 尚未逐条人工确认</strong>，将直接送评，由本轮评审人员重点核对。</>
+          : '。'}
+      </Notice>
       <UnconfirmedComplyList rows={unconfirmedComply} onLocate={row=>locateIssue({id:row.id,route:{page:'response',requirementId:row.id,fileId:row.sourceFileId,sourceVersion:row.sourceVersion}})}/>
       <Notice type={issues.length ? 'warning' : 'info'}>{issues.length
         ? <>检查未通过，共 {issues.length} 个阻断项。修正后可再次提交。</>
@@ -189,12 +195,9 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
       {issues.length > 0 && <div className="flow-modal-issues">{issues.map((issue, index) => <div key={issue.id+'-'+index}><strong>{issue.label}</strong><p>{issue.message}</p><UiButton className="text-link" onClick={() => locateIssue(issue)}>定位修正<ArrowRight size={13} /></UiButton></div>)}</div>}
       <dl className="flow-description">
         <dt>项目</dt><dd>{project.name}</dd>
-        <dt>人工确认</dt><dd>{requirements.filter(row=>row.status==='已确认').length} / {requirements.length} 条已确认 · 系统推荐 Comply 未人工确认 {unconfirmedComply.length} 条</dd>
         <dt>SR 评审人</dt><dd>{requiredFinalReviewers.filter(r=>r.side==='sr').map(r=>personName(appState,r.actorId)).join('、')||'尚未配置'}</dd>
         <dt>技术评审人</dt><dd>{requiredFinalReviewers.filter(r=>r.side==='technical').map(r=>personName(appState,r.actorId)).join('、')||'尚未配置'}</dd>
         <dt>通过规则</dt><dd>SR 方通过 + {finalReviewConfig.value?.technicalMode==='representative'?'技术负责人代表通过':'技术组全员通过'}</dd>
-        <dt>提交身份</dt><dd>{personName(appState,actorId)} · {actorRole}</dd>
-        <dt>对外附件</dt><dd>0 个 · 不包含内部证据</dd>
       </dl>
     </> : <>
       <div className="flow-modal-object"><strong className="flow-snapshot-id">{detail?.id || '快照不可用'}</strong><span>{detail?.rows?.length || 0} 条</span></div>
