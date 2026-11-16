@@ -98,8 +98,8 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 | RFQ_LLM_MODEL | 空 | 模型名称，由实际网关提供 |
 | RFQ_LLM_API_KEY | 空 | 可选 Bearer 密钥，支持无密钥内网服务 |
 | RFQ_LLM_LOG_PAYLOAD | false | 临时联调开关。开启后记录 LLM 请求和响应正文。正文包含 RFQ 原文。 |
-| RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 30s | 连接及整次请求超时 |
-| RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 16000 / 20 | 分批模型请求的字符数与条目数上限 |
+| RFQ_LLM_CONNECT_TIMEOUT / RFQ_LLM_TIMEOUT | 3s / 90s | 连接及整次请求超时（默认超时按大批次推理时间放宽） |
+| RFQ_LLM_BATCH_CHARS / RFQ_LLM_BATCH_BLOCKS | 60000 / 20 | 分批模型请求的字符数与条目数上限（默认约 26 万 token 窗口的 1/4，为输出与提示词留余量） |
 | RFQ_MARKITDOWN_PYTHON | python | 具备 MarkItDown DOCX 依赖的 Python 可执行文件 |
 | RFQ_MARKITDOWN_TIMEOUT | 60s | 单次 Word 转换超时 |
 | RFQ_WORD_MARKDOWN_MAX_CHARS | 0 | Word Markdown 的可选请求字符上限，`0` 由模型网关判断长度，正数允许超限时直接分批 |

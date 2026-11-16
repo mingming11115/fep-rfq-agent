@@ -54,8 +54,14 @@ public class ParseIntegrationProperties {
     public static class Llm extends Endpoint {
         private String model = "";
         private boolean logPayload;
-        private int batchChars = 16000;
+        /** 默认按 26 万 token 窗口的约 1/4 预留输出与 system prompt 余量。 */
+        private int batchChars = 60000;
         private int batchBlocks = 20;
+
+        public Llm() {
+            // 大批次推理时间更长，默认超时同步放宽。
+            setTimeout(Duration.ofSeconds(90));
+        }
     }
     @Getter @Setter
     public static class Ocr extends Endpoint {

@@ -94,8 +94,8 @@ rfq:
         model: ${RFQ_LLM_MODEL:}
         log-payload: ${RFQ_LLM_LOG_PAYLOAD:false}
         connect-timeout: ${RFQ_LLM_CONNECT_TIMEOUT:3s}
-        timeout: ${RFQ_LLM_TIMEOUT:30s}
-        batch-chars: ${RFQ_LLM_BATCH_CHARS:16000}
+        timeout: ${RFQ_LLM_TIMEOUT:90s}
+        batch-chars: ${RFQ_LLM_BATCH_CHARS:60000}
         batch-blocks: ${RFQ_LLM_BATCH_BLOCKS:20}
       ocr:
         enabled: ${RFQ_OCR_ENABLED:false}
