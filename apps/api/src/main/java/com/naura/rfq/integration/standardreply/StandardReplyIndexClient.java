@@ -67,7 +67,7 @@ public class StandardReplyIndexClient {
         if (ids.isEmpty() || ids.size() > 100) {
             throw new SearchFailure("INVALID_SEARCH_SCOPE", false);
         }
-        var body = json.createObjectNode().put("query", query).put("mode", "hybrid").put("top_k", Math.min(20, ids.size()));
+        var body = json.createObjectNode().put("query", query).put("mode", "semantic").put("top_k", Math.min(20, ids.size()));
         var filter = body.putObject("filter").putArray("and");
         filter.addObject().put("field", "bu_id").put("op", "eq").put("value", buId);
         var values = filter.addObject().put("field", "id").put("op", "in").putArray("value");

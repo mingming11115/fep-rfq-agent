@@ -258,6 +258,7 @@ class StandardReplyIndexClientTest {
         assertThat(found.requestId()).isEqualTo("req-1");
         assertThat(requests.get(0).path()).isEqualTo("/api/v1/semantic-datasets/" + DATASET + ":search");
         var body = json.readTree(requests.get(0).body());
+        assertThat(body.at("/mode").asText()).isEqualTo("semantic");
         assertThat(body.at("/filter/and/0/value").asText()).isEqualTo(BU);
         assertThat(body.at("/filter/and/1/value/0").asText()).isEqualTo("R1");
         assertThat(body.at("/result_options/include_matched_chunks").asBoolean(true)).isFalse();
