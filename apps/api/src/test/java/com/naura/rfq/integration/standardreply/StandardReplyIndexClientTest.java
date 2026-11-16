@@ -152,6 +152,22 @@ class StandardReplyIndexClientTest {
     }
 
     @Test
+    void reprovisionsWhenTheDatasetDisappearsOnThePlatform() throws Exception {
+        // 进程内已标记创建过，但中台数据集后来被删除：404 一律按数据集缺失处理，补配置重建。
+        replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(404, "{}"),
+            new Reply(202, "{\"job_id\":\"job-2\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"));
+        client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
+        assertThat(client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-2");
+        assertThat(requests).hasSize(3);
+        assertThat(json.readTree(requests.get(1).body()).has("dataset_config")).isFalse();
+        JsonNode recreated = json.readTree(requests.get(2).body());
+        assertThat(recreated.at("/dataset_config/embedding_fields").toString()).isEqualTo("[\"title\",\"requirement_text\"]");
+        assertThat(recreated.at("/records/0/id").asText()).isEqualTo("REPLY-2");
+        assertThat(recreated.at("/records/0/data")).isEqualTo(payload());
+    }
+
+    @Test
     void repeatedMissingDatasetConfigFailsWithThePlatformCode(CapturedOutput output) {
         replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
             new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"),

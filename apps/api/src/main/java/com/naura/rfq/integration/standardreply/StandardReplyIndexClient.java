@@ -287,12 +287,11 @@ public class StandardReplyIndexClient {
     }
 
     /**
-     * 数据集还没有可入库的配置：不存在（404 DATASET_NOT_FOUND）或存在但未声明 embedding 字段
-     * （DATA_CONFIG_REQUIRED）。首次写入已带配置，只有中台后续丢失配置时才需要补发一次。
+     * 数据集还没有可入库的配置：存在但未声明 embedding 字段（DATA_CONFIG_REQUIRED），或数据集不存在
+     * （任意 404——进程内可能已标记创建过，但中台数据集后来被删除或从未建成）。两种情况都补配置重建一次。
      */
     private static boolean missingDatasetConfig(Reply reply) {
-        String code = reply.errorCode();
-        return "DATA_CONFIG_REQUIRED".equals(code) || (reply.status() == 404 && "DATASET_NOT_FOUND".equals(code));
+        return "DATA_CONFIG_REQUIRED".equals(reply.errorCode()) || reply.status() == 404;
     }
 
     private static String recordError(JsonNode response, String replyId, String fallback) {
