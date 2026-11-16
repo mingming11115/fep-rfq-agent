@@ -65,9 +65,8 @@ class StandardReplyIndexClientTest {
     }
 
     @Test
-    void createsMissingDatasetAndWaitsUntilItsJobIsSearchable(CapturedOutput output) throws Exception {
-        replies = List.of(new Reply(404, "{\"error\":{\"code\":\"DATASET_NOT_FOUND\"}}"),
-            new Reply(202, "{\"job_id\":\"job-1\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
+    void firstIngestCarriesDatasetConfigAndWaitsUntilItsJobIsSearchable(CapturedOutput output) throws Exception {
+        replies = List.of(new Reply(202, "{\"job_id\":\"job-1\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
             new Reply(200, "{\"status\":\"running\"}"),
             new Reply(200, "{\"status\":\"succeeded\",\"succeeded_count\":1,\"failed_count\":0}"));
         var accepted = client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
@@ -77,19 +76,31 @@ class StandardReplyIndexClientTest {
         assertThat(client.poll("job-1", "REPLY-1").complete()).isTrue();
 
         assertThat(requests).extracting(Exchange::key).containsOnly("test-index-key");
-        assertThat(requests).extracting(Exchange::method).containsExactly("POST", "POST", "GET", "GET");
+        assertThat(requests).extracting(Exchange::method).containsExactly("POST", "GET", "GET");
         assertThat(requests.get(0).path()).isEqualTo("/api/v1/semantic-datasets/" + DATASET + ":ingest");
-        assertThat(requests.get(2).path()).isEqualTo("/api/v1/ingestion-jobs/job-1");
-        assertThat(json.readTree(requests.get(0).body()).has("dataset_config")).isFalse();
-        JsonNode created = json.readTree(requests.get(1).body());
+        assertThat(requests.get(1).path()).isEqualTo("/api/v1/ingestion-jobs/job-1");
+        JsonNode created = json.readTree(requests.get(0).body());
         assertThat(created.at("/dataset_config/embedding_fields").toString()).isEqualTo("[\"title\",\"requirement_text\"]");
         assertThat(created.at("/dataset_config/advanced/filter_fields").toString()).isEqualTo("[\"bu_id\",\"record_version\"]");
         assertThat(created.at("/records/0/id").asText()).isEqualTo("REPLY-1");
         assertThat(created.at("/records/0/updated_at").asText()).isEqualTo(UPDATED_AT.toString());
         assertThat(created.at("/records/0/data")).isEqualTo(payload());
         assertThat(output.getAll()).contains("external.call.request", "external.call.response",
-            "service=semantic_index operation=ingest", "service=semantic_index operation=poll", "status=404", "status=202")
+            "service=semantic_index operation=ingest", "service=semantic_index operation=poll", "status=202")
             .doesNotContain("test-index-key");
+    }
+
+    @Test
+    void laterIngestOnlySendsRecordsOnceTheDatasetExists() throws Exception {
+        replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(200, "{\"job_id\":\"job-2\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"));
+        client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
+        assertThat(client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT).complete()).isTrue();
+        assertThat(requests).hasSize(2);
+        assertThat(json.readTree(requests.get(0).body()).has("dataset_config")).isTrue();
+        JsonNode incremental = json.readTree(requests.get(1).body());
+        assertThat(incremental.has("dataset_config")).isFalse();
+        assertThat(incremental.at("/records/0/id").asText()).isEqualTo("REPLY-2");
     }
 
     @Test
@@ -102,16 +113,65 @@ class StandardReplyIndexClientTest {
             prefix + ".capability-dataset", dataset));
         var settings = new Binder(properties).bind(prefix, Bindable.of(StandardReplyIndexProperties.class)).get();
         var capabilityClient = new StandardReplyIndexClient(json, settings);
-        replies = List.of(new Reply(404, "{\"error\":{\"code\":\"DATASET_NOT_FOUND\"}}"),
-            new Reply(200, "{\"job_id\":\"job-cap\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"));
+        replies = List.of(new Reply(200, "{\"job_id\":\"job-cap\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"));
         var projection = json.createObjectNode().put("title", "定位精度").put("requirement_text", "≤5 μm")
             .put("bu_id", "BU-FEP").put("record_version", 1);
 
         assertThat(capabilityClient.submit(dataset, "CAP-1", "upsert", projection, UPDATED_AT).complete()).isTrue();
         assertThat(requests).extracting(Exchange::path).containsOnly("/api/v1/semantic-datasets/" + dataset + ":ingest");
-        JsonNode created = json.readTree(requests.get(1).body());
+        JsonNode created = json.readTree(requests.get(0).body());
         assertThat(created.at("/dataset_config/display_name").asText()).isEqualTo("机型能力边界");
         assertThat(created.at("/records/0/data")).isEqualTo(projection);
+    }
+
+    @Test
+    void keepsThePlatformConfigWhenItAlreadyExistsWithAnotherOne(CapturedOutput output) throws Exception {
+        replies = List.of(new Reply(409, "{\"error\":{\"code\":\"DATASET_CONFIG_CONFLICT\"}}"),
+            new Reply(202, "{\"job_id\":\"job-409\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"));
+        var accepted = client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
+        assertThat(accepted.jobId()).isEqualTo("job-409");
+        assertThat(requests).hasSize(2);
+        assertThat(json.readTree(requests.get(0).body()).has("dataset_config")).isTrue();
+        assertThat(json.readTree(requests.get(1).body()).has("dataset_config")).isFalse();
+        assertThat(output.getAll()).contains("配置与本地不一致", "dataset=" + DATASET);
+    }
+
+    @Test
+    void reprovisionsWhenThePlatformLosesTheDatasetConfig() throws Exception {
+        replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"),
+            new Reply(202, "{\"job_id\":\"job-2\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"));
+        client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
+        assertThat(client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-2");
+        assertThat(requests).hasSize(3);
+        assertThat(json.readTree(requests.get(1).body()).has("dataset_config")).isFalse();
+        JsonNode reprovisioned = json.readTree(requests.get(2).body());
+        assertThat(reprovisioned.at("/dataset_config/embedding_fields").toString()).isEqualTo("[\"title\",\"requirement_text\"]");
+        assertThat(reprovisioned.at("/records/0/id").asText()).isEqualTo("REPLY-2");
+        assertThat(reprovisioned.at("/records/0/data")).isEqualTo(payload());
+    }
+
+    @Test
+    void repeatedMissingDatasetConfigFailsWithThePlatformCode(CapturedOutput output) {
+        replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"),
+            new Reply(409, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"));
+        client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
+        assertThatThrownBy(() -> client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT))
+            .isInstanceOfSatisfying(StandardReplyIndexClient.Failure.class, failure -> {
+                assertThat(failure.getMessage()).isEqualTo("DATA_CONFIG_REQUIRED");
+                assertThat(failure.resubmit()).isFalse();
+            });
+        assertThat(requests).hasSize(3);
+        assertThat(output.getAll()).contains("数据集仍缺少配置", "dataset=" + DATASET);
+    }
+
+    @Test
+    void deleteOfConfiglessDatasetDoesNotProvisionOrSendData() throws Exception {
+        replies = List.of(new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"));
+        assertThat(client.submit(DATASET, "REPLY-1", "delete", null, UPDATED_AT).complete()).isTrue();
+        assertThat(requests).hasSize(1);
+        assertThat(json.readTree(requests.get(0).body()).has("dataset_config")).isFalse();
     }
 
     @Test

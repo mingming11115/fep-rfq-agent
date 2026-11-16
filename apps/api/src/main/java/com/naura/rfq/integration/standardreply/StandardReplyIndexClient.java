@@ -17,7 +17,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +48,9 @@ public class StandardReplyIndexClient {
     // (JDK-8239117) that some servers reject or mishandle for request bodies above a few KB.
     private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
         .connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
+    // 已确认可写入的数据集（进程内）。首次写入必须带 dataset_config，中台才按该配置建数据集；
+    // 建好之后按协议只传 records，因此不把配置当成每次请求的固定部分。
+    private final Set<String> provisioned = ConcurrentHashMap.newKeySet();
 
     public StandardReplyIndexClient(ObjectMapper json, StandardReplyIndexProperties settings) {
         this.json = json;
@@ -120,18 +125,37 @@ public class StandardReplyIndexClient {
         record.put("id", replyId).put("op", operation).put("updated_at", updatedAt.toString());
         if ("upsert".equals(operation)) {
             record.set("data", projection(payload));
+            if (!provisioned.contains(dataset)) {
+                addDatasetConfig(body, library.displayName);
+            }
         } else if (!"delete".equals(operation)) {
             throw new Failure("INVALID_OPERATION", false);
         }
 
         String path = "/semantic-datasets/" + dataset + ":ingest";
+        boolean configRejected = false;
         var result = request("ingest", path, body);
-        if (result.status() == 404 && "DATASET_NOT_FOUND".equals(result.errorCode())) {
+        if (body.has("dataset_config") && result.status() == 409 && "DATASET_CONFIG_CONFLICT".equals(result.errorCode())) {
+            // 数据集已存在（例如重启后首次写入）且配置与本地不一致：沿用中台已有配置，去掉配置重发一次。
+            log.warn("知识中台数据集已存在且配置与本地不一致 dataset={}，改为沿用中台已有配置继续同步", dataset);
+            configRejected = true;
+            body.remove("dataset_config");
+            result = request("ingest", path, body);
+        }
+        if (missingDatasetConfig(result)) {
+            // 数据集还没有可入库的配置：不存在（404 DATASET_NOT_FOUND）或存在但未声明 embedding 字段
+            // （DATA_CONFIG_REQUIRED）。删除不建数据集；其余情况补上配置再发一次。
             if ("delete".equals(operation)) {
                 return new Delivery(true, null);
             }
-            addDatasetConfig(body, library.displayName);
-            result = request("ingest", path, body);
+            if (!configRejected && !body.has("dataset_config")) {
+                addDatasetConfig(body, library.displayName);
+                result = request("ingest", path, body);
+            }
+        }
+        if (missingDatasetConfig(result)) {
+            log.error("错误：知识中台数据集仍缺少配置 dataset={} errorCode={}，需在中台补齐配置或删除该数据集后重试", dataset,
+                    result.errorCode());
         }
         if (result.status() != 202 && result.status() != 200) {
             throw result.failure(false);
@@ -139,6 +163,9 @@ public class StandardReplyIndexClient {
         JsonNode response = result.body();
         if (response.path("accepted_count").asInt(-1) != 1 || response.path("rejected_count").asInt(-1) != 0) {
             throw new Failure(recordError(response, replyId, "RECORD_NOT_ACCEPTED"), false);
+        }
+        if ("upsert".equals(operation)) {
+            provisioned.add(dataset);
         }
         String job = response.path("job_id").asText();
         requireJobId(job);
@@ -257,6 +284,15 @@ public class StandardReplyIndexClient {
                 pending.cancel(true);
             }
         }
+    }
+
+    /**
+     * 数据集还没有可入库的配置：不存在（404 DATASET_NOT_FOUND）或存在但未声明 embedding 字段
+     * （DATA_CONFIG_REQUIRED）。首次写入已带配置，只有中台后续丢失配置时才需要补发一次。
+     */
+    private static boolean missingDatasetConfig(Reply reply) {
+        String code = reply.errorCode();
+        return "DATA_CONFIG_REQUIRED".equals(code) || (reply.status() == 404 && "DATASET_NOT_FOUND".equals(code));
     }
 
     private static String recordError(JsonNode response, String replyId, String fallback) {
