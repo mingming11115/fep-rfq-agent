@@ -37,6 +37,8 @@ public class StandardReplyIndexClient {
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
     private static final Pattern JOB_ID = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,254}");
     private static final Pattern ERROR_CODE = Pattern.compile("[A-Z][A-Z0-9_]{0,63}");
+    // 中台当前返回 DATASET_CONFIG_REQUIRED；DATA_CONFIG_REQUIRED 是早期对接记录的变体，一并兼容。
+    private static final Set<String> CONFIG_MISSING_CODES = Set.of("DATASET_CONFIG_REQUIRED", "DATA_CONFIG_REQUIRED");
 
     @Autowired
     private ObjectMapper json;
@@ -200,11 +202,11 @@ public class StandardReplyIndexClient {
     }
 
     /**
-     * 任务阶段回报 DATA_CONFIG_REQUIRED 说明数据集在中台丢了配置：清掉进程内缓存，
+     * 任务阶段回报数据集配置缺失（DATASET_CONFIG_REQUIRED）说明数据集在中台丢了配置：清掉进程内缓存，
      * 让 resubmit 的下一次提交重新带上 dataset_config 重建数据集，否则会不带配置无限循环。
      */
     private void forgetDatasetOnConfigError(String dataset, String errorCode) {
-        if ("DATA_CONFIG_REQUIRED".equals(errorCode)) {
+        if (CONFIG_MISSING_CODES.contains(errorCode)) {
             provisioned.remove(dataset);
         }
     }
@@ -301,11 +303,11 @@ public class StandardReplyIndexClient {
     }
 
     /**
-     * 数据集还没有可入库的配置：存在但未声明 embedding 字段（DATA_CONFIG_REQUIRED），或数据集不存在
+     * 数据集还没有可入库的配置：存在但未声明 embedding 字段（DATASET_CONFIG_REQUIRED），或数据集不存在
      * （任意 404——进程内可能已标记创建过，但中台数据集后来被删除或从未建成）。两种情况都补配置重建一次。
      */
     private static boolean missingDatasetConfig(Reply reply) {
-        return "DATA_CONFIG_REQUIRED".equals(reply.errorCode()) || reply.status() == 404;
+        return CONFIG_MISSING_CODES.contains(reply.errorCode()) || reply.status() == 404;
     }
 
     private static String recordError(JsonNode response, String replyId, String fallback) {

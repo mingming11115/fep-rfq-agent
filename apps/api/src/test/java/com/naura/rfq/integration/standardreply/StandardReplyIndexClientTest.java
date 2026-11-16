@@ -139,7 +139,7 @@ class StandardReplyIndexClientTest {
     @Test
     void reprovisionsWhenThePlatformLosesTheDatasetConfig() throws Exception {
         replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
-            new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"),
+            new Reply(400, "{\"error\":{\"code\":\"DATASET_CONFIG_REQUIRED\"}}"),
             new Reply(202, "{\"job_id\":\"job-2\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"));
         client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
         assertThat(client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-2");
@@ -149,6 +149,17 @@ class StandardReplyIndexClientTest {
         assertThat(reprovisioned.at("/dataset_config/embedding_fields").toString()).isEqualTo("[\"title\",\"requirement_text\"]");
         assertThat(reprovisioned.at("/records/0/id").asText()).isEqualTo("REPLY-2");
         assertThat(reprovisioned.at("/records/0/data")).isEqualTo(payload());
+    }
+
+    @Test
+    void legacyDataConfigCodeIsAlsoTreatedAsMissingConfig() throws Exception {
+        replies = List.of(new Reply(202, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(422, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"),
+            new Reply(202, "{\"job_id\":\"job-2\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"));
+        client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
+        assertThat(client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-2");
+        assertThat(json.readTree(requests.get(1).body()).has("dataset_config")).isFalse();
+        assertThat(json.readTree(requests.get(2).body()).has("dataset_config")).isTrue();
     }
 
     @Test
@@ -170,12 +181,12 @@ class StandardReplyIndexClientTest {
     @Test
     void repeatedMissingDatasetConfigFailsWithThePlatformCode(CapturedOutput output) {
         replies = List.of(new Reply(200, "{\"job_id\":\"job-1\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"),
-            new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"),
-            new Reply(409, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"));
+            new Reply(400, "{\"error\":{\"code\":\"DATASET_CONFIG_REQUIRED\"}}"),
+            new Reply(409, "{\"error\":{\"code\":\"DATASET_CONFIG_REQUIRED\"}}"));
         client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
         assertThatThrownBy(() -> client.submit(DATASET, "REPLY-2", "upsert", payload(), UPDATED_AT))
             .isInstanceOfSatisfying(StandardReplyIndexClient.Failure.class, failure -> {
-                assertThat(failure.getMessage()).isEqualTo("DATA_CONFIG_REQUIRED");
+                assertThat(failure.getMessage()).isEqualTo("DATASET_CONFIG_REQUIRED");
                 assertThat(failure.resubmit()).isFalse();
             });
         assertThat(requests).hasSize(3);
@@ -184,7 +195,7 @@ class StandardReplyIndexClientTest {
 
     @Test
     void deleteOfConfiglessDatasetDoesNotProvisionOrSendData() throws Exception {
-        replies = List.of(new Reply(400, "{\"error\":{\"code\":\"DATA_CONFIG_REQUIRED\"}}"));
+        replies = List.of(new Reply(400, "{\"error\":{\"code\":\"DATASET_CONFIG_REQUIRED\"}}"));
         assertThat(client.submit(DATASET, "REPLY-1", "delete", null, UPDATED_AT).complete()).isTrue();
         assertThat(requests).hasSize(1);
         assertThat(json.readTree(requests.get(0).body()).has("dataset_config")).isFalse();
@@ -208,7 +219,7 @@ class StandardReplyIndexClientTest {
         replies = List.of(
             new Reply(202, "{\"job_id\":\"job-1\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
             new Reply(200, """
-                {"status":"failed","errors":[{"id":"REPLY-1","code":"DATA_CONFIG_REQUIRED"}]}
+                {"status":"failed","errors":[{"id":"REPLY-1","code":"DATASET_CONFIG_REQUIRED"}]}
                 """),
             new Reply(202, "{\"job_id\":\"job-2\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
             new Reply(200, "{\"status\":\"succeeded\",\"succeeded_count\":1,\"failed_count\":0}"));
@@ -216,7 +227,7 @@ class StandardReplyIndexClientTest {
         assertThatThrownBy(() -> client.poll(DATASET, "job-1", "REPLY-1"))
             .isInstanceOfSatisfying(StandardReplyIndexClient.Failure.class, failure -> {
                 assertThat(failure.resubmit()).isTrue();
-                assertThat(failure.getMessage()).isEqualTo("DATA_CONFIG_REQUIRED");
+                assertThat(failure.getMessage()).isEqualTo("DATASET_CONFIG_REQUIRED");
             });
         assertThat(client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-2");
         assertThat(json.readTree(requests.get(2).body()).has("dataset_config")).isTrue();

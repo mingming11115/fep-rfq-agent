@@ -179,7 +179,7 @@ npm run dev:api
 
 同一版本由另一位具有 `knowledge-publish` 资格的本 BU 管理员审核。修订生成新草稿，批准新版本后替代原发布版本。审核通过与索引同步分别记录。导入的 BU 共享标准回复在发布和撤销时登记同步任务，数据库事务提交后由后台发送。
 
-索引同步使用 `RFQ_STANDARD_REPLY_INDEX_BASE_URL` 和 `RFQ_STANDARD_REPLY_INDEX_API_KEY`。三个库各配置一个数据集标识并跨 BU 共用，默认值分别为 `standard-reply`、`rfq-item` 和 `equipment-capability`，例如 `rfq.standard-reply-index.dataset=standard-reply`；BU 隔离由记录里的 `bu_id` 字段过滤保证，不再按 BU 拆分数据集。首次写入某个数据集时，请求体带 `dataset_config`（`title`、`requirement_text` 参与 embedding，`bu_id`、`record_version` 声明为过滤字段），中台据此创建数据集；同一进程内创建成功后的增量只传 `records`。中台已有同名数据集且配置不一致时返回 `409 DATASET_CONFIG_CONFLICT`，此时沿用中台已有配置继续同步并记 WARN。中台数据集被删除或从未建成时（404 或 `DATA_CONFIG_REQUIRED`），下一次写入自动补带 `dataset_config` 重建；该错误也可能由异步入库任务在任务阶段以逐条错误回报，轮询发现后同样清缓存并在重投时补带配置。未配置数据集的库，其同步任务保留在队列中。配置示例使用测试环境地址和服务端密钥注入。
+索引同步使用 `RFQ_STANDARD_REPLY_INDEX_BASE_URL` 和 `RFQ_STANDARD_REPLY_INDEX_API_KEY`。三个库各配置一个数据集标识并跨 BU 共用，默认值分别为 `standard-reply`、`rfq-item` 和 `equipment-capability`，例如 `rfq.standard-reply-index.dataset=standard-reply`；BU 隔离由记录里的 `bu_id` 字段过滤保证，不再按 BU 拆分数据集。首次写入某个数据集时，请求体带 `dataset_config`（`title`、`requirement_text` 参与 embedding，`bu_id`、`record_version` 声明为过滤字段），中台据此创建数据集；同一进程内创建成功后的增量只传 `records`。中台已有同名数据集且配置不一致时返回 `409 DATASET_CONFIG_CONFLICT`，此时沿用中台已有配置继续同步并记 WARN。中台数据集被删除或从未建成时（404 或 `DATASET_CONFIG_REQUIRED`，早期对接记录的 `DATA_CONFIG_REQUIRED` 同样兼容），下一次写入自动补带 `dataset_config` 重建；该错误也可能由异步入库任务在任务阶段以逐条错误回报，轮询发现后同样清缓存并在重投时补带配置。未配置数据集的库，其同步任务保留在队列中。配置示例使用测试环境地址和服务端密钥注入。
 
 ```sh
 export SPRING_APPLICATION_JSON='{"rfq":{"standard-reply-index":{"dataset":"standard-reply","history-dataset":"rfq-item","capability-dataset":"equipment-capability"}}}'
