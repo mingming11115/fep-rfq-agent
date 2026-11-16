@@ -72,8 +72,8 @@ class StandardReplyIndexClientTest {
         var accepted = client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT);
         assertThat(accepted.complete()).isFalse();
         assertThat(accepted.jobId()).isEqualTo("job-1");
-        assertThat(client.poll("job-1", "REPLY-1").complete()).isFalse();
-        assertThat(client.poll("job-1", "REPLY-1").complete()).isTrue();
+        assertThat(client.poll(DATASET, "job-1", "REPLY-1").complete()).isFalse();
+        assertThat(client.poll(DATASET, "job-1", "REPLY-1").complete()).isTrue();
 
         assertThat(requests).extracting(Exchange::key).containsOnly("test-index-key");
         assertThat(requests).extracting(Exchange::method).containsExactly("POST", "GET", "GET");
@@ -196,11 +196,32 @@ class StandardReplyIndexClientTest {
             {"status":"partial_success","total_count":1,"succeeded_count":0,"failed_count":1,
              "errors":[{"id":"REPLY-1","code":"FIELD_TYPE_MISMATCH","message":"private payload"}]}
             """));
-        assertThatThrownBy(() -> client.poll("job-1", "REPLY-1"))
+        assertThatThrownBy(() -> client.poll(DATASET, "job-1", "REPLY-1"))
             .isInstanceOfSatisfying(StandardReplyIndexClient.Failure.class, failure -> {
                 assertThat(failure.resubmit()).isTrue();
                 assertThat(failure.getMessage()).isEqualTo("FIELD_TYPE_MISMATCH");
             });
+    }
+
+    @Test
+    void configMissingAtJobStageIsRepairedWithDatasetConfigOnResubmission() throws Exception {
+        replies = List.of(
+            new Reply(202, "{\"job_id\":\"job-1\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(200, """
+                {"status":"failed","errors":[{"id":"REPLY-1","code":"DATA_CONFIG_REQUIRED"}]}
+                """),
+            new Reply(202, "{\"job_id\":\"job-2\",\"job_status\":\"pending\",\"accepted_count\":1,\"rejected_count\":0}"),
+            new Reply(200, "{\"status\":\"succeeded\",\"succeeded_count\":1,\"failed_count\":0}"));
+        assertThat(client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-1");
+        assertThatThrownBy(() -> client.poll(DATASET, "job-1", "REPLY-1"))
+            .isInstanceOfSatisfying(StandardReplyIndexClient.Failure.class, failure -> {
+                assertThat(failure.resubmit()).isTrue();
+                assertThat(failure.getMessage()).isEqualTo("DATA_CONFIG_REQUIRED");
+            });
+        assertThat(client.submit(DATASET, "REPLY-1", "upsert", payload(), UPDATED_AT).jobId()).isEqualTo("job-2");
+        assertThat(json.readTree(requests.get(2).body()).has("dataset_config")).isTrue();
+        assertThat(json.readTree(requests.get(2).body()).at("/records/0/id").asText()).isEqualTo("REPLY-1");
+        assertThat(client.poll(DATASET, "job-2", "REPLY-1").complete()).isTrue();
     }
 
     @Test

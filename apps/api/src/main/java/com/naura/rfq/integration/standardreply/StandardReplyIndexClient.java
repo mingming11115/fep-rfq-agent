@@ -172,7 +172,7 @@ public class StandardReplyIndexClient {
         return new Delivery(result.status() == 200 && "succeeded".equals(response.path("job_status").asText()), job);
     }
 
-    Delivery poll(String jobId, String replyId) {
+    Delivery poll(String dataset, String jobId, String replyId) {
         requireJobId(jobId);
         var result = request("poll", "/ingestion-jobs/" + jobId, null);
         if (result.status() != 200) {
@@ -186,13 +186,27 @@ public class StandardReplyIndexClient {
                 int succeeded = response.path("succeeded_count").asInt(0);
                 int skipped = response.path("skipped_count").asInt(0);
                 if (error != null || succeeded + skipped != 1 || response.path("failed_count").asInt(-1) != 0) {
+                    forgetDatasetOnConfigError(dataset, error);
                     throw new Failure(error == null ? "RECORD_NOT_INDEXED" : error, true);
                 }
                 yield new Delivery(true, jobId);
             }
-            case "failed", "cancelled" -> throw new Failure(recordError(response, replyId, "JOB_NOT_COMPLETED"), true);
+            case "failed", "cancelled" -> {
+                forgetDatasetOnConfigError(dataset, recordError(response, replyId, "JOB_NOT_COMPLETED"));
+                throw new Failure(recordError(response, replyId, "JOB_NOT_COMPLETED"), true);
+            }
             default -> throw new Failure("INVALID_JOB_STATUS", false);
         };
+    }
+
+    /**
+     * 任务阶段回报 DATA_CONFIG_REQUIRED 说明数据集在中台丢了配置：清掉进程内缓存，
+     * 让 resubmit 的下一次提交重新带上 dataset_config 重建数据集，否则会不带配置无限循环。
+     */
+    private void forgetDatasetOnConfigError(String dataset, String errorCode) {
+        if ("DATA_CONFIG_REQUIRED".equals(errorCode)) {
+            provisioned.remove(dataset);
+        }
     }
 
     private void requireJobId(String jobId) {

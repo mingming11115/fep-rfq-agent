@@ -72,7 +72,7 @@ public class StandardReplyIndexWorker {
         try {
             var result = work.jobId() == null
                 ? client.submit(dataset, key.replyId(), work.operation(), projection(key, work), work.updatedAt().toInstant(ZoneOffset.UTC))
-                : client.poll(work.jobId(), key.replyId());
+                : client.poll(dataset, work.jobId(), key.replyId());
             return result.complete()
                 ? new Outcome(true, result.jobId(), 0, null, 0)
                 : new Outcome(false, result.jobId(), work.attempts(), null, POLL_DELAY_SECONDS);
