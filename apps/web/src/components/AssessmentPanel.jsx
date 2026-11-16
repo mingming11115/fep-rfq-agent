@@ -1,10 +1,15 @@
 import { UiButton } from './AntContent';
-import React from 'react';
-import { BookOpen, ChevronDown, Sparkles } from "./icons";
+import React, { useState } from 'react';
+import { ChevronDown, Sparkles, RefreshCw, Check } from "./icons";
 import { makeRequirements } from '../data';
+import { RESPONSE_CONCLUSIONS } from '../domain';
 import { reviewEvidenceHref } from '../reviewRequest';
 import { buildResponseAdvice } from '../responseAdvice';
-export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference, sourceScope, children }) {
+import { Button, Input, Radio, Space, Typography } from 'antd';
+export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference, sourceScope,
+  recommendation, evidence, currentDraft, canEdit, onAdopt, conclusion, onConclusionChange, liveAdvice, children }) {
+  const [editedWording, setEditedWording] = useState(null);
+  const wording = editedWording ?? recommendation ?? '';
   const original = makeRequirements(project.id).find((item) => item.id === row.id);
   const unchangedSource = !row.sourceRevision && !row.sourceCorrected && original?.original === row.original;
   const fixtures = {
@@ -16,17 +21,53 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
     'BHEL-REQ-003': { label: '设备交付周期', requested: { value: 12, unit: '周', operator: '<=' }, capability: { value: 16, unit: '周' }, contextMatches: true, conditions: '均以BHEL采购订单日期起算；16周为模拟排产', evidence: '模拟排产基线 DEMO-SCH-016；非真实交期承诺' },
   };
   const check = unchangedSource ? (row.realSource ? bhelFixtures[row.id] : fixtures[row.clause]) : null;
-  const advice=buildResponseAdvice(row,suggestion,{check,retrieval});
-  return <section className="response-advice" aria-label="AI 应答建议">
-    <header className="response-advice-heading"><span className="response-advice-avatar"><Sparkles size={16} aria-hidden="true"/></span><h3>AI 应答建议</h3></header>
-    {(row.backendDocumentId||row.documentId)&&<p role="note">条款来源：后端文件解析。{!suggestion?.evidence&&'尚无匹配证据，请核对原文。'}{row.parserNote&&` 解析提示：${row.parserNote}`}</p>}
-    <dl>
-      <dt>建议结论</dt><dd className="response-advice-conclusion"><strong>{advice.conclusion}</strong></dd>
-    </dl>
+  const advice = liveAdvice ?? buildResponseAdvice(row, suggestion || {}, {check, retrieval});
+  const suggested = advice.conclusion && advice.conclusion !== '待确认' ? advice.conclusion : '';
+  const linkedEvidence = advice.evidence || (liveAdvice ? evidence : '');
+  const evidenceHref = /^https?:\/\//i.test(linkedEvidence?.trim()) ? reviewEvidenceHref(linkedEvidence) : '';
+  const adopted = !!wording.trim() && wording.trim() === (currentDraft || '').trim();
+  const hasWording = typeof recommendation === 'string';
+  return <section className="response-advice response-wide">
+    {onConclusionChange && <>
+      <header className="response-advice-heading"><h3>应答结论 <i className="response-required" aria-hidden="true">*</i></h3></header>
+      <Radio.Group aria-label="应答结论" aria-required="true" className="rfq-conclusion-radio"
+        value={conclusion} disabled={!canEdit} options={RESPONSE_CONCLUSIONS}
+        onChange={event => onConclusionChange(event.target.value)}/>
+    </>}
     <details className="response-reference-details" key={JSON.stringify([project.id,row.id,sourceScope?.fileId??row.sourceFileId??row.source,String(sourceScope?.sourceVersion??row.sourceVersion??'1')])}>
-      <summary><BookOpen size={14}/><strong>参考与证据</strong><ChevronDown size={13}/></summary>
-      <div className="response-reference-body"><dl><dt>AI 建议来源</dt><dd>{advice.reference}{advice.evidence&&onOpenReference&&<UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}</dd><dt>本条关联证据</dt><dd aria-label="本条关联证据">{advice.evidence || '暂无关联证据'}{reviewEvidenceHref(advice.evidence)&&<a className="text-link" aria-label="打开本条关联证据" href={reviewEvidenceHref(advice.evidence)} target="_blank" rel="noopener noreferrer">查看来源 ↗</a>}</dd></dl>{children}</div>
+      <summary>
+        <Sparkles size={14} aria-hidden="true"/>
+        <strong>{suggested ? `AI 建议：${suggested}` : 'AI 暂无明确建议'}</strong>
+        <span>查看依据</span><ChevronDown size={13} aria-hidden="true"/>
+      </summary>
+      <div className="response-reference-body">
+        <dl>
+          <dt>AI 建议来源</dt>
+          <dd>{advice.reference || '暂无可用参考依据'}{advice.runId && ` · ${advice.runId}`}
+            {advice.evidence && onOpenReference && <UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}
+          </dd>
+          <dt>本条关联证据</dt>
+          <dd aria-label="本条关联证据">{linkedEvidence || '暂无关联证据'}
+            {evidenceHref && <a className="text-link" aria-label="打开本条关联证据" href={evidenceHref} target="_blank" rel="noopener noreferrer">查看来源 ↗</a>}
+          </dd>
+        </dl>
+        {row.parserNote && <p role="note">解析提示：{row.parserNote}</p>}
+        {children}
+      </div>
     </details>
+    {hasWording && <section className="response-wording-inner" aria-label="AI 推荐话术">
+      <Input.TextArea aria-label="推荐话术" autoSize={{ minRows: 3, maxRows: 6 }} value={wording} readOnly={!canEdit}
+        onChange={event => setEditedWording(event.target.value)}/>
+      <Typography.Paragraph type="secondary" aria-label="推荐话术依据" style={{ margin: '8px 0 0' }}>
+        依据：{String(evidence || '').trim() || '暂无关联证据'}
+      </Typography.Paragraph>
+      <div className="response-wording-footer">
+        <Space size={8} wrap>
+          <Button type="link" size="small" icon={<RefreshCw size={12}/>} disabled={!canEdit} onClick={() => setEditedWording(null)}>重新生成</Button>
+          <Button size="small" icon={<Check size={13}/>} disabled={!canEdit || !wording.trim() || adopted} onClick={() => onAdopt?.(wording.trim())}>{adopted ? '已采用' : '采用话术'}</Button>
+        </Space>
+      </div>
+    </section>}
     {row.previousOriginal&&<details><summary>查看变更前要求</summary><p>{row.previousOriginal}</p></details>}
   </section>;
 }

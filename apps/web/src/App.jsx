@@ -238,7 +238,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
    return true;
   }catch(error){ console.error('保存应答失败', error); if(restore) { throw error; } toast(error.message,'error');return false;}
  }
- function confirm(id,expectedVersion,patch,matchChoice){if(databaseBacked) { return persistResponse(id,patch,expectedVersion,true,null,matchChoice); } try{update(st=>event(confirmProjectRequirement(st,{projectId:project.id,requirementId:id,expectedVersion,route:routeRef.current}),'确认要求',`${project.id} · ${id}`,'按当前人员资格和条款分派确认'));return true;}catch(e){ console.error('确认条款失败', e); toast(e.message,'error');return false;}}
+ function confirm(id,expectedVersion,patch,matchChoice){if(databaseBacked) { return persistResponse(id,patch,expectedVersion,true,null,matchChoice); } try{update(st=>{const prepared=patch?{...st,requirementsByProject:{...st.requirementsByProject,[project.id]:st.requirementsByProject[project.id].map(r=>r.id===id?{...r,...patch}:r)}}:st;return event(confirmProjectRequirement(prepared,{projectId:project.id,requirementId:id,expectedVersion,route:routeRef.current}),'确认要求',`${project.id} · ${id}`,'按当前人员资格和条款分派确认');});return true;}catch(e){ console.error('确认条款失败', e); toast(e.message,'error');return false;}}
  function restoreConfirmation(id,expectedVersion,entry){return persistResponse(id,null,expectedVersion,false,entry);}
  function createReview(value){
   if(databaseBacked) { return matchClient().review(value.requirementId,{version:value.requirementVersion,

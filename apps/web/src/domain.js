@@ -1,7 +1,7 @@
 import { canReviewWithoutManualConfirmation, captureSystemRecommendation, getUnconfirmedComplyRows } from './responseRecommendation.js';
 import { answerRemark, normalizeResponseRemark } from './responseFields.js';
 
-const FINAL_CONCLUSIONS = new Set(['Comply', '有条件 Comply', '不满足', '不适用']);
+export const RESPONSE_CONCLUSIONS = ['Comply', '有条件 Comply', '不满足', '不适用'];
 const MATERIAL_FIELDS = ['original', 'conclusion', 'evidence', 'owner'];
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
 
@@ -44,7 +44,7 @@ export function confirmationValidation(row) {
   const issues = [];
   if (row.removedFromSource && row.conclusion !== '不适用') { issues.push('客户新版已删除此条款，请确认不适用范围处置'); }
   if (!hasText(row.original)) { issues.push('请填写客户要求原文'); }
-  if (!FINAL_CONCLUSIONS.has(row.conclusion)) { issues.push('请选择明确的最终结论，待确认不能作为最终处置'); }
+  if (!RESPONSE_CONCLUSIONS.includes(row.conclusion)) { issues.push('请选择明确的最终结论，待确认不能作为最终处置'); }
   return issues;
 }
 

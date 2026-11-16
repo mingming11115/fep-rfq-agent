@@ -1,8 +1,8 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Space, Tag} from 'antd';
+import {AlertTriangle} from './icons';
 import {MATCH_LIBRARIES, matchClient, matchNeedsPolling, matchStages} from '../requirementMatchClient.js';
 import MatchInputDialog from './MatchInputDialog';
-import {demoMatchPreview} from '../demoMatchPreview.js';
 import {Modal} from './ui';
 
 const matches = matchClient();
@@ -25,6 +25,13 @@ const reasons = {
 const reasonLabel = reason => reasons[reason] || (reason ? '请核对服务状态或重新比对' : '');
 const conditionLabels = {same:'适用条件一致', different:'适用条件不同', unverified:'适用条件待核对', not_specified:'来源未限定条件'};
 const checkLabels = {supports:'满足', refutes:'不满足', no_candidate:'未找到能力条目', evidence_unavailable:'证据不可用', review:'待核对'};
+const libraryStatusColors = {hit:'success', miss:'error', not_applicable:'default', not_run:'default', blocked:'warning'};
+function deviationLibraries(run) {
+  const stages = run?.status === 'completed' ? run.result?.stages : run?.stages;
+  return Object.entries(MATCH_LIBRARIES).map(([key, name]) => ({
+    key, name, status: stages?.[key]?.status || 'not_run',
+  }));
+}
 
 function Candidate({candidate, sourceDocument, action}) {
   return <details><summary>{candidate.title || candidate.id} · v{candidate.version}
@@ -45,8 +52,7 @@ function Candidate({candidate, sourceDocument, action}) {
   </details>;
 }
 
-export default function RequirementMatchPanel(props) {
-  const preview = demoMatchPreview(props.row.id, window.location.hash);
+export default function RequirementMatchPanel({preview, ...props}) {
   if (preview) {
     return <section className="response-match-panel" aria-label="知识库比对">
       <Space wrap><strong>知识库比对</strong><Tag color="blue">模拟召回</Tag><Tag>已完成</Tag></Space>
@@ -54,14 +60,12 @@ export default function RequirementMatchPanel(props) {
         <Space><b>{MATCH_LIBRARIES[stage.library]}</b><Tag>{statusLabels[stage.status]}</Tag></Space>
         {stage.candidates?.map(candidate => <Candidate key={candidate.id} candidate={candidate}/>)}
       </li>)}</ol>
-      {preview.result.matchedLibrary && <p>系统建议　{preview.result.conclusion}</p>}
-      {preview.result.knowledgeGap && <p>三库均未命中，请人工核对条款。</p>}
     </section>;
   }
   return <LiveRequirementMatchPanel {...props}/>;
 }
 
-function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdopt, canCloseDeviation, actorId, review, onAdopt, onResult, onDetach, onDeviation, toast}) {
+function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdopt, draftMatchChoice, review, onAdopt, onResult, onDetach, onDeviation, toast}) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -71,11 +75,10 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const deviation = (review?.version || 0) > (run?.deviation?.version || 0) ? review : run?.deviation;
-  const reviewers = deviation?.reviewerIds || [];
-  const canResolve = reviewers.length ? reviewers.includes(actorId) && !deviation.reviewVotes?.[actorId]
-    : canCloseDeviation && !deviation?.technicalReviewRequired;
   const retryId = useRef(null);
   const generation = useRef(0);
+  const capabilityAdopted = draftMatchChoice?.candidateId === 'capability' && draftMatchChoice.matchRunId === run?.runId ||
+    row.matchReference?.library === 'capability' && row.matchReference.runId === run?.runId && !run?.referenceInvalid;
 
   useEffect(() => {
     const current = ++generation.current;
@@ -101,7 +104,8 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
     return () => { generation.current++; clearTimeout(timer); };
   }, [row.id, row.backendVersion, refresh]);
   useEffect(() => {
-    if (run) { onResult(run); if (run.deviation) { onDeviation(run.deviation); } }
+    onResult?.(run);
+    if (run?.deviation) { onDeviation(run.deviation); }
   }, [run]);
 
   async function retry() {
@@ -168,22 +172,25 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
         {check.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}/>)}
       </div>)}
     </li>)}</ol>}
-    {run?.result?.matchedLibrary && <p>系统建议　{run.result.conclusion}</p>}
-    {canAdopt && run?.result?.matchedLibrary === 'capability' && run.result.conclusion !== '待确认' &&
+    {canAdopt && !capabilityAdopted && run?.result?.matchedLibrary === 'capability' && run.result.conclusion !== '待确认' &&
       <Button size="small" onClick={() => onAdopt(run, {id:'capability', conclusion:run.result.conclusion,
         conditions:run.result.stages.capability.restrictions?.join('；')})}>核对并采用能力结论</Button>}
-    {run?.result?.knowledgeGap && <p>三库均未命中，请人工核对条款。</p>}
     {run?.historyDocumentIds?.length > 0 && run.result?.stages?.history_rfq?.status === 'miss' &&
       <p>指定文件内未找到匹配。</p>}
     {run?.historyGroupId && run.result?.stages?.history_rfq?.status === 'miss' &&
       <p>同 Group RFQ 内未找到匹配。</p>}
-    {deviation && <div>
-      <p>知识比对偏离　{deviation.status}</p>
-      <ul>{deviation.triggers?.map(item => <li key={`${item.runId}:${item.type}`}>{item.reason}</li>)}</ul>
-      {deviation.resolution && <p>处理结果　{deviation.resolution}</p>}
-      {reviewers.length > 0 && <p>评审已完成 {Object.keys(deviation.reviewVotes || {}).length}/{reviewers.length}</p>}
-      {deviation.technicalReviewRequired && !reviewers.length && <p>请通过「评审」分派技术人员。</p>}
-      {canResolve && deviation.status === '待处理' && <Button size="small" onClick={() => openAction('close')}>{reviewers.length ? '通过本条评审' : '关闭偏离事项'}</Button>}
+    {deviation && <div className="match-deviation-card">
+      <div className="match-deviation-head">
+        <span className="match-deviation-icon"><AlertTriangle/></span>
+        <strong className="match-deviation-title">知识比对偏离</strong>
+        <span className="match-deviation-hint">以下知识库未能提供可靠依据，请人工核对条款</span>
+      </div>
+      <div className="match-deviation-libraries">
+        {deviationLibraries(run).map(item => <div className="match-deviation-library" key={item.key}>
+          <span className="match-deviation-library-name">{item.name}</span>
+          <Tag color={libraryStatusColors[item.status] || 'default'} className="match-deviation-library-status">{statusLabels[item.status] || item.status}</Tag>
+        </div>)}
+      </div>
     </div>}
     {(row.matchReference || row.restrictedMatchReference) && <div>
       <p>已采纳依据　{row.restrictedMatchReference ? '来源不可访问' : `${MATCH_LIBRARIES[row.matchReference.library]}　${row.matchReference.version ? `${row.matchReference.candidateId} · v${row.matchReference.version}` : '已保存能力条目与证据版本'}`}</p>

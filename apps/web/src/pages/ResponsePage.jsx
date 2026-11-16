@@ -11,7 +11,7 @@ import ResponseAssignmentControl from '../components/ResponseAssignmentControl';
 import ResponseHistoryDrawer from '../components/ResponseHistoryDrawer';
 import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../confirmationPolicy';
 import {personName,canAccessProject} from '../personnelDomain';
-import { Card, ConfigProvider, Descriptions, Grid, Radio, Splitter, Tabs, Tag } from 'antd';
+import { Card, ConfigProvider, Descriptions, Grid, Splitter, Tabs, Tag } from 'antd';
 import {resizePanelShare} from '../antdAdapters';
 import ProjectActivityPanel from '../components/ProjectActivityPanel';
 import './rfq-detail.css';
@@ -35,15 +35,15 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
-import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions } from '../domain';
+import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions, RESPONSE_CONCLUSIONS } from '../domain';
 import { answerRemark } from '../responseFields';
-import { matchClient } from '../requirementMatchClient';
+import { MATCH_LIBRARIES, matchClient } from '../requirementMatchClient';
+import { demoMatchPreview } from '../demoMatchPreview';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
 import AssessmentPanel from '../components/AssessmentPanel';
 import RequirementMatchPanel from '../components/RequirementMatchPanel';
-import RecommendedWording from '../components/RecommendedWording';
-import { generateRecommendedWording } from '../responseAdvice';
+import { buildResponseAdvice, generateRecommendedWording } from '../responseAdvice';
 import { matchingSuggestion } from '../responseRecommendation';
 import InlineReviewSurface from '../components/InlineReviewSurface';
 import ResponseCardFilters, { EMPTY_CARD_FILTERS, ResponseCardQuery } from '../components/ResponseCardFilters';
@@ -59,6 +59,27 @@ const matches = matchClient();
 const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: mergeAnswerConditions(row?.draft, row?.conditions), remark: answerRemark(row), evidence: row?.evidence || '' });
 const formFields = ['original', 'conclusion', 'draft', 'remark', 'evidence'];
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
+function matchPrefill(result, conclusion, evidence) {
+  const library = result?.matchedLibrary;
+  const stage = result?.stages?.[library];
+  if (library === 'capability' && conclusion) {
+    return { id: 'capability', conclusion, conditions: stage?.restrictions?.join('；'), evidence };
+  }
+  // A history hit can contain several plausible candidates without selecting one.
+  if (library === 'standard_reply' || (library === 'history_rfq' && conclusion && stage?.candidates?.length === 1)) {
+    const candidate = stage?.candidates?.[0];
+    if (candidate) { return { ...candidate, conclusion }; }
+  }
+  return conclusion ? { conclusion } : null;
+}
+function matchEvidenceText(result) {
+  const checks = result?.stages?.capability?.checks || [];
+  const references = checks.flatMap(check => (check.candidates || [])
+    .flatMap(candidate => candidate.evidenceRefs || []));
+  const citations = references.map(({ id, version, location }) =>
+    [id, version && `v${version}`, location].filter(Boolean).join(' · '));
+  return [...new Set(citations.filter(Boolean))].join('；');
+}
 function Notice({ children, warning = false, loading = false }) {
   const Icon = loading ? LoaderCircle : AlertCircle;
   return <div className={`response-notice ${warning ? 'response-notice-warning' : ''}`} role={loading ? 'status' : undefined}><Icon size={15} /><div>{children}</div></div>;
@@ -129,8 +150,9 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const setTransition = transition => transition?.next?.();
   const [adoption, setAdoption] = useState(null);
   const [matchChoice, setMatchChoice] = useState(null);
+  const [matchState, setMatchState] = useState(null);
   const [realAdoption, setRealAdoption] = useState(null);
-  const prefilledRuns = useRef(new Set());
+  const prefilledRun = useRef(null);
   const [reviewForm, setReviewForm] = useState(null);
   const [inlineReviewId, setInlineReviewId] = useState(null), [inlineReviewAction,setInlineReviewAction] = useState(null);
   const [cardFilters, setCardFilters] = useState(EMPTY_CARD_FILTERS);
@@ -196,8 +218,28 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const canEdit = !confirmedLocked && actorRole !== '最终审批人'&&!staleSource&&canBusinessAction('requirement',active?.id);
   const canConfirm = ['SR','技术'].includes(actorRole)&&!staleSource&&canBusinessAction('requirement',active?.id,'confirm');
   const suggestion = databaseBacked ? null : matchingSuggestion(active, project.id);
-  const recommendedWording = generateRecommendedWording({ ...active, ...form });
   const retrieval = retrievalById[active?.id] || 'normal';
+  const matchScope = JSON.stringify([project.id, actorId, active?.id, active?.backendVersion]);
+  const matchRun = databaseBacked && matchState?.scope === matchScope ? matchState.run : null;
+  const liveMatchResult = matchRun?.status === 'completed' && !staleSource &&
+    matchRun.sourceRequirementVersion === active?.backendVersion ? matchRun.result : null;
+  const matchPreview = databaseBacked && active ? demoMatchPreview(active.id, window.location.hash) : null;
+  const showingMatchPreview = Boolean(matchPreview);
+  const matchResult = matchPreview?.result ?? liveMatchResult;
+  const matchConclusion = RESPONSE_CONCLUSIONS.includes(matchResult?.conclusion) ? matchResult.conclusion : '';
+  const matchLibrary = MATCH_LIBRARIES[matchResult?.matchedLibrary];
+  const matchEvidence = matchEvidenceText(matchResult);
+  const selectedMatch = matchChoice || active?.matchReference;
+  const selectedRunId = selectedMatch?.matchRunId || selectedMatch?.runId;
+  const matchedConditions = selectedRunId && selectedRunId === matchRun?.runId && selectedMatch.candidateId === 'capability'
+    ? matchResult?.stages?.capability?.restrictions?.join('；') : '';
+  const recommendedWording = generateRecommendedWording({
+    ...active, ...form,
+    conditions: matchedConditions && form.draft.includes(`适用条件：${matchedConditions}`)
+      ? matchedConditions : active?.conditions,
+  });
+  const suggestedDemoConclusion = suggestion && RESPONSE_CONCLUSIONS.includes(suggestion.conclusion) &&
+    buildResponseAdvice(active, suggestion, { retrieval }).conclusion !== '待确认' ? suggestion.conclusion : '';
   const states = active ? { standard: active.matchLevel === 'standard' && active.score > 80 ? '命中' : '未命中', history: active.matchLevel === 'standard' && active.score > 80 ? '未执行' : active.matchLevel === 'history' ? '命中' : '未命中', capability: (active.matchLevel === 'standard' && active.score > 80) || active.matchLevel === 'history' ? '未执行' : active.matchLevel === 'capability' ? '命中' : '未命中' } : {};
   if (retrieval === 'failed') { Object.assign(states, { standard: '失败', history: '未执行', capability: '未执行' }); }
   if (retrieval === 'denied') { Object.assign(states, { standard: '无权限', history: '未执行', capability: '未执行' }); }
@@ -209,7 +251,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const selectedRows = responseRows.filter((r) => selected.includes(r.id));
   const batchSuccessCount = batchResults?.filter(row => row.result === '确认成功').length || 0;
   const batchFailureCount = batchResults?.filter(row => row.result === '确认失败').length || 0;
-  const batchExcludedCount = (batchResults?.length || 0) - batchSuccessCount - batchFailureCount;
   const candidates = !databaseBacked && active ? Array.from({ length: showMore ? 5 : 3 }, (_, index) => ({ id: `HIST-${active.clause}-${index + 1}`, project: `历史参考 RFQ-${index === 0 ? '2025-018' : index === 1 ? '2025-011' : `2024-00${index + 1}`}（模拟）`, date: `2025-${String(9 - index).padStart(2, '0')}-18`, model: active.realSource ? 'DEMO-YAG 150 · 模拟历史配置' : index === 0 ? 'DEMO-CUT 300 · V2.1' : 'DEMO-CUT 300 · V2.0', config: index === 0 ? '选配 X / 历史确认配置' : '标准配置 / 工况待比对', original: active.original, answer: suggestion.draft, conditions: suggestion.conditions || '仅适用历史案例记载的材料、厚度、工艺与验收方法；需核对本次条件。', evidence: suggestion.evidence || '模拟历史批准记录 V3，适用性待核对', difference: active.conclusion === '有条件 Comply' ? '本次选配、材料或测试条件尚未全部确认，与历史条件存在差异。' : '设备版本、材料与验收方案需逐项核对；相似要求不代表条件完全一致。', feedback: index === 0 ? '客户已接受（模拟记录）' : '未记录', acceptance: index === 0 ? '未记录' : '未记录', version: `V${3 - Math.min(index, 2)}` })) : [];
 
   useEffect(()=>{localStorage.setItem(`rfq.response.filters.${project.id}`,JSON.stringify({query,status,section}));},[query,status,section]);
@@ -219,7 +260,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const ids = new Set(directoryRows.map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
-  function hydrate(row) { if (!row) { return; } setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
+  function hydrate(row) { if (!row) { return; } prefilledRun.current = null; setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
   function edit(field, value) { if (!canEdit || cardBusyRef.current) { return; } setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
   function requestTransition(next) { if (cardBusyRef.current) { return false; } return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
@@ -362,20 +403,30 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (!canEdit || cardBusyRef.current) { return; }
     setForm(current=>({...current,draft:mergeAnswerConditions(candidate.answer || current.draft,candidate.conditions),
       ...(candidate.conclusion ? {conclusion:candidate.conclusion} : {}),
-      evidence:current.evidence || (candidate.version ? `${candidate.id} · v${candidate.version}` : `能力比对 ${run.runId}`)}));
+      evidence:current.evidence || candidate.evidence || (candidate.version ? `${candidate.id} · v${candidate.version}` : `能力比对 ${run.runId}`)}));
     setMatchChoice({matchRunId:run.runId,candidateId:candidate.id});
     dirtyRef.current=true;
     setDirty(true);
     setRealAdoption(null);
   }
-  function maybePrefill(run) {
-    const candidate=run.result?.stages?.standard_reply?.candidates?.[0];
-    if (!candidate || !canEdit || cardBusyRef.current || dirtyRef.current || prefilledRuns.current.has(run.runId) ||
-      active.status==='已确认' || active.sourceRequirementVersion != null || active.matchReference || active.draft ||
-      active.conclusion && active.conclusion!=='待确认') { return; }
-    prefilledRuns.current.add(run.runId);
-    applyMatch(run,candidate);
-  }
+  useEffect(() => {
+    if (!active || !canEdit || cardBusy || dirtyRef.current || active.status === '已确认' ||
+        active.needsReview || active.pendingReviewProposal || active.sourceRevision || active.sourceCorrected ||
+        active.removedFromSource || active.matchReference || active.restrictedMatchReference ||
+        active.draft || active.conditions || active.evidence || answerRemark(active) ||
+        (active.conclusion && active.conclusion !== '待确认')) { return; }
+    if (!databaseBacked) {
+      if (suggestedDemoConclusion) { edit('conclusion', suggestedDemoConclusion); }
+      return;
+    }
+    if (active.sourceRequirementVersion != null || showingMatchPreview || !liveMatchResult ||
+        matchRun.referenceInvalid || prefilledRun.current === matchRun.runId) { return; }
+    const candidate = matchPrefill(liveMatchResult, matchConclusion, matchEvidence);
+    if (!candidate) { return; }
+    prefilledRun.current = matchRun.runId;
+    if (candidate.id) { applyMatch(matchRun, candidate); }
+    else { edit('conclusion', matchConclusion); }
+  }, [active, canEdit, cardBusy, databaseBacked, matchRun, liveMatchResult, showingMatchPreview, matchConclusion, matchEvidence, suggestedDemoConclusion]);
   async function saveDraft(remarkOverride, choiceOverride) {
     if (!active || !canEdit) { toast('当前身份不能修改应答草稿'); return false; }
     if (conflicted) { setError('条目版本已变化，请保留当前输入并返回核对最新版本，不能覆盖保存。'); setModal('conflict'); return false; }
@@ -422,48 +473,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       setForm(expected); clearDirty(); setPendingConfirmation({ id: active.id, expected, nextId });
     } else { finishConfirmation(active, nextId); }
   }
-  async function checkBatchRow(row, draft) {
-    if (!canBusinessAction('requirement', row.id, 'confirm')) { return { exclusion: '当前账号无本条确认权限' }; }
-    if (row.status === '已确认') { return { exclusion: '当前版本已确认' }; }
-    if (row.status === '评审中' || responseStatusLabel(row, reviews) === '评审中' || row.id === active.id && reviewForm) {
-      return { exclusion: '请先处理本条评审、偏离或澄清事项' };
-    }
-    if (row.keyRequirement || row.obligation === 'mandatory' || row.needsReview || row.activeForApproval === false) {
-      return { exclusion: '关键要求或来源待核对，请逐条确认' };
-    }
-    if (draft && (!databaseBacked || !matchChoice || conflicted)) { return { exclusion: '本条有未保存的修改，请先核对草稿' }; }
-    const answer = draft ? { ...row, ...draft } : row;
-    if (answer.conclusion !== 'Comply') { return { exclusion: '仅可批量确认已明确为 Comply 的应答' }; }
-    const issues = confirmationValidation(answer);
-    if (issues.length) { return { exclusion: issues.join('；') }; }
-
-    const noStandardMatch = '不符合标准回复相似度 >80% 的批量条件，请逐条确认';
-    if (!databaseBacked) { return row.matchLevel === 'standard' && row.score > 80 ? {} : { exclusion: noStandardMatch }; }
-    const reference = row.matchReference;
-    if (row.restrictedMatchReference || reference && reference.library !== 'standard_reply') {
-      return { exclusion: '本条采纳依据不可访问或来自其他知识库，请逐条确认' };
-    }
-    const run = await matches.current(row.id);
-    if (run.deviation && !['已关闭', '已取消'].includes(run.deviation.status)) {
-      return { exclusion: '请先处理本条知识比对偏离' };
-    }
-    const candidate = run.result?.stages?.standard_reply?.candidates?.[0];
-    if (run.status !== 'completed' || run.sourceRequirementVersion !== row.backendVersion ||
-      run.result?.matchedLibrary !== 'standard_reply' || !(candidate?.businessSimilarity > 0.8)) {
-      return { exclusion: noStandardMatch };
-    }
-    if (run.referenceInvalid || reference && (reference.candidateId !== candidate.id || reference.version !== candidate.version) ||
-      draft && (matchChoice.matchRunId !== run.runId || matchChoice.candidateId !== candidate.id)) {
-      return { exclusion: '已采纳的比对依据已变化，请逐条核对' };
-    }
-    const wording = mergeAnswerConditions(answer.draft,answer.conditions).trim();
-    const candidateWording = mergeAnswerConditions(candidate.answer,candidate.conditions).trim();
-    if (!['same', 'not_specified'].includes(candidate.conditionStatus) ||
-      (wording && wording !== candidateWording)) {
-      return { exclusion: '答复或适用条件与标准回复不一致，或条件尚未核实' };
-    }
-    return reference && !draft ? {} : { choice: { matchRunId: run.runId, candidateId: candidate.id } };
-  }
   async function batchConfirm() {
     if (cardBusyRef.current || !selectedRows.length) { return; }
     const draft = dirtyRef.current ? form : null;
@@ -474,19 +483,14 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       const results = [];
       const confirmed = new Set();
       for (const row of selectedRows) {
-        const patch = row.id === active.id ? draft : null;
+        const patch = { ...(row.id === active.id && draft ? draft : {}), conclusion: 'Comply' };
         try {
-          const { exclusion, choice } = await checkBatchRow(row, patch);
-          if (exclusion) {
-            results.push({ ...row, result: '已排除', message: exclusion });
-            continue;
+          if (await onConfirm(row.id, row.version || 1, patch) === false) {
+            throw new Error('确认未通过，请核对条目状态和关联事项后重试');
           }
-          const args = [row.id, row.version || 1];
-          if (choice) { args.push(patch || undefined, choice); }
-          if (await onConfirm(...args) === false) { throw new Error('重新校验未通过，请核对条目状态和关联事项后重试'); }
           confirmed.add(row.id);
-          results.push({ ...row, status: '已确认', result: '确认成功', message: '本条应答已确认' });
-          if (patch) { clearDirty(); }
+          results.push({ ...row, status: '已确认', conclusion: 'Comply', result: '确认成功', message: '已按 Comply 确认' });
+          if (row.id === active.id && draft) { clearDirty(); }
         } catch (error) {
           results.push({ ...row, result: '确认失败', message: error.message || '本条确认失败，请重试' });
         }
@@ -494,7 +498,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       if (!aliveRef.current) { return; }
       setBatchResults(results);
       setSelected(old => old.filter(id => !confirmed.has(id)));
-      addActivity('批量确认结果', `明确选择 ${results.length} 条，成功 ${confirmed.size} 条`);
+      addActivity('批量确认结果', `明确选择 ${results.length} 条，按 Comply 成功 ${confirmed.size} 条`);
       setModal('batch-result');
     } finally {
       cardBusyRef.current = false;
@@ -686,36 +690,37 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   ]}/>
   <div hidden className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
         {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<UiButton className="text-link" onClick={() => goPage('export')}>查看最终审批</UiButton></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<UiButton className="text-link" onClick={() => openReviewDetails(openReview.id)}>查看事项</UiButton></Notice>}
-        {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}{databaseBacked ? <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}`} row={active}
+        {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}        {databaseBacked && <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}`} row={active}
           resources={appState.resourcesByBuId?.[project.buId]} canRun={canEdit && !active.needsReview && canPerform(actorRole,'analysis:run')}
           canSetInput={canEdit && !active.needsReview && ['SR','技术','BU管理员'].includes(actorRole)}
           canAdopt={canEdit} actorId={actorId} canCloseDeviation={[project.ownerId,active.confirmationAssigneeId].includes(actorId)}
-          onResult={maybePrefill} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))} onAdopt={(run,candidate)=>setRealAdoption({run,candidate})}
+          preview={matchPreview} draftMatchChoice={matchChoice}
+          onResult={run => setMatchState({ scope: matchScope, run })} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))} onAdopt={(run,candidate)=>setRealAdoption({run,candidate})}
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
-          onDeviation={item=>onDeviation?.(project.id,item)} toast={toast}/>
-          : <AssessmentPanel sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}/>}
+          onDeviation={item=>onDeviation?.(project.id,item)} toast={toast}/>}
+        <AssessmentPanel key={active.id} sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}
+          conclusion={form.conclusion} onConclusionChange={value => edit('conclusion', value)}
+          liveAdvice={databaseBacked ? {
+            conclusion: matchConclusion,
+            reference: matchLibrary && matchPreview ? `${matchLibrary}（模拟）` : matchLibrary,
+            runId: matchLibrary ? matchRun?.runId : undefined,
+            evidence: matchEvidence,
+          } : null}
+          recommendation={recommendedWording} evidence={form.evidence} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => {
+            if (!canEdit) { return; }
+            edit('draft', wording);
+            addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`);
+            toast('推荐话术已带入应答草稿，提交或确认后保存');
+          }}/>
         <div className="form-grid response-form response-answer-fields">
-          <div className="field response-wide">
-            <span><i className="response-required">*</i>人工最终结论</span>
-            <Radio.Group aria-label="人工最终结论" className="rfq-conclusion-radio" value={form.conclusion} disabled={!canEdit}
-              onChange={event=>edit('conclusion',event.target.value)}
-              options={['Comply','有条件 Comply','不满足','不适用']}/>
-          </div>
           <Field label="证据" required={form.conclusion === '有条件 Comply'} wide>
-            <UiInput aria-label="证据" value={form.evidence} readOnly={!canEdit}
-              onChange={event=>edit('evidence',event.target.value)}
-              placeholder="引用标准回复编号 / 能力条目与版本 / 历史 RFQ 记录及原文定位"/>
+            <div className={`response-evidence-view${String(form.evidence || '').trim() ? '' : ' is-empty'}`} aria-label="证据">
+              {String(form.evidence || '').trim() || '暂无证据；采用比对候选后自动带出'}
+            </div>
           </Field>
           {form.conclusion === '不适用' && <Field label="备注" wide>
             <UiTextArea aria-label="备注" value={form.remark} readOnly={!canEdit} onChange={event=>edit('remark',event.target.value)} placeholder="填写备注（选填）"/>
           </Field>}
-          {recommendedWording && <RecommendedWording key={`${active.id}:${form.conclusion}:${recommendedWording}`} recommendation={recommendedWording}
-            evidence={form.evidence} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => {
-              if (!canEdit) { return; }
-              edit('draft', wording);
-              addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`);
-              toast('推荐话术已带入应答草稿，提交或确认后保存');
-            }}/>}
         </div>
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openReviewDetails(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>
@@ -782,8 +787,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       onRestore={entry => onRestoreConfirmation(active.id, confirmationHistory.version, entry)}
       onClose={() => setConfirmationHistory(null)}/>}</OverlayPresence>
     <OverlayPresence>{modal === 'batch-result' && <Modal title="批量确认结果" width={820} onClose={() => setModal(null)} footer={<UiButton className="btn" onClick={() => setModal(null)}>完成</UiButton>}>
-      <Notice warning={batchExcludedCount > 0 || batchFailureCount > 0}>
-        本次选择 {batchResults?.length || 0} 条；确认成功 {batchSuccessCount} 条，确认失败 {batchFailureCount} 条，排除 {batchExcludedCount} 条。
+      <Notice warning={batchFailureCount > 0}>
+        本次选择 {batchResults?.length || 0} 条；已按 Comply 确认成功 {batchSuccessCount} 条，确认失败 {batchFailureCount} 条。
       </Notice>
       <div className="table-wrap response-batch-table"><BusinessTable className="data-table"><thead><tr><th>条款 / 要求</th><th>状态</th><th>执行结果</th></tr></thead><tbody>{(batchResults || []).map(row => <tr key={row.id}><td>{row.clause} {row.title}</td><td><StatusBadge status={responseStatusLabel(row, reviews)} /></td><td><StatusBadge status={row.result}/><p>{row.message}</p></td></tr>)}</tbody></BusinessTable></div>
     </Modal>}</OverlayPresence>
