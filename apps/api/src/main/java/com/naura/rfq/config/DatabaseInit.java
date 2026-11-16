@@ -60,6 +60,8 @@ class DatabaseInit {
     private static final String V23_END = "-- RFQ_MIGRATION_V23_END";
     private static final String V24_START = "-- RFQ_MIGRATION_V24\n";
     private static final String V24_END = "-- RFQ_MIGRATION_V24_END";
+    private static final String V25_START = "-- RFQ_MIGRATION_V25\n";
+    private static final String V25_END = "-- RFQ_MIGRATION_V25_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -118,9 +120,12 @@ class DatabaseInit {
         var singleExtractionStatus = resource("V24__normalize_requirement_extraction_status.sql",
                 sql.substring(sql.indexOf(V24_START) + V24_START.length(), sql.indexOf(V24_END)),
                 "classpath:db/init.sql#V24");
+        var parseBatch = resource("V25__parse_batch.sql",
+                sql.substring(sql.indexOf(V25_START) + V25_START.length(), sql.indexOf(V25_END)),
+                "classpath:db/init.sql#V25");
         var resources = List.of(baseline, standardReplies, history, capability, match, workflow,
                 replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs,
-                capabilityIndex, singleExtractionStatus);
+                capabilityIndex, singleExtractionStatus, parseBatch);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {

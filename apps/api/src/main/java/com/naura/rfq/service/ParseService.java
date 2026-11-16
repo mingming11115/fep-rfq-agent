@@ -12,14 +12,17 @@ import com.naura.rfq.integration.parse.WordMarkdownExtractor;
 import com.naura.rfq.integration.parse.WordMarkdownReader;
 import com.naura.rfq.mapper.CustomerDocumentMapper;
 import com.naura.rfq.mapper.DocumentBlockMapper;
+import com.naura.rfq.mapper.ParseBatchMapper;
 import com.naura.rfq.mapper.ParseRunMapper;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.mapper.RequirementMapper;
 import com.naura.rfq.model.entity.CustomerDocument;
 import com.naura.rfq.model.entity.DocumentBlock;
+import com.naura.rfq.model.entity.ParseBatch;
 import com.naura.rfq.model.entity.ParseRun;
 import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.model.entity.Requirement;
+import com.naura.rfq.model.parse.BatchAttempt;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.ExtractionResult;
 import com.naura.rfq.model.parse.RawBlock;
@@ -70,6 +73,8 @@ public class ParseService {
     @Autowired
     private ParseRunMapper runs;
     @Autowired
+    private ParseBatchMapper parseBatches;
+    @Autowired
     private List<DocumentBlockReader> readers;
     @Autowired
     private HybridRequirementExtractor extractor;
@@ -105,8 +110,9 @@ public class ParseService {
             List<String> recallIds, boolean hasPreviousResult, String actorId, long started) {
     }
 
-    /** 读取与抽取阶段的产物：原始块与抽取出的条款。 */
-    record ParseOutcome(List<RawBlock> rawBlocks, List<ExtractedRequirement> extracted) {
+    /** 读取与抽取阶段的产物：原始块、抽取出的条款与模型批次执行记录。 */
+    record ParseOutcome(List<RawBlock> rawBlocks, List<ExtractedRequirement> extracted,
+            List<BatchAttempt> batches) {
     }
 
     /**
@@ -223,7 +229,7 @@ public class ParseService {
             if (extracted.isEmpty() && ctx.hasPreviousResult()) {
                 throw new DocumentReadException("未生成新条款，保留上一版解析结果，请人工检查来源文件");
             }
-            return new ParseOutcome(rawBlocks, extracted);
+            return new ParseOutcome(rawBlocks, extracted, result.batches());
         } catch (Exception exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -288,6 +294,7 @@ public class ParseService {
         blocks.deleteByDocumentId(documentId);
         Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, outcome.rawBlocks());
         List<Requirement> saved = persistRequirements(ctx.document(), ctx.run().getId(), extracted, sourceBlocks);
+        persistBatches(ctx.run().getId(), outcome.batches());
 
         int issueCount = issues.size();
 
@@ -451,6 +458,31 @@ public class ParseService {
      *
      * @return 已落库的 Requirement 列表，顺序与抽取结果一致
      */
+    /**
+     * 落库 Word 模型批次执行记录：每个模型请求批次一行（success/failed/skipped），
+     * 便于在数据库里核对分批数量、每批覆盖的来源与失败原因。解析失败的运行随事务回滚，不保留批次记录。
+     *
+     * @param runId   解析运行 ID
+     * @param batches 批次执行结果；未分批的路径可能是空列表或单个批次
+     */
+    private void persistBatches(String runId, List<BatchAttempt> batches) {
+        if (batches.isEmpty()) {
+            return;
+        }
+        for (BatchAttempt attempt : batches) {
+            ParseBatch batch = new ParseBatch();
+            batch.setId(Ids.next("PBT"));
+            batch.setParseRunId(runId);
+            batch.setBatchIndex(attempt.index());
+            batch.setStatus(attempt.status());
+            batch.setPrimarySources(truncate(attempt.primarySources(), 500));
+            batch.setContentChars(attempt.chars());
+            batch.setFailureReason(truncate(attempt.failureReason(), 500));
+            batch.setCreatedAt(Instant.now());
+            parseBatches.insert(batch);
+        }
+    }
+
     private List<Requirement> persistRequirements(CustomerDocument document, String runId,
             List<ExtractedRequirement> extracted, Map<Integer, DocumentBlock> sourceBlocks) {
         List<Requirement> saved = new ArrayList<>();

@@ -2,6 +2,7 @@ package com.naura.rfq.integration.parse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.ExtractedRequirement;
@@ -146,6 +147,13 @@ class WordMarkdownExtractionTest {
             var result = extractor.extract(content, "RUN");
             assertThat(result.requirements()).extracting(ExtractedRequirement::requirementText)
                     .containsExactly("标准工况下必须自动上料");
+            assertThat(result.batches()).extracting(com.naura.rfq.model.parse.BatchAttempt::index,
+                            com.naura.rfq.model.parse.BatchAttempt::status,
+                            com.naura.rfq.model.parse.BatchAttempt::primarySources)
+                    .containsExactly(tuple(1, "success", "S0,S1"), tuple(2, "failed", "S2,S3"));
+            assertThat(result.batches().get(1).failureReason()).contains("S2");
+            assertThat(result.issues()).first().asString()
+                    .contains("模型分批解析共 2 批").contains("1 批失败");
             assertThat(result.issues()).anyMatch(issue -> issue.contains("S2") && issue.contains("批次解析失败"))
                     .anyMatch(issue -> issue.contains("模型未交代"));
         } finally {
@@ -282,7 +290,7 @@ class WordMarkdownExtractionTest {
         var extractor = new WordMarkdownExtractor(new ParseIntegrationProperties(false), new ParseHttpClient(json),
                 new RuleBasedExtractor(json));
 
-        var result = extractor.validate(output, content, "markitdown+llm:test");
+        var result = extractor.validate(output, content, "markitdown+llm:test", List.of());
 
         assertThat(result.requirements()).singleElement().satisfies(clause -> {
             assertThat(clause.blockIndex()).isEqualTo(1);
@@ -304,7 +312,7 @@ class WordMarkdownExtractionTest {
                 """);
         var extractor = new WordMarkdownExtractor(new ParseIntegrationProperties(false), new ParseHttpClient(json),
                 new RuleBasedExtractor(json));
-        var result = extractor.validate(output, content, "markitdown+llm:test");
+        var result = extractor.validate(output, content, "markitdown+llm:test", List.of());
         assertThat(result.requirements()).hasSize(2);
         var merged = result.requirements().get(0);
         assertThat(merged.sourceRefs()).containsExactly(

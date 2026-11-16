@@ -441,6 +441,21 @@ create table capability_index_sync like standard_reply_index_sync;
 update requirement set extraction_status='VALID' where extraction_status='NEEDS_REVIEW';
 -- RFQ_MIGRATION_V24_END
 
+-- RFQ_MIGRATION_V25
+-- Word 模型解析的批次执行记录：每个模型请求批次一行，用于排查分批解析的成败与覆盖范围。
+create table parse_batch (
+    id              varchar(64)  primary key,
+    parse_run_id    varchar(64)  not null,
+    batch_index     int          not null,
+    status          varchar(24)  not null,
+    primary_sources varchar(500),
+    content_chars   int          not null default 0,
+    failure_reason  varchar(500),
+    created_at      timestamp    not null default current_timestamp
+);
+create index idx_parse_batch_run on parse_batch (parse_run_id);
+-- RFQ_MIGRATION_V25_END
+
 -- RFQ_DEMO_ASSET_SCHEMA
 CREATE TABLE IF NOT EXISTS rfq_demo_document (
     id varchar(64) primary key,

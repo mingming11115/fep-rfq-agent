@@ -3,6 +3,7 @@ package com.naura.rfq.integration.parse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
+import com.naura.rfq.model.parse.BatchAttempt;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.ExtractionResult;
 import com.naura.rfq.model.parse.RawBlock;
@@ -59,6 +60,27 @@ public class WordMarkdownExtractor {
         {"requirements":[{"customerClauseNo":"2.1","title":"额定负载","requirementText":"额定负载至少为 5 kg。","specification":"5 kg","sourceRefs":["S0"]}],"ignoredSourceRefs":[]}
         """;
 
+    /** 单个批次的执行结果：是否成功、主要来源 S 编号、请求字符数与失败原因。 */
+    private record Attempt(boolean success, String sources, int chars, String failureReason) {
+
+        Attempt combine(Attempt other, int chars) {
+            return new Attempt(success && other.success, mergeSources(sources, other.sources), chars,
+                    failureReason != null ? failureReason : other.failureReason);
+        }
+
+        private static String mergeSources(String first, String second) {
+            var merged = new TreeSet<String>();
+            for (String part : new String[] {first, second}) {
+                for (String id : part.split(",")) {
+                    if (!id.isBlank()) {
+                        merged.add(id);
+                    }
+                }
+            }
+            return String.join(",", merged);
+        }
+    }
+
     @Autowired
     private ParseIntegrationProperties properties;
     @Autowired
@@ -93,7 +115,9 @@ public class WordMarkdownExtractor {
             } else {
                 try {
                     var response = request(content.markdown(), PROMPT, config, runId);
-                    return validate(response, content, extractor);
+                    var attempts = List.of(new BatchAttempt(1, BatchAttempt.SUCCESS,
+                            sources(content.availableSources()), content.markdown().length(), null));
+                    return validate(response, content, extractor, attempts);
                 } catch (LengthLimitException exception) {
                     log.error("Word 模型响应超出长度限制", exception);
                     log.info("document.parse.word.llm.batching parseRunId={} reason={}", runId, exception.getMessage());
@@ -149,31 +173,42 @@ public class WordMarkdownExtractor {
         batchChars = Math.min(batchChars, Math.min(maxChars, content.markdown().strip().length() - 1));
         int batchBlocks = Math.min(Math.max(1, config.getBatchBlocks()), (batches.size() + 1) / 2);
         int failed = 0;
+        var attempts = new ArrayList<BatchAttempt>();
         String lastFailure = null;
         for (int start = 0; start < batches.size();) {
             int end = batches.endOfBatch(start, batchChars, batchBlocks);
-            String failure = extractBatch(batches, start, end, batchChars, maxChars, config, runId, validation);
-            if (failure != null) {
+            Attempt attempt = extractBatch(batches, start, end, batchChars, maxChars, config, runId, validation);
+            String status = attempt.sources().isEmpty() ? BatchAttempt.SKIPPED
+                    : attempt.success() ? BatchAttempt.SUCCESS : BatchAttempt.FAILED;
+            attempts.add(new BatchAttempt(attempts.size() + 1, status, attempt.sources(), attempt.chars(),
+                    attempt.failureReason()));
+            if (!attempt.success() && !attempt.sources().isEmpty()) {
                 failed++;
-                lastFailure = failure;
+                lastFailure = attempt.failureReason();
             }
             start = end;
         }
+        log.info("document.parse.word.llm.batch.summary parseRunId={} batches={} failed={}",
+                runId, attempts.size(), failed);
         // 单批失败降级为 issue；全部批次都失败才让整次解析失败。
         if (failed > 0 && validation.isEmpty()) {
             throw new DocumentReadException("Word 模型批次解析全部失败（" + failed + " 批），最后原因：" + lastFailure);
         }
-        return validation.result(extractor + "+batched");
+        return validation.result(extractor + "+batched", attempts);
     }
 
-    /** 返回批次失败原因，null 表示本批成功或没有需要抽取的主要来源。 */
-    private String extractBatch(WordMarkdownBatches batches, int start, int end, int batchChars, int maxChars,
+    private static String sources(Set<Integer> ids) {
+        return new TreeSet<>(ids).stream().map(id -> "S" + id).collect(Collectors.joining(","));
+    }
+
+    /** 执行一个批次并落校验；返回该批执行结果，失败也不抛出（由调用方汇总降级）。 */
+    private Attempt extractBatch(WordMarkdownBatches batches, int start, int end, int batchChars, int maxChars,
             ParseIntegrationProperties.Llm config, String runId, Validation validation) throws Exception {
         var batch = batches.batch(start, end, batchChars, true);
         var primary = new TreeSet<>(batch.primary());
         primary.retainAll(validation.content.availableSources());
         if (primary.isEmpty()) {
-            return null;
+            return new Attempt(true, "", 0, null);
         }
         String prompt = PROMPT + "\n本批的主要来源为 " + primary.stream().map(id -> "S" + id).collect(Collectors.joining(", "))
                 + "。只输出主要来源在此列表内的条款。其他来源可作为表头、条件或相邻正文引用。";
@@ -182,27 +217,29 @@ public class WordMarkdownExtractor {
                 throw new LengthLimitException("local_length_limit");
             }
             validation.add(request(batch.markdown(), prompt, config, runId), batch.visible(), primary);
-            return null;
+            return new Attempt(true, sources(primary), batch.markdown().length(), null);
         } catch (LengthLimitException exception) {
             log.error("Word 模型批次超出模型长度上限", exception);
             if (end - start > 1) {
                 int middle = start + (end - start) / 2;
                 int smaller = Math.min(batchChars, batch.markdown().length() - 1);
-                String first = extractBatch(batches, start, middle, smaller, maxChars, config, runId, validation);
-                String second = extractBatch(batches, middle, end, smaller, maxChars, config, runId, validation);
-                return second != null ? second : first;
+                Attempt first = extractBatch(batches, start, middle, smaller, maxChars, config, runId, validation);
+                Attempt second = extractBatch(batches, middle, end, smaller, maxChars, config, runId, validation);
+                return first.combine(second, batch.markdown().length());
             }
             var core = batches.batch(start, end, batchChars, false);
             if (core.markdown().length() <= maxChars && !core.markdown().equals(batch.markdown())) {
                 try {
                     validation.add(request(core.markdown(), prompt, config, runId), core.visible(), primary);
-                    return null;
+                    return new Attempt(true, sources(primary), core.markdown().length(), null);
                 } catch (LengthLimitException ignored) {
                     log.error("Word 单来源请求仍超出模型长度上限", ignored);
                     // This request already contains just one source unit.
                 }
             }
-            return "S" + primary.first() + " 超出模型长度上限";
+            String reason = "S" + primary.first() + " 超出模型长度上限";
+            validation.failed("S" + primary.first(), "超出模型长度上限，请拆分文档后重试");
+            return new Attempt(false, sources(primary), batch.markdown().length(), reason);
         } catch (Exception exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -211,7 +248,7 @@ public class WordMarkdownExtractor {
                     ? detail.getMessage() : ParseHttpClient.reason(exception);
             log.warn("document.parse.word.llm.batch.failed parseRunId={} sources={} reason={}", runId, primary, reason);
             validation.failed("S" + primary.first(), reason);
-            return "S" + primary.first() + "：" + reason;
+            return new Attempt(false, sources(primary), batch.markdown().length(), "S" + primary.first() + "：" + reason);
         }
     }
 
@@ -219,11 +256,11 @@ public class WordMarkdownExtractor {
         LengthLimitException(String reason) { super(reason); }
     }
 
-    ExtractionResult validate(JsonNode response, WordMarkdownReader.Content content, String extractor)
-            throws DocumentReadException {
+    ExtractionResult validate(JsonNode response, WordMarkdownReader.Content content, String extractor,
+            List<BatchAttempt> batches) throws DocumentReadException {
         var validation = new Validation(content, new WordMarkdownBatches(content.markdown()).tableHeaders());
         validation.add(response, content.availableSources(), content.availableSources());
-        return validation.result(extractor);
+        return validation.result(extractor, batches);
     }
 
     private class Validation {
@@ -299,12 +336,17 @@ public class WordMarkdownExtractor {
             issues.add(firstSource + "：Word 模型批次解析失败，" + reason + "，请核对该部分是否遗漏条款");
         }
 
-        ExtractionResult result(String extractor) {
+        ExtractionResult result(String extractor, List<BatchAttempt> batches) {
+            long failedBatches = batches.stream().filter(batch -> BatchAttempt.FAILED.equals(batch.status())).count();
+            if (failedBatches > 0) {
+                // 置顶保证在 message 截断（前 8 条）内仍能看到批次总数与失败数。
+                issues.add(0, "模型分批解析共 " + batches.size() + " 批，其中 " + failedBatches + " 批失败");
+            }
             long missing = content.availableSources().stream().filter(index -> !covered.contains(index)).count();
             if (missing > 0) {
                 issues.add("模型未交代 " + missing + " 处 Word 来源，请核对是否遗漏条款");
             }
-            return new ExtractionResult(requirements, extractor, issues);
+            return new ExtractionResult(requirements, extractor, issues, batches);
         }
 
         /** 同一表格的多行被并进一条条款时留痕，用于核查提示词的逐行约束是否生效。 */
