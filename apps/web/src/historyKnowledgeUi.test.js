@@ -183,6 +183,38 @@ test('a BU publisher can publish a draft from the history clause list',async t=>
  assert.match(host.querySelector('.history-counts').textContent,/待审核0已发布1/);
 });
 
+test('全部提交审核 sends every submittable clause in one request',async t=>{
+ const {host,state,click,render,cleanup}=await setupHistoryPage();
+ t.after(cleanup);
+ const clauses=[
+  {id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'草稿',requirement:'要求一',answer:'答复一'},
+  {id:'K2',type:'history',documentId:'D1',buId:'A',version:1,revision:1,status:'退回',requirement:'要求二',answer:'答复二'},
+  {id:'K3',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'草稿',requirement:'要求三',answer:''},
+  {id:'K4',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'待审核',requirement:'要求四',answer:'答复四'},
+ ];
+ const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:clauses};
+ Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
+ let submitted;
+ const originalFetch=globalThis.fetch;
+ globalThis.fetch=async(path,request)=>{
+  if(path.endsWith('/clauses/batch-submit')) { submitted=[path,JSON.parse(request.body)]; return new Response(JSON.stringify({code:0,data:{submitted:3}})); }
+  return new Response(JSON.stringify({code:0,data:resources}));
+ };
+ t.after(()=>{globalThis.fetch=originalFetch;});
+ await render('sr','SR');await click('历史RFQ.docx',host);
+ const bar=host.querySelector('.history-batch-bar');
+ assert.match(bar.textContent,/全部提交审核/);
+ await click('全部提交审核',bar);
+ const dialog=document.querySelector('[role="dialog"]');
+ assert.match(dialog.textContent,/共 3 条/);
+ assert.match(dialog.textContent,/其中 1 条缺少客户要求或历史答复/);
+ await click('确认提交3条',dialog);
+ assert.equal(submitted[0],'/api/rfq/business-units/A/history-rfq/clauses/batch-submit');
+ assert.deepEqual(submitted[1].clauses,[
+  {id:'K1',version:1,revision:0},{id:'K2',version:1,revision:1},{id:'K3',version:1,revision:0},
+ ]);
+});
+
 test('a published history clause can be revoked with the reason left empty',async t=>{
  const {host,state,settle,click,render,cleanup}=await setupHistoryPage();
  t.after(cleanup);

@@ -9,10 +9,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.integration.standardreply.KnowledgeIndexQueue;
 import com.naura.rfq.integration.standardreply.Library;
+import com.naura.rfq.model.dto.HistoryRfqBatchSubmitRequest;
 import com.naura.rfq.model.dto.HistoryRfqDraftRequest;
 import com.naura.rfq.security.CurrentUser;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +41,8 @@ public class HistoryRfqReviewService {
     private KnowledgeIndexQueue index;
     @Autowired
     private AuditService audit;
+
+    public record SubmitResult(int submitted) {}
 
     public ObjectNode version(CurrentUser user, String buId, String id, int version) {
         access.requireScope(user, buId, null, null);
@@ -73,6 +80,44 @@ public class HistoryRfqReviewService {
             case "delete" -> deleteDraft(user, buId, row);
             default -> throw new BusinessException(404, "未知的历史 RFQ 操作");
         };
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public SubmitResult submitAll(CurrentUser user, String buId, List<HistoryRfqBatchSubmitRequest.Clause> targets) {
+        access.requireWriter(user, buId, false);
+        List<HistoryRfqBatchSubmitRequest.Clause> ordered = targets == null ? List.of() : targets.stream()
+                .distinct().sorted(Comparator.comparing(HistoryRfqBatchSubmitRequest.Clause::id)
+                        .thenComparingInt(HistoryRfqBatchSubmitRequest.Clause::version)).toList();
+        requireState(!ordered.isEmpty(), "没有可提交的历史条款");
+        Map<String, List<Clause>> chains = new LinkedHashMap<>();
+        for (String id : ordered.stream().map(HistoryRfqBatchSubmitRequest.Clause::id).distinct().toList()) {
+            chains.put(id, lock(buId, id));
+        }
+        List<String> issues = new ArrayList<>();
+        List<Clause> prepared = new ArrayList<>();
+        for (HistoryRfqBatchSubmitRequest.Clause target : ordered) {
+            try {
+                Clause row = checked(user, buId, chains.get(target.id()), target.version(), target.revision());
+                requireState(EDITABLE.contains(row.status()), "仅草稿或退回的历史条款可以提交");
+                requireState(!"被替代".equals(row.payload().path("validity").asText()), "已替代版本不能提交");
+                requireContent(row);
+                prepared.add(row);
+            } catch (BusinessException failure) {
+                issues.add("条款 " + target.id() + " V" + target.version() + "：" + failure.getMessage());
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new BusinessException(422, "以下条款无法提交：" + summarize(issues));
+        }
+        for (Clause row : prepared) {
+            submit(user, buId, row, "");
+        }
+        return new SubmitResult(prepared.size());
+    }
+
+    private String summarize(List<String> issues) {
+        return issues.size() <= 5 ? String.join("；", issues)
+                : String.join("；", issues.subList(0, 5)) + " 等 " + issues.size() + " 条";
     }
 
     private ObjectNode submit(CurrentUser user, String buId, Clause row, String reason) {

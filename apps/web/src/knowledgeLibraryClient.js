@@ -41,6 +41,9 @@ export function createKnowledgeLibraryClient(buId, client = api) {
   return {
     read:(kind,row)=>client.get(versionPath(collections[kind], row)),
     transition:(kind,row,action,reason='')=>client.post(`${versionPath(collections[kind], row)}/${action}`, {revision:row.revision ?? 0,reason}),
+    submitAllHistory:rows=>client.post(`${history}/clauses/batch-submit`,{
+      clauses:rows.map(row=>({id:row.id,version:row.version,revision:row.revision ?? 0})),
+    }),
     saveReply:row=>saveText('reply', row),
     saveHistoryClause:row=>saveText('history', row),
     importReplies:file=>client.upload(`${collections.reply}/import`,uploadBody(file)),

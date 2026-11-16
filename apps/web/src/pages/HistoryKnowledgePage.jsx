@@ -50,14 +50,14 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const load=()=>readHistorySnapshot(buId,legacy);
  const [localSnapshot,setSnapshot]=useState(()=>{try{return databaseBacked?null:load();}catch (error){ console.error('加载历史知识草稿失败', error); return {documents:[],clauses:[]};}});
  const snapshot=databaseBacked?{documents:resources?.historyDocuments||[],clauses:resources?.historyClauses||[]}:localSnapshot;
- const [error,setError]=useState(''),[query,setQuery]=useState(''),[activeId,setActiveId]=useState(null),[filter,setFilter]=useState('all'),[selected,setSelected]=useState([]),[uploading,setUploading]=useState(false),[files,setFiles]=useState({}),[busy,setBusy]=useState(false),[metadata,setMetadata]=useState(null),[editing,setEditing]=useState(null),[anchor,setAnchor]=useState(''),[review,setReview]=useState(null),[reason,setReason]=useState('');
+ const [error,setError]=useState(''),[query,setQuery]=useState(''),[activeId,setActiveId]=useState(null),[filter,setFilter]=useState('all'),[selected,setSelected]=useState([]),[uploading,setUploading]=useState(false),[files,setFiles]=useState({}),[busy,setBusy]=useState(false),[metadata,setMetadata]=useState(null),[editing,setEditing]=useState(null),[anchor,setAnchor]=useState(''),[review,setReview]=useState(null),[reason,setReason]=useState(''),[submitAllOpen,setSubmitAllOpen]=useState(false);
  const [deleteTarget,setDeleteTarget]=useState(null);
  const [deleteDocumentTarget,setDeleteDocumentTarget]=useState(null);
  const [viewing,setViewing]=useState(null);
  const [documentPage,setDocumentPage]=useState(1);
  useEffect(()=>{if(databaseBacked) { return; } const refresh=()=>{try{setSnapshot(load());}catch(cause){ console.error('刷新历史知识草稿失败', cause); setError(cause.message);}};refresh();window.addEventListener('rfq-history-change',refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener('rfq-history-change',refresh);window.removeEventListener('storage',refresh);};},[buId,databaseBacked]);
  useEffect(()=>setSelected([]),[query,filter,activeId]);
- useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setDocumentPage(1);setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setViewing(null);setError('');},[actorId,actorRole,buId]);
+ useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setDocumentPage(1);setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setViewing(null);setSubmitAllOpen(false);setError('');},[actorId,actorRole,buId]);
  const {documents:storedDocuments,clauses:readableClauses}=databaseBacked
   ?{documents:buildHistoryDocuments(snapshot.documents,snapshot.clauses),clauses:snapshot.clauses}
   :selectHistoryResources(snapshot,permissionContext);
@@ -98,6 +98,8 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const hasPendingReview=selectedRows.some(row=>row?.status==='待审核');
  const publishLabel=hasDraft&&!hasPendingReview?'直接发布':hasPendingReview&&!hasDraft?'批准发布':'发布条款';
  const filteredRows=rows.filter(row=>(filter==='all'||filter==='missing'&&!row.answer?.trim()||row.status===filter)&&[row.clauseNo,row.section,row.requirement,row.answer,row.conditions].join(' ').toLowerCase().includes(query.toLowerCase()));
+ const submittableRows=filteredRows.filter(row=>transitionStatuses.submit.includes(row.status)&&row.validity!=='被替代');
+ const incompleteSubmittable=submittableRows.filter(row=>!row.requirement?.trim()||!row.answer?.trim());
  const notify=message=>{toast?.(message);logEvent?.(message);};
  const fail=cause=>{setError(cause.message);toast?.(cause.message,'error');};
  const persist=next=>{writeHistorySnapshot(buId,next);setSnapshot(next);};
@@ -227,6 +229,23 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    },fail);
   }
   try{const fresh=load(),readable=new Set(selectHistoryResources(fresh,permissionContext).clauses.map(token));if(selected.some(id=>!readable.has(id))) { throw new Error('所选条款已变化或无权访问'); } persist({...fresh,clauses:transitionHistoryClauses(fresh.clauses,selected,action,actor,reviewReason)});setSelected([]);setReview(null);setReason('');notify(action==='submit'?'所选条款已提交审核':action==='approve'?'所选条款已发布':'所选条款已退回');}catch(cause){ console.error('提交历史条款审核操作失败', cause); fail(cause);}
+ }
+ function submitAll(){
+  if(!actor.canEdit||saving) { return; }
+  const targets=filteredRows.filter(row=>transitionStatuses.submit.includes(row.status)&&row.validity!=='被替代');
+  if(!targets.length) { return fail(new Error('当前列表没有可提交的条款')); }
+  setError('');setSubmitAllOpen(false);
+  if(databaseBacked){
+   return mutation.run(()=>library.submitAllHistory(targets),result=>{
+    setSelected([]);notify(`已提交 ${result.submitted} 条历史条款审核`);
+   },fail);
+  }
+  try{
+   const fresh=load(),readable=new Set(selectHistoryResources(fresh,permissionContext).clauses.map(token));
+   if(targets.some(row=>!readable.has(token(row)))) { throw new Error('部分条款已变化或无权访问，请重新打开'); }
+   persist({...fresh,clauses:transitionHistoryClauses(fresh.clauses,targets.map(token),'submit',actor)});
+   setSelected([]);notify(`已提交 ${targets.length} 条历史条款审核`);
+  }catch(cause){ console.error('批量提交历史条款审核失败', cause); fail(cause);}
  }
  function reviseClause(){
   if(!databaseBacked){
@@ -382,6 +401,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
       : !active.legacy&&!active.manual&&<Button disabled={!actor.canEdit||pending} onClick={()=>retryHistoryParse(active,actor,{legacy}).catch(error => { console.error('重新解析历史 RFQ 失败', error); return fail(error); })}>重新解析</Button>}
    </Space></div><div className="history-batch-bar"><span>已选择 {selected.length} 条</span><Space wrap>
     <Button type="primary" disabled={saving||!selected.length||!actor.canEdit} onClick={()=>transition('submit')}>提交审核</Button>
+    <Button disabled={saving||!submittableRows.length||!actor.canEdit} onClick={()=>{setError('');setSubmitAllOpen(true);}}>全部提交审核</Button>
     {actor.canApprove&&<><Button disabled={saving||!canTransition('approve')} onClick={()=>transition('approve')}>{publishLabel}</Button><Button disabled={saving||!selected.length} onClick={()=>{setReview('return');setReason('');}}>退回</Button>{databaseBacked&&<Button danger disabled={saving||!selected.length} onClick={()=>{setReview('revoke');setReason('');}}>撤销发布</Button>}</>}
    </Space></div><Table columns={clauseColumns} dataSource={filteredRows} rowKey={token} rowSelection={{selectedRowKeys:selected,onChange:setSelected,preserveSelectedRowKeys:false}} scroll={{x:1000}} pagination={{pageSize:20,showSizeChanger:true}} locale={{emptyText:<Empty description={pending?'正在解析，完成后条款将显示在这里':'当前没有符合条件的条款'}/>}}/></section>
   </>}
@@ -451,6 +471,12 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
   </Modal>
   <Modal open={!!review} title={review==='revoke'?'撤销所选条款':'退回所选条款'} confirmLoading={saving} onCancel={()=>{if(!saving) { setReview(null); }}} onOk={()=>transition(review,reason)} okText="确认">
    <Input.TextArea aria-label={review==='revoke'?'撤销原因':'退回原因'} placeholder={review==='revoke'?'撤销原因（选填）':'填写需要补充或修正的内容'} value={reason} onChange={event=>setReason(event.target.value)}/>
+   {error&&<Alert type="error" message={error}/>}
+  </Modal>
+  <Modal open={submitAllOpen} title="全部提交审核" confirmLoading={saving} onCancel={()=>{if(!saving) { setSubmitAllOpen(false); }}} onOk={submitAll} okText={`确认提交 ${submittableRows.length} 条`} cancelText="取消">
+   <p>将提交当前列表中所有草稿或退回状态的历史条款（共 {submittableRows.length} 条），提交后由审核人批准发布。</p>
+   {incompleteSubmittable.length>0&&<Alert type="warning" showIcon message={`其中 ${incompleteSubmittable.length} 条缺少客户要求或历史答复，将整批拒绝提交`}
+     description={incompleteSubmittable.slice(0,5).map(row=>row.clauseNo||row.id).join('、')+(incompleteSubmittable.length>5?' 等':'')}/>}
    {error&&<Alert type="error" message={error}/>}
   </Modal>
  </div>;

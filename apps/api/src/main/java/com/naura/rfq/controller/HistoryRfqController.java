@@ -2,6 +2,7 @@ package com.naura.rfq.controller;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.api.ApiResponse;
+import com.naura.rfq.model.dto.HistoryRfqBatchSubmitRequest;
 import com.naura.rfq.model.dto.HistoryRfqDraftRequest;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.HistoryRfqReviewService;
@@ -172,6 +173,17 @@ public class HistoryRfqController {
                     action, request.reason()));
         } catch (Exception exception) {
             log.error("Request failed in transition", exception);
+            throw exception;
+        }
+    }
+
+    @PostMapping(LIBRARY + "/clauses/batch-submit")
+    public ApiResponse<HistoryRfqReviewService.SubmitResult> batchSubmit(@PathVariable String buId,
+            @Valid @RequestBody HistoryRfqBatchSubmitRequest request) {
+        try {
+            return ApiResponse.success(review.submitAll(CurrentUserHolder.require(), buId, request.clauses()));
+        } catch (Exception exception) {
+            log.error("Request failed in batchSubmit", exception);
             throw exception;
         }
     }

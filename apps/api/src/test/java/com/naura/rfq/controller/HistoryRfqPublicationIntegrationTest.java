@@ -5,6 +5,7 @@ import com.naura.rfq.service.HistoryParseWorker;
 import com.naura.rfq.service.JwtService;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
@@ -297,6 +298,48 @@ class HistoryRfqPublicationIntegrationTest {
                 .andExpect(jsonPath("$.data.historyDocuments.length()").value(1))
                 .andExpect(jsonPath("$.data.historyDocuments[0].parseStatus").value("complete"))
                 .andExpect(jsonPath("$.data.historyClauses.length()").value(1));
+    }
+
+    @Test void batchSubmitRejectsTheWholeSetWhenAnyClauseIsIncomplete() throws Exception {
+        String bu = "HIST-" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("insert into business_unit(id,code,name) values (?,?,?)", bu, bu, bu);
+        String actor = user(bu, "A");
+        String path = "/api/rfq/business-units/" + bu + "/history-rfq";
+        String created = call(post(path + "/documents/manual").contentType("application/json").content("""
+                {"name":"批量提交","shareWithBu":true,"clause":
+                 {"id":"HK-batch-1","title":"要求一","requirement":"要求一","answer":"答复一"}}
+                """), actor).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String documentId = JsonPath.read(created, "$.data.document.id");
+        call(post(path + "/documents/" + documentId + "/clauses").contentType("application/json").content("""
+                {"id":"HK-batch-2","title":"要求二","requirement":"要求二","answer":"答复二"}
+                """), actor).andExpect(status().isOk());
+        call(post(path + "/documents/" + documentId + "/clauses").contentType("application/json").content("""
+                {"id":"HK-batch-3","title":"要求三","requirement":"要求三","answer":""}
+                """), actor).andExpect(status().isOk());
+        call(post(path + "/clauses/batch-submit").contentType("application/json").content("""
+                {"clauses":[{"id":"HK-batch-1","version":1,"revision":0},
+                 {"id":"HK-batch-2","version":1,"revision":0},{"id":"HK-batch-3","version":1,"revision":0}]}
+                """), actor).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(422))
+                .andExpect(jsonPath("$.msg").value(org.hamcrest.Matchers.containsString("HK-batch-3")));
+        for (String id : List.of("HK-batch-1", "HK-batch-2", "HK-batch-3")) {
+            call(get(path + "/clauses/" + id + "/versions/1"), actor).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value("草稿"))
+                    .andExpect(jsonPath("$.data.revision").value(0));
+        }
+        call(patch(path + "/clauses/HK-batch-3/versions/1").contentType("application/json").content("""
+                {"revision":0,"title":"要求三","requirement":"要求三","answer":"答复三"}
+                """), actor).andExpect(status().isOk());
+        call(post(path + "/clauses/batch-submit").contentType("application/json").content("""
+                {"clauses":[{"id":"HK-batch-1","version":1,"revision":0},
+                 {"id":"HK-batch-2","version":1,"revision":0},{"id":"HK-batch-3","version":1,"revision":1}]}
+                """), actor).andExpect(status().isOk()).andExpect(jsonPath("$.data.submitted").value(3));
+        for (String id : List.of("HK-batch-1", "HK-batch-2", "HK-batch-3")) {
+            call(get(path + "/clauses/" + id + "/versions/1"), actor).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value("待审核"))
+                    .andExpect(jsonPath("$.data.submitterId").value(actor))
+                    .andExpect(jsonPath("$.data.history[-1].action").value("提交历史 RFQ 审核"));
+        }
     }
 
     private ResultActions action(String path, String action, String actor, long revision, String reason) throws Exception {
