@@ -17,7 +17,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test',user}));
  localStorage.setItem('fep-rfq-app-v1',JSON.stringify({projects:[{id:'FAKE',name:'不应出现的前端模拟项目'}]}));
  const project={id:'P',code:'RFQ-DB',name:'从数据库读取的项目',buId:'BU',ownerId:'sr',groupId:'GROUP-A',stage:'DRAFT',version:0};
- let parsed=false,parseCalls=0,archived=false,projectVersion=0,allowReparse=false,finishFailed,finishRetry;
+ let parsed=false,reparsed=false,parseCalls=0,archived=false,projectVersion=0,finishFailed,finishRetry;
  let failedOnly=false,failedSourceStatus='UPLOADED',adminRetries=0;
  const projectActions=[],parseBodies=[];
  const failedRequest=new Promise(resolve=>{finishFailed=resolve;});
@@ -43,7 +43,7 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   }})); }
   if(url.endsWith('/download')) { return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404}); }
   if(url.endsWith('/parse-blockers')){
-   const blocked=!allowReparse&&url.includes('/documents/D/');
+   const blocked=!reparsed&&url.includes('/documents/D/');
    return new Response(JSON.stringify({code:0,data:{responses:blocked?1:0,reviews:0,snapshots:0,clauses:blocked?['3.2']:[]}}));
   }
   if(url.endsWith('/parse-runs')){
@@ -59,16 +59,16 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
     failedSourceStatus='FAILED';
     return new Response(JSON.stringify({code:0,data:{id:'RUN-'+parseCalls,status:'failed',requirementCount:0,message:'补充资料解析失败'}}));
    }
-   if(parsed&&!allowReparse) { return new Response(JSON.stringify({code:1,msg:'已有应答，请登记新版原件后再解析'}),{status:409}); }
+   if(url.includes('/documents/D/')&&parsed) { reparsed=true; }
    parsed=true;
    return new Response(JSON.stringify({code:0,data:{id:'RUN-'+parseCalls,status:'completed',requirementCount:1}}));
   }
-  const requirement={id:allowReparse?'R2':'R',projectId:'P',documentId:'D',originalText:allowReparse?'重新抽取的要求':'客户的真实要求',title:'真实条款',version:0,extractionStatus:'VALID'};
+  const requirement={id:reparsed?'R2':'R',projectId:'P',documentId:'D',originalText:reparsed?'重新抽取的要求':'客户的真实要求',title:'真实条款',version:0,extractionStatus:'VALID'};
   const otherFile={...source,id:'OTHER',name:'另一份原件.docx',status:'PARSED'};
   const otherRequirement={...requirement,id:'R-OTHER',documentId:'OTHER',originalText:'另一份原件的要求'};
   const failedSource={...source,id:'FAILED',name:'补充资料.docx',status:failedSourceStatus};
   const documents=failedOnly?[failedSource]:[{...source,status:parsed?'PARSED':'PARSING'},failedSource,otherFile];
-  const requirements=failedOnly?(failedSourceStatus==='PARSED'?[{...requirement,id:'R-RECOVERED',documentId:'FAILED',originalText:'重试解析生成的条款'}]:[]):allowReparse?[otherRequirement,requirement]:parsed?[requirement,otherRequirement]:[];
+  const requirements=failedOnly?(failedSourceStatus==='PARSED'?[{...requirement,id:'R-RECOVERED',documentId:'FAILED',originalText:'重试解析生成的条款'}]:[]):reparsed?[otherRequirement,requirement]:parsed?[requirement,otherRequirement]:[];
   const value=url.endsWith('/auth/me')?user:url.includes('/members')?[{userId:user.id,displayName:user.displayName,roles:[user.roles[0].role],enabled:true,canConfirm:true}]:url.includes('/documents?')?{list:documents,total:documents.length}:url.includes('/requirements?')?{list:requirements,total:requirements.length}:{list:[project],total:1};
   return new Response(JSON.stringify({code:0,data:value}));};
  const folder=fileURLToPath(new URL('../.test-build/',import.meta.url));await mkdir(folder,{recursive:true});const output=path.join(folder,'database-workspace.mjs');
@@ -121,14 +121,10 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.ok(node.textContent.includes('客户的真实要求'));
   const workbenchAction=node.querySelector('button[aria-label="重新解析当前文件"]');
   await clickControl(workbenchAction);
-  assert.ok(document.body.textContent.includes('该原件已产生下游记录'),'the dialog shows blockers before the user submits');
-  assert.ok(document.body.textContent.includes('涉及条款 3.2'),'blocked clause numbers are listed');
+  assert.ok(document.body.textContent.includes('重解析会保留已有应答'),'the dialog explains existing answers survive a reparse');
+  assert.ok(document.body.textContent.includes('涉及条款 3.2'),'affected clause numbers are listed');
   await clickControl(button('确认重新解析'));
-  assert.ok(document.body.textContent.includes('请登记新版原件'));
-  assert.ok(node.textContent.includes('客户的真实要求'));
-  allowReparse=true;
-  await clickControl(button('确认重新解析'));
-  assert.equal(parseCalls,5);
+  assert.equal(parseCalls,4);
   assert.equal(new URLSearchParams(window.location.hash.split('?')[1]).get('requirementId'),'R2');
   assert.ok(node.textContent.includes('重新抽取的要求'));
   assert.ok(!node.textContent.includes('客户的真实要求'));

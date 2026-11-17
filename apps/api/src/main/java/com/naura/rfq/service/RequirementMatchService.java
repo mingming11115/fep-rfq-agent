@@ -647,7 +647,10 @@ public class RequirementMatchService {
             if (current != null && current.fingerprint().equals(fingerprint) && current.policyVersion() == policy.version()) {
                 return new Accepted(current.id(), current.status());
             }
-            requestKey = "auto:" + digest(reason + ":" + requirement.getVersion() + ":" + context(requirement.getId()).version()
+            // 解析轮次也进指纹：重解析沿用条款 ID 时，同一份原文会得到相同的自动键，
+            // 撞上上一轮留下的 uk_match_request，因此把本轮解析运行作为新输入的一部分。
+            requestKey = "auto:" + digest(reason + ":" + requirement.getVersion() + ":"
+                    + requirement.getParseRunId() + ":" + context(requirement.getId()).version()
                     + ":" + fingerprint + ":" + policy.version());
         }
         supersede(requirement.getId());

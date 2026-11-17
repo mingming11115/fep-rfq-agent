@@ -16,6 +16,7 @@ import com.naura.rfq.mapper.ParseBatchMapper;
 import com.naura.rfq.mapper.ParseRunMapper;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.mapper.RequirementMapper;
+import com.naura.rfq.mapper.ResponseMapper;
 import com.naura.rfq.model.entity.CustomerDocument;
 import com.naura.rfq.model.entity.DocumentBlock;
 import com.naura.rfq.model.entity.ParseBatch;
@@ -36,9 +37,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +68,7 @@ public class ParseService {
     private static final Pattern SELECTED_WORD = Pattern.compile("selection:word:([0-9/]+):[0-9]+-([0-9/]+):[0-9]+");
     /** Word 原始块锚点格式：body/{块路径}，路径形如 1/r2/c3（表内行/列）。 */
     private static final Pattern WORD_BLOCK = Pattern.compile("body/([0-9]+(?:/[rc]?[0-9]+)*)");
-    /** 阻断明细中展示的条款号条数上限，避免长文档把提示撑爆。 */
+    /** 影响范围明细中展示的条款号条数上限，避免长文档把提示撑爆。 */
     private static final int BLOCKER_SAMPLE_LIMIT = 5;
 
     @Autowired
@@ -101,6 +105,8 @@ public class ParseService {
     private ProjectWorkScope work;
     @Autowired
     private HistoryRecallScope historyRecall;
+    @Autowired
+    private ResponseMapper responseRecords;
 
     /** 解析运行结果视图：运行 ID、状态、块数、条款数、待核对数及耗时起止等汇总信息。 */
     public record ParseRunView(String id, String documentId, String status, int totalBlocks,
@@ -108,9 +114,9 @@ public class ParseService {
             Instant startedAt, Instant finishedAt, String extractor) {
     }
 
-    /** 一次解析运行的事务内上下文：项目、文档、解析运行记录及审计信息。 */
-    record ParseContext(Project project, CustomerDocument document, ParseRun run,
-            List<String> recallIds, boolean hasPreviousResult, String actorId, long started) {
+    /** 一次解析运行的事务内上下文：项目、文档、解析运行记录、重解析前的条款及审计信息。 */
+    record ParseContext(Project project, CustomerDocument document, ParseRun run, List<String> recallIds,
+            List<Requirement> previous, boolean hasPreviousResult, String actorId, long started) {
     }
 
     /** 读取与抽取阶段的产物：原始块、抽取出的条款与模型批次执行记录。 */
@@ -142,7 +148,9 @@ public class ParseService {
     }
 
     /**
-     * 汇总该文档已产生的下游产物（应答、评审、定稿快照），供重解析守卫与前端提示共用。
+     * 汇总该文档已有的下游产物（应答、评审、定稿快照），供前端在重解析前说明影响范围。
+     *
+     * <p>这些产物不再阻止重解析：应答与确认人会按条款号带到新结果上，条款原文变化的应答退回待确认。
      *
      * @param documentId 客户文档 ID
      * @param projectId  所属项目 ID（评审与快照按项目存储，需配合文档过滤）
@@ -159,8 +167,8 @@ public class ParseService {
     /**
      * 解析前的准备阶段：校验访问权限与可重解析条件，锁定项目与文档，创建 RUNNING 状态的解析运行记录。
      *
-     * <p>拒绝重解析的两种情况：已存在人工修正过的条款（409，避免覆盖人工结果）；
-     * 已有应答、评审或定稿记录（409，需登记新版原件后再解析，提示中带明细）。
+     * <p>只拒绝已有人工修正过的条款（409，避免覆盖人工结果）。已有应答、评审或定稿记录不再拒绝重解析：
+     * 收尾阶段会按条款号把旧条款的 ID 与确认人带到新结果上，实现「应答随条款保留」。
      *
      * @return 携带项目、文档、运行记录、召回配置及计时的解析上下文
      */
@@ -178,13 +186,6 @@ public class ParseService {
         if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
         }
-        if (!previous.isEmpty()) {
-            ParseBlockerView blockers = blockers(documentId, project.getId());
-            if (blockers.blocked()) {
-                throw new BusinessException(409,
-                        "已有应答、评审或定稿记录（" + blockers.summary() + "），请登记新版原件后再解析");
-            }
-        }
 
         List<String> recallIds = historyDocumentIds == null ? document.historyRecallIds()
                 : historyRecall.validate(project, historyDocumentIds);
@@ -198,7 +199,8 @@ public class ParseService {
 
         document.setStatus(CustomerDocument.STATUS_PARSING);
         documents.update(document);
-        return new ParseContext(project, document, run, recallIds, !previous.isEmpty(), actorId, System.nanoTime());
+        return new ParseContext(project, document, run, recallIds, previous, !previous.isEmpty(), actorId,
+                System.nanoTime());
     }
 
     /**
@@ -304,19 +306,21 @@ public class ParseService {
     }
 
     /**
-     * 解析成功收尾：先剔除人工保留的划选条款，再整体替换旧块与旧条款并持久化本次结果，
-     * 按识别情况更新运行记录与文档状态（COMPLETED / PARTIAL），随后触发能力匹配并写审计日志。
+     * 解析成功收尾：先剔除人工保留的划选条款，再把新条款按条款号对应到旧条款以沿用其 ID 与确认人，
+     * 随后整体替换旧块与旧条款并持久化本次结果，最后按识别情况更新运行状态并触发能力匹配。
      */
     private ParseRunView finalizeRun(ParseContext ctx, ParseOutcome outcome, List<String> issues) {
         String documentId = ctx.document().getId();
         boolean recognized = !outcome.extracted().isEmpty();
         List<ExtractedRequirement> extracted =
                 omitRetainedSelections(documentId, outcome.extracted(), outcome.rawBlocks());
+        Map<ExtractedRequirement, Requirement> carried = carriedRequirements(ctx.previous(), extracted);
         requirements.deleteGeneratedByDocumentId(documentId);
         blocks.deleteByDocumentId(documentId);
         Map<Integer, DocumentBlock> sourceBlocks = persistBlocks(documentId, outcome.rawBlocks());
-        List<Requirement> saved = persistRequirements(ctx.document(), ctx.run().getId(), extracted, sourceBlocks);
+        List<Requirement> saved = persistRequirements(ctx.document(), ctx.run().getId(), extracted, sourceBlocks, carried);
         persistBatches(ctx.run().getId(), outcome.batches());
+        reconcileCarried(ctx, carried);
 
         int issueCount = issues.size();
 
@@ -475,6 +479,97 @@ public class ParseService {
     }
 
     /**
+     * 把重解析前的条款对应到新抽出的条款：按「条款号+原文 → 条款号 → 原文」三级唯一匹配，
+     * 命中者沿用旧条款 ID，使该条款上的应答、评审与确认人继续有效。
+     *
+     * <p>已被人为删除（EXCLUDED）的条款不参与匹配，避免把删除操作带回结果里。
+     */
+    private Map<ExtractedRequirement, Requirement> carriedRequirements(List<Requirement> previous,
+            List<ExtractedRequirement> extracted) {
+        // 抽取结果可能包含完全相同的条款，按对象身份索引，避免相同内容的条款互相覆盖。
+        Map<ExtractedRequirement, Requirement> carried = new IdentityHashMap<>();
+        List<Requirement> prior = previous.stream()
+                .filter(row -> !"EXCLUDED".equals(row.getExtractionStatus())).toList();
+        Set<Requirement> used = new HashSet<>();
+        for (ExtractedRequirement candidate : extracted) {
+            String key = clauseKey(candidate.customerClauseNo(), candidate.originalText());
+            List<Requirement> exact = prior.stream().filter(row -> !used.contains(row)
+                    && key.equals(clauseKey(row.getCustomerClauseNo(), row.getOriginalText()))).limit(2).toList();
+            if (exact.size() == 1) {
+                carried.put(candidate, exact.get(0));
+                used.add(exact.get(0));
+            }
+        }
+        matchByKey(carried, used, prior, extracted,
+                row -> normalizeNo(row.getCustomerClauseNo()), row -> normalizeNo(row.customerClauseNo()));
+        matchByKey(carried, used, prior, extracted,
+                row -> normalizeText(row.getOriginalText()), row -> normalizeText(row.originalText()));
+        return carried;
+    }
+
+    /**
+     * 按给定键把尚未匹配的旧条款与新条款一对一对应：只有该键在两侧都唯一时才认定同一条款，
+     * 避免重复条款号或重复原文造成错配。
+     */
+    private void matchByKey(Map<ExtractedRequirement, Requirement> carried, Set<Requirement> used,
+            List<Requirement> prior, List<ExtractedRequirement> extracted,
+            Function<Requirement, String> oldKey, Function<ExtractedRequirement, String> newKey) {
+        Map<String, List<Requirement>> oldGroups = new HashMap<>();
+        for (Requirement row : prior) {
+            String key = oldKey.apply(row);
+            if (!used.contains(row) && !key.isBlank()) {
+                oldGroups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+            }
+        }
+        Map<String, List<ExtractedRequirement>> newGroups = new HashMap<>();
+        for (ExtractedRequirement row : extracted) {
+            String key = newKey.apply(row);
+            if (!carried.containsKey(row) && !key.isBlank()) {
+                newGroups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+            }
+        }
+        for (Map.Entry<String, List<Requirement>> entry : oldGroups.entrySet()) {
+            List<ExtractedRequirement> candidates = newGroups.get(entry.getKey());
+            if (entry.getValue().size() == 1 && candidates != null && candidates.size() == 1) {
+                carried.put(candidates.get(0), entry.getValue().get(0));
+                used.add(entry.getValue().get(0));
+            }
+        }
+    }
+
+    /** 条款号与原文共同构成的第一优先级匹配键，空白差异不影响判定。 */
+    private static String clauseKey(String clauseNo, String text) {
+        return normalizeNo(clauseNo) + "\u0000" + normalizeText(text);
+    }
+
+    /** 条款号比对时忽略所有空白，兼容「3.2」「3. 2」等抽取差异。 */
+    private static String normalizeNo(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", "");
+    }
+
+    /** 原文比对时把连续空白折叠为单个空格，仅用于判断条款内容是否变化。 */
+    private static String normalizeText(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * 核对沿用的应答：条款原文有变化时取消未关闭的评审并把确认退回待确认；原文未变的应答保持原状，
+     * 用户不需要为一次重解析重新确认全部条款。
+     */
+    private void reconcileCarried(ParseContext ctx, Map<ExtractedRequirement, Requirement> carried) {
+        long workVersion = work.version(ctx.project().getId());
+        for (Map.Entry<ExtractedRequirement, Requirement> entry : carried.entrySet()) {
+            Requirement prior = entry.getValue();
+            if (normalizeText(prior.getOriginalText()).equals(normalizeText(entry.getKey().originalText()))) {
+                continue;
+            }
+            responseRecords.cancelOpenReviews(ctx.project().getId(), prior.getId(), workVersion);
+            responseRecords.resetConfirmation(ctx.project().getId(), prior.getId(),
+                    "原件已重新解析，条款原文有变化，请重新确认");
+        }
+    }
+
+    /**
      * 持久化抽取出的条款：每条条款先落一条摘录块（excerpt，来源指向对应原始块），
      * 再落 Requirement 记录；来源缺失时摘录按解析提示处理、来源记为 model。
      *
@@ -506,7 +601,8 @@ public class ParseService {
     }
 
     private List<Requirement> persistRequirements(CustomerDocument document, String runId,
-            List<ExtractedRequirement> extracted, Map<Integer, DocumentBlock> sourceBlocks) {
+            List<ExtractedRequirement> extracted, Map<Integer, DocumentBlock> sourceBlocks,
+            Map<ExtractedRequirement, Requirement> carried) {
         List<Requirement> saved = new ArrayList<>();
         for (ExtractedRequirement candidate : extracted) {
             DocumentBlock source = sourceBlocks.get(candidate.blockIndex());
@@ -525,7 +621,16 @@ public class ParseService {
             blocks.insert(excerpt);
 
             Requirement requirement = new Requirement();
-            requirement.setId(Ids.next("REQ"));
+            Requirement prior = carried.get(candidate);
+            if (prior == null) {
+                requirement.setId(Ids.next("REQ"));
+            } else {
+                requirement.setId(prior.getId());
+                requirement.setConfirmationAssigneeId(prior.getConfirmationAssigneeId());
+                requirement.setConfirmationAssignedBy(prior.getConfirmationAssignedBy());
+                requirement.setConfirmationAssignedAt(prior.getConfirmationAssignedAt());
+                requirement.setConfirmationAssignmentReason(prior.getConfirmationAssignmentReason());
+            }
             requirement.setProjectId(document.getProjectId());
             requirement.setDocumentId(document.getId());
             requirement.setParseRunId(runId);

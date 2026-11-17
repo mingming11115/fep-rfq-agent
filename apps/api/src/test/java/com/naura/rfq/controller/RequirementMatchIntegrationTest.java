@@ -364,8 +364,10 @@ class RequirementMatchIntegrationTest {
         assertThat(request(post(reviewPath + "/close").contentType("application/json").content(voteInput.toString()), technician)
                 .path("status").asText()).isEqualTo("已关闭");
         var response = request(post(responsePath + "/confirm").contentType("application/json").content(confirmation), owner);
-        mvc.perform(post("/api/rfq/documents/" + old + "/parse-runs").header("Authorization", owner.auth()))
-                .andExpect(status().isConflict());
+        // 已有应答不再阻止重解析：条款号与原文一致的条款沿用原 ID，应答与确认结果保持有效。
+        assertThat(request(post("/api/rfq/documents/" + old + "/parse-runs"), owner).path("requirementCount").asInt())
+                .isEqualTo(1);
+        assertThat(request(get(path + "/requirements"), owner).path("list").get(0).path("id").asText()).isEqualTo(id);
         var frozen = (ObjectNode) response.deepCopy();
         frozen.put("sourceFileId", old).put("sourceVersion", "V1.0").put("original", req.path("originalText").asText())
                 .put("clause", req.path("customerClauseNo").asText()).put("title", req.path("title").asText());

@@ -68,8 +68,8 @@ Java 17 / Spring Boot / MyBatis / MySQL，包含业务鉴权、客户文档上�
 | GET | `/projects/{id}/documents?page=1&size=20` | 文档列表 |
 | GET | `/documents/{id}` | 文档元数据详情，不返回内部存储位置 |
 | GET | `/documents/{id}/download` | 下载不可变原件，遵循项目读取权限 |
-| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析；已有人工修正或应答/评审/定稿产物时返回 409，提示中带产物明细 |
-| GET | `/documents/{id}/parse-blockers` | 重解析前会拦截的下游产物：`responses`、`reviews`、`snapshots` 计数与 `clauses` 条款号样本 |
+| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析；已有人工修正的条款时返回 409。已有应答/评审/定稿不阻止重解析：条款号与原文一致的条款沿用原 ID，应答保留；原文变化的应答退回待确认 |
+| GET | `/documents/{id}/parse-blockers` | 重解析会受影响的下游产物：`responses`、`reviews`、`snapshots` 计数与 `clauses` 条款号样本 |
 | GET | `/parse-runs/{id}` | 运行状态、实际 extractor、异常数量及说明 |
 | GET | `/documents/{id}/blocks` | 原文内容块、sourceAnchor、provenance、processingStatus |
 | GET | `/projects/{id}/requirements?page=1&size=20` | 解析条款及待人工核对原因 |

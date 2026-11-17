@@ -5,7 +5,7 @@ import {Modal} from './ui';
 import {isSourceParsing} from '../useSourceParsing';
 import HistoryRecallPicker from './HistoryRecallPicker';
 
-/** 把阻断明细拼成一行文案；无阻断项时返回空串，用于决定是否展示提示块。 */
+/** 把影响范围拼成一行文案；无下游产物时返回空串，用于决定是否展示提示块。 */
 function blockerText(blockers) {
   const parts = [];
   if (blockers?.responses > 0) { parts.push(`应答 ${blockers.responses} 条`); }
@@ -26,16 +26,16 @@ export default function SourceReparseDialog({project, files, currentFileId, onCl
   const [recallMode, setRecallMode] = useState(() => recallIds.length ? 'selected' : 'default');
   const missingRecallFiles = recallMode === 'selected' && !recallIds.length;
   const close = () => { if (!submitting.current) { onClose(); } };
-  const blocked = blockerText(blockers);
+  const affected = blockerText(blockers);
 
-  // 提交前先问服务端「这份原件已经产生了什么」，避免用户点了确认才被 409 拦下。
+  // 提交前先问服务端「这份原件已经产生了什么」，让用户在确认前看到影响范围。
   useEffect(() => {
     let live = true;
     setBlockers(null);
     if (!fileId) { return () => { live = false; }; }
     api.get(`/documents/${encodeURIComponent(fileId)}/parse-blockers`)
       .then(data => { if (live) { setBlockers(data); } })
-      .catch(failure => { console.error('读取重解析阻断项失败', failure); });
+      .catch(failure => { console.error('读取重解析影响范围失败', failure); });
     return () => { live = false; };
   }, [fileId]);
 
@@ -79,14 +79,14 @@ export default function SourceReparseDialog({project, files, currentFileId, onCl
       </label>}
     {file && <HistoryRecallPicker projectId={project.backendProjectId || project.id} groupId={project.groupId} mode={recallMode} ids={recallIds}
       onMode={setRecallMode} onIds={setRecallIds} disabled={busy || isSourceParsing(file)}/>}
-    {blocked && <Alert type="warning" showIcon message="该原件已产生下游记录，重解析会被拒绝"
+    {affected && <Alert type="info" showIcon message="重解析会保留已有应答"
       description={<div>
-        <p>{blocked}{blockers?.clauses?.length ? `；涉及条款 ${blockers.clauses.join('、')}` : ''}</p>
-        <p>请在项目设置「原件换版」登记新版原件，解析新版后核对影响范围；核对完成前正式评审仍沿用原件。</p>
-        {onOpenReplacement && <Button size="small" onClick={onOpenReplacement}>去登记新版</Button>}
+        <p>{affected}{blockers?.clauses?.length ? `；涉及条款 ${blockers.clauses.join('、')}` : ''}</p>
+        <p>应答与确认人按条款号带到新结果上；条款原文变化的应答会退回待确认，未能在新结果中匹配的条款不再展示。</p>
+        {onOpenReplacement && <Button size="small" onClick={onOpenReplacement}>登记新版原件</Button>}
       </div>}/>}
-    <p className="muted">{blocked
-      ? '重解析会整体替换条款并重新分配编号，已有应答、评审与定稿记录将无法继续对应。'
+    <p className="muted">{affected
+      ? '重解析会整体替换条款并重新分配编号，已匹配条款的应答、评审与定稿记录保持可追溯。'
       : '解析成功后将更新该文件的抽取条款。已有人工修正或应答记录时，请使用「原件换版」。'}</p>
     {busy && <Alert type="info" showIcon message={`正在重新解析 ${file?.name || ''}`}/>}
     {error && <Alert type="error" showIcon message={error}/>}
