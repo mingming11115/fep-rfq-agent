@@ -30,7 +30,18 @@ public interface RequirementMapper {
 
     int deleteByProjectId(@Param("projectId") String projectId);
 
-    boolean hasResponseArtifacts(@Param("documentId") String documentId, @Param("projectId") String projectId);
+    /** 重解析阻断项：该文档已产生应答的条款数。 */
+    int countRespondedRequirements(@Param("documentId") String documentId);
+
+    /** 重解析阻断项：该文档已进入评审的条款数（含已取消的历史评审，与放行判断保持一致）。 */
+    int countReviewedRequirements(@Param("documentId") String documentId, @Param("projectId") String projectId);
+
+    /** 重解析阻断项：包含该文档的定稿快照份数。 */
+    int countDocumentSnapshots(@Param("documentId") String documentId, @Param("projectId") String projectId);
+
+    /** 重解析阻断项：已应答或已评审的条款号样本，按条款号排序。 */
+    List<String> findArtifactClauses(@Param("documentId") String documentId, @Param("projectId") String projectId,
+            @Param("limit") int limit);
 
     int insert(Requirement requirement);
 

@@ -9,7 +9,7 @@ export function getProjectEntryPage(state,projectId,destination='response') {
  return destination==='documents'?'response':destination;
 }
 const pages=['dashboard','tasks','projects',...PROJECT_PAGES,...ADMIN_PAGES];
-const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload','buId','modelId','groupId'];
+const fields=['projectId','fileId','sourceVersion','requirementId','reviewId','snapshotId','taskId','returnKey','action','upload','buId','modelId','groupId','tab'];
 export function parseWorkRoute(hash='') {
  const [path,query='']=hash.replace(/^#\/?/,'').split('?');const route={page:path==='documents'?'response':pages.includes(path)?path:'dashboard'};
  const params=new URLSearchParams(query);for(const key of fields)if(params.has(key)) { route[key]=params.get(key); }

@@ -42,6 +42,10 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
    result:{matchedLibrary:'history_rfq',conclusion:'待确认',stages:{history_rfq:{status:'hit',candidates:[{id:'H',version:2,title:'数据库历史候选',answer:'真实参考答复'}]}}}
   }})); }
   if(url.endsWith('/download')) { return new Response(JSON.stringify({msg:'原件预览不在此测试范围'}),{status:404}); }
+  if(url.endsWith('/parse-blockers')){
+   const blocked=!allowReparse&&url.includes('/documents/D/');
+   return new Response(JSON.stringify({code:0,data:{responses:blocked?1:0,reviews:0,snapshots:0,clauses:blocked?['3.2']:[]}}));
+  }
   if(url.endsWith('/parse-runs')){
    parseCalls++;
    parseBodies.push(JSON.parse(options.body));
@@ -117,6 +121,8 @@ test('MySQL entry uses the original full workspace and ignores cached frontend d
   assert.ok(node.textContent.includes('客户的真实要求'));
   const workbenchAction=node.querySelector('button[aria-label="重新解析当前文件"]');
   await clickControl(workbenchAction);
+  assert.ok(document.body.textContent.includes('该原件已产生下游记录'),'the dialog shows blockers before the user submits');
+  assert.ok(document.body.textContent.includes('涉及条款 3.2'),'blocked clause numbers are listed');
   await clickControl(button('确认重新解析'));
   assert.ok(document.body.textContent.includes('请登记新版原件'));
   assert.ok(node.textContent.includes('客户的真实要求'));

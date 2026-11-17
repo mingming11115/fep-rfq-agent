@@ -27,6 +27,7 @@ import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.ExtractionResult;
 import com.naura.rfq.model.parse.RawBlock;
 import com.naura.rfq.model.parse.SourceRef;
+import com.naura.rfq.model.vo.ParseBlockerView;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.storage.DocumentStorage;
 import java.nio.file.Path;
@@ -63,6 +64,8 @@ public class ParseService {
     private static final Pattern SELECTED_WORD = Pattern.compile("selection:word:([0-9/]+):[0-9]+-([0-9/]+):[0-9]+");
     /** Word 原始块锚点格式：body/{块路径}，路径形如 1/r2/c3（表内行/列）。 */
     private static final Pattern WORD_BLOCK = Pattern.compile("body/([0-9]+(?:/[rc]?[0-9]+)*)");
+    /** 阻断明细中展示的条款号条数上限，避免长文档把提示撑爆。 */
+    private static final int BLOCKER_SAMPLE_LIMIT = 5;
 
     @Autowired
     private CustomerDocumentMapper documents;
@@ -139,10 +142,25 @@ public class ParseService {
     }
 
     /**
+     * 汇总该文档已产生的下游产物（应答、评审、定稿快照），供重解析守卫与前端提示共用。
+     *
+     * @param documentId 客户文档 ID
+     * @param projectId  所属项目 ID（评审与快照按项目存储，需配合文档过滤）
+     * @return 三类产物的计数与涉及的条款号样本
+     */
+    public ParseBlockerView blockers(String documentId, String projectId) {
+        List<String> clauses = requirements.findArtifactClauses(documentId, projectId, BLOCKER_SAMPLE_LIMIT);
+        int responses = requirements.countRespondedRequirements(documentId);
+        int reviews = requirements.countReviewedRequirements(documentId, projectId);
+        int snapshots = requirements.countDocumentSnapshots(documentId, projectId);
+        return new ParseBlockerView(responses, reviews, snapshots, clauses);
+    }
+
+    /**
      * 解析前的准备阶段：校验访问权限与可重解析条件，锁定项目与文档，创建 RUNNING 状态的解析运行记录。
      *
      * <p>拒绝重解析的两种情况：已存在人工修正过的条款（409，避免覆盖人工结果）；
-     * 已有应答、评审或定稿记录（409，需登记新版原件后再解析）。
+     * 已有应答、评审或定稿记录（409，需登记新版原件后再解析，提示中带明细）。
      *
      * @return 携带项目、文档、运行记录、召回配置及计时的解析上下文
      */
@@ -160,8 +178,12 @@ public class ParseService {
         if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
             throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
         }
-        if (!previous.isEmpty() && requirements.hasResponseArtifacts(documentId, project.getId())) {
-            throw new BusinessException(409, "已有应答、评审或定稿记录，请登记新版原件后再解析");
+        if (!previous.isEmpty()) {
+            ParseBlockerView blockers = blockers(documentId, project.getId());
+            if (blockers.blocked()) {
+                throw new BusinessException(409,
+                        "已有应答、评审或定稿记录（" + blockers.summary() + "），请登记新版原件后再解析");
+            }
         }
 
         List<String> recallIds = historyDocumentIds == null ? document.historyRecallIds()

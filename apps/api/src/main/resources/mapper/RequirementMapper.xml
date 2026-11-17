@@ -94,19 +94,41 @@
         where id=#{id} and version=#{version}
     </update>
 
-    <select id="hasResponseArtifacts" resultType="boolean">
-        with generated_requirements as (
-            select id,project_id from requirement where document_id=#{documentId}
-            and (parse_run_id is not null or block_id is not null or source_refs_json is null)
-        )
-        select exists(
-            select 1 from generated_requirements r join requirement_response a on a.requirement_id=r.id
-            union all
-            select 1 from generated_requirements r join response_review v on v.project_id=r.project_id
-                and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id
-            union all
-            select 1 from response_snapshot where project_id=#{projectId}
-                and json_search(payload,'one',#{documentId},null,'$.rows[*].sourceFileId') is not null
-        )
+    <!-- 重解析守卫的明细查询：分别统计应答、评审、定稿三类下游产物，供 409 文案与前端提示引用。 -->
+    <select id="countRespondedRequirements" resultType="int">
+        select count(distinct a.requirement_id)
+        from requirement_response a
+        join requirement r on r.id = a.requirement_id
+        where r.document_id = #{documentId} and <include refid="generatedRequirement"/>
+    </select>
+
+    <select id="countReviewedRequirements" resultType="int">
+        select count(distinct r.id)
+        from requirement r join response_review v on v.project_id = #{projectId}
+            and json_unquote(json_extract(v.payload,'$.requirementId')) = r.id
+        where r.document_id = #{documentId} and <include refid="generatedRequirement"/>
+    </select>
+
+    <select id="countDocumentSnapshots" resultType="int">
+        select count(*)
+        from response_snapshot
+        where project_id = #{projectId}
+          and json_search(payload,'one',#{documentId},null,'$.rows[*].sourceFileId') is not null
+    </select>
+
+    <select id="findArtifactClauses" resultType="string">
+        select clause_no from (
+            select r.customer_clause_no as clause_no
+            from requirement r join requirement_response a on a.requirement_id = r.id
+            where r.document_id = #{documentId} and <include refid="generatedRequirement"/>
+            union
+            select r.customer_clause_no
+            from requirement r join response_review v on v.project_id = #{projectId}
+                and json_unquote(json_extract(v.payload,'$.requirementId')) = r.id
+            where r.document_id = #{documentId} and <include refid="generatedRequirement"/>
+        ) artifacts
+        where clause_no is not null and clause_no &lt;&gt; ''
+        order by clause_no
+        limit #{limit}
     </select>
 </mapper>

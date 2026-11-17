@@ -3,6 +3,7 @@ package com.naura.rfq.controller;
 import com.naura.rfq.common.api.ApiResponse;
 import com.naura.rfq.model.entity.ParseRun;
 import com.naura.rfq.model.vo.BlockView;
+import com.naura.rfq.model.vo.ParseBlockerView;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.ParseQueryService;
 import com.naura.rfq.service.ParseService;
@@ -46,8 +47,17 @@ public class ParseController {
         }
     }
 
-    @GetMapping("/documents/{documentId}/blocks")
-    public ApiResponse<List<BlockView>> blocks(@PathVariable String documentId) {
+    @GetMapping("/documents/{documentId}/parse-blockers")
+    public ApiResponse<ParseBlockerView> blockers(@PathVariable String documentId) {
+        try {
+            return ApiResponse.success(service.blockers(CurrentUserHolder.require(), documentId));
+        } catch (Exception exception) {
+            log.error("Request failed in blockers", exception);
+            throw exception;
+        }
+    }
+
+    @GetMapping("/documents/{documentId}/blocks")    public ApiResponse<List<BlockView>> blocks(@PathVariable String documentId) {
         try {
             return ApiResponse.success(service.blocks(CurrentUserHolder.require(), documentId));
         } catch (Exception exception) {

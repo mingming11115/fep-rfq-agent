@@ -32,8 +32,11 @@ function Errors({ error }) { return error ? <div className="error-notice" role="
 function record(logEvent, action, object, summary, before, after, reason) { logEvent?.(action, object, JSON.stringify({ summary, before, after, reason })); }
 function ImpactList({ requirements, selected, onChange, readOnly = false }) { return <div className="mg-impact-list">{requirements.length ? requirements.map((row) => <label key={row.id}><UiCheckbox type="checkbox" disabled={readOnly} checked={selected.includes(row.id)} onChange={() => onChange(selected.includes(row.id) ? selected.filter((id) => id !== row.id) : [...selected, row.id])}/><span><strong>{row.clause} · {row.title}</strong><small>{row.category} · {row.owner || '未分派'}</small></span><StatusBadge status={row.status}/></label>) : <EmptyState title="当前项目暂无要求条目" description="配置保存后，后续解析的条目将使用新基线。"/>}</div>; }
 
-export function SettingsPage({ project, requirements = [], members = [], actorRole, onProjectChange, onInvalidateRequirements, onMembersChange, toast, navigate, logEvent,appState,actorId,onPersonnelAction,onConfigureFinalReview,onReload,permissionContext,onLibraryRefresh,embedded=false }) {
-  const [tab, setTab] = useState('basic');
+export function SettingsPage({ project, requirements = [], members = [], actorRole, onProjectChange, onInvalidateRequirements, onMembersChange, toast, navigate, logEvent,appState,actorId,onPersonnelAction,onConfigureFinalReview,onReload,permissionContext,onLibraryRefresh,embedded=false,route }) {
+  const [tab, setTab] = useState(route?.tab || 'basic');
+  useEffect(() => {
+    if (route?.tab && (route.tab !== 'source-versions' || appState?.dataSource === 'mysql')) { setTab(route.tab); }
+  }, [route?.tab, appState?.dataSource]);
   const [knowledgeOpen,setKnowledgeOpen]=useState(false),[knowledgeRoute,setKnowledgeRoute]=useState({page:'capabilities',groupId:project.groupId});
   const [form, setForm] = useState({ name: project.name, customer: project.customer, owner: project.owner, ownerId: project.ownerId||'', deadline: project.deadline });
   const [reason, setReason] = useState(''), [error, setError] = useState(''), [memberForm, setMemberForm] = useState(null), [memberReason, setMemberReason] = useState('');
