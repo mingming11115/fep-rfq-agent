@@ -43,13 +43,16 @@ async function harness(width){
 }
 
 test('desktop workbench defaults and resets to sixty percent while preserving unsaved source and response',async()=>{
-  const h=await harness(1280),{node,render,click,button,type,settle}=h;
+  const h=await harness(1280),{node,render,click,button,settle}=h;
   const separator=()=>node.querySelector('[role="separator"][aria-label^="调整原文"]');
   const press=async key=>act(async()=>{separator().dispatchEvent(new window.KeyboardEvent('keydown',{key,bubbles:true}));await settle();});
   try{
     await render();assert.equal(separator().getAttribute('aria-valuenow'),'60');
     const {frame,emit}=await h.connect();Object.defineProperty(node.querySelector('.response-workbench'),'getBoundingClientRect',{configurable:true,value:()=>({width:1200,height:600})});
-    await click(node.querySelector('.response-reference-details summary'));const evidence=node.querySelector('[aria-label="本条关联证据"]');assert.equal(evidence.tagName,'DD');
+    await click(node.querySelector('.response-reference-details summary'));
+    // The response card no longer offers a manual evidence field; the details pane only reports the AI source.
+    assert.ok(node.querySelector('.response-reference-body'),'the reference details expand for review');
+    assert.equal(node.querySelector('[aria-label="本条关联证据"]'),null,'saved evidence is no longer editable from the card');
     await act(async()=>{emit('dirty',{dirty:true});await settle();});
     await press('ArrowRight');assert.equal(separator().getAttribute('aria-valuenow'),'65');await press('Enter');assert.equal(separator().getAttribute('aria-valuenow'),'60');await press('ArrowLeft');assert.equal(separator().getAttribute('aria-valuenow'),'55');await press('Enter');assert.equal(separator().getAttribute('aria-valuenow'),'60');
     await click(button('放大原文件区'));assert.ok(node.querySelector('.office-source-expanded'));await click(button('还原原文件区'));assert.ok(!node.querySelector('.office-source-expanded'));
