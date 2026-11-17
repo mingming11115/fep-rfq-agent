@@ -197,6 +197,7 @@ test('project source pane opens the Word/PDF HTML entry, leaves loading after ha
     await act(async()=>await settle());
     const pdfFrame=container.querySelector('iframe');
     assert.equal(new URL(pdfFrame.src).pathname,'/craft-editors/pdfcraft-classic/index.html');
+    assert.equal(new URL(pdfFrame.src).searchParams.get('tools'),'host','PDF opens in the embedded reading layout');
     const pdfNative=await connectNative(pdfFrame,responseMeta);
     await act(async()=>{pdfNative.setNotes([{...nativeNote,nativeKey:'pdf-comment:1'}]);await settle();});
     assert.equal(container.querySelector('[data-native-note="pdf-comment:1"]').parentElement,container.querySelector('[data-response-note="R"]').parentElement,'PDF uses the same shared comment column');

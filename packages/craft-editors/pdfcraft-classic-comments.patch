@@ -1,7 +1,8 @@
 diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
+index 73d14f4..06b6dc4 100644
 --- a/apps/pdfcraft-web/src/main.rs
 +++ b/apps/pdfcraft-web/src/main.rs
-@@ -56,6 +56,7 @@
+@@ -56,6 +56,7 @@ fn main() {
                      warn_before_unload(app.unsaved_flag.clone());
                      // `?host=parent`: a same-origin page embedding PdfCraft in an iframe (such
                      // as the Nextcloud app) passes files in and takes saves back (`host` below).
@@ -9,14 +10,18 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
                      if query_param("host").as_deref() == Some("parent")
                          && let Some(bridge) = host::Bridge::new()
                      {
-@@ -66,7 +67,18 @@
+@@ -66,7 +67,22 @@ fn main() {
                          {
                              app.comment_prefs.author = author.chars().take(200).collect();
                          }
 -                        bridge.listen(app.startup_inbox.clone(), cc.egui_ctx.clone());
 +                        let review_enabled = query_param("comments").as_deref() == Some("classic");
 +                        if review_enabled {
-+                            app.enable_host_review();
++                            if query_param("tools").as_deref() == Some("host") {
++                                app.use_host_review_tools();
++                            } else {
++                                app.enable_host_review();
++                            }
 +                            if query_param("readonly").as_deref() == Some("1") || query_param("body").as_deref() == Some("0") {
 +                                app.set_host_review_permissions(
 +                                    query_param("readonly").as_deref() != Some("1"),
@@ -29,7 +34,7 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
                          app.host_save = Some(bridge.save_fn());
                          app.host_dirty = Some(bridge.dirty_fn());
                          bridge.post_ready();
-@@ -75,7 +87,7 @@
+@@ -75,7 +91,7 @@ fn main() {
                              &"PdfCraft: ?host=parent needs a framing page on the same origin; saves download instead".into(),
                          );
                      }
@@ -38,12 +43,10 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
                  }),
              )
              .await;
-@@ -88,6 +100,67 @@
-             }
-         }
+@@ -90,6 +106,67 @@ fn main() {
      });
-+}
-+
+ }
+ 
 +/// Keep PdfCraft's normal lifecycle while letting an opted-in host own the comment sidebar.
 +#[cfg(target_arch = "wasm32")]
 +struct WebShell {
@@ -103,10 +106,12 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
 +    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
 +        self.app.as_any_mut()
 +    }
- }
- 
++}
++
  #[cfg(target_arch = "wasm32")]
-@@ -133,18 +206,31 @@
+ fn warn_before_unload(unsaved: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+     use eframe::wasm_bindgen::{JsCast, closure::Closure};
+@@ -133,18 +210,31 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
  ///   a transferred `ArrayBuffer`. The parent stores the file (and reports its own errors).
  /// - `pdfcraft:dirty` (to the parent): `{ dirty }` whenever unsaved work appears or goes away.
  /// - `pdfcraft:failed` (to the parent): `{ error }` when the app couldn't start.
@@ -123,10 +128,10 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
 +    use std::rc::Rc;
 +
      use eframe::wasm_bindgen::{JsCast, JsValue, closure::Closure};
-+
+ 
 +    const MAX_REVIEW_PAYLOAD_BYTES: usize = 1_100_000;
 +    const MAX_REVIEW_ACTIONS: usize = 64;
- 
++
      #[derive(Clone)]
      pub struct Bridge {
          window: web_sys::Window,
@@ -138,7 +143,7 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
      }
  
      impl Bridge {
-@@ -162,7 +248,7 @@
+@@ -162,7 +252,7 @@ mod host {
              if parent.location().origin().ok()? != origin {
                  return None;
              }
@@ -147,7 +152,7 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
          }
  
          fn post(&self, message: &js_sys::Object, transfer: Option<&JsValue>) -> Result<(), String> {
-@@ -186,15 +272,69 @@
+@@ -186,15 +276,69 @@ mod host {
              }
          }
  
@@ -218,7 +223,7 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
                  if string(&data, "type").as_deref() != Some("pdfcraft:open") {
                      return;
                  }
-@@ -207,6 +347,7 @@
+@@ -207,6 +351,7 @@ mod host {
                  } else {
                      return;
                  };
@@ -226,7 +231,7 @@ diff --git a/apps/pdfcraft-web/src/main.rs b/apps/pdfcraft-web/src/main.rs
                  if let Ok(mut q) = inbox.lock() {
                      q.push((name, bytes));
                  }
-@@ -222,9 +363,16 @@
+@@ -222,9 +367,16 @@ mod host {
              let bridge = self.clone();
              Box::new(move |name: &str, bytes: &[u8], save_as: bool| {
                  let buffer = js_sys::Uint8Array::from(bytes).buffer();
@@ -791,9 +796,10 @@ diff --git a/crates/engine/src/session/editing.rs b/crates/engine/src/session/ed
          let editor = doc.editor.as_mut().ok_or(EditError::NothingToRedo)?;
          let (label, next, keys, scope) = editor.redo.pop().ok_or(EditError::NothingToRedo)?;
 diff --git a/crates/ui-egui/src/app.rs b/crates/ui-egui/src/app.rs
+index 425c2e2..d92e9e3 100644
 --- a/crates/ui-egui/src/app.rs
 +++ b/crates/ui-egui/src/app.rs
-@@ -82,6 +82,7 @@
+@@ -82,6 +82,7 @@ impl PdfCraftApp {
              last_right: RightPanel::Comments,
              right_before_read: None,
              comments_panel_closed: false,
@@ -801,10 +807,43 @@ diff --git a/crates/ui-egui/src/app.rs b/crates/ui-egui/src/app.rs
              right_panel_closed: false,
              quick_tool: QuickTool::Select,
              space_hand: None,
+@@ -610,16 +611,27 @@ impl eframe::App for PdfCraftApp {
+         if self.draws_window_frame() {
+             window_controls::resize_edges(&ctx);
+         }
+-        chrome::tab_strip(self, ui);
+-        chrome::mode_bar(self, ui);
++        let host_tools = self.uses_host_review_tools();
++        if host_tools {
++            chrome::review_navigation(self, ui);
++        } else {
++            chrome::tab_strip(self, ui);
++            chrome::mode_bar(self, ui);
++        }
+         // Whichever way another tab came to the front, it shows instead of the expanded view.
+         if self.all_tools_full && self.all_tools_tab != self.shown_tab() {
+             self.all_tools_full = false;
+         }
+-        side_panels::show(self, ui);
++        if !host_tools {
++            side_panels::show(self, ui);
++        }
+         let t = theme::Tokens::get(&ctx);
+         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
+-            if self.mode == Mode::AllTools && self.all_tools_full {
++            if host_tools {
++                if let Some(index) = self.active {
++                    canvas::document_area(self, index, ui);
++                }
++            } else if self.mode == Mode::AllTools && self.all_tools_full {
+                 all_tools_ui::show(self, ui);
+             } else {
+                 match self.active {
 diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
+index 8b280ba..e765e80 100644
 --- a/crates/ui-egui/src/canvas.rs
 +++ b/crates/ui-egui/src/canvas.rs
-@@ -272,6 +272,8 @@
+@@ -272,6 +272,8 @@ pub(crate) fn snapshot_tab_name(title: &str, file_name: &str, snapshot: &Snapsho
  }
  
  pub struct DocView {
@@ -813,7 +852,7 @@ diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
      pub id: DocId,
      pub zoom: f32,
      pub fit: Fit,
-@@ -609,6 +611,8 @@
+@@ -609,6 +611,8 @@ impl DocView {
      /// any layout or zoom the PDF itself asks for.
      pub fn new(id: DocId, info: &DocInfo, defaults: ViewDefaults) -> Self {
          Self {
@@ -822,26 +861,45 @@ diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
              id,
              zoom: defaults.zoom,
              fit: defaults.fit,
-@@ -2990,6 +2994,18 @@
+@@ -2990,6 +2994,20 @@ fn refine_goto_point(mut scroll: egui::ScrollArea, view: &mut DocView, geometry:
  /// Draws the document tab at `index`: its notice bars, then its pages (or the Organize grid) in a
  /// scroll area with this frame's zoom, scrolling, tool input, overlays and render requests.
  pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
 +    if let Some(host) = app.host_review.as_mut() {
 +        let full = ui.available_rect_before_wrap();
 +        host.clip = Some(full);
-+        let reserve = 264.0_f32.min(full.width() * 0.42);
-+        let page = egui::Rect::from_min_max(full.min, egui::pos2(full.right() - reserve, full.bottom()));
-+        ui.scope_builder(egui::UiBuilder::new().max_rect(page), |ui| document_area_native(app, index, ui));
-+    } else {
-+        document_area_native(app, index, ui);
++        if !host.host_tools {
++            let reserve = 264.0_f32.min(full.width() * 0.42);
++            let page = egui::Rect::from_min_max(full.min, egui::pos2(full.right() - reserve, full.bottom()));
++            ui.scope_builder(egui::UiBuilder::new().max_rect(page), |ui| document_area_native(app, index, ui));
++            return;
++        }
 +    }
++    document_area_native(app, index, ui);
 +}
 +
 +fn document_area_native(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
      let t = Tokens::get(ui.ctx());
      // Keyboard scrolling applies to this frame's page view only, never later.
      let key_scroll = std::mem::take(&mut app.views[index].key_scroll);
-@@ -3310,10 +3326,11 @@
+@@ -3029,6 +3047,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+     // Edit a PDF: added text and images can be selected, moved and edited.
+     let editing_content =
+         (app.left_open && app.left == crate::LeftPanel::Tool("edit")) || matches!(app.quick_tool, QuickTool::AddText | QuickTool::EditText);
++    let host_tools = app.uses_host_review_tools();
+     let text_style = app.text_style.clone();
+     let show_secured_notice = app.show_secured_notice;
+     let view = &mut app.views[index];
+@@ -3259,7 +3278,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+ 
+     view.viewport_screen = out.inner_rect;
+     view.auto_scroll.paint(ui, avail);
+-    if unobstructed && matches!(tool, QuickTool::Select | QuickTool::ColumnSelect) {
++    if !host_tools && unobstructed && matches!(tool, QuickTool::Select | QuickTool::ColumnSelect) {
+         copy_selected |= selection_actions(ui, avail, view, info, prefs, allowed && !comments_hidden, can_copy);
+     }
+ 
+@@ -3310,10 +3329,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
      match canvas_action {
          Some(comments::CanvasAction::Edit(e)) => view.pending_edit = Some(*e),
          // `choose_right_panel` would borrow all of `app` while `view` is held; same effect.
@@ -854,7 +912,16 @@ diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
          Some(comments::CanvasAction::Properties(p, i)) => open_props = Some((p, i)),
          Some(comments::CanvasAction::CopyImage(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::Copy(p, i)),
          Some(comments::CanvasAction::CopyImageFile(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::CopyFile(p, i)),
-@@ -3494,3 +3511,42 @@
+@@ -3478,7 +3498,7 @@ fn apply_frame_requests(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui,
+     }
+     // Read mode hides the tools (#2646), and full screen is the page and nothing else (#1459);
+     // the quick tools come back with the window.
+-    if app.mode != crate::Mode::Read && !app.full_screen {
++    if app.mode != crate::Mode::Read && !app.full_screen && !app.uses_host_review_tools() {
+         quick_bar(app, avail, ui);
+     }
+     if let Some((source, file, destination)) = remote_open {
+@@ -3494,3 +3514,42 @@ enum FieldMenu {
  
  #[cfg(test)]
  mod tests;
@@ -1580,9 +1647,10 @@ new file mode 100644
 +}
 diff --git a/crates/ui-egui/src/host_review.rs b/crates/ui-egui/src/host_review.rs
 new file mode 100644
+index 0000000..dd91066
 --- /dev/null
 +++ b/crates/ui-egui/src/host_review.rs
-@@ -0,0 +1,625 @@
+@@ -0,0 +1,638 @@
 +//! Host review adapter; edits stay in the native PDF engine.
 +use crate::PdfCraftApp;
 +use pdfcraft_engine::{DocId, Edit, NewAnnotation, NoteIcon, ReviewState, Shape};
@@ -1601,6 +1669,7 @@ new file mode 100644
 +    serial: u64,
 +    initial: Option<(bool, bool)>,
 +    pub clip: Option<egui::Rect>,
++    pub host_tools: bool,
 +}
 +
 +#[derive(Default)]
@@ -1623,6 +1692,18 @@ new file mode 100644
 +}
 +
 +impl PdfCraftApp {
++    /// The host provides file actions and comment controls; keep the document and reading controls here.
++    pub fn use_host_review_tools(&mut self) {
++        self.enable_host_review();
++        if let Some(host) = &mut self.host_review {
++            host.host_tools = true;
++        }
++    }
++
++    pub(crate) fn uses_host_review_tools(&self) -> bool {
++        self.host_review.as_ref().is_some_and(|host| host.host_tools)
++    }
++
 +    pub fn enable_host_review(&mut self) {
 +        if self.host_review.is_none() {
 +            self.host_review = Some(HostReview::default());
@@ -2297,3 +2378,55 @@ diff --git a/Cargo.lock b/Cargo.lock
   "wasm-bindgen-futures",
   "web-sys",
  ]
+diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
+index aa6233c..a8a9f8a 100644
+--- a/crates/ui-egui/src/chrome.rs
++++ b/crates/ui-egui/src/chrome.rs
+@@ -531,6 +531,47 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+         });
+ }
+ 
++/// The embedded review has its own file actions and comments. Show only reading controls here.
++pub fn review_navigation(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
++    let Some((index, id)) = app.active_ids() else { return };
++    let Some(doc) = app.session.get(id) else { return };
++    let page_count = doc.info.pages.len();
++    if page_count == 0 {
++        return;
++    }
++    let view = &mut app.views[index];
++    let t = Tokens::get(ui.ctx());
++    egui::Panel::bottom("review_navigation")
++        .resizable(false)
++        .exact_size(34.0)
++        .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 3)).stroke(Stroke::new(1.0, t.divider)))
++        .show(ui, |ui| {
++            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
++                let previous = ui.add_enabled_ui(view.current > 0, |ui| icons::button(ui, "chevron-left", 24.0, false, tl!("Previous page")));
++                if previous.inner.clicked() {
++                    view.step_page(false);
++                }
++                let current = (view.current + 1).min(page_count);
++                ui.label(format!("{current} / {page_count}"));
++                let next = ui.add_enabled_ui(current < page_count, |ui| icons::button(ui, "chevron-right", 24.0, false, tl!("Next page")));
++                if next.inner.clicked() {
++                    view.step_page(true);
++                }
++                ui.separator();
++                if icons::button(ui, "zoom-out", 24.0, false, tl!("Zoom out")).clicked() {
++                    view.zoom_step(false);
++                }
++                ui.label(format!("{:.0}%", view.zoom * 100.0));
++                if icons::button(ui, "zoom-in", 24.0, false, tl!("Zoom in")).clicked() {
++                    view.zoom_step(true);
++                }
++                if icons::button(ui, "maximize-2", 24.0, false, tl!("Fit to width")).clicked() {
++                    view.set_fit(Fit::Width);
++                }
++            });
++        });
++}
++
+ /// Draw the right tool rail with page navigation, history, zoom, rotation and page-display controls for the
+ /// active view.
+ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {

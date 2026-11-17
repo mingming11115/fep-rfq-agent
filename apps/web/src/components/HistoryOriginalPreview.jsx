@@ -43,11 +43,6 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
    try{payload=typeof message.payload==='string'?JSON.parse(message.payload):message.payload;}
    catch{finish('无法读取原文定位结果，请在原件中核对。');return;}
    if(message.type===engine+':reviewState'&&payload?.document&&payload.fileName===filename){
-    // PdfCraft draws its toolbar on the canvas. Its viewport starts below that toolbar.
-    const top=payload.clip?.y;
-    if(engine==='pdfcraft'&&Number.isFinite(top)&&top>=0) {
-     viewer.style.setProperty('--history-preview-top',`${top}px`);
-    }
     if(configured) { return; }
     configured=true;
     const externalTools=engine==='wordcraft';
@@ -63,7 +58,6 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
    }
   }
   window.addEventListener('message',receive);
-  viewer.style.removeProperty('--history-preview-top');
   setLoading(true);setNotice(null);
   async function load(){
    try{
@@ -73,7 +67,7 @@ export default function HistoryOriginalPreview({buId,documentId,row}){
     if(abort.signal.aborted) { return; }
     engine=/\.pdf$/i.test(filename)?'pdfcraft':'wordcraft';
     timer=setTimeout(()=>finish('原文预览或定位超时，请下载原件核对。'),30000);
-    viewer.src=`${import.meta.env?.BASE_URL||'/'}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0${engine==='wordcraft'?'&tools=host':''}`;
+    viewer.src=`${import.meta.env?.BASE_URL||'/'}craft-editors/${engine}-classic/index.html?host=parent&comments=classic&readonly=1&body=0&tools=host`;
    }catch(cause){
     if(!abort.signal.aborted) { finish(cause.message,'error'); }
    }

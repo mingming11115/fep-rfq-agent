@@ -1,7 +1,7 @@
 {
   "editor": "pdfcraft",
   "version": "0.16.1",
-  "patchSha256": "6b8569e2e5857c87e298b513e40992a52146b7114941310d735a321a0c70fbc3",
+  "patchSha256": "0e63f16d502f78c9ec742e70ceacde040cee417ad2a965f7fddd1a12d661a9f2",
   "files": {
     "ATTRIBUTION-craft-fonts.md": "aa2aa7eec68c32ac2da6ff7162ca9100ab3680e4c7b98365fc7c74ddd4167d07",
     "ATTRIBUTION.md": "8795acbd7b23019f5378e5cb19f449e3961f4eb65cfb95f63b8b513211b995b5",
@@ -21,8 +21,8 @@
     "OFL-noto-sans-hebrew.txt": "9b9fe028b5ba74d231659a1bbaf0ed09b11e759d1ca6a070999e16d151616b47",
     "OFL-noto-sans-thai.txt": "2e98fd23a52d253db8612cd5942c8f2ff4111b21d2367050fdca91d8ccc374a0",
     "index.html": "3d0f8f2cb4a87ca502f77e79db7a0cba6c59139e0263548b27b9e6e35c7c65c9",
-    "pdfcraft-classic.js": "bc7e2c8edc76eb591c258c492f85e3b38534d41e070f7e4b561e37a6e2662f5e",
-    "pdfcraft-classic_bg.wasm": "f0c62428cd8b42f1f7526105bf031a4a26fa6b3d41b3d172d952057cdd1685d7",
+    "pdfcraft-classic.js": "53cd65241c02267e2c843a2c5990af417ed13c337e3af41d6db8752c9a5d74a7",
+    "pdfcraft-classic_bg.wasm": "f47afb137997ee8015c0411c29c58880d348a0e97807518970a5fcda1f122cae",
     "snippets/eframe-d31a8450ea12dfc1/inline0.js": "22a98f9d0c5a0532d291bdc9a3050439420b3d11143b4568fcfd3c66fff36995"
   }
 }
