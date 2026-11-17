@@ -23,7 +23,7 @@ const REQUIREMENT_TEMPLATES = [
     clause: '2.1', title: '安全防护与联锁', category: '技术',
     original: '设备应配置防护门与安全联锁，防护门开启时停止危险运动。',
     conclusion: 'Comply', draft: '本演示配置包含防护门与联锁；最终功能按双方确认的验收方案验证。',
-    status: '待确认', owner: '技术确认人', matchLevel: 'standard', score: 92,
+    status: '待处理', owner: '技术确认人', matchLevel: 'standard', score: 92,
     evidence: '模拟安全方案 V2，第 4 页', sourcePage: 3,
   },
   {
@@ -60,7 +60,7 @@ const REQUIREMENT_TEMPLATES = [
     clause: '3.2', title: '现场安装与培训', category: '服务',
     original: '供应商应提供现场安装指导和操作、维护培训。',
     conclusion: 'Comply', draft: '按双方确认的服务计划提供安装指导及操作、维护培训，具体日程在发运前确认。',
-    status: '待确认', owner: '服务确认人', matchLevel: 'history', score: 89,
+    status: '待处理', owner: '服务确认人', matchLevel: 'history', score: 89,
     evidence: '模拟历史服务方案 SV-012 V2，服务范围第 2 节', sourcePage: 6,
   },
   {
@@ -75,7 +75,7 @@ const REQUIREMENT_TEMPLATES = [
     clause: '4.2', title: '付款里程碑', category: '商务',
     original: '付款安排按采购合同约定的预付款、发运款和验收款执行。',
     conclusion: '有条件 Comply', draft: '付款比例及各里程碑凭证以双方签署的采购合同为准。',
-    status: '待确认', owner: '商务确认人', matchLevel: 'standard', score: 85,
+    status: '待处理', owner: '商务确认人', matchLevel: 'standard', score: 85,
     conditions: '合同付款附件经双方授权人员签署后生效。',
     evidence: '模拟商务条款模板 COM-002 V3', sourcePage: 8,
   },
@@ -90,7 +90,7 @@ const REQUIREMENT_TEMPLATES = [
     clause: '5.2', title: '备件清单与保管', category: '服务',
     original: '提供建议备件清单，标明零件编号、数量和保管条件。',
     conclusion: 'Comply', draft: '提供与最终配置一致的建议备件清单，列明编号、数量及保管条件。',
-    status: '待确认', owner: '服务确认人', matchLevel: 'history', score: 83,
+    status: '待处理', owner: '服务确认人', matchLevel: 'history', score: 83,
     evidence: '模拟备件清单 SP-300 V1', sourcePage: 9,
   },
   {
@@ -105,7 +105,7 @@ const REQUIREMENT_TEMPLATES = [
     clause: '6.2', title: '最终资料与语言', category: '服务',
     original: '提供中文操作手册、维护手册和经批准的最终图纸。',
     conclusion: 'Comply', draft: '按最终配置提供中文操作手册、维护手册及经批准的最终图纸。',
-    status: '待确认', owner: '质量确认人', matchLevel: 'standard', score: 93,
+    status: '待处理', owner: '质量确认人', matchLevel: 'standard', score: 93,
     evidence: '模拟交付资料目录 DOC-300 V1', sourcePage: 10,
   },
 ];

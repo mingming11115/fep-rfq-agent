@@ -8,7 +8,7 @@ import { snapshotFingerprint } from './snapshotDomain.js';
 import { matchingSuggestion } from './responseRecommendation.js';
 
 function row(patch={}) {
-  return { id:'R',clause:'1.1',title:'自动推荐条目',original:'客户要求',conclusion:'Comply',draft:'满足本项要求',evidence:'测试报告 V1',conditions:'',status:'待确认',version:1,matchLevel:'standard',score:95,readyForConfirmation:true,
+  return { id:'R',clause:'1.1',title:'自动推荐条目',original:'客户要求',conclusion:'Comply',draft:'满足本项要求',evidence:'测试报告 V1',conditions:'',status:'待处理',version:1,matchLevel:'standard',score:95,readyForConfirmation:true,
     systemRecommendation:{conclusion:'Comply',draft:'满足本项要求',evidence:'测试报告 V1',conditions:'',original:'客户要求',version:'V2'},...patch };
 }
 
@@ -51,7 +51,7 @@ test('parsed recommendations and unconfirmed Comply snapshot IDs preserve their 
   assert.equal(imported.systemRecommendation?.conclusion,'Comply');
   const snapshot=makeSnapshot('P',[row(),row({id:'M',status:'已确认'})],'SR');
   assert.deepEqual(snapshot.unconfirmedComplyIds,['R']);
-  assert.equal(snapshot.rows[0].status,'待确认');assert.equal(snapshot.rows[0].confirmedAt,undefined);
+  assert.equal(snapshot.rows[0].status,'待处理');assert.equal(snapshot.rows[0].confirmedAt,undefined);
   parsed.conclusion='不满足';assert.equal(imported.systemRecommendation.conclusion,'Comply');
 });
 

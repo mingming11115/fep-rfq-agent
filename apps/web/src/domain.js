@@ -11,7 +11,7 @@ export function importParsedRequirements(existing, parsed) {
   const rows = new Map(existing.map((row) => [row.id, row]));
   for (const row of parsed) {
     if (rows.has(row.id)) { continue; }
-    const added = { ...row, systemRecommendation: structuredClone(row.systemRecommendation || captureSystemRecommendation(row)), status: '待确认' };
+    const added = { ...row, systemRecommendation: structuredClone(row.systemRecommendation || captureSystemRecommendation(row)), status: '待处理' };
     delete added.confirmedAt;
     delete added.confirmedBy;
     rows.set(row.id, added);
@@ -28,7 +28,7 @@ export function correctParsedRequirement(row, patch, reason) {
   if (!hasText(reason)) { throw new Error('请填写字段修改原因'); }
   return {
     ...corrected, sourceOriginal: row.sourceOriginal ?? row.original, sourceCorrected: true,
-    previousOriginal: row.original, status: '待确认', version: (row.version || 1) + 1,
+    previousOriginal: row.original, status: '待处理', version: (row.version || 1) + 1,
     matchLevel: 'none', score: 0, confirmedAt: undefined, confirmedBy: undefined,
     parseHistory: [...(row.parseHistory || []), { time: new Date().toISOString(), action: 'correct', reason: reason.trim() }],
   };
@@ -62,10 +62,13 @@ export function applyRequirementEdit(row, patch) {
     answerRemark(row) !== answerRemark(updated) ||
     mergeAnswerConditions(row.draft, row.conditions) !== mergeAnswerConditions(updated.draft, updated.conditions);
   updated.version = materialChange ? (row.version || 1) + 1 : row.version;
-  if (materialChange && row.status === '已确认') {
-    updated.status = '待确认';
-    delete updated.confirmedAt;
-    delete updated.confirmedBy;
+  if (materialChange) {
+    // 评审仍在进行时保持「评审中」，其余情况回到「待处理」，等本条确认人重新确认。
+    updated.status = row.status === '评审中' ? '评审中' : '待处理';
+    if (row.status === '已确认') {
+      delete updated.confirmedAt;
+      delete updated.confirmedBy;
+    }
   }
   return updated;
 }

@@ -92,7 +92,7 @@ export function tidyDemoState(previous) {
         remark: base.remark ?? base.reason ?? '', evidence: base.evidence || '', version: 1,
         source: '应答状态与结论矩阵示例.docx', sourceFileId: matrixFileId, sourceVersion: 'V1.0',
         sourcePage: 1, sourceOrder: selected.length, sourceAnchor: `matrix-${processingStatus}-${index + 1}`, sectionPath: [label],
-        status: processingStatus === 'confirmed' ? '已确认' : processingStatus === 'waiting' ? '评审中' : '待确认',
+        status: processingStatus === 'confirmed' ? '已确认' : processingStatus === 'waiting' ? '评审中' : '待处理',
         owner: personName(state, project.ownerId), confirmationAssigneeId: project.ownerId,
         readyForConfirmation: processingStatus === 'pending', matchLevel: 'none', score: 0,
         sample: true, demoMatrixExample: true, deadline: project.deadline,

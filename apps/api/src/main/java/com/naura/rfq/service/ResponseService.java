@@ -172,9 +172,13 @@ public class ResponseService {
             if(row.path("removedFromSource").asBoolean()&&!row.path("conclusion").asText().equals("不适用")) {
                 throw new BusinessException(400,"已删除条款须确认不适用");
             }
-            row.put("status","已确认").put("confirmedBy",user.displayName()).put("confirmedById",user.id()).put("confirmedAt",Instant.now().toString()).put("needsReview",false).put("sourceRevision",false).put("sourceCorrected",false);
+            row.put("status",ResponseStatus.CONFIRMED).put("confirmedBy",user.displayName()).put("confirmedById",user.id()).put("confirmedAt",Instant.now().toString()).put("needsReview",false).put("sourceRevision",false).put("sourceCorrected",false);
         }else{
-            row.put("status","待确认");row.remove(List.of("confirmedAt","confirmedBy","confirmedById"));
+            boolean openReview=projectReviews.stream()
+                .filter(r->id.equals(r.path("requirementId").asText()))
+                .anyMatch(ResponseStatus::openReview);
+            row.put("status",openReview?ResponseStatus.REVIEWING:ResponseStatus.PENDING);
+            row.remove(List.of("confirmedAt","confirmedBy","confirmedById"));
         }
         row.put("version",version+1).put("sourceRequirementVersion",sourceVersion);
         responseRecords.upsertResponse(id, project.getId(), row.toString());

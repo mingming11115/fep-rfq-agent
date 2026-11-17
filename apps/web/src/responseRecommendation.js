@@ -16,7 +16,7 @@ export function matchingSuggestion(row={}, projectId) {
 
 export function canReviewWithoutManualConfirmation(row, projectId) {
   if(hasAssignedConfirmer(row)) { return false; }
-  if(row.status!=='待确认'||row.conclusion!=='Comply'||row.needsReview||row.pendingReviewProposal||row.sourceRevision||row.sourceCorrected||row.removedFromSource) { return false; }
+  if(row.status!=='待处理'||row.conclusion!=='Comply'||row.needsReview||row.pendingReviewProposal||row.sourceRevision||row.sourceCorrected||row.removedFromSource) { return false; }
   if(![row.original,row.draft,row.evidence].every(value=>typeof value==='string'&&value.trim())) { return false; }
   const suggestion=matchingSuggestion(row,projectId);
   return suggestion.conclusion==='Comply'&&buildResponseAdvice(row,suggestion).conclusion==='满足';

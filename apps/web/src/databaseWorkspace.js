@@ -28,7 +28,7 @@ export function mapDatabaseRequirement(row,files,owner){
   specification:readRequirementSpecification(row.metricsJson),
   ...selectionSource(row),
   source:file?.name||'',sourceFileId:row.documentId,sourceVersion:file?.version||'V1.0',activeForApproval:file?.activeForApproval!==false,sectionPath:sectionPath(row.sectionPath),
-  category:'未分类',status:'待确认',conclusion:'',draft:'',evidence:'',remark:'',
+  category:'未分类',status:'待处理',conclusion:'',draft:'',evidence:'',remark:'',
   matchLevel:'none',score:0,backendVersion:row.version,version:Math.max(1,row.version),owner,
   confirmationAssigneeId:row.confirmationAssigneeId||null,confirmationAssignmentSource:row.confirmationAssigneeId?'explicit':null,
   parserNote:row.reviewReasons||'',

@@ -151,7 +151,7 @@ public class ParseService {
      * 汇总该文档已有的下游产物（应答、评审、定稿快照、人工修正），供前端在重解析前说明影响范围。
      *
      * <p>这些产物都不再阻止重解析：人工改动、应答与确认人会按条款号带到新结果上，
-     * 条款原文变化的应答退回待确认。
+     * 条款原文变化的应答退回待处理。
      *
      * @param documentId 客户文档 ID
      * @param projectId  所属项目 ID（评审与快照按项目存储，需配合文档过滤）
@@ -553,7 +553,7 @@ public class ParseService {
     }
 
     /**
-     * 核对沿用的应答：条款原文有变化时取消未关闭的评审并把确认退回待确认；原文未变的应答保持原状，
+     * 核对沿用的应答：条款原文有变化时取消未关闭的评审并把确认退回待处理；原文未变的应答保持原状，
      * 用户不需要为一次重解析重新确认全部条款。
      */
     private void reconcileCarried(ParseContext ctx, Map<ExtractedRequirement, Requirement> carried) {
@@ -661,7 +661,7 @@ public class ParseService {
      *
      * <p>只在新旧原文一致时沿用条款号、标题、条款正文与复核原因，并保留原版本号——行内容与用户
      * 手上的版本一致，乐观锁不会被无谓推进。原文已变的条款说明客户措辞变了，以新抽取结果为准，
-     * 旧的人工措辞不再适用；该条款的应答由 {@link #reconcileCarried} 退回待确认。
+     * 旧的人工措辞不再适用；该条款的应答由 {@link #reconcileCarried} 退回待处理。
      *
      * @param requirement 本次抽取出的新条款，字段已按抽取结果填好
      * @param prior       匹配到的旧条款，未匹配到时为 null

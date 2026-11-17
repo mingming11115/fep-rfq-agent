@@ -37,7 +37,7 @@ test('saving an owner handover and equipment change invalidates technical confir
  s.requirementsByProject={P:[{id:'T',category:'技术',status:'已确认',version:9,confirmedBy:'tech',confirmedAt:'2026-10-28'},{id:'B',category:'商务',status:'已确认',version:3}]};
  const next=project.updateProjectSettings(s,{projectId:'P',patch:{ownerId:'other',equipment:'新基线',reason:'基线与人员调整'},invalidateTechnical:true});
  assert.equal(next.projects[0].ownerId,'other');assert.equal(next.projects[0].equipment,'新基线');assert.equal(next.projects[0].version,3);
- assert.equal(next.requirementsByProject.P[0].status,'待确认');assert.equal(next.requirementsByProject.P[0].version,10);
+ assert.equal(next.requirementsByProject.P[0].status,'待处理');assert.equal(next.requirementsByProject.P[0].version,10);
  assert.equal(next.requirementsByProject.P[0].confirmedBy,undefined);assert.equal(next.requirementsByProject.P[0].confirmedAt,undefined);
  assert.deepEqual(next.requirementsByProject.P[1],s.requirementsByProject.P[1]);
  assert.equal(s.projects[0].ownerId,'creator');assert.equal(s.requirementsByProject.P[0].status,'已确认');

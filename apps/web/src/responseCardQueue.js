@@ -4,6 +4,9 @@ export const RESPONSE_STATUS_LABELS = {pending: '待处理', waiting: '评审中
 
 function cardStatus(row, reviews) {
   if (row.status === '已确认') { return 'confirmed'; }
+  if (row.status === '评审中') { return 'waiting'; }
+  if (row.status === '待处理') { return 'pending'; }
+  // 兼容尚未回写状态的旧数据：缺失或为历史取值「待确认」时按评审事项推导一次。
   return row.pendingReviewProposal || linkedTo(row, reviews).some(isOpen) ? 'waiting' : 'pending';
 }
 

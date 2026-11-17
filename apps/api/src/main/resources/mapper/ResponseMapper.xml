@@ -109,7 +109,7 @@
     <update id="resetConfirmation">
         update requirement_response set payload=json_set(
             json_remove(payload,'$.confirmedAt','$.confirmedBy','$.confirmedById'),
-            '$.status','待确认','$.version',cast(json_unquote(json_extract(payload,'$.version')) as unsigned)+1,
+            '$.status','待处理','$.version',cast(json_unquote(json_extract(payload,'$.version')) as unsigned)+1,
             '$.confirmationReason',#{reason},'$.sourceRevision',cast('true' as json))
         where project_id=#{projectId} and requirement_id=#{requirementId}
     </update>

@@ -12,7 +12,7 @@ const input = { reason: '客户增加新的安全条件', owner: '技术确认�
 
 test('adopting an approved review returns the clause to pending confirmation', () => {
   const next = reviews.applyReviewProposal(requirement, reviews.prepareReviewProposal(requirement, closed), { expectedVersion: 2, actor });
-  assert.equal(next.status, '待确认');
+  assert.equal(next.status, '待处理');
   assert.equal(next.needsReview, true);
   assert.match(next.confirmationReason, /确认/);
   assert.equal(next.confirmedAt, undefined);
@@ -28,7 +28,7 @@ test('a clarification on a confirmed clause binds its proposal to the new clause
   const replied = reviews.recordClarificationReply(started.review, { reply: '客户确认补充方案', sufficient: true, assessment: '覆盖新增的安全条件', suggestion: '配备门禁联锁并增加复位确认' }, actor);
   const pending = reviews.requirementAfterReview(started.requirement, started.review, replied);
   const adopted = reviews.applyReviewProposal(pending, pending.pendingReviewProposal, { expectedVersion: 3, actor });
-  assert.equal(adopted.status, '待确认');
+  assert.equal(adopted.status, '待处理');
   assert.equal(adopted.draft, '配备门禁联锁并增加复位确认');
   assert.equal(requirement.version, 2);
 });
@@ -36,7 +36,7 @@ test('a clarification on a confirmed clause binds its proposal to the new clause
 test('legacy pending rechecks migrate without changing answers or historical snapshots', () => {
   const old = { projects: [{ id: 'P' }], requirementsByProject: { P: [{ ...requirement, status: '待复核', pendingReviewProposal: { reviewId: 'D' } }] }, snapshotsByProject: { P: [{ id: 'S', status: '已批准', rows: [{ ...requirement, status: '待复核' }] }] } };
   const next = upgradePrototypeState(old, { members: [] });
-  assert.equal(next.requirementsByProject.P[0].status, '待确认');
+  assert.equal(next.requirementsByProject.P[0].status, '待处理');
   assert.equal(next.requirementsByProject.P[0].draft, requirement.draft);
   assert.equal(next.requirementsByProject.P[0].needsReview, true);
   assert.deepEqual(next.snapshotsByProject, old.snapshotsByProject);
@@ -81,7 +81,7 @@ test('a new review round invalidates clause confirmation and retains completed t
   assert.equal(Object.values(state.tasksById).filter(task => task.kind === 'review-process' && task.round === 2 && task.status === '待处理').length, 1);
   assert.equal(Object.values(state.tasksById).filter(task => task.objectType === 'requirement' && task.status === '待处理').length, 0);
   const ended = reviews.requirementAfterReview(nextRow, nextReview, { ...nextReview, status: '已关闭' });
-  assert.equal(ended.status, '待确认');
+  assert.equal(ended.status, '待处理');
   assert.ok(ended.pendingReviewProposal);
   assert.equal(confirmRequirement({ ...ended, pendingReviewProposal: null }).status, '已确认');
 });

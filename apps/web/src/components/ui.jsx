@@ -13,10 +13,10 @@ export function Drawer({ onClose, children, footer, width = 660, open=true, ...p
   return <AntDrawer {...props} open={open} onClose={onClose} width={width} footer={footer}
     className="rfq-ant-drawer">{children}</AntDrawer>;
 }
-export const displayStatus = status => normalizeTaskStatus(status === '待复核' ? '待确认' : status);
+export const displayStatus = status => normalizeTaskStatus(status === '待复核' || status === '待确认' ? '待处理' : status);
 const tagColors = { success: 'success', danger: 'error', warning: 'warning', neutral: 'default' };
 export function StatusBadge({ status, value, children, tone }) {
-  const text = displayStatus(status || value || children || '待确认');
+  const text = displayStatus(status || value || children || '待处理');
   const type = statusTone(text, tone);
   return <Tag color={tagColors[type] || 'default'}>{text}</Tag>;
 }

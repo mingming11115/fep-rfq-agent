@@ -64,6 +64,10 @@ class DatabaseInit {
     private static final String V25_END = "-- RFQ_MIGRATION_V25_END";
     private static final String V26_START = "-- RFQ_MIGRATION_V26\n";
     private static final String V26_END = "-- RFQ_MIGRATION_V26_END";
+    private static final String V27_START = "-- RFQ_MIGRATION_V27\n";
+    private static final String V27_END = "-- RFQ_MIGRATION_V27_END";
+    private static final String V28_START = "-- RFQ_MIGRATION_V28\n";
+    private static final String V28_END = "-- RFQ_MIGRATION_V28_END";
     private static final String ASSET_SCHEMA = "-- RFQ_DEMO_ASSET_SCHEMA";
     private static final String INSERTS = "-- RFQ_DEMO_INSERTS\n";
     private static final String INSERTS_END = "-- RFQ_DEMO_INSERTS_END";
@@ -128,9 +132,15 @@ class DatabaseInit {
         var projectMatchPolicy = resource("V26__project_match_policy.sql",
                 sql.substring(sql.indexOf(V26_START) + V26_START.length(), sql.indexOf(V26_END)),
                 "classpath:db/init.sql#V26");
+        var responseStatus = resource("V27__requirement_response_status.sql",
+                sql.substring(sql.indexOf(V27_START) + V27_START.length(), sql.indexOf(V27_END)),
+                "classpath:db/init.sql#V27");
+        var responseRecheckStatus = resource("V28__normalize_response_recheck_status.sql",
+                sql.substring(sql.indexOf(V28_START) + V28_START.length(), sql.indexOf(V28_END)),
+                "classpath:db/init.sql#V28");
         var resources = List.of(baseline, standardReplies, history, capability, match, workflow,
                 replacements, projectGroups, historyRecall, requirementFields, responseRemark, historyParse, sourceRefs,
-                capabilityIndex, singleExtractionStatus, parseBatch, projectMatchPolicy);
+                capabilityIndex, singleExtractionStatus, parseBatch, projectMatchPolicy, responseStatus, responseRecheckStatus);
         return configuration -> configuration.baselineVersion("10").resourceProvider(new ResourceProvider() {
             @Override
             public LoadableResource getResource(String name) {

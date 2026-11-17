@@ -68,7 +68,7 @@ Java 17 / Spring Boot / MyBatis / MySQL，包含业务鉴权、客户文档上�
 | GET | `/projects/{id}/documents?page=1&size=20` | 文档列表 |
 | GET | `/documents/{id}` | 文档元数据详情，不返回内部存储位置 |
 | GET | `/documents/{id}/download` | 下载不可变原件，遵循项目读取权限 |
-| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析，不因下游记录返回 409。条款号与原文一致的条款沿用原 ID，人工改写的条款号、标题与正文一并保留；原文变化的应答退回待确认；已删除的条款保持删除 |
+| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析，不因下游记录返回 409。条款号与原文一致的条款沿用原 ID，人工改写的条款号、标题与正文一并保留；原文变化的应答退回待处理；已删除的条款保持删除 |
 | GET | `/documents/{id}/parse-blockers` | 重解析会受影响的下游产物：`responses`、`reviews`、`snapshots`、`edited` 计数与 `clauses` 条款号样本 |
 | GET | `/parse-runs/{id}` | 运行状态、实际 extractor、异常数量及说明 |
 | GET | `/documents/{id}/blocks` | 原文内容块、sourceAnchor、provenance、processingStatus |
@@ -318,6 +318,16 @@ Excel 支持单工作表 `.xlsx`，最多 5 MiB、1,000 条数据。首行按顺
 ```
 
 各设备项和指标同时满足才支持整体结论。范围端点、运算符与能力库使用相同字段。`capabilityApplicable=false` 表示经确认不适用机型能力。以 `knowledgeGap=true` 表示三库均成功查询且全部未命中。工作台采纳建议时，把轮次及候选 ID 随草稿或确认请求写入。服务端保存具体知识和证据版本，确认及正式导出时复核。开启 Worker 后，失效引用也会定期转为待复核。三库未命中、明确拒绝和来源失效合并到同一工作版本的偏离事项。完成试点校准后，可通过 `RFQ_MATCH_LOW_CONFIDENCE_THRESHOLD` 配置文本候选的低置信度阈值，默认 `0` 关闭此触发。
+
+### 应答状态（待处理 / 评审中 / 已确认）
+
+`requirement_response.payload.status` 只保存三个值，作为唯一事实来源：
+
+- `待处理`：尚未确认且没有未关闭事项，等待本条确认人处理。
+- `评审中`：存在未关闭的评审、偏离或澄清事项，确认动作被阻断。
+- `已确认`：已通过确认，可作为定稿与正式导出的依据。
+
+状态由服务端在同一事务内随评审写入同步：比对产生偏离或发起评审时置为 `评审中`；关闭评审后，评审人全部投票且本条未指定确认人则自动确认，否则回落 `待处理`；保存草稿或重解析导致原文变化时回落 `待处理`。对已确认条款发起评审会自动退回 `评审中` 并清空确认事实。历史取值 `待确认`、`待复核` 由 V27/V28 迁移归并为 `待处理`。
 
 ## 定稿、历史回流与原件换版
 

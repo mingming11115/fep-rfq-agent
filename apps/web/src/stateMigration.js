@@ -31,7 +31,7 @@ export function upgradePrototypeState(previous, demo, {now=new Date()}={}) {
     const reviews=state.reviewsByProject[project.id],counts=new Map();
     for (const row of state.requirementsByProject[project.id]) {
       if (row.status !== '待复核') { continue; }
-      row.status = reviews.some(review => review.requirementId === row.id && !['已关闭', '已取消'].includes(review.status)) ? '评审中' : '待确认';
+      row.status = reviews.some(review => review.requirementId === row.id && !['已关闭', '已取消'].includes(review.status)) ? '评审中' : '待处理';
       row.needsReview = true;
       row.confirmationReason ||= '评审结果或来源内容已变化，请重新确认应答。';
       delete row.confirmedAt;
@@ -203,7 +203,7 @@ function seedClauseStatusExamples(state, project) {
   const rows = state.requirementsByProject[project.id], reviews = state.reviewsByProject[project.id];
   const examples = makeDocumentDemo(project.id).parsed.filter(row => row.sourceFileId === `${project.id}-DEMO-FILE-CLAUSE-STATUSES`);
   const answers = [
-    { status: '待确认', conclusion: 'Comply', draft: '配置门禁联锁；防护门打开时停止危险运动，复位确认后方可恢复。', evidence: '模拟安全方案 SAF-001 V1，第 2 页', readyForConfirmation: true },
+    { status: '待处理', conclusion: 'Comply', draft: '配置门禁联锁；防护门打开时停止危险运动，复位确认后方可恢复。', evidence: '模拟安全方案 SAF-001 V1，第 2 页', readyForConfirmation: true },
     { status: '评审中', conclusion: '有条件 Comply', draft: '按最终配置提供电力、冷却水与排风接口表，额定值及允许范围待双方核对。', conditions: '客户现场公用设施参数与最终接口表一致后实施。', evidence: '模拟接口表 FAC-001 V1（评审稿）' },
     { status: '已确认', conclusion: 'Comply', draft: '按双方确认的布局附件预留设备维护空间，并在安装前核对现场尺寸。', evidence: '模拟布局附件 LAYOUT-001 V1，第 5 页', confirmedAt: '2026-10-24T01:00:00.000Z', confirmedBy: '技术确认人' },
   ];

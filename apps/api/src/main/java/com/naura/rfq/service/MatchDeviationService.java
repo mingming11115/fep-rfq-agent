@@ -67,6 +67,7 @@ class MatchDeviationService {
         }
         item.put("description", reason);
         save(project, item);
+        setStatus(project, requirement.getId(), ResponseStatus.REVIEWING, "条款已进入评审，请重新确认本条应答");
         return item;
     }
 
@@ -100,6 +101,7 @@ class MatchDeviationService {
         item.put("status", "已关闭").put("resolution", reason).put("closedById", user.id())
                 .put("closedAt", Instant.now().toString());
         save(project, item);
+        closeStatus(user, project, requirement, item);
         audit.successInBu(user.id(), project.getBuId(), "关闭知识比对偏离", "requirement", requirement.getId(), reason);
         return item;
     }
@@ -118,7 +120,8 @@ class MatchDeviationService {
             throw new BusinessException(422, "请选择具备项目授权和确认资格的评审人，能力偏离须包含技术评审人");
         }
         String fingerprint = answerFingerprint(response);
-        if (existing != null && reviewers(existing).equals(reviewers) && fingerprint.equals(existing.path("answerFingerprint").asText())
+        if (existing != null && "待处理".equals(existing.path("status").asText())
+                && reviewers(existing).equals(reviewers) && fingerprint.equals(existing.path("answerFingerprint").asText())
                 && deadline.equals(existing.path("deadline").asText()) && reason.equals(existing.path("reviewRequestReason").asText())) {
             return existing;
         }
@@ -168,7 +171,65 @@ class MatchDeviationService {
             old.put("status", "已取消").put("supersededByWorkVersion", version);
             save(project, old);
             save(project, next);
+            setStatus(project, old.path("requirementId").asText(), ResponseStatus.REVIEWING,
+                    "工作版本已切换，评审事项结转，请重新确认本条应答");
         }
+    }
+
+    /** 关闭评审事项后重算应答状态：投过票的评审未指定确认人即视为通过并自动确认，其余回落待处理。 */
+    private void closeStatus(CurrentUser user, Project project, Requirement requirement, JsonNode item) {
+        var payloads = responseRecords.lockResponse(requirement.getId(), project.getId());
+        if (payloads.isEmpty()) {
+            return;
+        }
+        ObjectNode row = parse(payloads.get(0));
+        if (!item.path("reviewerIds").isEmpty() && !hasAssignedConfirmer(requirement, row)) {
+            confirmResponse(user, project, requirement.getId(), row);
+            return;
+        }
+        setStatus(project, requirement.getId(), row, ResponseStatus.PENDING, "评审事项已关闭，请重新确认本条应答");
+    }
+
+    /** 评审人全部投票且未指定确认人时，视为评审通过并自动确认本条应答。 */
+    private void confirmResponse(CurrentUser user, Project project, String requirementId, ObjectNode row) {
+        row.put("status", ResponseStatus.CONFIRMED).put("confirmedBy", user.displayName())
+                .put("confirmedById", user.id()).put("confirmedAt", Instant.now().toString())
+                .put("needsReview", false).put("confirmationReason", "评审已完成且未指定确认人，系统自动确认");
+        row.put("version", row.path("version").asLong(1) + 1);
+        responseRecords.upsertResponse(requirementId, project.getId(), row.toString());
+    }
+
+    /** 是否已指定确认人；已指定的条款必须由本人手工确认，评审关闭后不自动确认。 */
+    private boolean hasAssignedConfirmer(Requirement requirement, JsonNode response) {
+        return requirement.getConfirmationAssigneeId() != null
+                || !response.path("confirmationAssigneeId").asText("").isBlank()
+                || "explicit".equals(response.path("confirmationAssignmentSource").asText());
+    }
+
+    private void setStatus(Project project, String requirementId, String target, String reason) {
+        var payloads = responseRecords.lockResponse(requirementId, project.getId());
+        if (payloads.isEmpty()) {
+            return;
+        }
+        setStatus(project, requirementId, parse(payloads.get(0)), target, reason);
+    }
+
+    /** 写入应答状态；仅在语义变化时推进版本，避免干扰无关的乐观锁。 */
+    private void setStatus(Project project, String requirementId, ObjectNode row, String target, String reason) {
+        String stored = row.path("status").asText(ResponseStatus.PENDING);
+        String current = ResponseStatus.normalize(stored);
+        if (target.equals(current) && target.equals(stored)) {
+            return;
+        }
+        row.put("status", target);
+        if (!target.equals(current)) {
+            row.put("version", row.path("version").asLong(1) + 1);
+            if (!ResponseStatus.CONFIRMED.equals(target)) {
+                row.remove(List.of("confirmedAt", "confirmedBy", "confirmedById"));
+            }
+            row.put("confirmationReason", reason);
+        }
+        responseRecords.upsertResponse(requirementId, project.getId(), row.toString());
     }
 
     private void save(Project project, ObjectNode item) {

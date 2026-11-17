@@ -60,7 +60,7 @@ export function makeDocumentDemo(projectId, requirements = makeRequirements(proj
     return { id: `${projectId}-DOC-EXAMPLE-${i}`, clause, sectionPath, title, original,
       sourceOriginal: original, source: sourceFile.name, sourceFileId: sourceFile.id,
       sourceVersion: sourceFile.version, sourcePage, sourceOrder: i, sourceAnchor: `paragraph-${i + 1}`,
-      category: '', conclusion: '待确认', status: '待确认', owner: '技术确认人',
+      category: '', conclusion: '待确认', status: '待处理', owner: '技术确认人',
       draft: '', evidence: '', conditions: '', remark: '', matchLevel: 'none', score: 0, version: 1,
       parserNote: '模拟 Word 章节识别，原始编号保留',
     };

@@ -19,7 +19,7 @@ const call = (name, ...args) => {
 const validRow = (patch = {}) => ({
   id: 'req-test', clause: '2.1', title: '样品测试', category: '技术',
   original: '按双方确认的样品方案测试。', conclusion: 'Comply',
-  draft: '按确认后的样品方案执行。', status: '待确认', owner: '技术确认人',
+  draft: '按确认后的样品方案执行。', status: '待处理', owner: '技术确认人',
   source: '客户 RFQ（模拟）.pdf', sourcePage: 3, matchLevel: 'standard', score: 92,
   conditions: '', remark: '', evidence: '模拟测试方案 V1，第 3 页', version: 1,
   ...patch,
@@ -30,7 +30,7 @@ test('automatic parsing adds all new requirements without confirming replies or 
   const parsed = [validRow(), validRow({ id: 'new-row', status: '已确认', confirmedBy: '演示样例', confirmedAt: '2026-10-20' })];
   const result = call('importParsedRequirements', [existing], parsed);
   assert.deepEqual(result[0], existing);
-  assert.equal(result[1].status, '待确认');
+  assert.equal(result[1].status, '待处理');
   assert.equal(result[1].confirmedAt, undefined);
   assert.equal(result[1].confirmedBy, undefined);
   assert.equal(result[1].source, parsed[1].source);
@@ -44,7 +44,7 @@ test('correcting extracted source fields retains the reply and original excerpt 
   assert.equal(corrected.sourceOriginal, '按双方确认的样品方案测试。');
   assert.equal(corrected.sourcePage, '5');
   assert.equal(corrected.draft, '按确认后的样品方案执行。');
-  assert.equal(corrected.status, '待确认');
+  assert.equal(corrected.status, '待处理');
   assert.equal(corrected.version, 5);
   assert.equal(corrected.matchLevel, 'none');
   assert.equal(corrected.score, 0);
@@ -75,7 +75,7 @@ test('conditional replies keep legacy conditions in the draft before formal expo
   assert.deepEqual(call('getExportIssues', [confirmed], []), []);
   assert.equal(confirmed.status, '已确认');
   assert.ok(Number.isFinite(Date.parse(confirmed.confirmedAt)));
-  assert.equal(row.status, '待确认');
+  assert.equal(row.status, '待处理');
 });
 
 test('an unresolved conclusion or missing source blocks confirmation', () => {
@@ -92,7 +92,7 @@ test('confirmation and export do not require the removed owner field', () => {
     const row = validRow({ owner });
     const confirmed = call('confirmRequirement', row);
     assert.equal(confirmed.status, '已确认');
-    assert.equal(row.status, '待确认');
+    assert.equal(row.status, '待处理');
     assert.deepEqual(call('getExportIssues', [confirmed], []), []);
   }
 });
@@ -103,7 +103,7 @@ test('clause confirmation does not require removed response fields and preserves
     const confirmed = call('confirmRequirement', row);
     assert.equal(confirmed.status, '已确认');
     assert.ok(Number.isFinite(Date.parse(confirmed.confirmedAt)));
-    assert.equal(row.status, '待确认');
+    assert.equal(row.status, '待处理');
     assert.equal(confirmed.draft, '');
     assert.equal(confirmed.conditions, '');
     assert.equal(confirmed.evidence, '');
@@ -140,7 +140,7 @@ test('changing confirmed requirements invalidates confirmation without mutating 
     { conditions: '新增材料限制。' }, { evidence: '模拟测试方案 V2' },
   ]) {
     const updated = call('applyRequirementEdit', row, patch);
-    assert.equal(updated.status, '待确认');
+    assert.equal(updated.status, '待处理');
     assert.equal(updated.version, 4);
     assert.equal(updated.confirmedAt, undefined);
   }
@@ -195,7 +195,7 @@ test('a snapshot starts in approval and remains unchanged when source data is ed
 
 test('CSV preserves commas, quotes and line breaks and excludes internal evidence', () => {
   const csv = call('toCsv', [validRow({ original: '材料 A, 材料 B', draft: '答复 "A"\n第二行' })]);
-  assert.equal(csv, '条款,客户要求,应答结论,对外答复,确认状态\r\n2.1,"材料 A, 材料 B",Comply,"答复 ""A""\n第二行",待确认');
+  assert.equal(csv, '条款,客户要求,应答结论,对外答复,确认状态\r\n2.1,"材料 A, 材料 B",Comply,"答复 ""A""\n第二行",待处理');
   assert.ok(!csv.includes('模拟测试方案'));
 });
 
@@ -222,7 +222,7 @@ test('demo projects have independent working rows and do not imply standard hits
   assert.equal(state.projects.length, 5);
   const rows = state.requirementsByProject['RFQ-001'];
   assert.equal(rows.length, 12);
-  assert.ok(rows.some((row) => row.matchLevel === 'standard' && row.score > 80 && row.draft && row.status === '待确认'));
+  assert.ok(rows.some((row) => row.matchLevel === 'standard' && row.score > 80 && row.draft && row.status === '待处理'));
   assert.ok(rows.some((row) => row.matchLevel === 'history'));
   assert.ok(rows.some((row) => row.matchLevel === 'none' && row.conclusion === '待确认'));
   assert.ok(state.reviewsByProject['RFQ-001'].every((review) => rows.some((row) => row.id === review.requirementId)));
@@ -282,7 +282,7 @@ test('restored clauses reuse the original identity and require review again', ()
   const result = workflowCall('applyRfqRevision', [old], [{ ...old, removedFromSource: false }], '客户恢复条款', 'RFQ V3');
   assert.equal(result.rows[0].id, old.id);
   assert.equal(result.rows[0].removedFromSource, false);
-  assert.equal(result.rows[0].status, '待确认');
+  assert.equal(result.rows[0].status, '待处理');
 });
 
 test('changed RFQ text invalidates stale matching and deleted clauses need explicit scope disposition', () => {
@@ -366,7 +366,7 @@ test('BHEL demo keeps real source pages, distinct section identities, and fictio
   assert.equal(rows.length, 40);
   assert.equal(new Set(rows.map(row => row.id)).size, 40);
   assert.equal(new Set(rows.map(row => JSON.stringify([row.sectionPath, row.clause]))).size, 40);
-  assert.ok(rows.every(row => row.realSource && row.sourceOriginal && row.sourcePage >= 1 && row.sourcePage <= 43 && row.status === '待确认'));
+  assert.ok(rows.every(row => row.realSource && row.sourceOriginal && row.sourcePage >= 1 && row.sourcePage <= 43 && row.status === '待处理'));
   assert.ok(rows.every(row => row.draft.includes('演示草稿')));
   assert.ok(rows.find(row => row.id === 'BHEL-REQ-003').original.includes('12 周'));
   assert.ok(rows.find(row => row.id === 'BHEL-REQ-029').original.includes('50 μm'));

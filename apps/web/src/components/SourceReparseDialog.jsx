@@ -83,7 +83,7 @@ export default function SourceReparseDialog({project, files, currentFileId, onCl
     {affected && <Alert type="info" showIcon message="重解析会保留已有应答与人工修正"
       description={<div>
         <p>{affected}{blockers?.clauses?.length ? `；涉及条款 ${blockers.clauses.join('、')}` : ''}</p>
-        <p>应答与确认人按条款号带到新结果上；人工改过的条款号、标题与应答正文在原文未变时继续沿用；条款原文变化的应答会退回待确认，未能在新结果中匹配的条款不再展示。</p>
+        <p>应答与确认人按条款号带到新结果上；人工改过的条款号、标题与应答正文在原文未变时继续沿用；条款原文变化的应答会退回待处理，未能在新结果中匹配的条款不再展示。</p>
         {onOpenReplacement && <Button size="small" onClick={onOpenReplacement}>登记新版原件</Button>}
       </div>}/>}
     <p className="muted">重解析会整体替换条款并重新分配编号，人工改动与应答随条款保留，不会因此被拦下。</p>

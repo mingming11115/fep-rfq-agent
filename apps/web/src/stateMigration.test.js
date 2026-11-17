@@ -83,7 +83,7 @@ test('Word status examples seed once with a real review task and preserve subseq
   const initial = upgradePrototypeState(demo, demo);
   const pid = 'RFQ-001';
   const rows = initial.requirementsByProject[pid].filter(row => row.sourceFileId === `${pid}-DEMO-FILE-CLAUSE-STATUSES`);
-  assert.deepEqual(rows.map(row => row.status), ['待确认', '评审中', '已确认']);
+  assert.deepEqual(rows.map(row => row.status), ['待处理', '评审中', '已确认']);
   assert.deepEqual(requirementValidation(rows[2]), []);
   assert.ok(rows[2].confirmedAt);
   const reconciled = reconcileTasks(initial);

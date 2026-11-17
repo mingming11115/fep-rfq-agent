@@ -38,7 +38,7 @@ async function readParsedRows(projectId,file,run,api){
    ...selectionSource(row),
    specification:readRequirementSpecification(row.metricsJson),
    source:file.name,sourceFileId:file.id,sourceVersion:file.version,sectionPath:row.sectionPath?[row.sectionPath]:[],
-   category:'技术',status:'待确认',conclusion:'',draft:'',matchLevel:'none',score:0,evidence:'',
+   category:'技术',status:'待处理',conclusion:'',draft:'',matchLevel:'none',score:0,evidence:'',
    parserNote:row.reviewReasons||'',version:row.version,backendVersion:row.version,
   }); }
  }

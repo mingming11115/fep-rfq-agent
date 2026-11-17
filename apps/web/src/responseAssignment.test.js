@@ -11,7 +11,7 @@ function fixture() {
   return {actorId:'sr', actorRole:'SR', accountsById:Object.fromEntries(ids.map(id => [id,{id,name:id,enabled:true}])),
     businessUnits:[{id:'B'}], buPersonnelByBuId:{B:ids.map(userId => ({userId,roles:[userId==='sr'?'SR':'技术'],enabled:true,canConfirm:userId!=='sr'}))},
     projects:[{id:'P',buId:'B',ownerId:'sr',participantIds:['sr','t1','t2']}],
-    requirementsByProject:{P:[{id:'R',version:1,status:'待确认',original:'客户要求',conclusion:'Comply',draft:'答复',evidence:'依据',sourceFileId:'F',sourceVersion:'V1'}]},
+    requirementsByProject:{P:[{id:'R',version:1,status:'待处理',original:'客户要求',conclusion:'Comply',draft:'答复',evidence:'依据',sourceFileId:'F',sourceVersion:'V1'}]},
     reviewsByProject:{P:[]}, snapshotsByProject:{P:[]}, tasksById:{}, audit:[]};
 }
 const request = (state, patch={}) => ({projectId:'P',requirementId:'R',userIds:['t1'],reason:'调整条款分工',
@@ -75,7 +75,7 @@ test('review completion hands off to the independently assigned confirmer withou
     {projectId:'P',reviewId:'D',expectedVersion:2,expectedRound:1,patch:{action:'confirm'}}));
   assert.equal(state.reviewsByProject.P[0].status,'已关闭');
   assert.deepEqual(state.reviewsByProject.P[0].reviewerIds,['t1']);
-  assert.equal(state.requirementsByProject.P[0].status,'待确认');
+  assert.equal(state.requirementsByProject.P[0].status,'待处理');
   assert.equal(state.requirementsByProject.P[0].confirmedAt,undefined);
   assert.equal(selectMyTasks(state,{actorId:'t2'}).some(t=>t.objectId==='R'&&t.kind==='confirm'),true);
   assert.throws(()=>confirmProjectRequirement(state,{projectId:'P',requirementId:'R',expectedVersion:1}),/权限/);

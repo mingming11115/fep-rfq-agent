@@ -35,7 +35,7 @@ class ResponseServiceTest {
     @Test void ownerCanSaveAndConfirm(){
         var saved=service.write(sr,"R",1L,0L,json.createObjectNode().put("conclusion","Comply"),false);
         assertThat(saved.path("version").asLong()).isEqualTo(2);
-        assertThat(saved.path("status").asText()).isEqualTo("待确认");
+        assertThat(saved.path("status").asText()).isEqualTo("待处理");
         verify(responseRecords).upsertResponse(eq("R"),eq("P"),anyString());
         verify(audit).successInBu(eq("sr"),eq("BU"),anyString(),eq("requirement"),eq("R"),anyString());
     }
@@ -103,6 +103,6 @@ class ResponseServiceTest {
     @Test void editingConfirmedResponseInvalidatesConfirmation(){
         response("{\"version\":2,\"status\":\"已确认\",\"confirmedBy\":\"张明\",\"confirmedAt\":\"now\"}");
         var row=service.write(sr,"R",2L,0L,json.createObjectNode().put("draft","新答复"),false);
-        assertThat(row.path("status").asText()).isEqualTo("待确认");assertThat(row.has("confirmedAt")).isFalse();
+        assertThat(row.path("status").asText()).isEqualTo("待处理");assertThat(row.has("confirmedAt")).isFalse();
     }
 }
