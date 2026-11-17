@@ -8,7 +8,6 @@ import ReviewerPicker from '../components/ReviewerPicker';
 import useContentTransition from '../components/useContentTransition';
 import OverlayPresence from '../components/OverlayPresence';
 import ResponseAssignmentControl from '../components/ResponseAssignmentControl';
-import ResponseHistoryDrawer from '../components/ResponseHistoryDrawer';
 import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,hasAssignedConfirmer} from '../confirmationPolicy';
 import {personName,canAccessProject} from '../personnelDomain';
 import { Card, ConfigProvider, Descriptions, Grid, Splitter, Tabs, Tag } from 'antd';
@@ -33,7 +32,7 @@ import {assertCapabilityProcess} from '../modelProcessDomain';
 import {getSourceUploadRoute} from '../navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, Eye, EyeOff, Trash2 } from "../components/icons";
+import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, Eye, EyeOff, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions, RESPONSE_CONCLUSIONS } from '../domain';
 import { answerRemark, singleLineReply } from '../responseFields';
@@ -93,7 +92,7 @@ function Notice({ children, warning = false, loading = false }) {
 function Field({ label, required, children, wide }) { return <label className={`field ${wide ? 'response-wide' : ''}`}><span>{required && <i className="response-required">*</i>}{label}</span>{children}</label>; }
 function Description({ rows }) { return <dl className="response-description">{rows.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value || '—'}</dd></React.Fragment>)}</dl>; }
 
-export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onAddSelection, onConfirm, onRestoreConfirmation, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,sourceReparse, logEvent = () => {} }) {
+export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onAddSelection, onConfirm, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,sourceReparse, logEvent = () => {} }) {
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
   const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
@@ -102,7 +101,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [activeId, setActiveId] = useState(initialRow?.id || null);
   const active = requirements.find((r) => r.id === activeId) || requirements[0];
   const databaseBacked = appState.dataSource === 'mysql';
-  const [confirmationHistory, setConfirmationHistory] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [form, setForm] = useState(() => toForm(initialRow));
   const [dirty, setDirty] = useState(false);
@@ -220,7 +218,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const staleSource=route?.requirementId===active?.id&&((route?.sourceVersion&&route.sourceVersion!==String(active?.sourceVersion||'1'))||(route?.fileId&&route.fileId!==(active?.sourceFileId||active?.source)));
   const [reconfirmKey, setReconfirmKey] = useState(null);
   const confirmedLocked = active?.status === '已确认' && reconfirmKey !== `${active.id}:${active.version}`;
-  const confirmationVersion = active?.confirmationVersion || (active?.confirmedAt && active?.status === '已确认' ? active.version : null);
   const canEdit = !confirmedLocked && actorRole !== '最终审批人'&&!staleSource&&canBusinessAction('requirement',active?.id);
   const canConfirm = ['SR','技术'].includes(actorRole)&&!staleSource&&canBusinessAction('requirement',active?.id,'confirm');
   // 批量确认必须逐条沿用单条确认的资格：数据库模式下由确认人指派决定，不能把责任人的条款一起勾选。
@@ -277,7 +274,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const ids = new Set(directoryRows.filter(canBatchConfirmRow).map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
-  function hydrate(row) { if (!row) { return; } prefilledRun.current = null; setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
+  function hydrate(row) { if (!row) { return; } prefilledRun.current = null; setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
   function edit(field, value) { if (!canEdit || cardBusyRef.current) { return; } setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
   function requestTransition(next) { if (cardBusyRef.current) { return false; } return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
@@ -480,8 +477,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     if (issues.length) { setError(issues.join('；')); setModal('confirmation-validation'); return; }
     if (conflicted) { setModal('conflict'); return; }
     cardBusyRef.current = true; setCardBusy(true); setError('');
-    const nextId = databaseBacked && active.restoredFromVersion && active.status !== '已确认'
-      ? active.id : nextResponseCard(cardRows, active.id, deferredCards)?.id;
+    const nextId = nextResponseCard(cardRows, active.id, deferredCards)?.id;
     if (dirty && databaseBacked) { return finishConfirmation(active, nextId, form); }
     if (dirty) {
       const expected = { ...form };
@@ -692,13 +688,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     <div className="response-card-meta-row">
       <div className="response-confirmation-meta">
         <StatusBadge status={responseStatusLabel(active, reviews)}/>
-        {databaseBacked && confirmationVersion && <Tag color="blue">{active.status === '已确认' ? '确认' : '最近确认'} V{confirmationVersion}</Tag>}
-        {active.restoredFromVersion && <Tag>恢复自 V{active.restoredFromVersion}</Tag>}
         {dirty && <span role="status" aria-label="应答保存状态" className="response-save-state dirty">● 应答未保存</span>}
       </div>
-      {databaseBacked && <UiButton className="text-link" size="small" onClick={() => setConfirmationHistory({ id: active.id, version: active.version || 1, sourceVersion: active.backendVersion })}>
-        <History size={15}/>确认历史
-      </UiButton>}
     </div>
   </>}>
   <Descriptions className="response-requirement-details" size="small" column={1} colon={false} items={[
@@ -793,11 +784,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       <Notice>确认会记录当前应答和来源。请先完成未关闭的评审，并填写明确结论。</Notice>
       <label className="response-checkbox"><UiCheckbox type="checkbox" checked={confirmNext} onChange={(e) => setConfirmNext(e.target.checked)} />确认后跳转下一未完成条目</label>{error && <p className="response-error" role="alert">{error}</p>}
     </Modal>}
-    <OverlayPresence>{confirmationHistory?.id === active.id && <ResponseHistoryDrawer key={active.id} requirement={active}
-      dirty={dirty} canRestore={Boolean(onRestoreConfirmation && actorRole !== '最终审批人' && !staleSource &&
-        canBusinessAction('requirement', active.id, 'save') && confirmationHistory.sourceVersion === active.backendVersion && confirmationHistory.version === (active.version || 1))}
-      onRestore={entry => onRestoreConfirmation(active.id, confirmationHistory.version, entry)}
-      onClose={() => setConfirmationHistory(null)}/>}</OverlayPresence>
     <OverlayPresence>{modal === 'batch-result' && <Modal title="批量确认结果" width={820} onClose={() => setModal(null)} footer={<UiButton className="btn" onClick={() => setModal(null)}>完成</UiButton>}>
       <Notice warning={batchFailureCount > 0}>
         本次选择 {batchResults?.length || 0} 条；已按 Comply 确认成功 {batchSuccessCount} 条，确认失败 {batchFailureCount} 条。

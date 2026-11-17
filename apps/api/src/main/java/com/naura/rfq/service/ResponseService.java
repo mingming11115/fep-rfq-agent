@@ -20,15 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 @AllArgsConstructor
 @Slf4j
 public class ResponseService {
-    private static final String CONFIRMATION = "confirmation";
-    private static final String CHECKPOINT = "checkpoint";
     private static final List<String> ANSWER_FIELDS = List.of("conclusion", "draft", "remark", "evidence");
-    private static final List<String> SOURCE_FIELDS = List.of("original", "sourceDocumentId", "sourceRequirementText");
-    private static final List<String> RESTORE_FIELDS = List.of("restoredFromVersion", "restoredBy", "restoredById", "restoredAt");
 
-    public record History(List<JsonNode> versions, List<JsonNode> checkpoints) {}
     public record MatchChoice(String matchRunId, String candidateId, String detachMatchReason) {}
-    private record Restore(String kind, long version) {}
 
     @Autowired
     private ResponseMapper responseRecords;
@@ -66,43 +60,14 @@ public class ResponseService {
         return payloads.stream().map(this::decode).toList();
     }
 
-    @Transactional(readOnly = true)
-    public History history(CurrentUser user, String id) {
-        var requirement = requirements.findById(id).orElseThrow(() -> new BusinessException(404, "条款不存在"));
-        String projectId = requirement.getProjectId();
-        var project = projects.findById(projectId).orElse(null);
-        guard.requireProject(user, project);
-        var versions = historyRows(id, projectId, CONFIRMATION);
-        if (versions.isEmpty()) {
-            versions = decodeRows(responseRecords.findResponse(id, projectId))
-                    .stream().findFirst().flatMap(row -> legacyConfirmation(row, requirement)).stream().toList();
-        }
-        return new History(versions.stream().map(ResponseService::withRemark)
-                        .map(row -> row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row).toList(),
-                historyRows(id, projectId, CHECKPOINT).stream().map(ResponseService::withRemark)
-                        .map(row -> row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row).toList());
-    }
-
-    @Transactional
-    public JsonNode restore(CurrentUser user, String id, Long version, Long sourceVersion, String kind, Long historyVersion) {
-        if ((!CONFIRMATION.equals(kind) && !CHECKPOINT.equals(kind)) || historyVersion == null || historyVersion < 1) {
-            throw new BusinessException(400, "请选择要恢复的确认版本或草稿检查点");
-        }
-        return write(user, id, version, sourceVersion, null, false, new Restore(kind, historyVersion), null);
-    }
-
     @Transactional
     public JsonNode write(CurrentUser user,String id,Long version,Long sourceVersion,JsonNode patch,boolean confirm){
-        return write(user, id, version, sourceVersion, patch, confirm, null, null);
+        return write(user, id, version, sourceVersion, patch, confirm, null);
     }
 
     @Transactional
-    public JsonNode write(CurrentUser user, String id, Long version, Long sourceVersion, JsonNode patch, boolean confirm, MatchChoice choice) {
-        return write(user, id, version, sourceVersion, patch, confirm, null, choice);
-    }
-
-    private JsonNode write(CurrentUser user, String id, Long version, Long sourceVersion, JsonNode patch,
-            boolean confirm, Restore restore, MatchChoice choice) {
+    public JsonNode write(CurrentUser user, String id, Long version, Long sourceVersion, JsonNode patch,
+            boolean confirm, MatchChoice choice) {
         var requirement=requirements.findById(id).orElseThrow(()->new BusinessException(404,"条款不存在"));
         var project=projects.findByIdForUpdate(requirement.getProjectId()).orElseThrow(()->new BusinessException(404,"项目不存在"));
         guard.requireProject(user,project);guard.requireActiveProject(project);
@@ -148,33 +113,7 @@ public class ResponseService {
             throw new BusinessException(409,"请先核对评审建议");
         }
 
-        String projectId = project.getId();
-        var previous = latestConfirmation(row, requirement, projectId);
-        previous.ifPresent(saved -> row.put("confirmationVersion", saved.path("confirmationVersion").asLong()));
-        if (restore != null) {
-            var saved = decodeRows(responseRecords.findHistoryEntry(id, projectId, restore.kind(), restore.version())).stream().findFirst()
-                    .orElseThrow(() -> new BusinessException(404, "该条款的历史版本不存在"));
-            if (!records.isEmpty() && !isConfirmed(row)) {
-                var checkpoint = row.deepCopy().put("checkpointVersion", version).put("checkpointBy", user.displayName())
-                        .put("checkpointAt", Instant.now().toString());
-                insertHistory(id, projectId, CHECKPOINT, version, checkpoint);
-            }
-            if (saved.hasNonNull("matchReference") && matches.readableResponse(project, saved).path("restrictedMatchReference").asBoolean()) {
-                throw new BusinessException(403, "历史应答的采纳依据已不可访问");
-            }
-            for (String field : ANSWER_FIELDS) row.put(field, saved.path(field).asText(""));
-            row.put("draft", answerDraft(saved));
-            row.put("remark", answerRemark(saved));
-            copyFields(saved, row, List.of("matchReference"));
-            row.remove("matchReferenceInvalidatedAt");
-            row.remove(RESTORE_FIELDS);
-            if (CONFIRMATION.equals(restore.kind())) {
-                row.put("restoredFromVersion", restore.version()).put("restoredBy", user.displayName())
-                        .put("restoredById", user.id()).put("restoredAt", Instant.now().toString());
-            } else {
-                copyFields(saved, row, RESTORE_FIELDS);
-            }
-        } else if(patch!=null&&!patch.isNull()){
+        if(patch!=null&&!patch.isNull()){
             if(!patch.isObject()) {
                 throw new BusinessException(400,"应答字段格式不正确");
             }
@@ -201,9 +140,6 @@ public class ResponseService {
                 }
             }
             foldConditions(row);
-            if (isConfirmed(row) && !sameAnswerFields(records.get(0), row)) {
-                row.remove(RESTORE_FIELDS);
-            }
         }
         if (choice != null && (choice.matchRunId() != null || choice.candidateId() != null)) {
             if (choice.detachMatchReason() != null) {
@@ -237,70 +173,14 @@ public class ResponseService {
                 throw new BusinessException(400,"已删除条款须确认不适用");
             }
             row.put("status","已确认").put("confirmedBy",user.displayName()).put("confirmedById",user.id()).put("confirmedAt",Instant.now().toString()).put("needsReview",false).put("sourceRevision",false).put("sourceCorrected",false);
-            var snapshot = row.deepCopy();
-            bindSource(snapshot, requirement);
-            if (previous.filter(saved -> sameAnswerFields(saved, snapshot) && sameFields(saved, snapshot, SOURCE_FIELDS)
-                    && saved.path("matchReference").equals(snapshot.path("matchReference"))).isEmpty()) {
-                long next = row.path("confirmationVersion").asLong(0) + 1;
-                row.put("confirmationVersion", next);
-                snapshot.put("confirmationVersion", next).put("sourceRequirementVersion", sourceVersion);
-                insertHistory(id, projectId, CONFIRMATION, next, snapshot);
-            }
         }else{
             row.put("status","待确认");row.remove(List.of("confirmedAt","confirmedBy","confirmedById"));
         }
         row.put("version",version+1).put("sourceRequirementVersion",sourceVersion);
         responseRecords.upsertResponse(id, project.getId(), row.toString());
-        // Frozen snapshots remain historical; live scope versions no longer match after this write.
-        if (restore != null) {
-            String label = CONFIRMATION.equals(restore.kind()) ? "恢复条款确认版本" : "恢复草稿检查点";
-            String source = CONFIRMATION.equals(restore.kind()) ? "V" : "R";
-            audit.successInBu(user.id(), project.getBuId(), label, "requirement", id, "恢复自 " + source + restore.version() + " · 草稿待确认");
-        } else {
-            String detail = confirm ? "应答版本 V" + row.path("confirmationVersion").asLong() : "草稿修订 R" + (version + 1);
-            audit.successInBu(user.id(), project.getBuId(), confirm ? "确认要求" : "保存应答草稿", "requirement", id, detail);
-        }
+        String detail = confirm ? "应答版本 V" + (version + 1) : "草稿修订 R" + (version + 1);
+        audit.successInBu(user.id(), project.getBuId(), confirm ? "确认要求" : "保存应答草稿", "requirement", id, detail);
         return row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row;
-    }
-
-    private List<JsonNode> historyRows(String id, String projectId, String kind) {
-        return decodeRows(responseRecords.listHistory(id, projectId, kind));
-    }
-
-    private Optional<JsonNode> latestConfirmation(JsonNode row, Requirement requirement, String projectId) {
-        String id = requirement.getId();
-        var versions = decodeRows(responseRecords.findLatestHistory(id, projectId, CONFIRMATION));
-        if (!versions.isEmpty()) {
-            return Optional.of(versions.get(0));
-        }
-        var legacy = legacyConfirmation(row, requirement);
-        legacy.ifPresent(saved -> insertHistory(id, projectId, CONFIRMATION, saved.path("confirmationVersion").asLong(), saved));
-        return legacy;
-    }
-
-    private Optional<JsonNode> legacyConfirmation(JsonNode row, Requirement requirement) {
-        if (!isConfirmed(row) || row.path("confirmedAt").asText().isBlank()) {
-            return Optional.empty();
-        }
-        ObjectNode saved = row.deepCopy();
-        saved.put("confirmationVersion", Math.max(1, row.path("confirmationVersion").asLong(row.path("version").asLong(1))));
-        if (row.path("sourceRequirementVersion").asLong(-1) == requirement.getVersion()) {
-            bindSource(saved, requirement);
-        }
-        return Optional.of(saved);
-    }
-
-    private void insertHistory(String id, String projectId, String kind, long version, JsonNode payload) {
-        responseRecords.insertHistory(id, projectId, kind, version, payload.toString());
-    }
-
-    private static boolean isConfirmed(JsonNode row) {
-        return "已确认".equals(row.path("status").asText());
-    }
-
-    private static void bindSource(ObjectNode snapshot, Requirement requirement) {
-        snapshot.put("original", requirement.getOriginalText()).put("sourceDocumentId", requirement.getDocumentId())
-                .put("sourceRequirementText", requirement.getRequirementText());
     }
 
     static String answerDraft(JsonNode response) {
@@ -320,43 +200,14 @@ public class ResponseService {
         }
     }
 
-    private static boolean sameAnswerFields(JsonNode left, JsonNode right) {
-        return answerDraft(left).equals(answerDraft(right))
-                && answerRemark(left).equals(answerRemark(right))
-                && sameFields(left, right, List.of("conclusion", "evidence"));
-    }
-
     static String answerRemark(JsonNode response) {
         return response.path("remark").asText(response.path("reason").asText(""));
-    }
-
-    private static JsonNode withRemark(JsonNode response) {
-        if (response instanceof ObjectNode && response.has("reason")) {
-            ObjectNode copy = response.deepCopy();
-            foldRemark(copy);
-            return copy;
-        }
-        return response;
     }
 
     private static void foldRemark(ObjectNode response) {
         if (response.has("reason")) {
             response.put("remark", answerRemark(response));
             response.remove("reason");
-        }
-    }
-
-    private static boolean sameFields(JsonNode left, JsonNode right, List<String> fields) {
-        return fields.stream().allMatch(field -> left.path(field).asText("").equals(right.path(field).asText("")));
-    }
-
-    private static void copyFields(JsonNode from, ObjectNode to, List<String> fields) {
-        for (String field : fields) {
-            if (from.hasNonNull(field)) {
-                to.set(field, from.get(field));
-            } else {
-                to.remove(field);
-            }
         }
     }
 }

@@ -31,6 +31,16 @@ test('keeps the persisted order and renders nothing when every library is switch
   assert.deepEqual(matchStages({ status: 'completed', matchOrder: [], result: { skipped: true, stages: {} } }), []);
 });
 
+test('marks a switched-off library as disabled instead of dropping the row', () => {
+  const partial = { status: 'completed', matchOrder: ['history_rfq', 'standard_reply'],
+    result: { stages: { history_rfq: { status: 'miss' }, standard_reply: { status: 'miss' } } } };
+  assert.deepEqual(matchStages(partial).map(stage => [stage.library, stage.status]), [
+    ['history_rfq', 'miss'], ['standard_reply', 'miss'], ['capability', 'disabled'],
+  ]);
+  // 关闭的库不能伪造命中/未命中状态，也不能携带上一次的候选。
+  assert.deepEqual(matchStages(partial)[2], { library: 'capability', status: 'disabled' });
+});
+
 test('shows results in the order persisted on the run and never uses a superseded candidate', () => {
   const completed = { status: 'completed', matchOrder: ['capability', 'history_rfq', 'standard_reply'],
     result: { stages: { history_rfq: { status: 'hit', candidates: [{ id: 'H1', version: 3 }] } } } };

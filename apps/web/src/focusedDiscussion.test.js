@@ -67,40 +67,5 @@ test('operation records show only project history and remain read-only',async()=
     await act(async()=>{button('操作记录').click();await settle();});
     assert.match(history().textContent,/李工 → 王工.*改派确认人：技术分工.*默认确认人 → 李工/);
     assert.deepEqual(requests,[['/api/rfq/projects/Q/activity','GET'],['/api/rfq/projects/Q/activity','GET']]);
-
-    const confirmed={...rows[0],status:'已确认',version:5,backendVersion:0,confirmationVersion:2,draft:'交期 8 周'};
-    const restored=[];
-    globalThis.fetch=async url=>{
-      assert.equal(url,'/api/rfq/requirements/R1/response/history');
-      return {ok:true,json:async()=>({code:0,data:{versions:[
-        {confirmationVersion:2,confirmedBy:'B',draft:'交期 8 周'},
-        {confirmationVersion:1,confirmedBy:'A',draft:'交期 10 周'},
-      ],checkpoints:[]}})};
-    };
-    props={...props,project,requirements:[confirmed],route:{page:'response',projectId:'P',requirementId:'R1'},actorRole:'SR',
-      canBusinessAction:()=>true,onRestoreConfirmation:(id,version,entry)=>{
-        restored.push([id,version,entry.kind,entry.historyVersion]);
-        props={...props,requirements:[{...confirmed,status:'待确认',version:6,draft:'交期 10 周',restoredFromVersion:1}]};
-        root.render(React.createElement(ResponsePage,props));
-        return true;
-      }};
-    await render();
-    await act(async()=>{button('确认历史').click();await settle();});
-    const comparison=document.querySelector('.rfq-confirm-history-comparison');
-    assert.match(comparison.textContent,/交期 8 周.*交期 10 周/);
-    const restoreButton=scope=>[...scope.querySelectorAll('button')].find(candidate=>candidate.textContent==='恢复为草稿');
-    const historyFooter=document.querySelector('.rfq-confirm-history-footer');
-    const versions=[...document.querySelectorAll('.rfq-confirm-history-version')];
-    await act(async()=>{versions[0].click();await settle();});
-    const disabledRestore=restoreButton(historyFooter);
-    assert.equal(disabledRestore.disabled,true);
-    await act(async()=>{disabledRestore.parentElement.focus();await new Promise(resolve=>setTimeout(resolve,180));});
-    assert.match(document.querySelector('[role="tooltip"]')?.textContent||'',/V2 是当前已确认版本/);
-    await act(async()=>{versions[1].click();await settle();});
-    assert.equal(restoreButton(historyFooter).disabled,false);
-    await act(async()=>{restoreButton(document.querySelector('.rfq-confirm-history-footer')).click();await settle();});
-    await act(async()=>{restoreButton(document.querySelector('.ant-modal')).click();await settle();});
-    assert.deepEqual(restored,[['R1',5,'confirmation',1]]);
-    assert.match(node.querySelector('.response-confirmation-meta').textContent,/恢复自 V1/);
   }finally{globalThis.fetch=originalFetch;await act(async()=>root.unmount());await window.happyDOM.cancelAsync();}
 });

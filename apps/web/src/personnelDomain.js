@@ -137,7 +137,7 @@ export function initializePersonnel(state) {
  if(state.personnelSchemaVersion) { return state; }
  const names={'demo-sales':'林晓','demo-technical':'顾工','demo-approver':'赵明','demo-technical-2':'王工','demo-technical-3':'陈工','demo-bu-admin':'BU管理员','demo-system-admin':'后台管理员','demo-directory-tech':'刘工'};
  state.accountsById ||= Object.fromEntries(Object.entries(names).map(([id,name])=>[id,{id,name,enabled:true,systemAdmin:id==='demo-system-admin',managedBuIds:id==='demo-bu-admin'?['BU-DEMO']:[]}]));
- state.businessUnits ||= [{id:'BU-DEMO',name:'FEP事业部（演示）'}];
+ state.businessUnits ||= [{id:'BU-DEMO',name:'演示事业部'}];
  state.buPersonnelByBuId ||= {'BU-DEMO':Object.keys(names).filter(id=>!['demo-system-admin','demo-directory-tech'].includes(id)).map(userId=>({userId,roles:userId==='demo-bu-admin'?[]:[userId==='demo-sales'?'SR':'技术'],enabled:true,canConfirm:userId!=='demo-bu-admin',canFinalReview:userId!=='demo-bu-admin',resourceQualifications:userId==='demo-bu-admin'?['knowledge-publish','capability-publish']:[]}))};
  state.buReviewSettingsByBuId ||= {'BU-DEMO':{technicalMode:'all',version:1}};
  state.actorRole=normalizeRole(state.actorRole||'SR');state.actorId ||= 'demo-sales';

@@ -9,9 +9,3 @@ export function writeResponse(row,patch,confirm=false,client=api,matchChoice){
  const responsePatch=patch?normalizeResponseRemark(patch):patch;
  return confirm?client.post(`${path}/confirm`,responsePatch?{...body,patch:responsePatch}:body):client.patch(path,{...body,patch:responsePatch});
 }
-
-export const loadResponseHistory=(id,client=api)=>client.get(`${responsePath(id)}/history`);
-
-export function restoreResponse(row,{kind,historyVersion},client=api){
- return client.post(`${responsePath(row.id)}/restore`,{...revisions(row),kind,historyVersion});
-}

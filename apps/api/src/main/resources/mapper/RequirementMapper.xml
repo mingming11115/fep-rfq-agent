@@ -102,8 +102,6 @@
         select exists(
             select 1 from generated_requirements r join requirement_response a on a.requirement_id=r.id
             union all
-            select 1 from generated_requirements r join response_confirmation_history h on h.requirement_id=r.id
-            union all
             select 1 from generated_requirements r join response_review v on v.project_id=r.project_id
                 and json_unquote(json_extract(v.payload,'$.requirementId'))=r.id
             union all

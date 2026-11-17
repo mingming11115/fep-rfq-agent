@@ -222,15 +222,6 @@ alter table requirement
     add column confirmation_assigned_at timestamp(6) null,
     add column confirmation_assignment_reason varchar(900) null;
 
-create table response_confirmation_history (
-    requirement_id varchar(64) not null,
-    project_id varchar(64) not null,
-    kind varchar(16) not null,
-    entry_version bigint not null,
-    payload json not null,
-    primary key (requirement_id, kind, entry_version)
-);
-
 -- RFQ_MIGRATION_V11
 -- Retain original history versions. A same-key record with different content
 -- remains available as a separate draft for reconciliation.

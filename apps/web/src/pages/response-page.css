@@ -24,3 +24,5 @@
 .match-deviation-library-name { font-size: 13px; color: #434343; }
 .match-deviation-library .ant-tag { margin-inline-end: 0; }
 @media(max-width:520px){.match-deviation-libraries{grid-template-columns:1fr}}
+.response-confirmation-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.response-confirmation-meta .ant-tag { margin: 0; }

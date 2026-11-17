@@ -17,7 +17,7 @@ export function saveModelMetadata(models,{context,record}){
  if(models.some(r=>r.id===record.id&&!belongsTo(r,context.buId))) { throw new Error('不能覆盖其他BU的机型'); }
  const previous=existing.sort((a,b)=>b.version-a.version)[0];
  if(previous&&previous.revision!==revision) { throw new Error('已有机型的硬件版本不可更改，请新建机型以保留原工艺与能力归属'); }
- const item={...record,code,name,revision,config,buId:context.buId,scope:'FEP 授权项目',version:previous?(previous.version||1)+1:1,status:'已发布',validity:'有效',updatedById:context.actorId,history:[...(previous?.history||record.history||[]),{date:day(),text:`${context.state?.actorRole||'BU管理员'}保存机型配置`}]};
+ const item={...record,code,name,revision,config,buId:context.buId,scope:'BU共享',version:previous?(previous.version||1)+1:1,status:'已发布',validity:'有效',updatedById:context.actorId,history:[...(previous?.history||record.history||[]),{date:day(),text:`${context.state?.actorRole||'BU管理员'}保存机型配置`}]};
  delete item.newVersion;
  return [...models.map(r=>r.id===record.id&&belongsTo(r,context.buId)?{...r,validity:'被替代'}:r),item];
 }

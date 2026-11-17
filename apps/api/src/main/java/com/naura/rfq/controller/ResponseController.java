@@ -17,7 +17,6 @@ public class ResponseController {
     public record WriteRequest(Long version,Long sourceVersion,JsonNode patch,String matchRunId,String candidateId,String detachMatchReason) {
         ResponseService.MatchChoice choice() { return new ResponseService.MatchChoice(matchRunId, candidateId, detachMatchReason); }
     }
-    public record RestoreRequest(Long version, Long sourceVersion, String kind, Long historyVersion) {}
     @PatchMapping
     public ApiResponse<JsonNode> save(@PathVariable String id,@RequestBody WriteRequest request){
         try {
@@ -33,27 +32,6 @@ public class ResponseController {
             return ApiResponse.success(service.write(CurrentUserHolder.require(),id,request.version(),request.sourceVersion(),request.patch(),true,request.choice()));
         } catch (Exception exception) {
             log.error("Request failed in confirm", exception);
-            throw exception;
-        }
-    }
-
-    @GetMapping("/history")
-    public ApiResponse<ResponseService.History> history(@PathVariable String id) {
-        try {
-            return ApiResponse.success(service.history(CurrentUserHolder.require(), id));
-        } catch (Exception exception) {
-            log.error("Request failed in history", exception);
-            throw exception;
-        }
-    }
-
-    @PostMapping("/restore")
-    public ApiResponse<JsonNode> restore(@PathVariable String id, @RequestBody RestoreRequest request) {
-        try {
-            return ApiResponse.success(service.restore(CurrentUserHolder.require(), id, request.version(), request.sourceVersion(),
-                    request.kind(), request.historyVersion()));
-        } catch (Exception exception) {
-            log.error("Request failed in restore", exception);
             throw exception;
         }
     }

@@ -7,7 +7,7 @@ import {Modal, StatusBadge} from './ui';
 const matches = matchClient();
 const statusLabels = {
   queued:'排队中', running:'比对中', retry_wait:'等待重试', blocked:'等待处理', completed:'已完成',
-  failed:'失败', superseded:'已失效', excluded:'已排除', not_run:'未执行',
+  failed:'失败', superseded:'已失效', excluded:'已排除', not_run:'未执行', disabled:'未配置',
   hit:'命中', miss:'未命中', not_applicable:'不适用', loading:'读取中', read_failed:'读取失败',
 };
 const statusTones = {
@@ -32,9 +32,8 @@ const reasonLabel = reason => reasons[reason] || (reason ? '比对暂未完成�
 const conditionLabels = {same:'适用条件一致', different:'适用条件不同', unverified:'适用条件待核对', not_specified:'来源未限定条件'};
 const checkLabels = {supports:'满足', refutes:'不满足', no_candidate:'未找到能力条目', evidence_unavailable:'证据不可用', review:'待核对'};
 function deviationLibraries(run) {
-  const stages = run?.status === 'completed' ? run.result?.stages : run?.stages;
-  return Object.entries(MATCH_LIBRARIES).map(([key, name]) => ({
-    key, name, status: stages?.[key]?.status || 'not_run',
+  return matchStages(run).map(stage => ({
+    key: stage.library, name: MATCH_LIBRARIES[stage.library], status: stage.status,
   }));
 }
 
@@ -149,6 +148,7 @@ function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, 
     {run?.result?.skipped && <Alert type="info" showIcon message="本项目已关闭三个知识库比对，条款按人工核对处理"/>}
     {run && !run.result?.skipped && <ol>{matchStages(run).map(stage => <li key={stage.library}>
       <Space><b>{MATCH_LIBRARIES[stage.library]}</b><MatchStatus status={stage.status}/></Space>
+      {stage.status === 'disabled' && <p>本项目已关闭该知识库，未参与本轮比对</p>}
       {stage.reason && <p>{reasonLabel(stage.reason)}</p>}
       {stage.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
         sourceDocument={stage.library === 'history_rfq' ? resources?.historyDocuments?.find(file => file.id === candidate.documentId) : undefined}

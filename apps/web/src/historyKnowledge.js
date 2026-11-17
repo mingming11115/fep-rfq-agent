@@ -12,7 +12,7 @@ export function clausesForDocument(document,clauses) {
 }
 export function buildHistoryDocuments(documents,clauses) {
  const legacy=clauses.filter(row=>row.type==='history'&&!row.documentId),groups=new Map();
- for(const row of legacy){const key=JSON.stringify([row.source||'手工历史知识',row.scope||'FEP 授权项目',row.sourceProjectId||row.projectId||'']);if(!groups.has(key)) { groups.set(key,[]); } groups.get(key).push(row);}
+ for(const row of legacy){const key=JSON.stringify([row.source||'手工历史知识',row.scope||'BU共享',row.sourceProjectId||row.projectId||'']);if(!groups.has(key)) { groups.set(key,[]); } groups.get(key).push(row);}
  return [...documents,...[...groups.entries()].map(([key,rows])=>({id:`legacy:${key}`,buId:rows[0].buId||'BU-DEMO',legacy:true,...(rows.some(r=>Array.isArray(r.groupIds)||r.groupId)?{groupIds:[...new Set(rows.flatMap(r=>Array.isArray(r.groupIds)?r.groupIds:r.groupId?[r.groupId]:[]))]}:{}),legacyIds:[...new Set(rows.map(row=>row.id))],name:rows[0].source||'手工历史知识',metadata:{},version:'—',parseStatus:'legacy',scope:rows[0].scope,projectId:rows[0].sourceProjectId||rows[0].projectId,createdAt:'',issues:[],sources:[]}))];
 }
 export function selectHistoryResources(snapshot,context){

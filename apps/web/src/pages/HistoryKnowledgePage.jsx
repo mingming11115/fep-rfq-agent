@@ -171,7 +171,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  function manual(){
   if(!actor.canEdit) { return; }
   const id=`HK-${crypto.randomUUID()}`;
-  setEditing({id,version:1,type:'history',documentId:active?.id,buId,sourceKey:`manual:${id}`,manual:true,newManual:true,clauseNo:'',section:'',requirement:'',answer:'',conditions:'',status:'草稿',scope:active?.scope||'FEP 授权项目',submitterId:actor.id,issues:[]});setAnchor('');
+  setEditing({id,version:1,type:'history',documentId:active?.id,buId,sourceKey:`manual:${id}`,manual:true,newManual:true,clauseNo:'',section:'',requirement:'',answer:'',conditions:'',status:'草稿',scope:active?.scope||'BU共享',submitterId:actor.id,issues:[]});setAnchor('');
  }
  function saveClause(){
   if(databaseBacked){
@@ -204,7 +204,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
    let doc=parentId?accessible.documents.find(row=>row.id===parentId):null;
    if(parentId&&!doc) { throw new Error('文档范围已变化或无权访问，请重新打开'); }
    if(doc?.legacy){const migrated=materializeHistoryDocument({...doc,buId},fresh.documents,fresh.clauses);doc=migrated.document;fresh.documents=migrated.documents;fresh.clauses=migrated.clauses;}
-   if(!doc){doc={...(groupScope?{groupIds:groupScope.defaultGroupIds}:{}),id:`HD-${crypto.randomUUID()}`,buId,name:'手工补录历史知识',version:'V1',metadata:{},scope:editing.scope||'FEP 授权项目',projectId:editing.sourceProjectId||editing.projectId,parseStatus:'manual',sources:[],issues:[],createdAt:new Date().toISOString()};fresh.documents=[doc,...fresh.documents];}
+   if(!doc){doc={...(groupScope?{groupIds:groupScope.defaultGroupIds}:{}),id:`HD-${crypto.randomUUID()}`,buId,name:'手工补录历史知识',version:'V1',metadata:{},scope:editing.scope||'BU共享',projectId:editing.sourceProjectId||editing.projectId,parseStatus:'manual',sources:[],issues:[],createdAt:new Date().toISOString()};fresh.documents=[doc,...fresh.documents];}
    const item=syncHistoryRequirement({...editing,documentId:doc.id,title:editing.title||editing.requirement.slice(0,40),status:'草稿',submitterId:actor.id,submitterRole:actor.role,author:actor.name,editedFields:[...new Set([...(previous?.editedFields||[]),...changed])],history:[...(editing.history||[]),{date:new Date().toISOString(),text:`${actor.name} 保存历史知识草稿`}]});delete item.newVersion;
    const clauses=previous?fresh.clauses.map(row=>token(row)===token(item)?item:row):[...fresh.clauses,item];
    persist({...fresh,clauses:applyHistoryMetadata(doc,clauses)});setEditing(null);setActiveId(doc.id);notify('条款草稿已保存');

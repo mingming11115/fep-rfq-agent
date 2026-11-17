@@ -28,9 +28,17 @@ export function matchClient(client = api) {
 
 export function matchStages(run) {
   const stages = run?.status === 'completed' ? run.result?.stages : run?.stages;
-  return (run?.matchOrder ?? Object.keys(MATCH_LIBRARIES)).map(library => ({
+  const order = run?.matchOrder ?? Object.keys(MATCH_LIBRARIES);
+  // 三库全关时整轮 skipped，由面板顶部统一提示，这里不逐库列出。
+  if (order.length === 0) { return []; }
+  const rows = order.map(library => ({
     status: 'not_run', ...stages?.[library], library,
   }));
+  // 项目配置关闭的库不在 matchOrder 中；显式占位，避免整行消失被误认为漏比对。
+  for (const library of Object.keys(MATCH_LIBRARIES)) {
+    if (!order.includes(library)) { rows.push({ library, status: 'disabled' }); }
+  }
+  return rows;
 }
 
 export function matchNeedsPolling(run) {

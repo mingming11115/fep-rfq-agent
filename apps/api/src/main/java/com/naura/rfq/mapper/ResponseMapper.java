@@ -33,15 +33,6 @@ public interface ResponseMapper {
 
     List<String> listSnapshots(@Param("projectId") String projectId);
 
-    List<String> findHistoryEntry(@Param("requirementId") String requirementId,
-            @Param("projectId") String projectId, @Param("kind") String kind, @Param("version") long version);
-
-    List<String> listHistory(@Param("requirementId") String requirementId, @Param("projectId") String projectId,
-            @Param("kind") String kind);
-
-    List<String> findLatestHistory(@Param("requirementId") String requirementId,
-            @Param("projectId") String projectId, @Param("kind") String kind);
-
     List<String> findMatchReference(@Param("requirementId") String requirementId);
 
     List<String> listAdoptedAfter(@Param("cursor") String cursor);
@@ -52,9 +43,6 @@ public interface ResponseMapper {
             @Param("payload") String payload);
 
     int updateResponse(@Param("requirementId") String requirementId, @Param("payload") String payload);
-
-    int insertHistory(@Param("requirementId") String requirementId, @Param("projectId") String projectId,
-            @Param("kind") String kind, @Param("version") long version, @Param("payload") String payload);
 
     int upsertConfig(@Param("projectId") String projectId, @Param("payload") String payload);
 

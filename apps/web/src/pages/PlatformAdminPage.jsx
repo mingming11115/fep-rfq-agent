@@ -148,7 +148,7 @@ export default function PlatformAdminPage({ actorId }) {
     </section>
     {edit && <Modal title={kind === 'bu' ? (edit.id ? '维护BU' : '新增BU') : (edit.id ? '编辑账号' : '新增账号')} onClose={() => setEdit(null)} footer={<><UiButton className="btn" onClick={() => setEdit(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={busy} onClick={save}>{busy ? '保存中…' : '保存目录配置'}</UiButton></>}>
       {kind === 'bu' && <>
-        {!edit.id && <Field label="编码"><UiInput className="input" aria-label="事业部编码" value={edit.code} onChange={(e) => setEdit({ ...edit, code: e.target.value })} placeholder="如 FEP、BU-QA"/></Field>}
+        {!edit.id && <Field label="编码"><UiInput className="input" aria-label="事业部编码" value={edit.code} onChange={(e) => setEdit({ ...edit, code: e.target.value })} placeholder="如 BU-QA"/></Field>}
         <Field label="名称"><UiInput className="input" aria-label="目录名称" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })}/></Field>
       </>}
       {kind === 'account' && <>

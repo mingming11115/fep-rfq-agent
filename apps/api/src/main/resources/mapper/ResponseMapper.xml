@@ -54,18 +54,6 @@
         select payload from response_snapshot where project_id=#{projectId} order by id
     </select>
 
-    <select id="findHistoryEntry" resultType="string">
-        select payload from response_confirmation_history where requirement_id=#{requirementId} and project_id=#{projectId} and kind=#{kind} and entry_version=#{version}
-    </select>
-
-    <select id="listHistory" resultType="string">
-        select payload from response_confirmation_history where requirement_id=#{requirementId} and project_id=#{projectId} and kind=#{kind} order by entry_version desc
-    </select>
-
-    <select id="findLatestHistory" resultType="string">
-        select payload from response_confirmation_history where requirement_id=#{requirementId} and project_id=#{projectId} and kind=#{kind} order by entry_version desc limit 1
-    </select>
-
     <select id="findMatchReference" resultType="string">
         select json_extract(payload,'$.matchReference') from requirement_response
         where requirement_id=#{requirementId} and json_contains_path(payload,'one','$.matchReference')
@@ -93,11 +81,6 @@
     <update id="updateResponse">
         update requirement_response set payload=#{payload},updated_at=current_timestamp where requirement_id=#{requirementId}
     </update>
-
-    <insert id="insertHistory">
-        insert into response_confirmation_history(requirement_id,project_id,kind,entry_version,payload)
-        values (#{requirementId},#{projectId},#{kind},#{version},#{payload})
-    </insert>
 
     <insert id="upsertConfig">
         insert into project_response_config(project_id,payload) values (#{projectId},#{payload}) as desired

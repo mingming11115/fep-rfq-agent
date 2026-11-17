@@ -24,13 +24,13 @@ export default function RfqAppLayout({ navigation, activeNav, icons, collapsed, 
       icon: Icon ? <Icon size={18}/> : undefined };
   });
   return <div className="rfq-pro-shell">
-    <ProLayout className="rfq-pro-layout" title="FEP RFQ" logo={<span className="brand-mark">F</span>}
+    <ProLayout className="rfq-pro-layout" title="RFQ" logo={<span className="brand-mark">R</span>}
       layout="mix" splitMenus={false} fixSiderbar fixedHeader headerHeight={64} siderWidth={218} breakpoint={isDetail ? false : undefined}
       collapsed={mobile ? mobileCollapsed : collapsed} onCollapse={mobile ? setMobileCollapsed : onCollapse} location={{ pathname: '/' + activeNav }}
       menuDataRender={() => menu} onMenuHeaderClick={onHome} menu={{ autoClose: false }}
       menuItemRender={(item, dom) => <button type="button" className="rfq-layout-menu-button" data-testid={'nav-' + item.key}
         onClick={event => { event.preventDefault(); onNavigate(item.targetPage); if (mobile) { setMobileCollapsed(true); } }}>{dom}</button>}
-      menuFooterRender={() => <span className="rfq-layout-menu-footer">{collapsed ? 'RFQ' : 'FEP · RFQ 工作空间'}</span>}
+      menuFooterRender={() => <span className="rfq-layout-menu-footer">{collapsed ? 'RFQ' : 'RFQ 工作空间'}</span>}
       actionsRender={() => [
         onRefresh ? <Tooltip key="refresh" title="刷新数据库数据"><Button type="text" aria-label="刷新数据库数据" icon={<ReloadOutlined/>} onClick={onRefresh}/></Tooltip> : null,
         compact ? null : <Tooltip key="search" title="搜索页面和项目"><Button type="text" aria-label="搜索页面和项目" icon={<Search size={18}/>} onClick={onSearch}/></Tooltip>,

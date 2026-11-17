@@ -57,9 +57,9 @@ export default function LoginPage({ onLogin, accounts=DEMO_ACCOUNTS }) {
       <div className="login-shell">
         <aside className="login-brand">
           <div className="login-brand-top">
-            <span className="brand-mark">F</span>
+            <span className="brand-mark">R</span>
             <div>
-              <strong>FEP RFQ</strong>
+              <strong>RFQ 工作空间</strong>
               <small>销售应答提效平台</small>
             </div>
           </div>

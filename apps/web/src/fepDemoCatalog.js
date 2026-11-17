@@ -53,7 +53,7 @@ export function migrateFepDemoCatalog(storage){
     for(const [key,value]of changes){storage.setItem(key,value);written.push(key);}
     storage.setItem(marker,'1');
   }catch(error){
-    console.error('写入 FEP 演示资料失败', error);
+    console.error('写入演示资料失败', error);
     for(const key of written.reverse())storage.setItem(key,before.get(key));
     throw error;
   }
