@@ -100,6 +100,39 @@ test('batch confirmation confirms every selected clause as Comply and retains fa
   }finally{await h.close();}
 });
 
+test('SR batch selection skips clauses assigned to another confirmer',async()=>{
+  const h=await harness('batch-assignee'),{ResponsePage,node,root,settle,click}=h;
+  const base={projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'1',original:'Source',
+    conclusion:'Comply',draft:'Answer',status:'待确认',matchLevel:'none',score:0,version:1,backendVersion:0};
+  const rows=[
+    {...base,id:'R1',clause:'1.1',title:'Mine',confirmationAssigneeId:'sr',confirmationAssignmentSource:'explicit'},
+    {...base,id:'R2',clause:'1.2',title:'Tech owned',confirmationAssigneeId:'tech',confirmationAssignmentSource:'explicit'},
+  ];
+  const appState={dataSource:'mysql',accountsById:{sr:{enabled:true},tech:{enabled:true}},
+    businessUnits:[{id:'BU'}],buPersonnelByBuId:{BU:[{userId:'sr',roles:['SR'],enabled:true,canConfirm:true},{userId:'tech',roles:['技术'],enabled:true,canConfirm:true}]},
+    projects:[{id:'P',buId:'BU',participantIds:['sr','tech'],defaultConfirmationAssigneeId:'sr'}],
+    requirementsByProject:{P:rows},reviewsByProject:{P:[]},commentsByProject:{},membersByProject:{},audit:[]};
+  const confirmations=[];
+  const props={project:appState.projects[0],requirements:rows,reviews:[],
+    route:{page:'response',projectId:'P',requirementId:'R1',fileId:'F',sourceVersion:'1'},appState,
+    actorRole:'SR',actorId:'sr',canBusinessAction:()=>true,onAppUpdate:()=>{},navigate:()=>{},toast:()=>{},logEvent:()=>{},
+    onConfirm:async id=>{confirmations.push(id);return true;}};
+  try{
+    await act(async()=>{root.render(React.createElement(ResponsePage,props));await settle();});
+    await click(node.querySelector('[aria-label="展开文档目录"]'));
+    const mine=node.querySelector('[aria-label="选择条款 1.1 Mine"]');
+    const tech=node.querySelector('[aria-label="选择条款 1.2 Tech owned"]');
+    assert.equal(tech.disabled,true,'SR cannot select a clause assigned to a technical confirmer');
+    await click(node.querySelector('[aria-label="全选当前筛选条款"]'));
+    assert.equal(mine.checked,true);
+    assert.equal(tech.checked,false);
+    const batch=[...node.querySelectorAll('.detail-outline-footer button')].find(button=>button.textContent.includes('批量确认'));
+    assert.equal(batch.disabled,false);
+    await click(batch);
+    assert.deepEqual(confirmations,['R1'],'batch confirmation skips rows the SR cannot confirm');
+  }finally{await h.close();}
+});
+
 test('MySQL batch confirms every selected clause as Comply',async t=>{
   const h=await harness('mysql-batch'),{ResponsePage,node,root,settle,click}=h;
   const row={id:'R1',projectId:'P',sourceFileId:'F',source:'Customer.docx',sourceVersion:'V1.0',

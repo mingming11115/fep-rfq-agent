@@ -223,6 +223,15 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const confirmationVersion = active?.confirmationVersion || (active?.confirmedAt && active?.status === '已确认' ? active.version : null);
   const canEdit = !confirmedLocked && actorRole !== '最终审批人'&&!staleSource&&canBusinessAction('requirement',active?.id);
   const canConfirm = ['SR','技术'].includes(actorRole)&&!staleSource&&canBusinessAction('requirement',active?.id,'confirm');
+  // 批量确认必须逐条沿用单条确认的资格：数据库模式下由确认人指派决定，不能把责任人的条款一起勾选。
+  function confirmationOwner(row) { return getConfirmationActorIds(appState, project.id, row).map(id => personName(appState, id)).join('、') || '未指派'; }
+  function canBatchConfirmRow(row) {
+    if (!row || !['SR','技术'].includes(actorRole) || staleSource) { return false; }
+    if (databaseBacked && appState?.accountsById?.[actorId]) {
+      return canPerform(actorRole, 'response:confirm', {state: appState, actorId, projectId: project.id, requirementId: row.id});
+    }
+    return canBusinessAction('requirement', row.id, 'confirm');
+  }
   const suggestion = databaseBacked ? null : matchingSuggestion(active, project.id);
   const retrieval = retrievalById[active?.id] || 'normal';
   const matchScope = JSON.stringify([project.id, actorId, active?.id, active?.backendVersion]);
@@ -255,6 +264,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const selectedDirectoryCount = directoryRows.filter(row => selected.includes(row.id)).length;
   const shown = filtered.slice((page - 1) * 6, page * 6);
   const selectedRows = responseRows.filter((r) => selected.includes(r.id));
+  const batchTargets = selectedRows.filter(canBatchConfirmRow);
+  const batchBlockedCount = selectedRows.length - batchTargets.length;
   const batchSuccessCount = batchResults?.filter(row => row.result === '确认成功').length || 0;
   const batchFailureCount = batchResults?.filter(row => row.result === '确认失败').length || 0;
   const candidates = !databaseBacked && active ? Array.from({ length: showMore ? 5 : 3 }, (_, index) => ({ id: `HIST-${active.clause}-${index + 1}`, project: `历史参考 RFQ-${index === 0 ? '2025-018' : index === 1 ? '2025-011' : `2024-00${index + 1}`}（模拟）`, date: `2025-${String(9 - index).padStart(2, '0')}-18`, model: active.realSource ? 'DEMO-YAG 150 · 模拟历史配置' : index === 0 ? 'DEMO-CUT 300 · V2.1' : 'DEMO-CUT 300 · V2.0', config: index === 0 ? '选配 X / 历史确认配置' : '标准配置 / 工况待比对', original: active.original, answer: suggestion.draft, conditions: suggestion.conditions || '仅适用历史案例记载的材料、厚度、工艺与验收方法；需核对本次条件。', evidence: suggestion.evidence || '模拟历史批准记录 V3，适用性待核对', difference: active.conclusion === '有条件 Comply' ? '本次选配、材料或测试条件尚未全部确认，与历史条件存在差异。' : '设备版本、材料与验收方案需逐项核对；相似要求不代表条件完全一致。', feedback: index === 0 ? '客户已接受（模拟记录）' : '未记录', acceptance: index === 0 ? '未记录' : '未记录', version: `V${3 - Math.min(index, 2)}` })) : [];
@@ -263,7 +274,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   function addActivity(action, detail, id = active?.id) { const entry = { id: uid('EVT'), requirementId: id, action, detail, time: timestamp(), actor: actorRole }; setActivities((old) => [entry, ...old]); logEvent(action, id || project.id, detail); }
   function clearDirty() { dirtyRef.current = false; setDirty(false); setMatchChoice(null); setRealAdoption(null); }
   function selectDirectoryRows(checked) {
-    const ids = new Set(directoryRows.map(row => row.id));
+    const ids = new Set(directoryRows.filter(canBatchConfirmRow).map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
   function hydrate(row) { if (!row) { return; } prefilledRun.current = null; setConfirmationHistory(null); setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
@@ -480,7 +491,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     } else { finishConfirmation(active, nextId); }
   }
   async function batchConfirm() {
-    if (cardBusyRef.current || !selectedRows.length) { return; }
+    if (cardBusyRef.current || !batchTargets.length) { return; }
     const draft = dirtyRef.current ? form : null;
     cardBusyRef.current = true;
     setCardBusy(true);
@@ -488,7 +499,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     try {
       const results = [];
       const confirmed = new Set();
-      for (const row of selectedRows) {
+      for (const row of batchTargets) {
         const patch = { ...(row.id === active.id && draft ? draft : {}), conclusion: 'Comply' };
         try {
           if (await onConfirm(row.id, row.version || 1, patch) === false) {
@@ -504,7 +515,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
       if (!aliveRef.current) { return; }
       setBatchResults(results);
       setSelected(old => old.filter(id => !confirmed.has(id)));
-      addActivity('批量确认结果', `明确选择 ${results.length} 条，按 Comply 成功 ${confirmed.size} 条`);
+      addActivity('批量确认结果', `明确选择 ${results.length} 条，按 Comply 成功 ${confirmed.size} 条${batchBlockedCount ? `，跳过 ${batchBlockedCount} 条无确认权限条款` : ''}`);
       setModal('batch-result');
     } finally {
       cardBusyRef.current = false;
@@ -653,7 +664,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     title={reparseBlocked?'请先处理未保存的修改':'重新解析当前文件'} disabled={!!reparseBlocked}
     onClick={()=>sourceReparse.open(project.id,reparseFileId)}><RefreshCw size={14}/><span className="rfq-editor-tools-label">重新解析</span></UiButton>;
   const sourceToolbar={fileAction:reparseAction,fileSelector:sourceSelector(active.sourceFileId||active.source||'manual'),actions:<><UiButton className={`btn btn-sm rfq-directory-trigger ${outlineOpen?'active':''}`} aria-label="展开文档目录" title="目录" aria-expanded={outlineOpen} onClick={()=>setOutlineOpen(!outlineOpen)}><BookOpen size={14}/><span className="count-pill">{responseRows.length}</span></UiButton><ResponseCardQuery compact filters={cardFilters} draft={cardFilterDraft} sources={cardSources} disabled={cardBusy} onDraftChange={setCardFilterDraft} onApply={applyCardFilters}/><UiButton className={`btn btn-sm rfq-response-toggle ${showResponses?'active':''}`} aria-label="应答标注" title={showResponses?'隐藏应答标注':'显示应答标注'} aria-pressed={showResponses} onClick={()=>setShowResponses(!showResponses)}><MessageSquarePlus size={14}/></UiButton></>};
-  const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id))}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!selectedRows.length || cardBusy} onClick={batchConfirm}>批量确认 {selectedRows.length || ''}</UiButton></div></RfqDirectory>;
+  const directoryPanel=outlineOpen && <RfqDirectory documentOutline={documentOutline?.sourceKey===craftSourceKey(activeSourceAnchor)?documentOutline:undefined} onNavigateHeading={target=>void documentOutline?.navigateHeading?.(target)} onClose={()=>setOutlineOpen(false)}><label className="detail-outline-search"><Search size={14}/><UiInput className="input" aria-label="搜索要求" placeholder="搜索条款或要求" value={query} onChange={e => setQuery(e.target.value)}/></label><UiSelect className="select" aria-label="处理状态" value={status} onChange={e => setStatus(e.target.value)}><option>全部状态</option>{Object.values(RESPONSE_STATUS_LABELS).map(v => <option key={v}>{v}</option>)}</UiSelect><RequirementOutline getStatusLabel={row => responseStatusLabel(row, reviews)} rows={directoryRows} selectedId={active.id} onSelect={row => { chooseRow(row); setOutlineOpen(false); }} selected={selected} onCheck={(id, checked) => { const row = directoryRows.find(item => item.id === id); if (checked && !canBatchConfirmRow(row)) { toast(`当前账号不是「${row?.title || '该条款'}」的确认人：${confirmationOwner(row)}`); return; } setSelected(old => checked ? [...new Set([...old, id])] : old.filter(v => v !== id)); }} isCheckable={canBatchConfirmRow} checkTitle={row => canBatchConfirmRow(row) ? '可批量确认' : `不能批量确认：确认责任人 ${confirmationOwner(row)}`}/><div className="detail-outline-footer"><UiCheckbox aria-label="全选当前筛选条款" title="全选当前文件中符合筛选条件的条款" checked={directoryRows.length > 0 && selectedDirectoryCount === directoryRows.length} indeterminate={selectedDirectoryCount > 0 && selectedDirectoryCount < directoryRows.length} disabled={!directoryRows.length} onChange={event => selectDirectoryRows(event.target.checked)}>全选</UiCheckbox><UiButton className="text-link" onClick={() => { setQuery(''); setStatus('全部状态'); setSection('全部章节'); setOwner('全部责任人'); setSpecial('全部要求'); }}>重置筛选</UiButton><UiButton className="btn btn-sm" disabled={!batchTargets.length || cardBusy} title={batchBlockedCount ? `已跳过 ${batchBlockedCount} 条当前账号无确认权限的条款` : '批量确认已勾选条款'} onClick={batchConfirm}>批量确认 {batchTargets.length || ''}</UiButton></div></RfqDirectory>;
   return <div className="response-page rfq-detail">
     {selectionDialog}
     {parsingFiles.length>0&&<Notice loading>正在解析：{parsingFiles.map(file=>file.name).join('、')}</Notice>}
