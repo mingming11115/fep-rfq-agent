@@ -52,7 +52,7 @@ test('a manual conclusion does not become a system suggestion when no reference 
  const before=structuredClone(input);
  const advice=model.buildResponseAdvice(input,suggestion);
  assert.equal(advice?.conclusion,'待确认');
- assert.equal(advice?.reference,'暂无可用参考依据');
+ assert.equal(advice?.reference,'无');
  assert.equal(advice?.evidence,'');
  assert.deepEqual(input,before);
 });

@@ -64,9 +64,9 @@ export function buildResponseAdvice(row={},suggestion={}, {check=null,retrieval=
   if(row.removedFromSource) { return {conclusion:'不适用',reference:'客户新版已删除此条款',evidence:'',checks:['核对本轮应答范围并填写不适用依据']}; }
   if(row.sourceRevision||row.sourceCorrected) { return pending('来源内容已变化',['按当前来源版本重新匹配并核对参考答复']); }
   if(retrieval==='failed') { return pending('本次检索未完成',['重新匹配后核对参考答复']); }
-  if(retrieval==='denied') { return pending('暂无可访问的参考资料',['由具备资料访问权限的人员核对本条要求']); }
+  if(retrieval==='denied') { return pending('无',['由具备资料访问权限的人员核对本条要求']); }
   const source={standard:Number(row.score)>80?'标准回复':null,history:'历史应答',capability:'机型能力'}[row.matchLevel];
-  if(!source) { return pending('暂无可用参考依据',[answerRemark(row).trim()||`补充“${row.title||'本条要求'}”的能力证据或专业评审结论`]); }
+  if(!source) { return pending('无',[answerRemark(row).trim()||`补充“${row.title||'本条要求'}”的能力证据或专业评审结论`]); }
   const checks=[];
   if(check){
     const comparison=compareParameter(check);

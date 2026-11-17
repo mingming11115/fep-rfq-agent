@@ -51,13 +51,13 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
     <details className="response-reference-details" key={JSON.stringify([project.id,row.id,sourceScope?.fileId??row.sourceFileId??row.source,String(sourceScope?.sourceVersion??row.sourceVersion??'1')])}>
       <summary>
         <Sparkles size={14} aria-hidden="true"/>
-        <strong>{suggested ? `AI 建议：${suggested}` : 'AI 暂无明确建议'}</strong>
+        <strong>{suggested ? `AI 建议：${suggested}` : 'AI 建议：无'}</strong>
         <span>查看依据</span><ChevronDown size={13} aria-hidden="true"/>
       </summary>
       <div className="response-reference-body">
         <dl>
           <dt>AI 建议来源</dt>
-          <dd>{advice.reference || '暂无可用参考依据'}{advice.runId && ` · ${advice.runId}`}
+          <dd>{advice.reference || '无'}{advice.runId && ` · ${advice.runId}`}
             {advice.evidence && onOpenReference && <UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}
           </dd>
           {linkedEvidence && <>
