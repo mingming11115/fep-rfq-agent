@@ -9,6 +9,7 @@
   border: 1px solid var(--line, #e5e7eb);
   border-radius: 8px;
 }
+.response-match-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .response-match-panel ol { margin: 8px 0 0; padding-inline-start: 24px; }
 .response-match-panel li + li { margin-top: 8px; }
 .response-match-panel p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -712,7 +712,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           preview={matchPreview} draftMatchChoice={matchChoice}
           onResult={run => setMatchState({ scope: matchScope, run })} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))} onAdopt={(run,candidate)=>setRealAdoption({run,candidate})}
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
-          onDeviation={item=>onDeviation?.(project.id,item)}/>}
+          onDeviation={item=>onDeviation?.(project.id,item)}
+          onRematch={canPerform(actorRole,'analysis:run')&&canEdit?()=>setModal('rematch'):null} matching={matching}/>}
         <AssessmentPanel key={active.id} sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}
           conclusion={form.conclusion} onConclusionChange={value => edit('conclusion', value)}
           responseAnswer={replyHints[form.conclusion] && <div className="response-form response-answer-fields">

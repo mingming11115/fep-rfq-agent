@@ -268,8 +268,10 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     assert.match(h.node.querySelector('[aria-label="本条关联证据"]').textContent, /能力比对 RUN-1/);
     assert.equal(h.node.querySelector('.response-answer-fields [aria-label="证据"]'), null);
     const matchPanel = () => h.node.querySelector('[aria-label="知识库比对"]');
+    assert.ok([...matchPanel().querySelectorAll('button')].some(button => button.textContent.includes('重新比对')),
+      '重新比对 is available in the match panel for an editor');
     assert.ok(![...matchPanel().querySelectorAll('button')].some(button =>
-      ['重新比对', '设置比对条件'].includes(button.textContent)));
+      button.textContent === '设置比对条件'));
     assert.equal(confirmations.length, 0);
 
     const reply = () => h.node.querySelector('[aria-label="对外答复"]');

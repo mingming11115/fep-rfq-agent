@@ -1,5 +1,5 @@
 import { UiButton } from './AntContent';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Sparkles, RefreshCw, Check } from "./icons";
 import { makeRequirements } from '../data';
 import { RESPONSE_CONCLUSIONS } from '../domain';
@@ -10,6 +10,17 @@ import { Button, Input, Radio, Space } from 'antd';
 export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference, sourceScope,
   recommendation, evidence, currentDraft, canEdit, onAdopt, conclusion, onConclusionChange, responseAnswer, liveAdvice, children }) {
   const [editedWording, setEditedWording] = useState(null);
+  const [regenerateHint, setRegenerateHint] = useState('');
+  const regenerateTimer = useRef(null);
+  useEffect(() => () => clearTimeout(regenerateTimer.current), []);
+  function regenerate() {
+    if (!canEdit) { return; }
+    setEditedWording(null);
+    const hasRecommendation = !!String(recommendation || '').trim();
+    setRegenerateHint(hasRecommendation ? '已重新生成推荐话术' : '当前结论暂无可生成的话术，请先选择应答结论');
+    clearTimeout(regenerateTimer.current);
+    regenerateTimer.current = setTimeout(() => setRegenerateHint(''), 3000);
+  }
   const wording = editedWording ?? recommendation ?? '';
   const original = makeRequirements(project.id).find((item) => item.id === row.id);
   const unchangedSource = !row.sourceRevision && !row.sourceCorrected && original?.original === row.original;
@@ -66,8 +77,9 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
         placeholder="选择应答结论后生成推荐话术" onChange={event => setEditedWording(event.target.value)}/>
       <div className="response-wording-footer">
         <Space size={8} wrap>
-          <Button type="link" size="small" icon={<RefreshCw size={12}/>} disabled={!canEdit} onClick={() => setEditedWording(null)}>重新生成</Button>
+          <Button type="link" size="small" icon={<RefreshCw size={12}/>} disabled={!canEdit} onClick={regenerate}>重新生成</Button>
           <Button size="small" icon={<Check size={13}/>} disabled={!canEdit || !replyToAdopt || adopted} onClick={() => onAdopt?.(replyToAdopt)}>{adopted ? '已采用' : '采用话术'}</Button>
+          {regenerateHint && <span className="response-regen-hint" role="status">{regenerateHint}</span>}
         </Space>
       </div>
     </section>}

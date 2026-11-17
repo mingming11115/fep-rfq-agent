@@ -15,6 +15,7 @@
 .response-advice dd strong{font-size:14px;font-weight:600}.response-advice .response-advice-evidence{display:block;text-align:left;font-size:14px;margin-top:4px;white-space:normal;line-height:1.8;overflow-wrap:anywhere}
 .response-advice ul{margin:0;padding-left:16px}.response-advice li+li{margin-top:5px}.response-advice details{margin-top:12px;font-size:14px;color:var(--text-secondary,#595959)}.response-advice details p{line-height:1.8;white-space:pre-wrap}
 .response-wording-inner{margin-top:14px;padding-top:14px;border-top:1px solid #e3e9f1}.response-wording-inner textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;color:#42536b}
+.response-regen-hint{color:#389e0d;font-size:13px}
 .response-processing .response-workflow-actions{align-items:flex-start;gap:10px}
 .response-processing .response-workflow-actions>.btn{flex:1}
 .response-problem-actions{position:relative;flex:0 0 auto}

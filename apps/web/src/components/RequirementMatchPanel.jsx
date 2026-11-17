@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Space, Tag} from 'antd';
-import {AlertTriangle} from './icons';
+import {AlertTriangle, RefreshCw} from './icons';
 import {MATCH_LIBRARIES, matchClient, matchNeedsPolling, matchStages} from '../requirementMatchClient.js';
 import {Modal, StatusBadge} from './ui';
 
@@ -70,7 +70,7 @@ export default function RequirementMatchPanel({preview, ...props}) {
   return <LiveRequirementMatchPanel {...props}/>;
 }
 
-function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onAdopt, onResult, onDetach, onDeviation}) {
+function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onAdopt, onResult, onDetach, onDeviation, onRematch, matching}) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -134,11 +134,16 @@ function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, 
   }
 
   return <section className="response-match-panel" aria-label="知识库比对">
-    <Space wrap>
-      <strong>知识库比对</strong>
-      <MatchStatus status={run?.status || (error ? 'read_failed' : 'loading')}/>
-      {error && <Button size="small" onClick={() => setRefresh(value => value + 1)}>刷新结果</Button>}
-    </Space>
+    <div className="response-match-head">
+      <Space wrap>
+        <strong>知识库比对</strong>
+        <MatchStatus status={run?.status || (error ? 'read_failed' : 'loading')}/>
+      </Space>
+      <Space size={4} wrap>
+        {onRematch && <Button type="link" size="small" icon={<RefreshCw size={13}/>} loading={matching} disabled={matching} onClick={onRematch}>重新比对</Button>}
+        {error && <Button size="small" onClick={() => setRefresh(value => value + 1)}>刷新结果</Button>}
+      </Space>
+    </div>
     {error && <Alert type="error" message={error} showIcon/>}
     {run?.reason && <p>{reasonLabel(run.reason)}</p>}
     {run?.result?.skipped && <Alert type="info" showIcon message="本项目已关闭三个知识库比对，条款按人工核对处理"/>}
