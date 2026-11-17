@@ -3,6 +3,9 @@ const fold=value=>value.trim().replace(/\s+/g,' ');
 
 export function craftClauseTargets(source,rows,engine,blocks=[]){
   const targets=officeClauseTargets(source,rows);
+  if(engine==='pdfcraft') {
+    return targets.map(target=>({...target,quote:target.anchor.locator.quote}));
+  }
   if(engine!=='wordcraft') { return targets; }
   const tableQuotes=new Map(),tableRows=[],paragraphs=[];
   for(const {type,content} of blocks){

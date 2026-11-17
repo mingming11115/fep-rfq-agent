@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.RawBlock;
+import com.naura.rfq.model.parse.SourceRef;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
@@ -202,6 +203,50 @@ class ParsingAdaptersTest {
             assertThat(result.issues()).hasSize(1);
         } finally { s.stop(0); }
     }
+
+    @Test void pdfModelPreservesCustomerClauseNumberAndVerifiedContext() throws Exception {
+        var input = List.of(
+            RawBlock.paragraph(0, source, "技术规格", null, "page-1/mineru-0"),
+            RawBlock.paragraph(1, "注：仅在标准工况下适用。", "技术规格", null, "page-2/mineru-1"));
+        var reply = """
+            {"requirements":[{"blockIndex":0,"originalText":"1.1 泵的设计压力应不低于 2 MPa。",
+              "customerClauseNo":"1.1","item":"泵的设计压力","description":"标准工况下，泵的设计压力应不低于 2 MPa。",
+              "specification":"2 MPa","supportingSources":[{"blockIndex":1,"originalText":"注：仅在标准工况下适用。"}]}],
+              "ignoredBlockIndexes":[]}
+            """;
+        var result = extractorWithModelReply(reply).extractWithReport(input);
+        assertThat(result.extractor()).isEqualTo("llm:test-model");
+        assertThat(result.requirements()).singleElement().satisfies(clause -> {
+            assertThat(clause.customerClauseNo()).isEqualTo("1.1");
+            assertThat(clause.originalText()).isEqualTo(source);
+            assertThat(clause.sourceRefs()).containsExactly(
+                new SourceRef("page-1/mineru-0", source),
+                new SourceRef("page-2/mineru-1", "注：仅在标准工况下适用。"));
+        });
+    }
+
+    @Test void pdfModelRejectsAnUnverifiedSupportingQuote() throws Exception {
+        var reply = """
+            {"requirements":[{"blockIndex":0,"originalText":"1.1 泵的设计压力应不低于 2 MPa。",
+              "customerClauseNo":"1.1","item":"泵的设计压力","description":"标准工况下，泵的设计压力应不低于 2 MPa。",
+              "specification":"2 MPa","supportingSources":[{"blockIndex":0,"originalText":"仅在标准工况下适用。"}]}],
+              "ignoredBlockIndexes":[]}
+            """;
+        var result = extractorWithModelReply(reply).extractWithReport(blocks());
+        assertThat(result.extractor()).isEqualTo("rule-based-v1");
+        assertThat(result.issues()).singleElement().asString().contains("已降级");
+    }
+
+    private HybridRequirementExtractor extractorWithModelReply(String reply) throws Exception {
+        var response = json.readTree(envelope(reply));
+        var http = new ParseHttpClient(json) {
+            @Override public JsonNode post(ParseIntegrationProperties.Endpoint endpoint, Object request, String runId) {
+                return response;
+            }
+        };
+        return new HybridRequirementExtractor(new RuleBasedExtractor(json), settings("", true), http, json);
+    }
+
     String answer(int block, String quote) throws Exception {
         return json.writeValueAsString(Map.of("requirements", List.of(Map.of("blockIndex", block,
             "originalText", quote, "item", "设计压力", "description", "设计压力至少 2 MPa",
@@ -279,7 +324,7 @@ class ParsingAdaptersTest {
                 assertThat(r.title()).isEqualTo("设计压力");
                 assertThat(r.requirementText()).isEqualTo("设计压力至少 2 MPa");
                 assertThat(r.metricsJson()).isEqualTo("{\"specification\":\"≥ 2 MPa\"}");
-                assertThat(r.customerClauseNo()).isNull();
+                assertThat(r.customerClauseNo()).isEqualTo("1.1");
                 assertThat(r.parentClauseNo()).isNull();
                 assertThat(r.level()).isEqualTo(1);
                 assertThat(r.obligation()).isEqualTo("unknown");

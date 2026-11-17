@@ -299,6 +299,34 @@ class WordMarkdownExtractionTest {
     }
 
     @Test
+    void wordLocatesTheDataRowWhenItAlsoCitesAnEarlierParagraph() throws Exception {
+        var content = new WordMarkdownReader.Content("""
+                [S0] 以下要求仅适用标准工况。
+
+                | Item | 规格 |
+                | --- | --- |
+                | [S1] 额定负载 | 5 kg |
+                """, List.of(
+                RawBlock.paragraph(0, "以下要求仅适用标准工况。", "", null, "body/2"),
+                RawBlock.table(1, List.of(List.of("额定负载", "5 kg")), "", "body/3/r1")),
+                java.util.Set.of(0, 1), List.of());
+        var output = json.readTree("""
+                {"requirements":[{"customerClauseNo":"","title":"额定负载",
+                    "requirementText":"标准工况下额定负载为 5 kg。","specification":"5 kg","sourceRefs":["S1","S0"]}],
+                    "ignoredSourceRefs":[]}
+                """);
+        var extractor = new WordMarkdownExtractor(new ParseIntegrationProperties(false), new ParseHttpClient(json),
+                new RuleBasedExtractor(json));
+
+        var result = extractor.validate(output, content, "markitdown+llm:test", List.of());
+
+        assertThat(result.requirements()).singleElement().satisfies(clause -> {
+            assertThat(clause.blockIndex()).isEqualTo(1);
+            assertThat(clause.sourceRefs()).extracting(SourceRef::anchor).containsExactly("body/3/r1", "body/2");
+        });
+    }
+
+    @Test
     void referencesUseOriginalWordPositionsAndRejectInventedAndMissingMarkers() throws Exception {
         var content = WordMarkdownReader.mapMarkdown("RFQX0END 正文\n| RFQX1END | 5 kg |\nRFQX2END RFQX2END", "RFQX",
                 List.of(RawBlock.paragraph(0, "须支持自动上料", "", null, "body/2"),
@@ -306,7 +334,7 @@ class WordMarkdownExtractionTest {
                         RawBlock.paragraph(2, "额定工况", "", null, "body/8")));
         var output = json.readTree("""
                 {"requirements":[
-                  {"title":"自动上料","requirementText":"须在额定负载 5 kg 时支持自动上料","specification":"5 kg","sourceRefs":["S1","S0"]},
+                  {"title":"自动上料","requirementText":"须在额定负载 5 kg 时支持自动上料","specification":"5 kg","sourceRefs":["S0","S1"]},
                   {"title":"待核对","requirementText":"核对运行工况","sourceRefs":["S2","S999"]}
                 ],"ignoredSourceRefs":[]}
                 """);

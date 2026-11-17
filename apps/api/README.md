@@ -68,7 +68,8 @@ Java 17 / Spring Boot / MyBatis / MySQL，包含业务鉴权、客户文档上�
 | GET | `/projects/{id}/documents?page=1&size=20` | 文档列表 |
 | GET | `/documents/{id}` | 文档元数据详情，不返回内部存储位置 |
 | GET | `/documents/{id}/download` | 下载不可变原件，遵循项目读取权限 |
-| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析 |
+| POST | `/documents/{id}/parse-runs` | 创建并同步完成解析；已有人工修正或应答/评审/定稿产物时返回 409，提示中带产物明细 |
+| GET | `/documents/{id}/parse-blockers` | 重解析前会拦截的下游产物：`responses`、`reviews`、`snapshots` 计数与 `clauses` 条款号样本 |
 | GET | `/parse-runs/{id}` | 运行状态、实际 extractor、异常数量及说明 |
 | GET | `/documents/{id}/blocks` | 原文内容块、sourceAnchor、provenance、processingStatus |
 | GET | `/projects/{id}/requirements?page=1&size=20` | 解析条款及待人工核对原因 |
@@ -112,27 +113,26 @@ OCR 关闭或失败时保留图片占位和待核对标识，可读正文继续�
 | RFQ_OCR_MAX_IMAGE_BYTES | 10485760 | 单张识别图片字节上限 |
 | RFQ_PARSE_MAX_BLOCKS | 5000 | 最多处理内容块数；超出时提示内容未完全处理 |
 
-模型接口使用非流式 `model` 和 `messages` 请求，[协议参考](https://developers.openai.com/api/reference/resources/chat)。服务端发送固定系统指令及内容块 JSON；网关返回 `choices[0].message.content` 中的 JSON 字符串，且 `finish_reason=stop`。不依赖特定模型 SDK 或强制 JSON 模式。
+模型接口使用非流式 `model` 和 `messages` 请求。服务端发送系统指令和文档内容，网关在 `choices[0].message.content` 中返回 JSON 字符串。[协议参考](https://developers.openai.com/api/reference/resources/chat)
 
-模型返回内容示例（blockIndex 为输入内容块编号）：
+项目 PDF 和 DOCX 共用条款抽取规则。PDF 输入是带 `blockIndex` 的内容块，模型返回如下 JSON。
 
 ```json
 {
   "requirements": [{
     "blockIndex": 0,
     "originalText": "1.1 设计压力应不低于 2 MPa。",
-    "requirementText": "设计压力应不低于 2 MPa。",
-    "title": "设计压力",
     "customerClauseNo": "1.1",
-    "level": 2,
-    "parentClauseNo": "1",
-    "obligation": "mandatory"
+    "item": "设计压力",
+    "description": "标准工况下，设计压力应不低于 2 MPa。",
+    "specification": "2 MPa",
+    "supportingSources": [{"blockIndex": 1, "originalText": "注：仅适用标准工况。"}]
   }],
   "ignoredBlockIndexes": []
 }
 ```
 
-每个输入块必须被要求引用或明确列入 `ignoredBlockIndexes`，原文摘录必须是对应块的连续原文，且未忽略块的全部原文需被摘录覆盖，遗漏块内后文同样触发降级。模型不能忽略规则已识别出的候选条款。当前模型模式不直接接受模型给出的指标 JSON，避免未经验证的结构化数值入库；规则模式仍提供指标提取。
+每个输入块都要作为主来源或补充来源被引用，或明确列入 `ignoredBlockIndexes`。后端校验摘录来自对应块的连续原文，且规则识别出的候选块不可标为忽略。PDF 的补充出处限同批次，校验通过后与主出处一起存入 `sourceRefs`。校验失败时该批回退规则抽取。DOCX 输入带 `[S编号]` 的 Markdown，模型用 `sourceRefs` 引用正文、表格行和脚注。
 
 OCR 使用本项目定义的轻量 HTTP JSON 协议，可通过适配服务对接 PaddleOCR、云 OCR 或现有内网 OCR；不是上述服务的原生协议。请求格式：
 

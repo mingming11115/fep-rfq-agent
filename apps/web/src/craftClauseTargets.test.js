@@ -11,6 +11,17 @@ test('Word targets keep the physical references for a clause combined by the mod
   assert.equal(target.quote,'须支持自动上料。');
   assert.deepEqual(target.sourceRefs,sourceRefs);
 });
+
+test('PDF targets locate the primary quote on its original page',()=>{
+  const source={projectId:'P',fileId:'F',sourceVersion:'1'};
+  const row={id:'R',projectId:'P',sourceFileId:'F',original:'泵须支持 2 MPa。\n注：仅适用标准工况。',
+    sourceRefs:[{anchor:'page-3/mineru-0',quote:'泵须支持 2 MPa。'},
+      {anchor:'page-4/mineru-1',quote:'注：仅适用标准工况。'}]};
+  const [target]=craftClauseTargets(source,[row],'pdfcraft');
+  assert.equal(target.quote,'泵须支持 2 MPa。');
+  assert.equal(target.anchor.locator.page,3);
+});
+
 test('repeated Word clauses use their distinct headings for native navigation',()=>{
   const source={projectId:'P',fileId:'F',sourceVersion:'1'};
   const rows=[{id:'R1',projectId:'P',sourceFileId:'F',clause:'P3',title:'Delivery pending',original:'Same words'},
