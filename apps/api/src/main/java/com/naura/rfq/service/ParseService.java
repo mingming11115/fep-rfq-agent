@@ -55,7 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>一次解析运行的完整流程：读取原始块并落库 → 抽取条款 → 复核来源引用 → 持久化条款。
  * 同一文档上一轮运行产生的块与条款会被整体替换，因此重试永远不会产生重复条款；
- * 已有人工修正或应答产物时会拒绝重解析以保护人工结果。
+ * 重解析不设业务拦截，人工修正与应答按条款号沿用到新结果上，而不是拒绝重解析。
  *
  * <p>整个 {@link #run} 在一个事务内执行：读取/抽取阶段失败时回滚为失败状态并保留上一版结果，
  * 成功时按「完成 / 部分成功」两档更新运行记录与文档状态。
@@ -148,27 +148,29 @@ public class ParseService {
     }
 
     /**
-     * 汇总该文档已有的下游产物（应答、评审、定稿快照），供前端在重解析前说明影响范围。
+     * 汇总该文档已有的下游产物（应答、评审、定稿快照、人工修正），供前端在重解析前说明影响范围。
      *
-     * <p>这些产物不再阻止重解析：应答与确认人会按条款号带到新结果上，条款原文变化的应答退回待确认。
+     * <p>这些产物都不再阻止重解析：人工改动、应答与确认人会按条款号带到新结果上，
+     * 条款原文变化的应答退回待确认。
      *
      * @param documentId 客户文档 ID
      * @param projectId  所属项目 ID（评审与快照按项目存储，需配合文档过滤）
-     * @return 三类产物的计数与涉及的条款号样本
+     * @return 四类产物的计数与涉及的条款号样本
      */
     public ParseBlockerView blockers(String documentId, String projectId) {
         List<String> clauses = requirements.findArtifactClauses(documentId, projectId, BLOCKER_SAMPLE_LIMIT);
         int responses = requirements.countRespondedRequirements(documentId);
         int reviews = requirements.countReviewedRequirements(documentId, projectId);
         int snapshots = requirements.countDocumentSnapshots(documentId, projectId);
-        return new ParseBlockerView(responses, reviews, snapshots, clauses);
+        int edited = requirements.countEditedRequirements(documentId);
+        return new ParseBlockerView(responses, reviews, snapshots, edited, clauses);
     }
 
     /**
-     * 解析前的准备阶段：校验访问权限与可重解析条件，锁定项目与文档，创建 RUNNING 状态的解析运行记录。
+     * 解析前的准备阶段：校验访问权限，锁定项目与文档，创建 RUNNING 状态的解析运行记录。
      *
-     * <p>只拒绝已有人工修正过的条款（409，避免覆盖人工结果）。已有应答、评审或定稿记录不再拒绝重解析：
-     * 收尾阶段会按条款号把旧条款的 ID 与确认人带到新结果上，实现「应答随条款保留」。
+     * <p>重解析不设业务拦截：人工修正、应答、评审与定稿都允许重解析。收尾阶段按条款号把旧条款的
+     * ID、确认人与人工改动带到新结果上，实现「改动随条款保留」，因此这里只取旧条款用于比对。
      *
      * @return 携带项目、文档、运行记录、召回配置及计时的解析上下文
      */
@@ -183,9 +185,6 @@ public class ParseService {
                 .orElseThrow(() -> new BusinessException(404, "文档不存在"));
 
         List<Requirement> previous = requirements.findByDocumentIdForReparse(documentId);
-        if (previous.stream().anyMatch(r -> r.getVersion() != null && r.getVersion() > 0)) {
-            throw new BusinessException(409, "已有人工修正的条款，请上传新版本后解析，避免覆盖人工结果");
-        }
 
         List<String> recallIds = historyDocumentIds == null ? document.historyRecallIds()
                 : historyRecall.validate(project, historyDocumentIds);
@@ -327,7 +326,8 @@ public class ParseService {
         ParseRun run = ctx.run();
         run.setTotalBlocks(outcome.rawBlocks().size());
         run.setProcessedBlocks(outcome.rawBlocks().size());
-        run.setRequirementCount(saved.size());
+        run.setRequirementCount((int) saved.stream()
+                .filter(row -> !"EXCLUDED".equals(row.getExtractionStatus())).count());
         run.setIssueCount(issueCount);
         run.setFinishedAt(Instant.now());
 
@@ -482,14 +482,14 @@ public class ParseService {
      * 把重解析前的条款对应到新抽出的条款：按「条款号+原文 → 条款号 → 原文」三级唯一匹配，
      * 命中者沿用旧条款 ID，使该条款上的应答、评审与确认人继续有效。
      *
-     * <p>已被人为删除（EXCLUDED）的条款不参与匹配，避免把删除操作带回结果里。
+     * <p>已被人为删除（EXCLUDED）的条款同样参与匹配：命中后新条款继续保持删除状态，
+     * 否则重解析会把用户明确删掉的误提取条款又带回来。
      */
     private Map<ExtractedRequirement, Requirement> carriedRequirements(List<Requirement> previous,
             List<ExtractedRequirement> extracted) {
         // 抽取结果可能包含完全相同的条款，按对象身份索引，避免相同内容的条款互相覆盖。
         Map<ExtractedRequirement, Requirement> carried = new IdentityHashMap<>();
-        List<Requirement> prior = previous.stream()
-                .filter(row -> !"EXCLUDED".equals(row.getExtractionStatus())).toList();
+        List<Requirement> prior = previous;
         Set<Requirement> used = new HashSet<>();
         for (ExtractedRequirement candidate : extracted) {
             String key = clauseKey(candidate.customerClauseNo(), candidate.originalText());
@@ -630,6 +630,10 @@ public class ParseService {
                 requirement.setConfirmationAssignedBy(prior.getConfirmationAssignedBy());
                 requirement.setConfirmationAssignedAt(prior.getConfirmationAssignedAt());
                 requirement.setConfirmationAssignmentReason(prior.getConfirmationAssignmentReason());
+                // 用户明确删掉的误提取条款，重解析后保持删除状态，不再重新出现在清单里。
+                if ("EXCLUDED".equals(prior.getExtractionStatus())) {
+                    requirement.setExtractionStatus("EXCLUDED");
+                }
             }
             requirement.setProjectId(document.getProjectId());
             requirement.setDocumentId(document.getId());
@@ -645,10 +649,35 @@ public class ParseService {
             requirement.setRequirementText(candidate.requirementText());
             requirement.setMetricsJson(candidate.metricsJson());
             requirement.setReviewReasons(truncate(candidate.reviewReasons(), 900));
+            applyHumanEdit(requirement, prior);
             requirements.insert(requirement);
             saved.add(requirement);
         }
         return saved;
+    }
+
+    /**
+     * 把旧条款上的人工改动带到新条款上：重解析不再因为人工修正而被拒绝，改为在新结果上继续沿用。
+     *
+     * <p>只在新旧原文一致时沿用条款号、标题、条款正文与复核原因，并保留原版本号——行内容与用户
+     * 手上的版本一致，乐观锁不会被无谓推进。原文已变的条款说明客户措辞变了，以新抽取结果为准，
+     * 旧的人工措辞不再适用；该条款的应答由 {@link #reconcileCarried} 退回待确认。
+     *
+     * @param requirement 本次抽取出的新条款，字段已按抽取结果填好
+     * @param prior       匹配到的旧条款，未匹配到时为 null
+     */
+    private void applyHumanEdit(Requirement requirement, Requirement prior) {
+        if (prior == null || prior.getVersion() == null || prior.getVersion() <= 0) {
+            return;
+        }
+        if (!normalizeText(prior.getOriginalText()).equals(normalizeText(requirement.getOriginalText()))) {
+            return;
+        }
+        requirement.setCustomerClauseNo(prior.getCustomerClauseNo());
+        requirement.setTitle(prior.getTitle());
+        requirement.setRequirementText(prior.getRequirementText());
+        requirement.setReviewReasons(prior.getReviewReasons());
+        requirement.setVersion(prior.getVersion());
     }
 
     /** 将解析运行记录转换为对外返回的结果视图。 */

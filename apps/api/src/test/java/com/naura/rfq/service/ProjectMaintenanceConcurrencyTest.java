@@ -67,11 +67,12 @@ class ProjectMaintenanceConcurrencyTest extends AcceptanceSupport {
             // The parser has read its document and opened an RR snapshot before trying the project lock.
             assertThat(pause.parseProjectAttempt.await(60,TimeUnit.SECONDS)).isTrue();
             pause.release.countDown();edited.get(60,TimeUnit.SECONDS);
-            assertThat(reparsed.get(60,TimeUnit.SECONDS).getResponse().getStatus()).isEqualTo(409);
+            assertThat(reparsed.get(60,TimeUnit.SECONDS).getResponse().getStatus()).isEqualTo(200);
             tx.execute(status->{
+                // 人工修正不再拒绝重解析：并发提交的正文被带到新一轮条款上，版本号与条款 ID 保持不变。
                 assertThat(jdbc.queryForObject("select version from requirement where id=?",Long.class,source.requirement())).isEqualTo(1L);
                 assertThat(jdbc.queryForObject("select requirement_text from requirement where id=?",String.class,source.requirement())).isEqualTo("并发前完成的人工修正");
-                assertThat(jdbc.queryForObject("select count(*) from parse_run where document_id=?",Long.class,source.document())).isEqualTo(1L);
+                assertThat(jdbc.queryForObject("select count(*) from parse_run where document_id=?",Long.class,source.document())).isEqualTo(2L);
                 return null;
             });
         } finally {

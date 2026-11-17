@@ -39,6 +39,9 @@ public interface RequirementMapper {
     /** 重解析影响范围：包含该文档的定稿快照份数。 */
     int countDocumentSnapshots(@Param("documentId") String documentId, @Param("projectId") String projectId);
 
+    /** 重解析影响范围：该文档人工修正过的条款数（未删除且 version 已推进）。 */
+    int countEditedRequirements(@Param("documentId") String documentId);
+
     /** 重解析影响范围：已应答或已评审的条款号样本，按条款号排序。 */
     List<String> findArtifactClauses(@Param("documentId") String documentId, @Param("projectId") String projectId,
             @Param("limit") int limit);

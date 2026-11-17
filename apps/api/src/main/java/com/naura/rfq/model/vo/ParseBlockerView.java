@@ -4,17 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 重解析前的下游产物摘要：该文档已产生的应答、评审、定稿三类产物计数，以及涉及的条款号样本。
+ * 重解析前的下游产物摘要：该文档已产生的应答、评审、定稿与人工修正计数，以及涉及的条款号样本。
  *
- * <p>重解析会整体替换条款并重新分配 ID，因此提交前需要让用户知道哪些条款上的记录会受影响。
- * 应答与确认人按条款号带到新结果上，原文变化的条款退回待确认。
+ * <p>重解析不拦截任何情况，本视图只用于提交前告知用户「哪些记录会受影响」。
+ * 人工修正、应答与确认人按条款号带到新结果上，原文变化的条款退回待确认。
  *
  * @param responses 已产生应答的条款数
  * @param reviews   已进入评审的条款数
  * @param snapshots 包含该文档的定稿快照份数
+ * @param edited    人工修正过且未删除的条款数
  * @param clauses   已应答或已评审的条款号样本（已排序，可能为空）
  */
-public record ParseBlockerView(int responses, int reviews, int snapshots, List<String> clauses) {
+public record ParseBlockerView(int responses, int reviews, int snapshots, int edited, List<String> clauses) {
 
     /**
      * 生成可直接拼入提示文案的明细描述。
@@ -31,6 +32,9 @@ public record ParseBlockerView(int responses, int reviews, int snapshots, List<S
         }
         if (snapshots > 0) {
             parts.add("定稿快照 " + snapshots + " 份");
+        }
+        if (edited > 0) {
+            parts.add("人工修正 " + edited + " 条");
         }
         if (parts.isEmpty()) {
             return "";

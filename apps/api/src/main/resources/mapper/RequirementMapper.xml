@@ -116,6 +116,13 @@
           and json_search(payload,'one',#{documentId},null,'$.rows[*].sourceFileId') is not null
     </select>
 
+    <select id="countEditedRequirements" resultType="int">
+        select count(*)
+        from requirement
+        where document_id = #{documentId} and <include refid="generatedRequirement"/>
+          and extraction_status &lt;&gt; 'EXCLUDED' and version &gt; 0
+    </select>
+
     <select id="findArtifactClauses" resultType="string">
         select clause_no from (
             select r.customer_clause_no as clause_no

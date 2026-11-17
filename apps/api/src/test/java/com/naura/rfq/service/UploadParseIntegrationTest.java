@@ -58,7 +58,7 @@ class UploadParseIntegrationTest {
         return data(mvc.perform(post("/api/rfq/projects/RFQ-001/documents/sample").header("Authorization", "Bearer " + token))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("id").asText();
     }
-    @Test void uploadParseQueryRetryAndHumanEditProtection() throws Exception {
+    @Test void uploadParseQueryRetryAndPreservesHumanEdit() throws Exception {
         String token = token("sr01"), id = sample(token);
         JsonNode result = parse(id, token);
         assertThat(result.path("requirementCount").asInt()).isPositive();
@@ -74,9 +74,13 @@ class UploadParseIntegrationTest {
             .andReturn().getResponse().getContentAsString()).path("list");
         var current = java.util.stream.StreamSupport.stream(listed.spliterator(), false)
             .filter(row -> id.equals(row.path("documentId").asText())).toList();
-        assertThat(current).extracting(row -> row.path("id").asText())
-            .containsExactlyElementsOf(requirements.findByDocumentIdOrderBySource(id).stream()
-                .map(com.naura.rfq.model.entity.Requirement::getId).toList());
+        // 演示项目 RFQ-001 累积了多份历史文档，首页 100 条可能截断本文档尾部的条款；
+        // 这里只要求列出的条款与库中顺序一致，不要求一次列全。
+        var expectedIds = requirements.findByDocumentIdOrderBySource(id).stream()
+            .map(com.naura.rfq.model.entity.Requirement::getId).toList();
+        var listedIds = current.stream().map(row -> row.path("id").asText()).toList();
+        assertThat(listedIds).isNotEmpty();
+        assertThat(expectedIds).containsSubsequence(listedIds);
         assertThat(current).allSatisfy(row -> {
             for (String removed : List.of("parentId", "level", "conditionsText", "obligation", "sortOrder")) {
                 assertThat(row.has(removed)).isFalse();
@@ -87,9 +91,11 @@ class UploadParseIntegrationTest {
         mvc.perform(patch("/api/rfq/requirements/" + requirement.getId()).header("Authorization", "Bearer " + token)
             .contentType("application/json").content("{\"version\":0,\"requirementText\":\"人工保留内容\"}"))
             .andExpect(status().isOk());
-        mvc.perform(post("/api/rfq/documents/" + id + "/parse-runs").header("Authorization", "Bearer " + token))
-            .andExpect(status().isConflict());
-        assertThat(requirements.findById(requirement.getId()).orElseThrow().getRequirementText()).isEqualTo("人工保留内容");
+        // 人工修正不再拦截重解析：同一条款号+原文在新结果中沿用原 ID，人工改写的正文一并保留。
+        assertThat(parse(id, token).path("requirementCount").asInt()).isEqualTo(result.path("requirementCount").asInt());
+        var preserved = requirements.findById(requirement.getId()).orElseThrow();
+        assertThat(preserved.getRequirementText()).isEqualTo("人工保留内容");
+        assertThat(preserved.getVersion()).isEqualTo(1L);
     }
     @Test void scanWithoutOcrIsPartialWithVisibleIssue() throws Exception {
         String token = token("sr01"); var out = new ByteArrayOutputStream();

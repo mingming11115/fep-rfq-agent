@@ -62,8 +62,11 @@ class RequirementMatchIntegrationTest {
                 String.class, run.path("runId").asText())).isEqualTo("superseded");
         assertThat(jdbc.queryForObject("select count(*) from document_block where document_id=?",
                 Integer.class, document)).isPositive();
-        mvc.perform(post(parsePath).header("Authorization", f.auth()))
-                .andExpect(status().isConflict());
+        // 重解析不再因删除条款被拒：被删条款沿用原 ID 并保持 EXCLUDED，不会重新出现在清单里。
+        assertThat(request(post(parsePath), f).path("requirementCount").asInt()).isEqualTo(1);
+        assertThat(request(get(projectPath + "/requirements"), f).path("total").asInt()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select extraction_status from requirement where id=?", String.class, id))
+                .isEqualTo("EXCLUDED");
     }
 
     @Test void uploadAndReparseUseTheSelectedHistoryScope() throws Exception {

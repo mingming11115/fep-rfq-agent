@@ -11,6 +11,7 @@ function blockerText(blockers) {
   if (blockers?.responses > 0) { parts.push(`应答 ${blockers.responses} 条`); }
   if (blockers?.reviews > 0) { parts.push(`评审 ${blockers.reviews} 条`); }
   if (blockers?.snapshots > 0) { parts.push(`定稿快照 ${blockers.snapshots} 份`); }
+  if (blockers?.edited > 0) { parts.push(`人工修正 ${blockers.edited} 条`); }
   return parts.join('、');
 }
 
@@ -79,15 +80,13 @@ export default function SourceReparseDialog({project, files, currentFileId, onCl
       </label>}
     {file && <HistoryRecallPicker projectId={project.backendProjectId || project.id} groupId={project.groupId} mode={recallMode} ids={recallIds}
       onMode={setRecallMode} onIds={setRecallIds} disabled={busy || isSourceParsing(file)}/>}
-    {affected && <Alert type="info" showIcon message="重解析会保留已有应答"
+    {affected && <Alert type="info" showIcon message="重解析会保留已有应答与人工修正"
       description={<div>
         <p>{affected}{blockers?.clauses?.length ? `；涉及条款 ${blockers.clauses.join('、')}` : ''}</p>
-        <p>应答与确认人按条款号带到新结果上；条款原文变化的应答会退回待确认，未能在新结果中匹配的条款不再展示。</p>
+        <p>应答与确认人按条款号带到新结果上；人工改过的条款号、标题与应答正文在原文未变时继续沿用；条款原文变化的应答会退回待确认，未能在新结果中匹配的条款不再展示。</p>
         {onOpenReplacement && <Button size="small" onClick={onOpenReplacement}>登记新版原件</Button>}
       </div>}/>}
-    <p className="muted">{affected
-      ? '重解析会整体替换条款并重新分配编号，已匹配条款的应答、评审与定稿记录保持可追溯。'
-      : '解析成功后将更新该文件的抽取条款。已有人工修正或应答记录时，请使用「原件换版」。'}</p>
+    <p className="muted">重解析会整体替换条款并重新分配编号，人工改动与应答随条款保留，不会因此被拦下。</p>
     {busy && <Alert type="info" showIcon message={`正在重新解析 ${file?.name || ''}`}/>}
     {error && <Alert type="error" showIcon message={error}/>}
   </Modal>;
