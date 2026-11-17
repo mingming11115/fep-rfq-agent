@@ -91,10 +91,7 @@ class MineruPdfReaderTest {
         withMineru(true, 200, content, mineru -> mineru.context().run(context -> {
             var requests = new ArrayList<JsonNode>();
             var history = historyWithModel(requests, """
-                {"answers":[{"clauseId":"main:page-1/mineru-0/r1","source":
-                    {"blockIndex":0,"rowIndex":2,"cellIndex":2,"quote":"Comply"}},
-                  {"clauseId":"main:page-1/mineru-0/r2","source":
-                    {"blockIndex":0,"rowIndex":2,"cellIndex":2,"quote":"Comply"}}]}
+                {"answers":[{"id":"main:page-1/mineru-0/r1","candidateId":0}]}
                 """);
             var blocks = context.getBean(PdfBlockReader.class).readForHistory(file);
             var result = history.extract(blocks, List.of());
@@ -107,7 +104,13 @@ class MineruPdfReaderTest {
             assertThat(requests).singleElement().satisfies(request -> {
                 assertThat(request.at("/messages/0/content").asText()).contains("历史答复");
                 var payload = JSON.readTree(request.at("/messages/1/content").asText());
-                assertThat(payload.path("table_body").asText()).isEqualTo(html);
+                assertThat(payload).hasSize(1);
+                assertThat(payload.at("/0/id").asText()).isEqualTo("main:page-1/mineru-0/r1");
+                assertThat(payload.at("/0/requirement").asText()).isEqualTo(requirement);
+                assertThat(payload.at("/0/candidates/0/header").asText()).isEqualTo("Rev");
+                assertThat(payload.at("/0/candidates/0/text").asText()).isEqualTo("Comply");
+                assertThat(payload.at("/0/candidates/0/rowIndex").asInt()).isEqualTo(2);
+                assertThat(payload.at("/0/candidates/0/columnIndex").asInt()).isEqualTo(2);
             });
         }));
     }

@@ -4,9 +4,8 @@ import com.naura.rfq.integration.parse.HybridRequirementExtractor;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.integration.parse.HistoryModelExtractor;
-import com.naura.rfq.integration.parse.HybridRequirementExtractor.HistoryAnswerTarget;
-import com.naura.rfq.integration.parse.HybridRequirementExtractor.WordAnswerCell;
-import com.naura.rfq.integration.parse.HybridRequirementExtractor.WordAnswerTarget;
+import com.naura.rfq.integration.parse.HybridRequirementExtractor.AnswerCandidate;
+import com.naura.rfq.integration.parse.HybridRequirementExtractor.AnswerTarget;
 import com.naura.rfq.integration.parse.RuleBasedExtractor;
 import com.naura.rfq.model.parse.ExtractedRequirement;
 import com.naura.rfq.model.parse.RawBlock;
@@ -57,7 +56,7 @@ public class HistoryExtractor {
         boolean llmEnabled = properties.llmEnabled();
         Map<String, String> metadata = new LinkedHashMap<>();
         List<String> issues = new ArrayList<>();
-        Map<String, WordAnswerTarget> wordSources = new LinkedHashMap<>();
+        Map<String, AnswerTarget> wordSources = new LinkedHashMap<>();
         List<HistoryClause> clauses;
         List<HistoryClause> answers;
         if (rulesEnabled) {
@@ -101,36 +100,105 @@ public class HistoryExtractor {
     }
 
     private List<HistoryClause> applyTableAnswers(List<RawBlock> blocks, List<HistoryClause> clauses,
-            Map<String, WordAnswerTarget> wordSources, List<String> issues) {
+            Map<String, AnswerTarget> wordSources, List<String> issues) {
         Map<String, HistoryClause> missing = new LinkedHashMap<>();
         for (var clause : clauses) {
             if (clause.answer().isBlank() && !clause.requirement().isBlank()) {
                 missing.put(clause.key(), clause);
             }
         }
-        Map<String, String> answers = new LinkedHashMap<>();
-        var wordTargets = wordSources.values().stream().filter(target -> missing.containsKey(target.anchor())).toList();
-        answers.putAll(model.extractWordHistoryAnswers(wordTargets, issues));
-        for (var block : blocks) {
-            var table = block.mineruTable();
-            if (table == null) {
-                continue;
+        List<AnswerTarget> targets = new ArrayList<>();
+        for (var target : wordSources.values()) {
+            if (missing.containsKey(target.id())) {
+                targets.add(target);
             }
-            List<HistoryAnswerTarget> targets = new ArrayList<>();
-            for (int row = 0; row < table.sourceRows().size(); row++) {
-                var clause = missing.get("main:" + block.anchor() + "/r" + row);
-                if (clause != null) {
-                    targets.add(new HistoryAnswerTarget(clause.key(), table.sourceRows().get(row), clause.requirement()));
-                }
-            }
-            answers.putAll(model.extractMineruHistoryAnswers(block, targets, issues));
         }
+        for (var block : blocks) {
+            if (block.mineruTable() != null) {
+                targets.addAll(mineruAnswerTargets(block, missing));
+            }
+        }
+        Map<String, String> answers = model.locateAnswers(targets, issues);
         return clauses.stream().map(clause -> {
             String answer = answers.get(clause.key());
             return answer == null ? clause : new HistoryClause(clause.key(), clause.clauseNo(), clause.section(),
                 clause.requirement(), answer, clause.conditions(), clause.evidence(), clause.feedback(),
                 clause.requirementAnchor(), clause.requirementAnchor(), clause.issues(), clause.customerRequirement());
         }).toList();
+    }
+
+    /** MinerU 表格按展开后的网格提供候选，保留原始行号与列号，合并表头按列合并。 */
+    private List<AnswerTarget> mineruAnswerTargets(RawBlock block, Map<String, HistoryClause> missing) {
+        var table = block.mineruTable();
+        var rows = block.tableRows();
+        List<AnswerTarget> targets = new ArrayList<>();
+        if (rows.isEmpty()) {
+            return targets;
+        }
+        int firstDataRow = -1;
+        for (int index = 0; index < rows.size(); index++) {
+            if (missing.containsKey("main:" + block.anchor() + "/r" + index)) {
+                firstDataRow = index;
+                break;
+            }
+        }
+        if (firstDataRow <= 0) {
+            firstDataRow = 1;
+        }
+        List<String> headers = mergedHeaders(rows, firstDataRow);
+        for (int index = 0; index < rows.size(); index++) {
+            var clause = missing.get("main:" + block.anchor() + "/r" + index);
+            if (clause == null) {
+                continue;
+            }
+            var cells = rows.get(index);
+            int sourceRow = index < table.sourceRows().size() ? table.sourceRows().get(index) : index;
+            List<AnswerCandidate> candidates = new ArrayList<>();
+            for (int column = 0; column < cells.size(); column++) {
+                String text = value(cells.get(column));
+                if (text.isBlank() || text.equals(value(clause.requirement()))) {
+                    continue;
+                }
+                String header = column < headers.size() ? headers.get(column) : "";
+                String kind = headerKind(header);
+                if (List.of("number", "requirement", "item", "specification").contains(kind)) {
+                    continue;
+                }
+                if ("revision".equals(kind) && REVISION_VALUE.matcher(text).matches()) {
+                    continue;
+                }
+                candidates.add(new AnswerCandidate(candidates.size(), sourceRow, column, header, text));
+            }
+            if (!candidates.isEmpty()) {
+                targets.add(new AnswerTarget(clause.key(), clause.requirement(), candidates));
+            }
+        }
+        return targets;
+    }
+
+    /** 合并表头：逐列拼接数据行之前的非空表头文本，colspan 留下的空格沿用左列。 */
+    private List<String> mergedHeaders(List<List<String>> rows, int firstDataRow) {
+        int columns = rows.stream().mapToInt(List::size).max().orElse(0);
+        List<String> headers = new ArrayList<>();
+        String carried = "";
+        for (int column = 0; column < columns; column++) {
+            List<String> parts = new ArrayList<>();
+            for (int row = 0; row < Math.min(firstDataRow, rows.size()); row++) {
+                if (column >= rows.get(row).size()) {
+                    continue;
+                }
+                String text = value(rows.get(row).get(column));
+                if (!text.isBlank() && (parts.isEmpty() || !parts.get(parts.size() - 1).equals(text))) {
+                    parts.add(text);
+                }
+            }
+            String header = parts.isEmpty() ? carried : String.join(" / ", parts);
+            if (!header.isBlank()) {
+                carried = header;
+            }
+            headers.add(header);
+        }
+        return headers;
     }
     private HistoryClause flagMissingFields(HistoryClause clause) {
         List<String> reasons = new ArrayList<>(clause.issues());
@@ -193,7 +261,7 @@ public class HistoryExtractor {
     }
 
     private List<HistoryClause> read(List<RawBlock> blocks, String prefix, boolean companion, Map<String, String> metadata,
-            List<String> issues, Map<String, RawBlock> customerSources, Map<String, WordAnswerTarget> wordSources) {
+            List<String> issues, Map<String, RawBlock> customerSources, Map<String, AnswerTarget> wordSources) {
         List<HistoryClause> clauses = new ArrayList<>();
         for (RawBlock block : blocks) {
             String anchor = prefix + block.anchor(), section = value(block.sectionPath());
@@ -262,7 +330,7 @@ public class HistoryExtractor {
         return clauses;
     }
     private void readTable(RawBlock block, String prefix, boolean companion, List<HistoryClause> clauses, List<String> issues,
-            Map<String, RawBlock> customerSources, Map<String, WordAnswerTarget> wordSources) {
+            Map<String, RawBlock> customerSources, Map<String, AnswerTarget> wordSources) {
         Map<String, List<Integer>> columns = new LinkedHashMap<>();
         List<Integer> customerColumns = List.of();
         List<String> customerHeader = List.of();
@@ -311,9 +379,9 @@ public class HistoryExtractor {
                 customerSources.put(anchor, RawBlock.table(customerSources.size(),
                         List.of(customerHeader, customerRow), section, anchor));
                 if (block.anchor().startsWith("body/") && !columns.containsKey("answer")) {
-                    var candidates = wordAnswerCells(tableHeader, row);
+                    var candidates = wordAnswerCandidates(tableHeader, row);
                     if (!candidates.isEmpty()) {
-                        wordSources.put(anchor, new WordAnswerTarget(anchor, requirement, candidates));
+                        wordSources.put(anchor, new AnswerTarget(anchor, requirement, candidates));
                     }
                 }
             }
@@ -335,13 +403,13 @@ public class HistoryExtractor {
         }
     }
 
-    private List<WordAnswerCell> wordAnswerCells(List<String> header, List<String> row) {
-        List<WordAnswerCell> candidates = new ArrayList<>();
+    private List<AnswerCandidate> wordAnswerCandidates(List<String> header, List<String> row) {
+        List<AnswerCandidate> candidates = new ArrayList<>();
         for (int column = 0; column < Math.min(header.size(), row.size()); column++) {
-            String text = row.get(column);
+            String text = value(row.get(column));
             String kind = headerKind(header.get(column));
-            if (!text.isBlank() && (kind == null || "revision".equals(kind) && !REVISION_VALUE.matcher(text.strip()).matches())) {
-                candidates.add(new WordAnswerCell(column, header.get(column), text));
+            if (!text.isBlank() && (kind == null || "revision".equals(kind) && !REVISION_VALUE.matcher(text).matches())) {
+                candidates.add(new AnswerCandidate(candidates.size(), -1, column, header.get(column), text));
             }
         }
         return candidates;

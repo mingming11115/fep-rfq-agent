@@ -286,8 +286,8 @@ class HistoryExtractorTest {
                 assertThat(rows.at("/0/candidates/0/header").asText()).isEqualTo("Rev");
                 assertThat(rows.at("/0/candidates/0/text").asText()).isEqualTo("Comply\n使用模块 S。");
                 return modelResponse("""
-                        {"answers":[{"anchor":"main:body/1/r1","columnIndex":4},
-                          {"anchor":"main:body/1/r3","columnIndex":4},{"anchor":"main:body/2/r1","columnIndex":2}]}
+                        {"answers":[{"id":"main:body/1/r1","candidateId":0},
+                          {"id":"main:body/1/r3","candidateId":0},{"id":"main:body/2/r1","candidateId":0}]}
                         """);
             }
         });
@@ -315,7 +315,7 @@ class HistoryExtractorTest {
                 var prompt = json.valueToTree(body).at("/messages/0/content").asText();
                 return modelResponse(prompt.contains("历史答复")
                         ? """
-                          {"answers":[{"anchor":"main:body/1/r1","columnIndex":1}]}
+                          {"answers":[{"id":"main:body/1/r1","candidateId":1}]}
                           """
                         : """
                           {"requirements":[],"ignoredBlockIndexes":[0,1]}

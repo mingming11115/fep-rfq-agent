@@ -243,7 +243,7 @@ public class ParseService {
             ExtractionResult result = wordMarkdown != null
                     ? wordMarkdownExtractor.extract(wordMarkdown, ctx.run().getId())
                     : reader instanceof DocxBlockReader
-                    ? extractor.extractWordWithReport(rawBlocks, ctx.run().getId())
+                    ? extractor.extractWordWithReport(rawBlocks)
                     : extractor.extractWithReport(rawBlocks, ctx.run().getId());
             ctx.run().setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
