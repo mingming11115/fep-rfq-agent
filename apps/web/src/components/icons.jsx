@@ -4,7 +4,7 @@ import {
   BellOutlined, BookOutlined, BranchesOutlined, BuildOutlined, CalendarOutlined, CheckCircleOutlined,
   CheckOutlined, ClockCircleOutlined, CloseOutlined, CloudUploadOutlined, CommentOutlined, ControlOutlined,
   CopyOutlined, DashboardOutlined, DatabaseOutlined, DeleteOutlined, DownloadOutlined, EditOutlined,
-  EllipsisOutlined, ExclamationCircleOutlined, ExportOutlined, FileDoneOutlined, FileSearchOutlined,
+  EllipsisOutlined, ExclamationCircleOutlined, ExportOutlined, EyeInvisibleOutlined, EyeOutlined, FileDoneOutlined, FileSearchOutlined,
   FileTextOutlined, FilterOutlined, FolderOpenOutlined, GlobalOutlined, HddOutlined, HistoryOutlined,
   InfoCircleOutlined, LeftOutlined, LoadingOutlined, LockOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
   MinusOutlined, PlusOutlined, QuestionCircleOutlined, RedoOutlined, ReloadOutlined, RightOutlined,
@@ -41,6 +41,8 @@ export const CornerUpLeft = icon(RollbackOutlined);
 export const Database = icon(DatabaseOutlined);
 export const Download = icon(DownloadOutlined);
 export const Ellipsis = icon(EllipsisOutlined);
+export const Eye = icon(EyeOutlined);
+export const EyeOff = icon(EyeInvisibleOutlined);
 export const ExternalLink = icon(ExportOutlined);
 export const FileOutput = icon(ExportOutlined);
 export const FileSearch = icon(FileSearchOutlined);
