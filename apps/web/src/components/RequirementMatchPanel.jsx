@@ -2,17 +2,23 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Space, Tag} from 'antd';
 import {AlertTriangle} from './icons';
 import {MATCH_LIBRARIES, matchClient, matchNeedsPolling, matchStages} from '../requirementMatchClient.js';
-import MatchInputDialog from './MatchInputDialog';
-import {Modal} from './ui';
+import {Modal, StatusBadge} from './ui';
 
 const matches = matchClient();
 const statusLabels = {
   queued:'排队中', running:'比对中', retry_wait:'等待重试', blocked:'等待处理', completed:'已完成',
   failed:'失败', superseded:'已失效', excluded:'已排除', not_run:'未执行',
-  hit:'命中', miss:'未命中', not_applicable:'不适用',
+  hit:'命中', miss:'未命中', not_applicable:'不适用', loading:'读取中', read_failed:'读取失败',
 };
+const statusTones = {
+  queued:'warning', running:'warning', retry_wait:'warning', blocked:'warning', loading:'warning',
+  completed:'success', hit:'success', failed:'danger', miss:'danger', read_failed:'danger',
+};
+function MatchStatus({status}) {
+  return <StatusBadge status={statusLabels[status] || status} tone={statusTones[status] || 'neutral'}/>;
+}
 const reasons = {
-  MATCH_SCOPE_CHANGED:'比对依据已变化，请重新比对',
+  MATCH_SCOPE_CHANGED:'比对依据已变化，当前结果已失效',
   INDEX_NOT_READY:'知识库索引尚未同步',
   MISSING_CAPABILITY_INPUT:'请确认机型、工艺、工况和要求指标',
   CONDITIONS_DIFFER:'适用条件不同或尚未核实',
@@ -22,10 +28,9 @@ const reasons = {
   SEARCH_SCOPE_TOO_LARGE:'当前知识范围超过查询上限',
   QUERY_TOO_LONG:'条款超出查询长度上限',
 };
-const reasonLabel = reason => reasons[reason] || (reason ? '请核对服务状态或重新比对' : '');
+const reasonLabel = reason => reasons[reason] || (reason ? '比对暂未完成，请核对服务状态' : '');
 const conditionLabels = {same:'适用条件一致', different:'适用条件不同', unverified:'适用条件待核对', not_specified:'来源未限定条件'};
 const checkLabels = {supports:'满足', refutes:'不满足', no_candidate:'未找到能力条目', evidence_unavailable:'证据不可用', review:'待核对'};
-const libraryStatusColors = {hit:'success', miss:'error', not_applicable:'default', not_run:'default', blocked:'warning'};
 function deviationLibraries(run) {
   const stages = run?.status === 'completed' ? run.result?.stages : run?.stages;
   return Object.entries(MATCH_LIBRARIES).map(([key, name]) => ({
@@ -55,9 +60,9 @@ function Candidate({candidate, sourceDocument, action}) {
 export default function RequirementMatchPanel({preview, ...props}) {
   if (preview) {
     return <section className="response-match-panel" aria-label="知识库比对">
-      <Space wrap><strong>知识库比对</strong><Tag color="blue">模拟召回</Tag><Tag>已完成</Tag></Space>
+      <Space wrap><strong>知识库比对</strong><Tag color="blue">模拟召回</Tag><MatchStatus status={preview.status}/></Space>
       <ol>{matchStages(preview).map(stage => <li key={stage.library}>
-        <Space><b>{MATCH_LIBRARIES[stage.library]}</b><Tag>{statusLabels[stage.status]}</Tag></Space>
+        <Space><b>{MATCH_LIBRARIES[stage.library]}</b><MatchStatus status={stage.status}/></Space>
         {stage.candidates?.map(candidate => <Candidate key={candidate.id} candidate={candidate}/>)}
       </li>)}</ol>
     </section>;
@@ -65,17 +70,15 @@ export default function RequirementMatchPanel({preview, ...props}) {
   return <LiveRequirementMatchPanel {...props}/>;
 }
 
-function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdopt, draftMatchChoice, review, onAdopt, onResult, onDetach, onDeviation, toast}) {
+function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onAdopt, onResult, onDetach, onDeviation}) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [inputOpen, setInputOpen] = useState(false);
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const deviation = (review?.version || 0) > (run?.deviation?.version || 0) ? review : run?.deviation;
-  const retryId = useRef(null);
   const generation = useRef(0);
   const capabilityAdopted = draftMatchChoice?.candidateId === 'capability' && draftMatchChoice.matchRunId === run?.runId ||
     row.matchReference?.library === 'capability' && row.matchReference.runId === run?.runId && !run?.referenceInvalid;
@@ -108,26 +111,6 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
     if (run?.deviation) { onDeviation(run.deviation); }
   }, [run]);
 
-  async function retry() {
-    const current = generation.current;
-    setBusy(true);
-    try {
-      retryId.current ??= crypto.randomUUID();
-      await matches.retry(row.id, row.backendVersion, retryId.current);
-      if (generation.current !== current) { return; }
-      retryId.current = null;
-      setRun(null);
-      setRefresh(value => value + 1);
-    } catch (error) {
-      console.error('重试条款比对失败', error);
-      if (generation.current !== current) { return; }
-      if (error.status && error.status < 500) { retryId.current = null; }
-      toast(error.message, 'error');
-    } finally {
-      if (generation.current === current) { setBusy(false); }
-    }
-  }
-
   function openAction(action) {
     setReason('');
     setActionError('');
@@ -153,16 +136,14 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
   return <section className="response-match-panel" aria-label="知识库比对">
     <Space wrap>
       <strong>知识库比对</strong>
-      <Tag>{run ? statusLabels[run.status] || run.status : error ? '读取失败' : '读取中'}</Tag>
-      {canRun && <Button size="small" loading={busy} onClick={retry}>重新比对</Button>}
-      {canSetInput && <Button size="small" onClick={() => setInputOpen(true)}>设置比对条件</Button>}
+      <MatchStatus status={run?.status || (error ? 'read_failed' : 'loading')}/>
       {error && <Button size="small" onClick={() => setRefresh(value => value + 1)}>刷新结果</Button>}
     </Space>
     {error && <Alert type="error" message={error} showIcon/>}
     {run?.reason && <p>{reasonLabel(run.reason)}</p>}
     {run?.result?.skipped && <Alert type="info" showIcon message="本项目已关闭三个知识库比对，条款按人工核对处理"/>}
     {run && !run.result?.skipped && <ol>{matchStages(run).map(stage => <li key={stage.library}>
-      <Space><b>{MATCH_LIBRARIES[stage.library]}</b><Tag>{statusLabels[stage.status] || stage.status}</Tag></Space>
+      <Space><b>{MATCH_LIBRARIES[stage.library]}</b><MatchStatus status={stage.status}/></Space>
       {stage.reason && <p>{reasonLabel(stage.reason)}</p>}
       {stage.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
         sourceDocument={stage.library === 'history_rfq' ? resources?.historyDocuments?.find(file => file.id === candidate.documentId) : undefined}
@@ -188,7 +169,7 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
       <div className="match-deviation-libraries">
         {deviationLibraries(run).map(item => <div className="match-deviation-library" key={item.key}>
           <span className="match-deviation-library-name">{item.name}</span>
-          <Tag color={libraryStatusColors[item.status] || 'default'} className="match-deviation-library-status">{statusLabels[item.status] || item.status}</Tag>
+          <MatchStatus status={item.status}/>
         </div>)}
       </div>
     </div>}
@@ -197,8 +178,6 @@ function LiveRequirementMatchPanel({row, resources, canRun, canSetInput, canAdop
       {run?.referenceInvalid && <Alert type="warning" showIcon message="已采纳依据已失效，请重新核对后确认"/>}
       {canAdopt && <Button size="small" onClick={() => openAction('detach')}>解除采纳依据</Button>}
     </div>}
-    {inputOpen && <MatchInputDialog row={row} resources={resources} client={matches} onClose={() => setInputOpen(false)}
-      onSaved={() => { setInputOpen(false); setRun(null); setRefresh(value => value + 1); toast('比对条件已保存，已提交比对'); }}/>}
     {action && <Modal title={{close:'关闭偏离事项', detach:'解除采纳依据'}[action.kind]}
       onClose={() => { if (!busy) { setAction(null); } }}
       footer={<Space><Button disabled={busy} onClick={() => setAction(null)}>取消</Button><Button type="primary" loading={busy} onClick={submitAction}>提交</Button></Space>}>

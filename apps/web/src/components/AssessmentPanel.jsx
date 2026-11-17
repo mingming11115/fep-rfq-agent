@@ -3,11 +3,12 @@ import React, { useState } from 'react';
 import { ChevronDown, Sparkles, RefreshCw, Check } from "./icons";
 import { makeRequirements } from '../data';
 import { RESPONSE_CONCLUSIONS } from '../domain';
+import { singleLineReply } from '../responseFields';
 import { reviewEvidenceHref } from '../reviewRequest';
 import { buildResponseAdvice } from '../responseAdvice';
-import { Button, Input, Radio, Space, Typography } from 'antd';
+import { Button, Input, Radio, Space } from 'antd';
 export default function AssessmentPanel({ row, project, suggestion, retrieval, onOpenReference, sourceScope,
-  recommendation, evidence, currentDraft, canEdit, onAdopt, conclusion, onConclusionChange, liveAdvice, children }) {
+  recommendation, evidence, currentDraft, canEdit, onAdopt, conclusion, onConclusionChange, responseAnswer, liveAdvice, children }) {
   const [editedWording, setEditedWording] = useState(null);
   const wording = editedWording ?? recommendation ?? '';
   const original = makeRequirements(project.id).find((item) => item.id === row.id);
@@ -23,9 +24,10 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
   const check = unchangedSource ? (row.realSource ? bhelFixtures[row.id] : fixtures[row.clause]) : null;
   const advice = liveAdvice ?? buildResponseAdvice(row, suggestion || {}, {check, retrieval});
   const suggested = advice.conclusion && advice.conclusion !== '待确认' ? advice.conclusion : '';
-  const linkedEvidence = advice.evidence || (liveAdvice ? evidence : '');
-  const evidenceHref = /^https?:\/\//i.test(linkedEvidence?.trim()) ? reviewEvidenceHref(linkedEvidence) : '';
-  const adopted = !!wording.trim() && wording.trim() === (currentDraft || '').trim();
+  const linkedEvidence = advice.evidence?.trim() || (liveAdvice ? String(evidence || '').trim() : '');
+  const evidenceHref = /^https?:\/\//i.test(linkedEvidence) ? reviewEvidenceHref(linkedEvidence) : '';
+  const replyToAdopt = singleLineReply(wording).trim();
+  const adopted = !!replyToAdopt && replyToAdopt === singleLineReply(currentDraft).trim();
   const hasWording = typeof recommendation === 'string';
   return <section className="response-advice response-wide">
     {onConclusionChange && <>
@@ -34,6 +36,7 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
         value={conclusion} disabled={!canEdit} options={RESPONSE_CONCLUSIONS}
         onChange={event => onConclusionChange(event.target.value)}/>
     </>}
+    {responseAnswer}
     <details className="response-reference-details" key={JSON.stringify([project.id,row.id,sourceScope?.fileId??row.sourceFileId??row.source,String(sourceScope?.sourceVersion??row.sourceVersion??'1')])}>
       <summary>
         <Sparkles size={14} aria-hidden="true"/>
@@ -46,25 +49,25 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
           <dd>{advice.reference || '暂无可用参考依据'}{advice.runId && ` · ${advice.runId}`}
             {advice.evidence && onOpenReference && <UiButton className="text-link response-advice-evidence" onClick={onOpenReference}>查看候选参考依据</UiButton>}
           </dd>
-          <dt>本条关联证据</dt>
-          <dd aria-label="本条关联证据">{linkedEvidence || '暂无关联证据'}
-            {evidenceHref && <a className="text-link" aria-label="打开本条关联证据" href={evidenceHref} target="_blank" rel="noopener noreferrer">查看来源 ↗</a>}
-          </dd>
+          {linkedEvidence && <>
+            <dt>本条关联证据</dt>
+            <dd aria-label="本条关联证据">{linkedEvidence}
+              {evidenceHref && <a className="text-link" aria-label="打开本条关联证据" href={evidenceHref} target="_blank" rel="noopener noreferrer">查看来源 ↗</a>}
+            </dd>
+          </>}
         </dl>
         {row.parserNote && <p role="note">解析提示：{row.parserNote}</p>}
         {children}
       </div>
     </details>
     {hasWording && <section className="response-wording-inner" aria-label="AI 推荐话术">
+      <h4 className="response-wording-heading"><Sparkles size={15} aria-hidden="true"/>AI 推荐话术</h4>
       <Input.TextArea aria-label="推荐话术" autoSize={{ minRows: 3, maxRows: 6 }} value={wording} readOnly={!canEdit}
-        onChange={event => setEditedWording(event.target.value)}/>
-      <Typography.Paragraph type="secondary" aria-label="推荐话术依据" style={{ margin: '8px 0 0' }}>
-        依据：{String(evidence || '').trim() || '暂无关联证据'}
-      </Typography.Paragraph>
+        placeholder="选择应答结论后生成推荐话术" onChange={event => setEditedWording(event.target.value)}/>
       <div className="response-wording-footer">
         <Space size={8} wrap>
           <Button type="link" size="small" icon={<RefreshCw size={12}/>} disabled={!canEdit} onClick={() => setEditedWording(null)}>重新生成</Button>
-          <Button size="small" icon={<Check size={13}/>} disabled={!canEdit || !wording.trim() || adopted} onClick={() => onAdopt?.(wording.trim())}>{adopted ? '已采用' : '采用话术'}</Button>
+          <Button size="small" icon={<Check size={13}/>} disabled={!canEdit || !replyToAdopt || adopted} onClick={() => onAdopt?.(replyToAdopt)}>{adopted ? '已采用' : '采用话术'}</Button>
         </Space>
       </div>
     </section>}

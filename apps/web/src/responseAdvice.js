@@ -1,5 +1,5 @@
 import {compareParameter} from './rfqWorkflow.js';
-import {answerRemark} from './responseFields.js';
+import {answerRemark, mergeAnswerConditions} from './responseFields.js';
 
 const conclusionLabels={Comply:'满足','有条件 Comply':'有条件满足','不满足':'不满足','不适用':'不适用','待确认':'待确认'};
 export const SOURCE_ANNOTATION_CONCLUSIONS=Object.keys(conclusionLabels);
@@ -15,8 +15,12 @@ export function buildSourceResponseAnnotation(row = {}, response = row) {
   const current = { ...row, ...response };
   const value = String(current.conclusion || '').trim();
   const conclusion = Object.hasOwn(conclusionLabels, value) ? value : '待确认';
-  if (conclusion === 'Comply') { return { kind: 'comply', label: 'Comply', conclusion, wording: '' }; }
   if (conclusion === '待确认') { return { kind: 'pending', label: '待确认', conclusion, wording: '' }; }
+  const draft = String(response?.draft ?? '');
+  if (draft.trim()) {
+    return { kind: 'response', label: '对外答复', conclusion, wording: mergeAnswerConditions(draft, response?.conditions) };
+  }
+  if (conclusion === 'Comply') { return { kind: 'comply', label: 'Comply', conclusion, wording: '' }; }
   return {
     kind: 'recommendation', label: '推荐话术', conclusion,
     wording: generateRecommendedWording({ ...current, conclusion }),

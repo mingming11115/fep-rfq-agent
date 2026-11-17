@@ -107,13 +107,13 @@ test('incomplete conditional wording does not invent a satisfied commitment',()=
  assert.ok(!conditional.includes('已满足'));
 });
 
-test('source margin shows only Comply for a compliant clause, without its saved draft',()=>{
- const input={...row,conclusion:'Comply',draft:'保留的人工答复'};
+test('source margin shows the reply that will be written to the document',()=>{
+ const input={...row,conclusion:'Comply',draft:'Comply，使用客户提供的校准件'};
  const before=structuredClone(input);
  const annotation=model.buildSourceResponseAnnotation?.(input);
- assert.equal(annotation?.kind,'comply');
- assert.equal(annotation?.label,'Comply');
- assert.equal(annotation?.wording,'');
+ assert.equal(annotation?.kind,'response');
+ assert.equal(annotation?.label,'对外答复');
+ assert.equal(annotation?.wording,'Comply，使用客户提供的校准件');
  assert.deepEqual(input,before);
 });
 
@@ -138,11 +138,8 @@ test('source margin uses the latest saved response rather than an old parsed con
  const response={conclusion:'不满足',conditions:'当前排产16周',reason:'客户要求12周',draft:'当前人工答复'};
  const before=structuredClone({parsed,response});
  const annotation=model.buildSourceResponseAnnotation?.(parsed,response);
- assert.equal(annotation?.kind,'recommendation');
  assert.equal(annotation?.conclusion,'不满足');
- assert.ok(annotation?.wording.includes('当前排产16周'));
- assert.ok(annotation?.wording.includes('客户要求12周'));
- assert.ok(!annotation?.wording.includes('旧条件'));
+ assert.equal(annotation?.wording,'当前人工答复\n适用条件：当前排产16周');
  assert.deepEqual({parsed,response},before);
  const compliant=model.buildSourceResponseAnnotation?.({...parsed,conclusion:'不满足'},{conclusion:'Comply'});
  assert.equal(compliant?.label,'Comply');

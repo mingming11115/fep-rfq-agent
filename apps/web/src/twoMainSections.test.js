@@ -166,11 +166,12 @@ test('MySQL batch confirms every selected clause as Comply',async t=>{
     props={...props,route:{...props.route,requirementId:'R8'}};
     await act(async()=>{paint();await settle();});
     await click(node.querySelector('[aria-label="应答结论"] input[value="Comply"]'));
-    for (const label of ['对外答复','适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
+    assert.equal(field('对外答复')?.tagName, 'INPUT');
+    for (const label of ['适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="应答结论"] input[value="有条件 Comply"]'));
     const wording = node.querySelector('section[aria-label="AI 推荐话术"]');
     assert.ok(wording, 'conditional Comply shows editable recommended wording');
-    assert.equal(field('对外答复'), null, 'the response card has no separate external reply field');
+    assert.equal(field('对外答复')?.tagName, 'INPUT');
     assert.equal(node.querySelector('.response-current-card [aria-label="应答依据"]'), null,
       'the response card has no manual evidence input');
     assert.equal(field('适用条件'), null, 'conditions belong in the answer text');
@@ -186,16 +187,22 @@ test('the single response conclusion prefills a clear AI recommendation and subm
   };
   const requirements = [
     row,
-    { ...row, id: 'R2', conclusion: '不适用', draft: 'Already saved by a person' },
+    { ...row, id: 'R2', conclusion: '不适用', draft: '范围外\n客户已确认', remark: '原内部备注' },
     { ...row, id: 'R3' },
   ];
   t.mock.method(globalThis, 'fetch', async url => {
     if (url.endsWith('/match-result')) {
       const pending = url.includes('/R3/');
+      if (pending) {
+        return Response.json({ code: 0, data: {
+          runId: 'RUN-3', status: 'blocked', sourceRequirementVersion: 0,
+          stages: { standard_reply: { status: 'blocked' } },
+        } });
+      }
       return Response.json({ code: 0, data: {
-        runId: pending ? 'RUN-3' : 'RUN-1', status: 'completed', sourceRequirementVersion: 0,
+        runId: 'RUN-1', status: 'completed', sourceRequirementVersion: 0,
         result: {
-          matchedLibrary: 'capability', conclusion: pending ? '待确认' : '有条件 Comply',
+          matchedLibrary: 'capability', conclusion: '有条件 Comply',
           stages: { capability: { status: 'hit', restrictions: ['选配 X'] } },
         },
       } });
@@ -221,18 +228,46 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     assert.equal(h.node.querySelectorAll('[aria-label="应答结论"]').length, 1);
     assert.match(h.node.querySelector('.response-reference-details summary').textContent, /AI 建议.*有条件/);
     assert.match(h.node.querySelector('textarea[aria-label="推荐话术"]').value, /选配 X/);
+    const wording = h.node.querySelector('[aria-label="AI 推荐话术"]');
+    assert.equal(wording.querySelector('h4')?.textContent, 'AI 推荐话术');
+    assert.equal(Boolean(wording.querySelector('[aria-label="推荐话术依据"]')), false);
+    await h.click(h.node.querySelector('.response-reference-details summary'));
+    assert.match(h.node.querySelector('[aria-label="本条关联证据"]').textContent, /能力比对 RUN-1/);
+    assert.equal(h.node.querySelector('.response-answer-fields [aria-label="证据"]'), null);
+    const matchPanel = () => h.node.querySelector('[aria-label="知识库比对"]');
+    assert.ok(![...matchPanel().querySelectorAll('button')].some(button =>
+      ['重新比对', '设置比对条件'].includes(button.textContent)));
     assert.equal(confirmations.length, 0);
 
-    await h.click(h.node.querySelector('[aria-label="应答结论"] input[value="Comply"]'));
+    const reply = () => h.node.querySelector('[aria-label="对外答复"]');
+    assert.equal(reply()?.tagName, 'INPUT', 'the selected conclusion has a single-line reply field');
+    assert.match(reply().placeholder, /前提/);
+    assert.equal(reply().value, '适用条件：选配 X');
+    for (const [conclusion, hint] of [['不满足', /差距/], ['不适用', /范围/], ['Comply', /满足方式/]]) {
+      await h.click(h.node.querySelector(`[aria-label="应答结论"] input[value="${conclusion}"]`));
+      assert.match(reply().placeholder, hint);
+      assert.equal(reply().value, '适用条件：选配 X');
+    }
     assert.equal(selected(), 'Comply');
+    await h.type(reply(), 'Comply，使用客户提供的校准件');
     assert.match(h.node.querySelector('.response-reference-details summary').textContent, /有条件/);
     await h.click([...h.node.querySelectorAll('button')].find(button => button.textContent === '确认本条'));
     assert.equal(confirmations[0][2].conclusion, 'Comply');
+    assert.equal(confirmations[0][2].draft, 'Comply，使用客户提供的校准件');
+    assert.equal(confirmations[0][2].remark, '', 'the external reply stays separate from internal remarks');
+    assert.equal(confirmations[0][2].evidence, '能力比对 RUN-1');
     assert.deepEqual(confirmations[0][3], { matchRunId: 'RUN-1', candidateId: 'capability' });
 
     assert.equal(selected(), '不适用', 'a saved human conclusion takes priority');
+    assert.equal(reply().value, '范围外 客户已确认', 'a saved multiline reply remains readable in one line');
     await next();
-    assert.equal(selected(), undefined, 'an inconclusive match leaves the field empty');
+    assert.equal(selected(), undefined, 'a blocked match leaves the field empty');
+    assert.equal(reply(), null);
+    assert.equal(h.node.querySelector('[aria-label="推荐话术依据"]'), null);
+    assert.equal(h.node.querySelector('[aria-label="本条关联证据"]'), null);
+    const tags = [...matchPanel().querySelectorAll('.ant-tag')];
+    assert.ok(tags.some(tag => tag.textContent === '等待处理' && tag.classList.contains('ant-tag-warning')));
+    assert.ok(tags.some(tag => tag.textContent === '未执行' && !tag.classList.contains('ant-tag-warning')));
   } finally {
     await h.close();
   }

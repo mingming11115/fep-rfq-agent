@@ -50,6 +50,7 @@
 .rfq-detail .response-wording { min-width:0; }
 .rfq-detail .response-wording-heading { display:flex; align-items:center; gap:8px; margin:0; font-size:14px; font-weight:600; }
 .rfq-detail .response-wording-heading svg { color:var(--primary); flex:none; }
+.rfq-detail .response-wording-inner .response-wording-heading { margin-block-end:8px; }
 .rfq-detail .response-wording .ant-card-extra { margin-inline-start:8px; font-size:12px; }
 .rfq-detail .response-wording .ant-card-extra .ant-tag { margin:0; }
 .rfq-detail .response-wording-footer { display:flex; justify-content:flex-end; margin-top:8px; }

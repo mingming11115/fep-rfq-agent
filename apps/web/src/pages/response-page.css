@@ -21,7 +21,5 @@
 .match-deviation-libraries { margin-top: 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .match-deviation-library { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 10px; border: 1px solid #ffe7ba; border-radius: 5px; background: #fff; }
 .match-deviation-library-name { font-size: 13px; color: #434343; }
-.match-deviation-library-status { margin-inline-end: 0; }
+.match-deviation-library .ant-tag { margin-inline-end: 0; }
 @media(max-width:520px){.match-deviation-libraries{grid-template-columns:1fr}}
-.response-evidence-view { min-height: 34px; padding: 7px 11px; border: 1px solid var(--line, #e5e7eb); border-radius: 6px; background: #fafafa; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.response-evidence-view.is-empty { color: #8c8c8c; }

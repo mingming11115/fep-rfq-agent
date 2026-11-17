@@ -1,17 +1,11 @@
 import { canReviewWithoutManualConfirmation, captureSystemRecommendation, getUnconfirmedComplyRows } from './responseRecommendation.js';
-import { answerRemark, normalizeResponseRemark } from './responseFields.js';
+import { answerRemark, mergeAnswerConditions, normalizeResponseRemark } from './responseFields.js';
 
 export const RESPONSE_CONCLUSIONS = ['Comply', '有条件 Comply', '不满足', '不适用'];
 const MATERIAL_FIELDS = ['original', 'conclusion', 'evidence', 'owner'];
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
 
-export function mergeAnswerConditions(draft = '', conditions = '') {
-  const text = String(draft ?? '');
-  const condition = String(conditions ?? '').trim();
-  if (!condition) { return text; }
-  const line = `适用条件：${condition}`;
-  return text.includes(line) ? text : [text, line].filter(Boolean).join('\n');
-}
+export { mergeAnswerConditions };
 
 export function importParsedRequirements(existing, parsed) {
   const rows = new Map(existing.map((row) => [row.id, row]));

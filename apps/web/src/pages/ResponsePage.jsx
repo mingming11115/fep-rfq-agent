@@ -36,7 +36,7 @@ import { flushSync } from 'react-dom';
 import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, History, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, MessageSquarePlus, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions, RESPONSE_CONCLUSIONS } from '../domain';
-import { answerRemark } from '../responseFields';
+import { answerRemark, singleLineReply } from '../responseFields';
 import { MATCH_LIBRARIES, matchClient } from '../requirementMatchClient';
 import { demoMatchPreview } from '../demoMatchPreview';
 import './response-page.css';
@@ -58,6 +58,12 @@ const read = (key, fallback = []) => { try { return JSON.parse(localStorage.getI
 const matches = matchClient();
 const toForm = (row) => ({ original: row?.original || '', conclusion: row?.conclusion === '待确认' ? '' : row?.conclusion || '', draft: mergeAnswerConditions(row?.draft, row?.conditions), remark: answerRemark(row), evidence: row?.evidence || '' });
 const formFields = ['original', 'conclusion', 'draft', 'remark', 'evidence'];
+const replyHints = {
+  Comply: '例如 Comply，补充满足方式或验收说明',
+  '有条件 Comply': '写明适用条件、工况或其他前提',
+  不满足: '说明差距、限制或可提供的替代方案',
+  不适用: '说明不适用的范围或原因',
+};
 const detailSection = page => page === 'activity' ? 'activity' : 'response';
 function matchPrefill(result, conclusion, evidence) {
   const library = result?.matchedLibrary;
@@ -656,7 +662,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total) { setPaneShare(sizes[0]/total*100); }}}>
       <Splitter.Panel size={paneShare+'%'} min={narrowWorkbench?280:320}><div className="detail-document-column">
 
-        <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={row=>actorRole!=='最终审批人'&&!staleSource&&canBusinessAction('requirement',row.id)} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={activeFile} onExtractSelection={selectionAction(activeFile)} rows={requirements.filter(r => (r.sourceFileId || r.source) === (active.sourceFileId || active.source)).map(r => ({ ...r, projectId: project.id }))} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={!conflicted && !staleSource ? { ...active, ...form } : undefined} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
+        <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={row=>actorRole!=='最终审批人'&&!staleSource&&canBusinessAction('requirement',row.id)} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={activeFile} onExtractSelection={selectionAction(activeFile)} rows={requirements.filter(r => (r.sourceFileId || r.source) === (active.sourceFileId || active.source)).map(r => ({ ...r, projectId: project.id }))} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={!conflicted && !staleSource ? { ...active, ...form, conditions: undefined } : undefined} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
       </div></Splitter.Panel>
       <Splitter.Panel size={(100-paneShare)+'%'} min={narrowWorkbench?360:380}><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content" ref={detailSideRef}>
 
@@ -691,15 +697,19 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   <div hidden className="response-customer-requirement"><div><span>客户原始要求</span><UiButton className="text-link" onClick={() => { setModal('original'); setError(''); }}>查看 / 修订</UiButton></div><p>{active.original}</p>{active.realSource && <a className="text-link" href={active.sourceUrl} target="_blank" rel="noreferrer">查看英文原PDF · 第{active.sourcePage}页 ↗</a>}<small><FileText size={12} />{active.source} · 第 {active.sourcePage || 1} 页</small></div>
         {conflicted && <Notice warning>条目版本已更新。当前输入仍保留，保存及确认前请核对最新版本。</Notice>}{actorRole === '最终审批人' && <Notice>条款由技术确认，请在最终审批中核对整份应答。<UiButton className="text-link" onClick={() => goPage('export')}>查看最终审批</UiButton></Notice>}{openReview && <Notice warning>{hasAssignedConfirmer(active)?'评审处理中；评审完成后由条款确认人确认本条。':'评审处理中；全部评审人确认后完成本条。'}<UiButton className="text-link" onClick={() => openReviewDetails(openReview.id)}>查看事项</UiButton></Notice>}
         {active.status==='待确认'&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}        {databaseBacked && <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}`} row={active}
-          resources={appState.resourcesByBuId?.[project.buId]} canRun={canEdit && !active.needsReview && canPerform(actorRole,'analysis:run')}
-          canSetInput={canEdit && !active.needsReview && ['SR','技术','BU管理员'].includes(actorRole)}
-          canAdopt={canEdit} actorId={actorId} canCloseDeviation={[project.ownerId,active.confirmationAssigneeId].includes(actorId)}
+          resources={appState.resourcesByBuId?.[project.buId]} canAdopt={canEdit}
           preview={matchPreview} draftMatchChoice={matchChoice}
           onResult={run => setMatchState({ scope: matchScope, run })} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))} onAdopt={(run,candidate)=>setRealAdoption({run,candidate})}
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
-          onDeviation={item=>onDeviation?.(project.id,item)} toast={toast}/>}
+          onDeviation={item=>onDeviation?.(project.id,item)}/>}
         <AssessmentPanel key={active.id} sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}
           conclusion={form.conclusion} onConclusionChange={value => edit('conclusion', value)}
+          responseAnswer={replyHints[form.conclusion] && <div className="response-form response-answer-fields">
+            <Field label="对外答复">
+              <UiInput aria-label="对外答复" value={singleLineReply(form.draft)} readOnly={!canEdit}
+                onChange={event => edit('draft', event.target.value)} placeholder={replyHints[form.conclusion]}/>
+            </Field>
+          </div>}
           liveAdvice={databaseBacked ? {
             conclusion: matchConclusion,
             reference: matchLibrary && matchPreview ? `${matchLibrary}（模拟）` : matchLibrary,
@@ -712,16 +722,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
             addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`);
             toast('推荐话术已带入应答草稿，提交或确认后保存');
           }}/>
-        <div className="form-grid response-form response-answer-fields">
-          <Field label="证据" required={form.conclusion === '有条件 Comply'} wide>
-            <div className={`response-evidence-view${String(form.evidence || '').trim() ? '' : ' is-empty'}`} aria-label="证据">
-              {String(form.evidence || '').trim() || '暂无证据；采用比对候选后自动带出'}
-            </div>
-          </Field>
-          {form.conclusion === '不适用' && <Field label="备注" wide>
-            <UiTextArea aria-label="备注" value={form.remark} readOnly={!canEdit} onChange={event=>edit('remark',event.target.value)} placeholder="填写备注（选填）"/>
-          </Field>}
-        </div>
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openReviewDetails(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>
         {!!linkedReviews.length && <div className="rfq-linked-reviews"><div className="rfq-section-title"><strong>问题处理记录</strong><span>{linkedReviews.length} 项</span></div>{linkedReviews.map((review) => <button key={review.id} className="rfq-review-link" onClick={() => openReviewDetails(review.id)}><span><b>{review.title}</b><small>{review.owner} · 截止 {review.deadline || '未设置'}</small></span><StatusBadge status={review.status}/><ChevronRight size={14}/></button>)}</div>}
@@ -777,7 +777,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason)) { setModal(null); }}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal)) { setModal(null); }}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{mergeAnswerConditions(active.pendingReviewProposal.proposal.draft, active.pendingReviewProposal.proposal.conditions)}</p><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
     {modal === 'confirm' && <Modal title={dirty ? '修改后确认当前条目' : '确认当前条目应答'} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={!canConfirm || !!pendingConfirmation} onClick={confirmOne}>{pendingConfirmation ? '保存后确认中…' : '确认本条'}</UiButton></>}>
       <div className="response-modal-title"><span>条款 {active.clause}{!databaseBacked && ` · V${active.version || 1}`}</span><h3>{active.title}</h3></div>
-      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.remark]] : []), ...(String(form.draft || '').trim() ? [['推荐话术', form.draft]] : []), ...(String(form.evidence || '').trim() ? [['证据', form.evidence]] : [])]}/>
+      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.remark]] : []), ...(form.draft.trim() ? [['对外答复', form.draft]] : []), ...(String(form.evidence || '').trim() ? [['证据', form.evidence]] : [])]}/>
       <Notice>确认会记录当前应答和来源。请先完成未关闭的评审，并填写明确结论。</Notice>
       <label className="response-checkbox"><UiCheckbox type="checkbox" checked={confirmNext} onChange={(e) => setConfirmNext(e.target.checked)} />确认后跳转下一未完成条目</label>{error && <p className="response-error" role="alert">{error}</p>}
     </Modal>}
