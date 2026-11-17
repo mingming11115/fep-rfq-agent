@@ -99,7 +99,8 @@ class WordMarkdownExtractionTest {
                 assertThatThrownBy(() -> extractor.extract(content, "RUN")).isInstanceOf(DocumentReadException.class);
                 assertThat(requests).containsExactly(content.markdown());
                 assertThat(logs.getAll())
-                        .contains("document.parse.word.llm.failed parseRunId=RUN errorType=RemoteStatusException reason=HTTP 401")
+                        .contains("document.parse.word.llm.failed 文档模型解析失败 documentName=- parseRunId=RUN"
+                                + " errorType=RemoteStatusException reason=HTTP 401")
                         .doesNotContain("Invalid API key", "设备必须自动上料");
                 return;
             }

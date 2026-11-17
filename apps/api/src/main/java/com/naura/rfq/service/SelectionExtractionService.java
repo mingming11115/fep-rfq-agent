@@ -65,11 +65,13 @@ public class SelectionExtractionService {
         List<RawBlock> blocks = new ArrayList<>();
         selection.text().lines().filter(line -> !line.isBlank()).forEach(line ->
             blocks.add(new RawBlock(blocks.size(), RawBlock.PARAGRAPH, line.strip(), List.of(), "", null, anchor)));
-        var result = extractor.extractWithReport(blocks);
+        var result = extractor.extractWithReport(blocks, null, document.getName());
         List<Candidate> candidates = result.requirements().stream()
             .filter(row -> row.originalText() != null && !row.originalText().isBlank()
                 && selection.text().contains(row.originalText()))
             .map(this::candidate).toList();
+        log.info("document.selection.extract 选区条款抽取完成 documentName={} documentId={} 选区行数={} 候选条款={} 提示={}",
+                document.getName(), documentId, blocks.size(), candidates.size(), result.issues().size());
         return new Preview(candidates, result.issues());
     }
 

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
@@ -71,6 +72,16 @@ public class WordMarkdownExtractor {
     }
 
     public ExtractionResult extract(WordMarkdownReader.Content content, String runId) throws DocumentReadException {
+        return extract(content, runId, null);
+    }
+
+    /**
+     * 抽取 Word 文档条款，并把文档名带进每条日志，便于按文件核对分批与耗时。
+     *
+     * @param documentName 客户文档名，仅用于日志；未知时传 null
+     */
+    public ExtractionResult extract(WordMarkdownReader.Content content, String runId, String documentName)
+            throws DocumentReadException {
         var config = properties.getLlm();
         if (config.getModel().isBlank() || config.getUrl().isBlank()) {
             throw new DocumentReadException("Word 模型抽取需要配置模型名称和地址");
@@ -85,27 +96,39 @@ public class WordMarkdownExtractor {
         int maxChars = configuredMax > 0 ? configuredMax : Integer.MAX_VALUE;
         String extractor = "markitdown+llm:" + config.getModel();
         int wholeChars = Math.min(Math.max(1, config.getBatchChars()), maxChars);
+        log.info("document.parse.word.llm.start 文档开始调用模型解析 documentName={} parseRunId={} model={}"
+                        + " markdownChars={} blocks={} sources={} batchChars={}",
+                label(documentName), runId, config.getModel(), content.markdown().length(), content.blocks().size(),
+                content.availableSources().size(), wholeChars);
         try {
             if (content.markdown().length() > wholeChars) {
                 // 文件超过单批上限直接分批，不先发一次注定超限的整文请求。
-                log.info("document.parse.word.llm.batching parseRunId={} reason=input_exceeds_batch_chars batchChars={}",
-                        runId, wholeChars);
+                log.info("document.parse.word.llm.batching 文档超过单批上限，改为分批调用模型 documentName={} parseRunId={}"
+                                + " reason=input_exceeds_batch_chars batchChars={}",
+                        label(documentName), runId, wholeChars);
             } else {
                 try {
                     var response = request(content.markdown(), PROMPT, config, runId);
                     var attempts = List.of(new BatchAttempt(1, BatchAttempt.SUCCESS,
                             sources(content.availableSources()), content.markdown().length(), null));
-                    return validate(response, content, extractor, attempts);
+                    var result = validate(response, content, extractor, attempts);
+                    log.info("document.parse.word.llm.single 文档整篇调用模型解析完成 documentName={} parseRunId={} 批次=1"
+                                    + " chars={} requirements={} issues={}",
+                            label(documentName), runId, content.markdown().length(), result.requirements().size(),
+                            result.issues().size());
+                    return result;
                 } catch (LengthLimitException exception) {
                     log.error("Word 模型响应超出长度限制", exception);
-                    log.info("document.parse.word.llm.batching parseRunId={} reason={}", runId, exception.getMessage());
+                    log.info("document.parse.word.llm.batching 文档响应超出长度上限，改为分批调用模型 documentName={}"
+                                    + " parseRunId={} reason={}",
+                            label(documentName), runId, exception.getMessage());
                 }
             }
-            return extractBatches(content, config, runId, maxChars, wholeChars, extractor);
+            return extractBatches(content, config, runId, maxChars, wholeChars, extractor, documentName);
         } catch (DocumentReadException exception) {
             log.error("Word 模型抽取失败", exception);
-            log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
-                    runId, exception.getClass().getSimpleName(), exception.getMessage());
+            log.warn("document.parse.word.llm.failed 文档模型解析失败 documentName={} parseRunId={} errorType={} reason={}",
+                    label(documentName), runId, exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
         } catch (Exception exception) {
             log.error("Word 模型抽取失败", exception);
@@ -115,8 +138,8 @@ public class WordMarkdownExtractor {
             Throwable cause = ParseHttpClient.unwrap(exception);
             String reason = cause instanceof JsonProcessingException ? "模型响应 JSON 无法解析"
                     : ParseHttpClient.reason(exception);
-            log.warn("document.parse.word.llm.failed parseRunId={} errorType={} reason={}",
-                    runId, cause.getClass().getSimpleName(), reason);
+            log.warn("document.parse.word.llm.failed 文档模型解析失败 documentName={} parseRunId={} errorType={} reason={}",
+                    label(documentName), runId, cause.getClass().getSimpleName(), reason);
             throw new DocumentReadException("Word 模型抽取失败，请检查模型配置或重试", exception);
         }
     }
@@ -141,7 +164,7 @@ public class WordMarkdownExtractor {
     }
 
     private ExtractionResult extractBatches(WordMarkdownReader.Content content, ParseIntegrationProperties.Llm config,
-            String runId, int maxChars, int batchChars, String extractor) throws Exception {
+            String runId, int maxChars, int batchChars, String extractor, String documentName) throws Exception {
         var batches = new WordMarkdownBatches(content.markdown());
         if (batches.size() < 2) {
             throw new DocumentReadException("Word 内容块超出模型长度上限，请拆分文档后重试");
@@ -150,29 +173,56 @@ public class WordMarkdownExtractor {
         // 末批留一个字符余量，避免批次大小恰好等于整文时被当成单批。
         batchChars = Math.min(batchChars, Math.min(maxChars, content.markdown().strip().length() - 1));
         int batchBlocks = Math.min(Math.max(1, config.getBatchBlocks()), (batches.size() + 1) / 2);
+        int total = countBatches(batches, batchChars, batchBlocks);
+        log.info("document.parse.word.llm.plan 文档分 {} 批调用模型解析 documentName={} parseRunId={} 内容块={}"
+                        + " 来源块={} batchChars={} batchBlocks={}",
+                total, label(documentName), runId, batches.size(), content.availableSources().size(), batchChars, batchBlocks);
         int failed = 0;
+        int index = 0;
         var attempts = new ArrayList<BatchAttempt>();
         String lastFailure = null;
         for (int start = 0; start < batches.size();) {
             int end = batches.endOfBatch(start, batchChars, batchBlocks);
+            index++;
+            long startedAt = System.nanoTime();
             Attempt attempt = extractBatch(batches, start, end, batchChars, maxChars, config, runId, validation);
             String status = attempt.sources().isEmpty() ? BatchAttempt.SKIPPED
                     : attempt.success() ? BatchAttempt.SUCCESS : BatchAttempt.FAILED;
             attempts.add(new BatchAttempt(attempts.size() + 1, status, attempt.sources(), attempt.chars(),
                     attempt.failureReason()));
+            log.info("document.parse.word.llm.batch 第 {}/{} 批完成 documentName={} parseRunId={} 状态={} 来源={}"
+                            + " chars={} durationMs={}",
+                    index, total, label(documentName), runId, status, attempt.sources().isEmpty() ? "-" : attempt.sources(),
+                    attempt.chars(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
             if (!attempt.success() && !attempt.sources().isEmpty()) {
                 failed++;
                 lastFailure = attempt.failureReason();
             }
             start = end;
         }
-        log.info("document.parse.word.llm.batch.summary parseRunId={} batches={} failed={}",
-                runId, attempts.size(), failed);
+        log.info("document.parse.word.llm.batch.summary 文档分批调用模型解析结束 documentName={} parseRunId={} 批次={}"
+                        + " 失败={} 条款={} issues={}",
+                label(documentName), runId, attempts.size(), failed, validation.requirements.size(), validation.issues.size());
         // 单批失败降级为 issue；全部批次都失败才让整次解析失败。
         if (failed > 0 && validation.isEmpty()) {
             throw new DocumentReadException("Word 模型批次解析全部失败（" + failed + " 批），最后原因：" + lastFailure);
         }
         return validation.result(extractor + "+batched", attempts);
+    }
+
+    /** 预走一遍分批边界，只统计批次数，用于日志里说明「分几批调用模型」。 */
+    private static int countBatches(WordMarkdownBatches batches, int batchChars, int batchBlocks) {
+        int total = 0;
+        for (int start = 0; start < batches.size();) {
+            start = batches.endOfBatch(start, batchChars, batchBlocks);
+            total++;
+        }
+        return total;
+    }
+
+    /** 文档名只用于日志，缺失时统一显示 -，避免日志断列。 */
+    private static String label(String documentName) {
+        return documentName == null || documentName.isBlank() ? "-" : documentName;
     }
 
     private static String sources(Set<Integer> ids) {

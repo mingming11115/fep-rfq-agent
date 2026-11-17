@@ -117,6 +117,8 @@ public class DocumentService {
         projects.update(project);
         audit.successInBu(user.id(), project.getBuId(), "上传客户文件", "document", document.getId(),
                 name + "（" + stored.size() + " bytes）");
+        log.info("document.upload 客户文档上传完成 documentName={} documentId={} 项目={} 版本={} 大小={}B 操作人={}",
+                name, document.getId(), projectId, fileVersion, stored.size(), user.id());
         return DocumentView.of(document);
     }
 
@@ -153,6 +155,8 @@ public class DocumentService {
         projects.update(project);
         audit.successInBu(user.id(), project.getBuId(), "载入示例RFQ", "document", document.getId(),
                 document.getName() + "（" + stored.size() + " bytes）");
+        log.info("document.upload 示例RFQ载入完成 documentName={} documentId={} 项目={} 版本={} 大小={}B 操作人={}",
+                document.getName(), document.getId(), projectId, fileVersion, stored.size(), user.id());
         return DocumentView.of(document);
     }
 

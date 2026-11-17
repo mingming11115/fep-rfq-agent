@@ -189,9 +189,23 @@ public class RequirementMatchService {
         }
         // 条款存在但都无需比对（如已被排除）时不会再有比对收尾回调，直接判定阶段；
         // 未识别到任何条款则保持解析比对中，交由人工补录或重试解析。
-        if (!rows.isEmpty() && queued == 0) {
-            advanceToReview(project);
+        if (rows.isEmpty()) {
+            log.info("requirement.match.document.start 文档未识别到条款，本轮不做比对 documentName={} documentId={}"
+                            + " projectId={}",
+                    document.getName(), document.getId(), project.getId());
+            return;
         }
+        if (queued == 0) {
+            log.info("requirement.match.document.start 文档没有可比对条款（已排除或正文为空） documentName={} documentId={}"
+                            + " projectId={} 条款={}",
+                    document.getName(), document.getId(), project.getId(), rows.size());
+            advanceToReview(project);
+            return;
+        }
+        log.info("requirement.match.document.start 文档开始比对 documentName={} documentId={} projectId={} 条款={} 入队={}"
+                        + " 比对库={} 阈值={} 策略版本={}",
+                document.getName(), document.getId(), project.getId(), rows.size(), queued,
+                String.join("→", policy.activeOrder()), policy.similarity(), policy.version());
     }
 
     void corrected(Project project, CustomerDocument document, Requirement requirement) {
@@ -569,8 +583,8 @@ public class RequirementMatchService {
         project.setStage(ProjectStage.REVIEWING.name());
         project.setUpdatedAt(Instant.now());
         projects.update(project);
-        log.info("project.stage.advanced projectId={} from={} to={}", project.getId(), ProjectStage.PARSING,
-                ProjectStage.REVIEWING);
+        log.info("project.stage.advanced 全部条款比对完成，项目进入评审确认 projectId={} from={} to={}",
+                project.getId(), ProjectStage.PARSING, ProjectStage.REVIEWING);
     }
 
     private ObjectNode view(Project project, Requirement requirement, Run run, boolean detail) {

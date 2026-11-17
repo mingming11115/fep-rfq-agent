@@ -48,7 +48,12 @@ public class RequirementMatchWorker {
     }
 
     public void runOnce() {
-        for (String id : runs.due()) {
+        var due = runs.due();
+        if (!due.isEmpty()) {
+            log.info("requirement.match.worker.tick 本轮开始处理待比对条款 条数={}", due.size());
+        }
+        int processed = 0;
+        for (String id : due) {
             long started = System.nanoTime();
             String phase = "claim";
             try {
@@ -68,12 +73,16 @@ public class RequirementMatchWorker {
                 var finished = runs.finish(job, outcome);
                 if (finished != null) {
                     logResult(job, finished, started);
+                    processed++;
                 }
             } catch (RuntimeException failure) {
                 // A database interruption leaves the lease recoverable by the next worker.
                 log.error("requirement.match.delivery_failed runId={} phase={} errorType={} durationMs={}", id,
                         phase, failure.getClass().getSimpleName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             }
+        }
+        if (!due.isEmpty()) {
+            log.info("requirement.match.worker.tick.done 本轮待比对条款处理结束 待处理={} 已完成={}", due.size(), processed);
         }
     }
 
@@ -96,7 +105,7 @@ public class RequirementMatchWorker {
             case "blocked" -> job.attempts() == 1 ? Level.WARN : Level.INFO;
             default -> Level.INFO;
         };
-        log.atLevel(level).log("requirement.match.result runId={} requirementId={} documentId={} parseRunId={} projectId={}"
+        log.atLevel(level).log("requirement.match.result 条款比对完成 runId={} requirementId={} documentId={} parseRunId={} projectId={}"
                         + " status={} stage={} reason={} attempt={} failureCount={} retryInSeconds={} durationMs={}"
                         + " platformRequestId={} indexVersion={}",
                 job.id(), job.requirement(), job.document(), job.parseRun(), job.input().project(), finished.status(), stage,

@@ -50,6 +50,12 @@ public class HistoryModelExtractor {
             Integer textStartTwips, Integer headingLevel) { }
 
     public List<HistoryClause> extract(List<RawBlock> blocks, boolean companion, Map<String, String> metadata, List<String> issues) {
+        return extract(blocks, companion, metadata, issues, null);
+    }
+
+    /** 带文档名解析历史 RFQ：文档名写入日志，便于按文件核对模型分批与条款数。 */
+    public List<HistoryClause> extract(List<RawBlock> blocks, boolean companion, Map<String, String> metadata,
+            List<String> issues, String documentName) {
         var sources = sources(blocks, companion ? "answer:" : "main:", issues);
         if (sources.isEmpty()) {
             return List.of();
@@ -60,11 +66,14 @@ public class HistoryModelExtractor {
         }
         int maxChars = Math.max(1, config.getBatchChars());
         int maxBlocks = Math.max(1, config.getBatchBlocks());
+        log.info("history.parse.llm.start 历史RFQ文档开始调用模型解析 documentName={} 部分={} 来源块={} batchChars={} batchBlocks={}",
+                label(documentName), companion ? "配套答复" : "主文件", sources.size(), maxChars, maxBlocks);
         List<HistoryClause> clauses = new ArrayList<>();
         List<Source> batch = new ArrayList<>();
         List<String> encoded = new ArrayList<>();
         int chars = 2;
         boolean accepted = false;
+        int batches = 0;
         for (int index = 0; index < sources.size(); index++) {
             Source source = sources.get(index);
             String entry = json.valueToTree(source).toString();
@@ -89,7 +98,9 @@ public class HistoryModelExtractor {
                     batch.add(source);
                     encoded.add(entry);
                 }
-                accepted |= extractBatch(batch, encoded, primaryCount, companion, clauses, metadata, issues);
+                batches++;
+                accepted |= extractBatch(batch, encoded, primaryCount, companion, clauses, metadata, issues,
+                        documentName, batches);
                 batch.clear();
                 encoded.clear();
                 chars = 2;
@@ -99,8 +110,12 @@ public class HistoryModelExtractor {
             encoded.add(entry);
         }
         if (!batch.isEmpty()) {
-            accepted |= extractBatch(batch, encoded, batch.size(), companion, clauses, metadata, issues);
+            batches++;
+            accepted |= extractBatch(batch, encoded, batch.size(), companion, clauses, metadata, issues,
+                    documentName, batches);
         }
+        log.info("history.parse.llm.summary 历史RFQ文档模型解析结束 documentName={} 部分={} 批次={} 条款={} 提示={}",
+                label(documentName), companion ? "配套答复" : "主文件", batches, clauses.size(), issues.size());
         if (!accepted && !companion) {
             throw new BusinessException(422, "历史 RFQ 的 LLM 未返回可用的抽取结果，请检查模型配置和原文");
         }
@@ -145,8 +160,13 @@ public class HistoryModelExtractor {
     }
 
     private boolean extractBatch(List<Source> batch, List<String> encoded, int primaryCount, boolean companion,
-            List<HistoryClause> clauses, Map<String, String> metadata, List<String> issues) {
+            List<HistoryClause> clauses, Map<String, String> metadata, List<String> issues, String documentName,
+            int batchIndex) {
         String anchor = batch.get(0).anchor();
+        long startedAt = System.nanoTime();
+        log.info("history.parse.llm.batch 开始第 {} 批调用模型解析 documentName={} 来源块={} 字符数={} 首个来源={}",
+                batchIndex, label(documentName), batch.size(),
+                encoded.stream().mapToInt(String::length).sum() + batch.size() - 1, anchor);
         try {
             var config = properties.getLlm();
             String task = companion
@@ -191,6 +211,9 @@ public class HistoryModelExtractor {
                     }
                 }
             }
+            log.info("history.parse.llm.batch.done 第 {} 批模型解析完成 documentName={} 来源块={} 新增条款={} durationMs={}",
+                    batchIndex, label(documentName), batch.size(), parsed.size(),
+                    (System.nanoTime() - startedAt) / 1_000_000);
             return true;
         } catch (InterruptedException exception) {
             log.error("历史 RFQ 的 LLM 解析被中断", exception);
@@ -199,10 +222,16 @@ public class HistoryModelExtractor {
         } catch (Exception exception) {
             log.error("历史 RFQ 的 LLM 批次解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
-            log.warn("history.parse.llm.failed firstAnchor={} reason={}", anchor, reason);
+            log.warn("history.parse.llm.failed 第 {} 批模型解析失败 documentName={} firstAnchor={} reason={} durationMs={}",
+                    batchIndex, label(documentName), anchor, reason, (System.nanoTime() - startedAt) / 1_000_000);
             issues.add(anchor + "：历史 RFQ 的 LLM 批次解析失败，" + reason);
             return false;
         }
+    }
+
+    /** 文档名只用于日志，缺失时统一显示 -，避免日志断列。 */
+    private static String label(String documentName) {
+        return documentName == null || documentName.isBlank() ? "-" : documentName;
     }
 
     private HistoryClause clause(JsonNode row, Source source, Map<Integer, Source> byIndex, boolean companion, int order) {

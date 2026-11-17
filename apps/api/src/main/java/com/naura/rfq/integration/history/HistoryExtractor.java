@@ -51,6 +51,11 @@ public class HistoryExtractor {
     }
 
     public Result extract(List<RawBlock> primary, List<RawBlock> companion) {
+        return extract(primary, companion, null);
+    }
+
+    /** 带文档名解析历史 RFQ，文档名只用于日志，便于按文件核对模型分批与结果。 */
+    public Result extract(List<RawBlock> primary, List<RawBlock> companion, String documentName) {
         requireEnabled();
         boolean rulesEnabled = properties.getHistory().isRulesEnabled();
         boolean llmEnabled = properties.llmEnabled();
@@ -67,8 +72,8 @@ public class HistoryExtractor {
             }
             answers = read(companion, "answer:", true, new LinkedHashMap<>(), issues, new LinkedHashMap<>(), Map.of());
         } else {
-            clauses = historyModel.extract(primary, false, metadata, issues);
-            answers = historyModel.extract(companion, true, new LinkedHashMap<>(), issues);
+            clauses = historyModel.extract(primary, false, metadata, issues, documentName);
+            answers = historyModel.extract(companion, true, new LinkedHashMap<>(), issues, documentName);
         }
         Map<String, List<HistoryClause>> requirementsByNumber = group(clauses), answersByNumber = group(answers);
         List<HistoryClause> matched = new ArrayList<>();

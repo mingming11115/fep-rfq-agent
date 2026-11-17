@@ -198,6 +198,11 @@ public class ParseService {
 
         document.setStatus(CustomerDocument.STATUS_PARSING);
         documents.update(document);
+        log.info("document.parse.start 文档开始解析 documentName={} documentId={} 版本={} 项目={} parseRunId={}"
+                        + " 类型={} 大小={}B 重解析={} 旧条款={} 历史召回={} 操作人={}",
+                document.getName(), documentId, document.getVersion(), project.getId(), run.getId(),
+                document.getContentType(), document.getSizeBytes(), !previous.isEmpty(), previous.size(),
+                recallIds.size(), actorId);
         return new ParseContext(project, document, run, recallIds, previous, !previous.isEmpty(), actorId,
                 System.nanoTime());
     }
@@ -230,8 +235,13 @@ public class ParseService {
             if (rawBlocks.isEmpty()) {
                 throw new DocumentReadException("文档没有可读取内容");
             }
+            log.info("document.parse.read 文档读取完成 documentName={} documentId={} parseRunId={} 通道={} 内容块={} 字符数={}",
+                    ctx.document().getName(), ctx.document().getId(), ctx.run().getId(), channel(reader, wordMarkdown),
+                    rawBlocks.size(), chars(rawBlocks));
             if (rawBlocks.size() > properties.maxBlocks()) {
                 issues.add("文档内容块超过上限 " + properties.maxBlocks() + "，仅处理前部分内容");
+                log.warn("document.parse.read.truncated 文档内容块超上限，仅处理前 {} 块 documentName={} parseRunId={} 总块数={}",
+                        properties.maxBlocks(), ctx.document().getName(), ctx.run().getId(), rawBlocks.size());
                 rawBlocks = new ArrayList<>(rawBlocks.subList(0, properties.maxBlocks()));
             }
             for (RawBlock block : rawBlocks) {
@@ -241,12 +251,15 @@ public class ParseService {
             }
             phase = ParsePhase.EXTRACT;
             ExtractionResult result = wordMarkdown != null
-                    ? wordMarkdownExtractor.extract(wordMarkdown, ctx.run().getId())
+                    ? wordMarkdownExtractor.extract(wordMarkdown, ctx.run().getId(), ctx.document().getName())
                     : reader instanceof DocxBlockReader
                     ? extractor.extractWordWithReport(rawBlocks)
-                    : extractor.extractWithReport(rawBlocks, ctx.run().getId());
+                    : extractor.extractWithReport(rawBlocks, ctx.run().getId(), ctx.document().getName());
             ctx.run().setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
+            log.info("document.parse.extract 条款抽取完成 documentName={} parseRunId={} 抽取器={} 条款={} 模型批次={} 提示={}",
+                    ctx.document().getName(), ctx.run().getId(), result.extractor(), result.requirements().size(),
+                    result.batches().size(), result.issues().size());
             phase = ParsePhase.SOURCE_REVIEW;
             List<ExtractedRequirement> extracted = withSourceReview(result.requirements(), rawBlocks);
             if (extracted.isEmpty() && ctx.hasPreviousResult()) {
@@ -262,6 +275,16 @@ public class ParseService {
         }
     }
 
+    /** 读取通道标识：Word 走 markitdown 时标注，其余按读取器类型区分，便于日志里核对走了哪条链路。 */
+    private String channel(DocumentBlockReader reader, WordMarkdownReader.Content wordMarkdown) {
+        return wordMarkdown != null ? "markitdown" : reader.getClass().getSimpleName();
+    }
+
+    /** 统计原始块的总字符数，日志里用于判断文档规模与分批数量是否合理。 */
+    private static long chars(List<RawBlock> rawBlocks) {
+        return rawBlocks.stream().mapToLong(block -> block.text() == null ? 0 : block.text().length()).sum();
+    }
+
     /**
      * 解析失败收尾：记录结构化错误日志（附带原始异常堆栈），将运行记录置为 FAILED 并落库失败原因，
      * 文档状态置为 FAILED，并写入失败审计事件。已有解析结果保持不变。
@@ -270,8 +293,9 @@ public class ParseService {
      * 用户可见的运行记录与审计日志；原始异常只保留在本方法输出的日志里。
      */
     private void recordFailure(ParseContext ctx, ParsePhase phase, Exception exception) {
-        log.error("document.parse.failed parseRunId={} documentId={} projectId={} phase={} errorType={} durationMs={}",
-                ctx.run().getId(), ctx.document().getId(), ctx.project().getId(), phase.label(),
+        log.error("document.parse.failed 文档解析失败 documentName={} parseRunId={} documentId={} projectId={} phase={}"
+                        + " errorType={} durationMs={}",
+                ctx.document().getName(), ctx.run().getId(), ctx.document().getId(), ctx.project().getId(), phase.label(),
                 exception.getClass().getSimpleName(),
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()),
                 exception);
@@ -354,9 +378,13 @@ public class ParseService {
         matches.parsed(ctx.project(), ctx.document(), saved);
         audit.successInBu(ctx.actorId(), ctx.project().getBuId(), "解析客户文件", "document", documentId,
                 "提取 " + saved.size() + " 条条款，识别提示 " + issueCount + " 项，抽取器 " + run.getExtractor());
-        log.info("document.parse.result parseRunId={} documentId={} projectId={} status={} blocks={} requirements={} issues={} durationMs={}",
-                run.getId(), documentId, ctx.project().getId(), run.getStatus(), outcome.rawBlocks().size(), saved.size(),
-                issueCount, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
+        long failedBatches = outcome.batches().stream()
+                .filter(batch -> BatchAttempt.FAILED.equals(batch.status())).count();
+        log.info("document.parse.result 文档解析完成 documentName={} parseRunId={} documentId={} projectId={} 状态={}"
+                        + " 内容块={} 条款={} 模型批次={} 失败批次={} 提示={} 抽取器={} 耗时={}ms",
+                ctx.document().getName(), run.getId(), documentId, ctx.project().getId(), run.getStatus(),
+                outcome.rawBlocks().size(), saved.size(), outcome.batches().size(), failedBatches, issueCount,
+                run.getExtractor(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
         return view(run);
     }
 

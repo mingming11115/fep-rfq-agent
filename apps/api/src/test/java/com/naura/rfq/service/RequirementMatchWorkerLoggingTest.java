@@ -27,12 +27,15 @@ class RequirementMatchWorkerLoggingTest {
         logger.addAppender(events);
         try {
             worker.runOnce();
-            assertThat(events.list).singleElement().satisfies(event -> {
-                assertThat(event.getFormattedMessage())
-                        .contains("runId=MATCH-1", "phase=claim", "errorType=IllegalStateException")
-                        .doesNotContain("private-provider-detail");
-                assertThat(event.getThrowableProxy()).isNull();
-            });
+            assertThat(events.list).anySatisfy(event -> assertThat(event.getFormattedMessage())
+                    .contains("本轮开始处理待比对条款", "条数=1"));
+            assertThat(events.list).filteredOn(event -> event.getFormattedMessage().contains("runId=MATCH-1"))
+                    .singleElement().satisfies(event -> {
+                        assertThat(event.getFormattedMessage())
+                                .contains("phase=claim", "errorType=IllegalStateException")
+                                .doesNotContain("private-provider-detail");
+                        assertThat(event.getThrowableProxy()).isNull();
+                    });
         } finally {
             logger.detachAppender(events);
             events.stop();

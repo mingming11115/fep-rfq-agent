@@ -81,7 +81,16 @@ public class HybridRequirementExtractor implements RequirementExtractor {
     }
 
     public ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId) {
-        return extractWithReport(blocks, parseRunId, true);
+        return extractWithReport(blocks, parseRunId, null);
+    }
+
+    /**
+     * 抽取 PDF 等按块输入的条款，并把文档名写进每条日志，便于按文件核对分批与耗时。
+     *
+     * @param documentName 客户文档名，仅用于日志；未知时传 null
+     */
+    public ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, String documentName) {
+        return extractWithReport(blocks, parseRunId, documentName, true);
     }
 
     /** DOCX 未走 Markdown 抽取时只做规则抽取；模型总结分支已下线。 */
@@ -91,7 +100,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
 
     /** For callers that already have source-specific rule results. */
     public ExtractionResult extractModelRequirements(List<RawBlock> blocks) {
-        return extractWithReport(blocks, null, false);
+        return extractWithReport(blocks, null, null, false);
     }
 
     /** 历史答复定位统一入口：Word 与 MinerU 都提供候选单元格，模型只返回候选 ID。 */
@@ -200,67 +209,119 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         return value.isIntegralNumber() && value.canConvertToInt() && value.intValue() == expected;
     }
 
-    private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, boolean fallbackToRules) {
+    private ExtractionResult extractWithReport(List<RawBlock> blocks, String parseRunId, String documentName,
+            boolean fallbackToRules) {
         var config = properties.getLlm();
         if (!properties.llmEnabled()) {
-            log.info("document.parse.llm.skipped parseRunId={} reason=disabled", parseRunId);
+            log.info("document.parse.llm.skipped 未启用模型抽取，仅按规则抽取 documentName={} parseRunId={} reason=disabled",
+                    label(documentName), parseRunId);
             return new ExtractionResult(fallbackToRules ? rules.extract(blocks) : List.of(), rules.name(), List.of());
         }
-        List<ExtractedRequirement> results = new ArrayList<>();
         List<String> issues = new ArrayList<>();
         // The model-only caller enriches historical clauses already linked to individual blocks.
         String prompt = fallbackToRules ? PROMPT : PROMPT + HISTORY_CONTEXT;
-        boolean modelUsed = false;
         List<RawBlock> readable = blocks.stream().filter(b -> b.hasText() && !RawBlock.IMAGE.equals(b.type())).toList();
         if (readable.isEmpty()) {
-            log.info("document.parse.llm.skipped parseRunId={} reason=no_readable_blocks", parseRunId);
+            log.info("document.parse.llm.skipped 没有可解析的内容块 documentName={} parseRunId={} blocks={} reason=no_readable_blocks",
+                    label(documentName), parseRunId, blocks.size());
+            return assemble(blocks, List.of(), issues, false, config, fallbackToRules);
         }
-        int position = 0;
-        while (position < readable.size()) {
-            List<RawBlock> batch = new ArrayList<>();
-            int chars = 0;
-            do {
-                RawBlock b = readable.get(position);
-                if (!batch.isEmpty() && chars + b.text().length() > Math.max(1, config.getBatchChars())) {
-                    break;
-                }
-                batch.add(b); chars += b.text().length(); position++;
-            } while (position < readable.size() && batch.size() < Math.max(1, config.getBatchBlocks()));
-            int firstBlockIndex = batch.get(0).index();
-            long startedAt = System.nanoTime();
-            String phase = "preflight";
-            try {
-                if (config.getModel().isBlank() || chars > Math.max(1, config.getBatchChars())) {
-                    throw new IllegalArgumentException("模型配置或批次上限");
-                }
-                var request = Map.of("model", config.getModel(), "stream", false,
-                    "messages", List.of(Map.of("role", "system", "content", prompt),
-                        Map.of("role", "user", "content", json.writeValueAsString(batch.stream().map(b -> Map.of(
-                            "blockIndex", b.index(), "type", b.type(), "text", b.text(),
-                            "sectionPath", b.sectionPath() == null ? "" : b.sectionPath())).toList()))));
-                phase = "request";
-                log.info("document.parse.llm.request parseRunId={} model={} firstBlockIndex={} blocks={} chars={}",
-                    parseRunId, config.getModel(), firstBlockIndex, batch.size(), chars);
-                JsonNode response = http.post(config, request, parseRunId);
-                phase = "validation";
-                var accepted = validate(modelContent(response), batch, fallbackToRules);
-                results.addAll(accepted);
-                modelUsed = true;
-                log.info("document.parse.llm.accepted parseRunId={} model={} firstBlockIndex={} acceptedBlockIndexes={} requirements={} durationMs={}",
-                    parseRunId, config.getModel(), firstBlockIndex,
-                    accepted.stream().map(ExtractedRequirement::blockIndex).distinct().toList(), accepted.size(),
-                    (System.nanoTime() - startedAt) / 1_000_000);
-            } catch (Exception exception) {
-                String reason = ParseHttpClient.reason(exception);
-                String detail = "validation".equals(phase) ? validationDetail(exception) : "-";
-                log.error("document.parse.llm.fallback parseRunId={} model={} firstBlockIndex={} phase={} reason={} validationDetail={} durationMs={}",
-                    parseRunId, config.getModel(), firstBlockIndex, phase, reason, detail, (System.nanoTime() - startedAt) / 1_000_000);
-                issues.add("模型批次 " + firstBlockIndex + " 已降级规则抽取：" + reason);
-                if (fallbackToRules) {
-                    results.addAll(rules.extract(batch));
-                }
+        List<List<RawBlock>> batches = splitBatches(readable, config);
+        log.info("document.parse.llm.plan 文档分 {} 批调用模型解析 documentName={} parseRunId={} 内容块={} 可解析块={}"
+                        + " batchChars={} batchBlocks={}",
+                batches.size(), label(documentName), parseRunId, blocks.size(), readable.size(),
+                Math.max(1, config.getBatchChars()), Math.max(1, config.getBatchBlocks()));
+        List<ExtractedRequirement> results = new ArrayList<>();
+        boolean modelUsed = false;
+        for (int index = 0; index < batches.size(); index++) {
+            modelUsed |= extractBatch(batches.get(index), index + 1, batches.size(), blocks.size(), prompt, config,
+                    parseRunId, documentName, fallbackToRules, results, issues);
+        }
+        log.info("document.parse.llm.summary 文档模型抽取结束 documentName={} parseRunId={} 批次={} 条款={} issues={} modelUsed={}",
+                label(documentName), parseRunId, batches.size(), results.size(), issues.size(), modelUsed);
+        return assemble(blocks, results, issues, modelUsed, config, fallbackToRules);
+    }
+
+    /** 按单批字符数与块数上限切分可解析块，切分口径与原逐块累加的批处理保持一致。 */
+    private static List<List<RawBlock>> splitBatches(List<RawBlock> readable, ParseIntegrationProperties.Llm config) {
+        int maxChars = Math.max(1, config.getBatchChars());
+        int maxBlocks = Math.max(1, config.getBatchBlocks());
+        List<List<RawBlock>> batches = new ArrayList<>();
+        List<RawBlock> current = new ArrayList<>();
+        int chars = 0;
+        for (RawBlock block : readable) {
+            if (!current.isEmpty() && chars + block.text().length() > maxChars) {
+                batches.add(current);
+                current = new ArrayList<>();
+                chars = 0;
+            }
+            current.add(block);
+            chars += block.text().length();
+            if (current.size() >= maxBlocks) {
+                batches.add(current);
+                current = new ArrayList<>();
+                chars = 0;
             }
         }
+        if (!current.isEmpty()) {
+            batches.add(current);
+        }
+        return batches;
+    }
+
+    /**
+     * 执行一个批次并在失败时按需降级规则抽取；返回本批是否真正用到了模型结果。
+     * 失败不抛出，原因写入 issues，由调用方在最终结论里汇总。
+     */
+    private boolean extractBatch(List<RawBlock> batch, int index, int total, int totalBlocks, String prompt,
+            ParseIntegrationProperties.Llm config, String parseRunId, String documentName, boolean fallbackToRules,
+            List<ExtractedRequirement> results, List<String> issues) {
+        int firstBlockIndex = batch.get(0).index();
+        int chars = batch.stream().mapToInt(b -> b.text().length()).sum();
+        long startedAt = System.nanoTime();
+        String phase = "preflight";
+        log.info("document.parse.llm.batch 开始第 {}/{} 批调用模型解析 documentName={} parseRunId={} 块数={}/{} chars={}",
+                index, total, label(documentName), parseRunId, batch.size(), totalBlocks, chars);
+        try {
+            if (config.getModel().isBlank() || chars > Math.max(1, config.getBatchChars())) {
+                throw new IllegalArgumentException("模型配置或批次上限");
+            }
+            var request = Map.of("model", config.getModel(), "stream", false,
+                "messages", List.of(Map.of("role", "system", "content", prompt),
+                    Map.of("role", "user", "content", json.writeValueAsString(batch.stream().map(b -> Map.of(
+                        "blockIndex", b.index(), "type", b.type(), "text", b.text(),
+                        "sectionPath", b.sectionPath() == null ? "" : b.sectionPath())).toList()))));
+            phase = "request";
+            log.info("document.parse.llm.request parseRunId={} documentName={} batch={}/{} model={} firstBlockIndex={} blocks={} chars={}",
+                parseRunId, label(documentName), index, total, config.getModel(), firstBlockIndex, batch.size(), chars);
+            JsonNode response = http.post(config, request, parseRunId);
+            phase = "validation";
+            var accepted = validate(modelContent(response), batch, fallbackToRules);
+            results.addAll(accepted);
+            log.info("document.parse.llm.accepted parseRunId={} documentName={} batch={}/{} model={} firstBlockIndex={}"
+                            + " acceptedBlockIndexes={} requirements={} durationMs={}",
+                parseRunId, label(documentName), index, total, config.getModel(), firstBlockIndex,
+                accepted.stream().map(ExtractedRequirement::blockIndex).distinct().toList(), accepted.size(),
+                (System.nanoTime() - startedAt) / 1_000_000);
+            return true;
+        } catch (Exception exception) {
+            String reason = ParseHttpClient.reason(exception);
+            String detail = "validation".equals(phase) ? validationDetail(exception) : "-";
+            log.error("document.parse.llm.fallback 模型批次失败，降级规则抽取 documentName={} parseRunId={} batch={}/{}"
+                            + " firstBlockIndex={} phase={} reason={} validationDetail={} durationMs={}",
+                label(documentName), parseRunId, index, total, firstBlockIndex, phase, reason, detail,
+                (System.nanoTime() - startedAt) / 1_000_000);
+            issues.add("模型批次 " + firstBlockIndex + " 已降级规则抽取：" + reason);
+            if (fallbackToRules) {
+                results.addAll(rules.extract(batch));
+            }
+            return false;
+        }
+    }
+
+    /** 汇总抽取结果：剔除文首声明类条款、重排序号并标注实际使用的抽取方式。 */
+    private ExtractionResult assemble(List<RawBlock> blocks, List<ExtractedRequirement> results, List<String> issues,
+            boolean modelUsed, ParseIntegrationProperties.Llm config, boolean fallbackToRules) {
         Set<Integer> noticeBlocks = new HashSet<>();
         for (var block : blocks) {
             if (block.hasText() && !block.isTable() && rules.isDocumentNotice(block.text())) {
@@ -281,6 +342,11 @@ public class HybridRequirementExtractor implements RequirementExtractor {
             used += "+" + rules.name();
         }
         return new ExtractionResult(ordered, used, issues);
+    }
+
+    /** 文档名只用于日志，缺失时统一显示 -，避免日志断列。 */
+    private static String label(String documentName) {
+        return documentName == null || documentName.isBlank() ? "-" : documentName;
     }
 
     JsonNode modelContent(JsonNode response) throws JsonProcessingException {
