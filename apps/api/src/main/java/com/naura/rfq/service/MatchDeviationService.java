@@ -67,7 +67,7 @@ class MatchDeviationService {
         }
         item.put("description", reason);
         save(project, item);
-        setStatus(project, requirement.getId(), ResponseStatus.REVIEWING, "条款已进入评审，请重新确认本条应答");
+        setStatus(project, requirement.getId(), ResponseService.REVIEWING, "条款已进入评审，请重新确认本条应答");
         return item;
     }
 
@@ -171,7 +171,7 @@ class MatchDeviationService {
             old.put("status", "已取消").put("supersededByWorkVersion", version);
             save(project, old);
             save(project, next);
-            setStatus(project, old.path("requirementId").asText(), ResponseStatus.REVIEWING,
+            setStatus(project, old.path("requirementId").asText(), ResponseService.REVIEWING,
                     "工作版本已切换，评审事项结转，请重新确认本条应答");
         }
     }
@@ -187,12 +187,12 @@ class MatchDeviationService {
             confirmResponse(user, project, requirement.getId(), row);
             return;
         }
-        setStatus(project, requirement.getId(), row, ResponseStatus.PENDING, "评审事项已关闭，请重新确认本条应答");
+        setStatus(project, requirement.getId(), row, ResponseService.PENDING, "评审事项已关闭，请重新确认本条应答");
     }
 
     /** 评审人全部投票且未指定确认人时，视为评审通过并自动确认本条应答。 */
     private void confirmResponse(CurrentUser user, Project project, String requirementId, ObjectNode row) {
-        row.put("status", ResponseStatus.CONFIRMED).put("confirmedBy", user.displayName())
+        row.put("status", ResponseService.CONFIRMED).put("confirmedBy", user.displayName())
                 .put("confirmedById", user.id()).put("confirmedAt", Instant.now().toString())
                 .put("needsReview", false).put("confirmationReason", "评审已完成且未指定确认人，系统自动确认");
         row.put("version", row.path("version").asLong(1) + 1);
@@ -216,15 +216,15 @@ class MatchDeviationService {
 
     /** 写入应答状态；仅在语义变化时推进版本，避免干扰无关的乐观锁。 */
     private void setStatus(Project project, String requirementId, ObjectNode row, String target, String reason) {
-        String stored = row.path("status").asText(ResponseStatus.PENDING);
-        String current = ResponseStatus.normalize(stored);
+        String stored = row.path("status").asText(ResponseService.PENDING);
+        String current = ResponseService.normalize(stored);
         if (target.equals(current) && target.equals(stored)) {
             return;
         }
         row.put("status", target);
         if (!target.equals(current)) {
             row.put("version", row.path("version").asLong(1) + 1);
-            if (!ResponseStatus.CONFIRMED.equals(target)) {
+            if (!ResponseService.CONFIRMED.equals(target)) {
                 row.remove(List.of("confirmedAt", "confirmedBy", "confirmedById"));
             }
             row.put("confirmationReason", reason);
