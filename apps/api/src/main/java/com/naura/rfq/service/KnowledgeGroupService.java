@@ -174,9 +174,19 @@ public class KnowledgeGroupService {
         return groupId == null || groupId.isBlank() ? List.of() : ancestors(catalog(bu), groupId);
     }
 
+    /** 资料的关联分组：新规则下一条资料只允许挂一个分组，取 groupIds 首个；兼容旧的单值 groupId 字段。 */
+    static String primaryGroup(JsonNode payload) {
+        var ids = payload.path("groupIds");
+        if (ids.isArray() && !ids.isEmpty()) { return ids.get(0).asText(); }
+        return payload.path("groupId").asText("");
+    }
+
     JsonNode groupIds(String bu, List<String> requested, JsonNode previous) {
         if (requested == null || requested.size() > 100) {
             throw new BusinessException(400, "分组关联格式无效");
+        }
+        if (requested.size() > 1) {
+            throw new BusinessException(400, "一条资料只能关联一个分组");
         }
         var catalog = catalog(bu);
         var nodes = nodes(catalog);

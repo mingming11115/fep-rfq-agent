@@ -73,7 +73,9 @@ class StandardReplyIndexWorkerIntegrationTest {
                 library == Library.CAPABILITY ? dataset : null);
             var worker = new StandardReplyIndexWorker(indexRecords, json, settings, new StandardReplyIndexClient(json, settings));
             var data = json.createObjectNode().put("title", "标题").put("requirement_text", "要求")
-                .put("bu_id", bu).put("record_version", 1);
+                .put("bu_id", bu).put("record_version", 1)
+                .put("document_title", "来源文件.xlsx").put("document_id", "")
+                .put("group_id", "G-1");
             new KnowledgeIndexQueue(indexRecords).enqueue(library, bu, id, 1, data);
 
             worker.sync();

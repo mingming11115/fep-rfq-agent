@@ -219,11 +219,14 @@ public class StandardReplyIndexClient {
 
     private ObjectNode projection(JsonNode payload) {
         if (payload == null || !payload.path("title").isTextual() || !payload.path("requirement_text").isTextual()
-                || !payload.path("bu_id").isTextual() || !payload.path("record_version").isIntegralNumber()) {
+                || !payload.path("bu_id").isTextual() || !payload.path("record_version").isIntegralNumber()
+                || !payload.path("document_title").isTextual() || !payload.path("document_id").isTextual()
+                || !payload.path("group_id").isTextual()) {
             throw new Failure("INVALID_PROJECTION", false);
         }
         var projection = json.createObjectNode();
-        for (String field : List.of("title", "requirement_text", "bu_id", "record_version")) {
+        for (String field : List.of("title", "requirement_text", "bu_id", "record_version",
+                "document_title", "document_id", "group_id")) {
             projection.set(field, payload.get(field));
         }
         return projection;
@@ -234,9 +237,11 @@ public class StandardReplyIndexClient {
         config.putArray("embedding_fields").add("title").add("requirement_text");
         var advanced = config.putObject("advanced");
         advanced.putObject("field_types").put("title", "text").put("requirement_text", "text")
-            .put("bu_id", "keyword").put("record_version", "integer");
-        advanced.putArray("filter_fields").add("bu_id").add("record_version");
-        advanced.putArray("return_fields").add("record_version").add("title").add("requirement_text");
+            .put("bu_id", "keyword").put("record_version", "integer")
+            .put("document_title", "keyword").put("document_id", "keyword").put("group_id", "keyword");
+        advanced.putArray("filter_fields").add("bu_id").add("record_version").add("document_id").add("group_id");
+        advanced.putArray("return_fields").add("record_version").add("title").add("requirement_text")
+            .add("document_title").add("document_id").add("group_id");
     }
 
     private Reply request(String operation, String path, ObjectNode body) {

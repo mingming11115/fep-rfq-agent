@@ -143,9 +143,10 @@ public class HistoryRfqReviewService {
         requireContent(row);
         requireState(row.buShared() || "仅当前项目".equals(row.scope()) && row.projectId() != null,
                 "请通过历史 RFQ 导入入口确认共享范围后再发布");
-        var sourceDocument = historyDocuments.findLatestScope(buId, row.payload().path("documentId").asText());
+        var sourceDocument = historyDocuments.findLatestSource(buId, row.payload().path("documentId").asText());
         requireState(sourceDocument.isPresent() && java.util.Objects.equals(sourceDocument.get().projectId(), row.projectId())
                 && java.util.Objects.equals(sourceDocument.get().scope(), row.scope()), "历史条款缺少同范围的来源文档");
+        var document = sourceDocument.map(source -> decode(source.payload())).orElseGet(json::createObjectNode);
 
         for (Clause previous : chain) {
             if (!previous.active()) {
@@ -159,7 +160,10 @@ public class HistoryRfqReviewService {
                 .put("publishedAt", Instant.now().toString());
         var projection = json.createObjectNode().put("title", row.payload().path("title").asText())
                 .put("requirement_text", row.payload().path("requirement").asText())
-                .put("bu_id", buId).put("record_version", row.version());
+                .put("bu_id", buId).put("record_version", row.version())
+                .put("document_title", document.path("name").asText())
+                .put("document_id", row.payload().path("documentId").asText())
+                .put("group_id", KnowledgeGroupService.primaryGroup(document));
         index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
         return save(user, buId, row, directPublish ? "直接发布历史 RFQ" : "批准发布历史 RFQ", reason);
     }
@@ -269,6 +273,15 @@ public class HistoryRfqReviewService {
     private Clause find(List<Clause> chain, int version) {
         return chain.stream().filter(row -> row.version() == version).findFirst()
                 .orElseThrow(() -> new BusinessException(404, "历史条款版本不存在"));
+    }
+
+    private ObjectNode decode(String payload) {
+        try {
+            return (ObjectNode) json.readTree(payload);
+        } catch (JsonProcessingException failure) {
+            log.error("解析历史文档记录失败 errorType={}", failure.getClass().getSimpleName());
+            throw new IllegalStateException("历史文档记录格式异常", failure);
+        }
     }
 
     private Clause map(KnowledgeRecordMapper.VersionRow row) {

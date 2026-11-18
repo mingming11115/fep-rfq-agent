@@ -81,7 +81,8 @@ class StandardReplyIndexClientTest {
         assertThat(requests.get(1).path()).isEqualTo("/api/v1/ingestion-jobs/job-1");
         JsonNode created = json.readTree(requests.get(0).body());
         assertThat(created.at("/dataset_config/embedding_fields").toString()).isEqualTo("[\"title\",\"requirement_text\"]");
-        assertThat(created.at("/dataset_config/advanced/filter_fields").toString()).isEqualTo("[\"bu_id\",\"record_version\"]");
+        assertThat(created.at("/dataset_config/advanced/filter_fields").toString())
+            .isEqualTo("[\"bu_id\",\"record_version\",\"document_id\",\"group_id\"]");
         assertThat(created.at("/records/0/id").asText()).isEqualTo("REPLY-1");
         assertThat(created.at("/records/0/updated_at").asText()).isEqualTo(UPDATED_AT.toString());
         assertThat(created.at("/records/0/data")).isEqualTo(payload());
@@ -115,7 +116,9 @@ class StandardReplyIndexClientTest {
         var capabilityClient = new StandardReplyIndexClient(json, settings);
         replies = List.of(new Reply(200, "{\"job_id\":\"job-cap\",\"job_status\":\"succeeded\",\"accepted_count\":1,\"rejected_count\":0}"));
         var projection = json.createObjectNode().put("title", "定位精度").put("requirement_text", "≤5 μm")
-            .put("bu_id", "BU-FEP").put("record_version", 1);
+            .put("bu_id", "BU-FEP").put("record_version", 1)
+            .put("document_title", "能力边界.xlsx").put("document_id", "")
+            .put("group_id", "");
 
         assertThat(capabilityClient.submit(dataset, "CAP-1", "upsert", projection, UPDATED_AT).complete()).isTrue();
         assertThat(requests).extracting(Exchange::path).containsOnly("/api/v1/semantic-datasets/" + dataset + ":ingest");
@@ -294,7 +297,9 @@ class StandardReplyIndexClientTest {
 
     private JsonNode payload() {
         return json.createObjectNode().put("title", "标准回复").put("requirement_text", "客户要求")
-            .put("bu_id", BU).put("record_version", 2);
+            .put("bu_id", BU).put("record_version", 2)
+            .put("document_title", "标准回复导入.xlsx").put("document_id", "")
+            .put("group_id", "G-1");
     }
 
     private record Reply(int status, String body) {}

@@ -233,8 +233,12 @@ public class CapabilityLibraryService {
         if (!payload.path("limits").asText().isBlank()) {
             description += "\n限制：" + payload.path("limits").asText();
         }
-        return json.createObjectNode().put("title", payload.path("metric").asText()).put("requirement_text", description)
-                .put("bu_id", buId).put("record_version", row.version());
+        var projection = json.createObjectNode().put("title", payload.path("metric").asText()).put("requirement_text", description)
+                .put("bu_id", buId).put("record_version", row.version())
+                .put("document_title", payload.path("importSource").path("filename").asText())
+                .put("document_id", "")
+                .put("group_id", KnowledgeGroupService.primaryGroup(payload));
+        return projection;
     }
 
     private ObjectNode returnDraft(CurrentUser user, String buId, Row row, String reason) {

@@ -156,7 +156,10 @@ public class StandardReplyService {
                 .put("publishedAt", Instant.now().toString());
         var projection = json.createObjectNode().put("title", record.payload().path("title").asText())
                 .put("requirement_text", record.payload().path("requirement").asText())
-                .put("bu_id", buId).put("record_version", record.version());
+                .put("bu_id", buId).put("record_version", record.version())
+                .put("document_title", record.payload().path("sourceFileName").asText())
+                .put("document_id", record.payload().path("documentId").asText())
+                .put("group_id", KnowledgeGroupService.primaryGroup(record.payload()));
         index.enqueue(Library.STANDARD_REPLY, buId, record.id(), record.version(), projection);
         return saveAction(user, buId, record, "批准发布标准回复", reason);
     }
