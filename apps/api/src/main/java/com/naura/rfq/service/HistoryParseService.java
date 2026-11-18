@@ -140,9 +140,9 @@ public class HistoryParseService {
             wordMarkdownReader.saveMarkdown(original, properties.maxBlocks(), payloadTarget);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            log.warn("document.parse.word.markdown.save_failed path={} errorType=Interrupted", payloadTarget);
+            log.warn("document.parse.word.markdown.save_failed Word Markdown 载荷保存失败 path={} errorType=Interrupted", payloadTarget);
         } catch (IOException | DocumentReadException exception) {
-            log.warn("document.parse.word.markdown.save_failed path={} errorType={}",
+            log.warn("document.parse.word.markdown.save_failed Word Markdown 载荷保存失败 path={} errorType={}",
                     payloadTarget, exception.getClass().getSimpleName());
         }
     }

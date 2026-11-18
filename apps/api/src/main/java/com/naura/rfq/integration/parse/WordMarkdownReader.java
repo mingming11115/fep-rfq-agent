@@ -116,10 +116,10 @@ public class WordMarkdownReader {
             } finally {
                 Files.deleteIfExists(pending);
             }
-            log.info("document.parse.word.markdown.saved path={}", target);
+            log.info("document.parse.word.markdown.saved Word Markdown 载荷已保存 path={}", target);
         } catch (IOException exception) {
             log.error("保存 Word Markdown 载荷失败", exception);
-            log.warn("document.parse.word.markdown.save_failed path={} errorType={}",
+            log.warn("document.parse.word.markdown.save_failed Word Markdown 载荷保存失败 path={} errorType={}",
                     target, exception.getClass().getSimpleName());
         }
     }

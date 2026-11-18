@@ -204,7 +204,7 @@ public class RuleBasedExtractor implements RequirementExtractor {
                     rowRefs(block, rowIndex, cells)));
         }
         if (!results.isEmpty()) {
-            log.debug("document.parse.word.table.refs anchor={} rows={}", block.anchor(), results.size());
+            log.debug("document.parse.word.table.refs Word 表格条款抽取完成 anchor={} rows={}", block.anchor(), results.size());
         }
         return results;
     }

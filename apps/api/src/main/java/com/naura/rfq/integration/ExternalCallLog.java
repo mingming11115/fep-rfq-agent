@@ -19,7 +19,7 @@ public final class ExternalCallLog {
         this.service = service;
         this.operation = operation;
         long requestBytes = request.bodyPublisher().map(HttpRequest.BodyPublisher::contentLength).orElse(0L);
-        log.info("external.call.request callId={} service={} operation={} method={} host={} path={} requestBytes={} parseRunId={}",
+        log.info("external.call.request 外部调用开始 callId={} service={} operation={} method={} host={} path={} requestBytes={} parseRunId={}",
             callId, service, operation, request.method(), request.uri().getHost(),
             request.uri().getRawPath(), requestBytes, parseRunId);
     }
@@ -30,7 +30,7 @@ public final class ExternalCallLog {
 
     public void response(int status, int responseBytes) {
         log.atLevel(status >= 200 && status < 300 ? Level.INFO : Level.WARN)
-            .log("external.call.response callId={} service={} operation={} status={} responseBytes={} durationMs={}",
+            .log("external.call.response 外部调用返回 callId={} service={} operation={} status={} responseBytes={} durationMs={}",
                 callId, service, operation, status, responseBytes, durationMs());
     }
 
@@ -39,7 +39,7 @@ public final class ExternalCallLog {
         if (exception instanceof ExecutionException && exception.getCause() != null) {
             cause = exception.getCause();
         }
-        log.error("external.call.failed callId={} service={} operation={} errorType={} durationMs={}",
+        log.error("external.call.failed 外部调用失败 callId={} service={} operation={} errorType={} durationMs={}",
             callId, service, operation, cause.getClass().getSimpleName(), durationMs());
     }
 
@@ -50,7 +50,7 @@ public final class ExternalCallLog {
         if (total > MAX_PAYLOAD_CHARS) {
             text = text.substring(0, MAX_PAYLOAD_CHARS) + "...(truncated, totalChars=" + total + ")";
         }
-        log.info("external.call.payload callId={} service={} operation={} direction={} body={}",
+        log.info("external.call.payload 外部调用报文 callId={} service={} operation={} direction={} body={}",
             callId, service, operation, direction, text);
     }
 

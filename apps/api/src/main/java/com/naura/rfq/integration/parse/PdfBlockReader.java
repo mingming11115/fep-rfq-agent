@@ -68,7 +68,7 @@ public class PdfBlockReader implements DocumentBlockReader {
         } catch (Exception exception) {
             log.error("MinerU 解析 PDF 失败", exception);
             String reason = exception instanceof DocumentReadException ? exception.getMessage() : ParseHttpClient.reason(exception);
-            log.warn("document.parse.mineru.fallback reason={}", reason);
+            log.warn("document.parse.mineru.fallback MinerU 解析失败，降级现有 PDF 解析 reason={}", reason);
             var blocks = read(file, historyLines);
             if (!historyLines && !blocks.isEmpty()) {
                 var first = blocks.get(0);

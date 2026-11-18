@@ -274,7 +274,7 @@ public class WordMarkdownExtractor {
             }
             String reason = exception instanceof DocumentReadException detail
                     ? detail.getMessage() : ParseHttpClient.reason(exception);
-            log.warn("document.parse.word.llm.batch.failed parseRunId={} sources={} reason={}", runId, primary, reason);
+            log.warn("document.parse.word.llm.batch.failed Word 模型批次解析失败 parseRunId={} sources={} reason={}", runId, primary, reason);
             validation.failed("S" + primary.first(), reason);
             return new Attempt(false, sources(primary), batch.markdown().length(), "S" + primary.first() + "：" + reason);
         }
@@ -393,7 +393,7 @@ public class WordMarkdownExtractor {
                     .collect(Collectors.groupingBy(key -> key, Collectors.counting()));
             rowsByTable.forEach((table, rows) -> {
                 if (rows > 1) {
-                    log.warn("document.parse.word.table.merged table={} rows={}", table, rows);
+                    log.warn("document.parse.word.table.merged 同一表格多行并入一条条款 table={} rows={}", table, rows);
                 }
             });
         }

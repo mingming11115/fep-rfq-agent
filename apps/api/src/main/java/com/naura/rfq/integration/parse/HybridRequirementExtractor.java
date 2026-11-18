@@ -189,7 +189,7 @@ public class HybridRequirementExtractor implements RequirementExtractor {
         } catch (Exception exception) {
             log.error("历史答复模型批次解析失败", exception);
             String reason = ParseHttpClient.reason(exception);
-            log.warn("document.parse.llm.history_answers.fallback target={} reason={}", batch.get(0).id(), reason);
+            log.warn("document.parse.llm.history_answers.fallback 历史答复批次降级 target={} reason={}", batch.get(0).id(), reason);
             issues.add(label + " 未返回可用结果，" + reason);
         }
         return Map.of();
@@ -292,13 +292,13 @@ public class HybridRequirementExtractor implements RequirementExtractor {
                         "blockIndex", b.index(), "type", b.type(), "text", b.text(),
                         "sectionPath", b.sectionPath() == null ? "" : b.sectionPath())).toList()))));
             phase = "request";
-            log.info("document.parse.llm.request parseRunId={} documentName={} batch={}/{} model={} firstBlockIndex={} blocks={} chars={}",
+            log.info("document.parse.llm.request 发起模型解析请求 parseRunId={} documentName={} batch={}/{} model={} firstBlockIndex={} blocks={} chars={}",
                 parseRunId, label(documentName), index, total, config.getModel(), firstBlockIndex, batch.size(), chars);
             JsonNode response = http.post(config, request, parseRunId);
             phase = "validation";
             var accepted = validate(modelContent(response), batch, fallbackToRules);
             results.addAll(accepted);
-            log.info("document.parse.llm.accepted parseRunId={} documentName={} batch={}/{} model={} firstBlockIndex={}"
+            log.info("document.parse.llm.accepted 模型解析结果已采纳 parseRunId={} documentName={} batch={}/{} model={} firstBlockIndex={}"
                             + " acceptedBlockIndexes={} requirements={} durationMs={}",
                 parseRunId, label(documentName), index, total, config.getModel(), firstBlockIndex,
                 accepted.stream().map(ExtractedRequirement::blockIndex).distinct().toList(), accepted.size(),
