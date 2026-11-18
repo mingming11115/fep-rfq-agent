@@ -203,7 +203,7 @@ test('MySQL batch confirms every selected clause as Comply',async t=>{
     assert.equal(field('对外答复')?.tagName, 'INPUT');
     for (const label of ['适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="应答结论"] input[value="有条件 Comply"]'));
-    const wording = node.querySelector('section[aria-label="应答"]');
+    const wording = node.querySelector('section[aria-label="应答话术"]');
     assert.ok(wording, 'conditional Comply shows editable recommended wording');
     assert.equal(field('对外答复')?.tagName, 'INPUT');
     assert.equal(node.querySelector('.response-current-card [aria-label="应答依据"]'), null,
@@ -267,8 +267,8 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     assert.equal(h.node.querySelectorAll('[aria-label="应答结论"]').length, 1);
     assert.match(h.node.querySelector('.response-reference-details summary').textContent, /AI 建议.*有条件/);
     assert.match(h.node.querySelector('textarea[aria-label="应答内容"]').value, /选配 X/);
-    const wording = h.node.querySelector('[aria-label="应答"]');
-    assert.equal(wording.querySelector('h4')?.textContent, '应答');
+    const wording = h.node.querySelector('[aria-label="应答话术"]');
+    assert.equal(wording.querySelector('h4')?.textContent, '应答话术');
     assert.equal(Boolean(wording.querySelector('[aria-label="应答依据"]')), false);
     await h.click(h.node.querySelector('.response-reference-details summary'));
     assert.match(h.node.querySelector('[aria-label="本条关联证据"]').textContent, /能力比对 RUN-1/);

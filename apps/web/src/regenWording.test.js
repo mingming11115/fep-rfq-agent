@@ -32,7 +32,7 @@ test('重新生成 gives visible feedback even when the wording was never edited
     assert.ok(regen,'重新生成 button exists');
     assert.equal(h.node.querySelector('.response-regen-hint'),null,'no hint before click');
     await act(async()=>{regen.click();await h.settle();});
-    assert.equal(h.node.querySelector('.response-regen-hint')?.textContent,'已重新生成应答','click always shows feedback');
+    assert.equal(h.node.querySelector('.response-regen-hint')?.textContent,'已重新生成应答话术','click always shows feedback');
   } finally { await h.close(); }
 });
 
@@ -43,7 +43,7 @@ test('重新生成 explains when no recommendation is available for the conclusi
     const regen=[...h.node.querySelectorAll('button')].find(item=>item.textContent.includes('重新生成'));
     assert.ok(regen);
     await act(async()=>{regen.click();await h.settle();});
-    assert.match(h.node.querySelector('.response-regen-hint')?.textContent||'',/暂无可生成的应答/);
+    assert.match(h.node.querySelector('.response-regen-hint')?.textContent||'',/暂无可生成的应答话术/);
   } finally { await h.close(); }
 });
 
