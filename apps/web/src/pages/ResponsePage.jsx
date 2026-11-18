@@ -32,7 +32,7 @@ import {assertCapabilityProcess} from '../modelProcessDomain';
 import {getSourceUploadRoute} from '../navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Pencil, Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, Eye, EyeOff, Trash2 } from "../components/icons";
+import { Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, Eye, EyeOff, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions, RESPONSE_CONCLUSIONS } from '../domain';
 import { answerRemark, singleLineReply } from '../responseFields';
@@ -217,8 +217,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const timer = useRef(null);
   const candidateDirty = useRef(false);
   const staleSource=route?.requirementId===active?.id&&((route?.sourceVersion&&route.sourceVersion!==String(active?.sourceVersion||'1'))||(route?.fileId&&route.fileId!==(active?.sourceFileId||active?.source)));
-  const [reconfirmKey, setReconfirmKey] = useState(null);
-  const confirmedLocked = active?.status === '已确认' && reconfirmKey !== `${active.id}:${active.version}`;
+  const confirmedLocked = active?.status === '已确认';
   const canEdit = !confirmedLocked && actorRole !== '最终审批人'&&!staleSource&&canBusinessAction('requirement',active?.id);
   const canConfirm = ['SR','技术'].includes(actorRole)&&!staleSource&&canBusinessAction('requirement',active?.id,'confirm');
   // 批量确认必须逐条沿用单条确认的资格：数据库模式下由确认人指派决定，不能把责任人的条款一起勾选。
@@ -275,7 +274,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const ids = new Set(directoryRows.filter(canBatchConfirmRow).map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
   }
-  function hydrate(row) { if (!row) { return; } prefilledRun.current = null; setReconfirmKey(null); setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
+  function hydrate(row) { if (!row) { return; } prefilledRun.current = null; setActiveId(row.id); setForm(toForm(row)); baseline.current = { id: row.id, version: row.version, status: row.status }; clearDirty(); setRightTab(row.matchLevel === 'history' ? 'history' : ['capability', 'none'].includes(row.matchLevel) ? 'capability' : 'standard'); setCandidateIndex(0); setShowMore(false); setError(''); setQueueDone(false); setReviewForm(null); reviewFormRef.current = null; setInlineReviewId(null); setInlineReviewAction(null); }
   function edit(field, value) { if (!canEdit || cardBusyRef.current) { return; } setForm((old) => ({ ...old, [field]: value })); dirtyRef.current = true; setDirty(true); }
   function requestTransition(next) { if (cardBusyRef.current) { return false; } return guardCardNavigation({ dirty: false, onBlock: action => action(), previous: issueGuardRef.current }, next); }
   function guardedDetail(next, sourceRow) {
@@ -786,8 +785,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
                     disabled={!!reparseBlocked} onClick={() => setDeleteTarget(active)}><Trash2 size={15}/></UiButton>}
                 <UiButton type="button" className="text-link" disabled={cardBusy} onClick={deferCard}>稍后处理</UiButton>
                 <UiButton type="button" className="btn" disabled={cardBusy || !canEdit || !dirty} onClick={() => saveDraft()}><Save size={14}/>保存草稿</UiButton>
-                {['SR','技术'].includes(actorRole) && confirmedLocked && <UiButton type="button" className="btn" disabled={cardBusy || !canConfirm} onClick={() => setReconfirmKey(`${active.id}:${active.version}`)}><Pencil size={14}/>再次确认</UiButton>}
-                {['SR','技术'].includes(actorRole) && !confirmedLocked && <UiButton type="button" className="btn btn-primary" onClick={beginConfirm} disabled={cardBusy || !canConfirm || !!active.pendingReviewProposal || !databaseBacked && active.status === '已确认' && !dirty}><Check size={14}/>{cardBusy ? '处理中…' : !databaseBacked && active.status === '已确认' && !dirty ? '本条已确认' : openReview&&openReview.kind!=='clarification'&&!hasAssignedConfirmer(active)?'处理本人评审':'确认本条'}</UiButton>}
+                {['SR','技术'].includes(actorRole) && confirmedLocked && <UiButton type="button" className="btn" disabled={cardBusy || !canConfirm} onClick={() => beginConfirm()}><Check size={14}/>再次确认</UiButton>}
+                {['SR','技术'].includes(actorRole) && !confirmedLocked && <UiButton type="button" className="btn btn-primary" onClick={beginConfirm} disabled={cardBusy || !canConfirm || !!active.pendingReviewProposal}><Check size={14}/>{cardBusy ? '处理中…' : openReview&&openReview.kind!=='clarification'&&!hasAssignedConfirmer(active)?'处理本人评审':'确认本条'}</UiButton>}
               </div>}
             </div>
           </footer>
