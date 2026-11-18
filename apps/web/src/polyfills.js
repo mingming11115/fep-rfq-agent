@@ -76,26 +76,43 @@ export function installPolyfills(target = globalThis.crypto) {
   const patched = [];
   if (!target) return patched;
 
-  if (typeof target.randomUUID !== 'function' && defineValue(target, 'randomUUID', createRandomUuid(target))) {
+  if (typeof target.randomUUID !== 'function' && patchRandomUuid(target)) {
     patched.push('crypto.randomUUID');
   }
 
   const nativeDigest = target.subtle && typeof target.subtle.digest === 'function';
-  if (!nativeDigest) {
-    const digest = createDigest();
-    // 继承原对象，避免覆盖 subtle 上可能存在的其它方法
-    const subtle = target.subtle ? Object.create(target.subtle) : {};
-    if (defineValue(subtle, 'digest', digest) && defineValue(target, 'subtle', subtle)) {
-      patched.push('crypto.subtle.digest');
-    }
+  if (!nativeDigest && patchSubtle(target)) {
+    patched.push('crypto.subtle.digest');
   }
 
   return patched;
 }
 
+// 少数环境的 crypto 实例不可扩展，此时退到原型上安装
+function patchRandomUuid(target) {
+  const impl = createRandomUuid(target);
+  if (defineValue(target, 'randomUUID', impl)) return true;
+  const proto = Object.getPrototypeOf(target);
+  return Boolean(proto && proto !== target && defineValue(proto, 'randomUUID', impl));
+}
+
+function patchSubtle(target) {
+  const digest = createDigest();
+  // 继承原对象，避免覆盖 subtle 上可能存在的其它方法
+  const subtle = target.subtle ? Object.create(target.subtle) : {};
+  if (defineValue(subtle, 'digest', digest) && defineValue(target, 'subtle', subtle)) return true;
+  const proto = Object.getPrototypeOf(target);
+  return Boolean(proto && proto !== target && defineValue(proto, 'subtle', subtle));
+}
+
 const patched = installPolyfills();
 
-if (patched.length) {
+// 自检：把结果直接打到控制台，避免"以为修好了其实没生效"
+if (typeof globalThis.crypto === 'undefined') {
+  console.error('[RFQ] 当前环境没有 crypto 对象，polyfill 无法安装。');
+} else if (typeof globalThis.crypto.randomUUID !== 'function') {
+  console.error('[RFQ] polyfill 安装失败：crypto.randomUUID 仍不可用。请将本行与页面地址反馈给开发。');
+} else if (patched.length) {
   console.info(
     `[RFQ] 当前为非安全上下文（${globalThis.location ? globalThis.location.origin : '未知来源'}），` +
     `已为 ${patched.join('、')} 启用 polyfill，相关功能降级可用。` +

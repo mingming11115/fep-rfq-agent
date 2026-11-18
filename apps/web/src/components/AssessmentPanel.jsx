@@ -17,7 +17,7 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
     if (!canEdit) { return; }
     setEditedWording(null);
     const hasRecommendation = !!String(recommendation || '').trim();
-    setRegenerateHint(hasRecommendation ? '已重新生成推荐话术' : '当前结论暂无可生成的话术，请先选择应答结论');
+    setRegenerateHint(hasRecommendation ? '已重新生成应答' : '当前结论暂无可生成的应答，请先选择应答结论');
     clearTimeout(regenerateTimer.current);
     regenerateTimer.current = setTimeout(() => setRegenerateHint(''), 3000);
   }
@@ -71,10 +71,10 @@ export default function AssessmentPanel({ row, project, suggestion, retrieval, o
         {children}
       </div>
     </details>
-    {hasWording && <section className="response-wording-inner" aria-label="AI 推荐话术">
-      <h4 className="response-wording-heading"><Sparkles size={15} aria-hidden="true"/>AI 推荐话术</h4>
-      <Input.TextArea aria-label="推荐话术" autoSize={{ minRows: 3, maxRows: 6 }} value={wording} readOnly={!canEdit}
-        placeholder="选择应答结论后生成推荐话术" onChange={event => setEditedWording(event.target.value)}/>
+    {hasWording && <section className="response-wording-inner" aria-label="应答">
+      <h4 className="response-wording-heading"><Sparkles size={15} aria-hidden="true"/>应答</h4>
+      <Input.TextArea aria-label="应答内容" autoSize={{ minRows: 3, maxRows: 6 }} value={wording} readOnly={!canEdit}
+        placeholder="选择应答结论后生成应答内容" onChange={event => setEditedWording(event.target.value)}/>
       <div className="response-wording-footer">
         <Space size={8} wrap>
           <Button type="link" size="small" icon={<RefreshCw size={12}/>} disabled={!canEdit} onClick={regenerate}>重新生成</Button>
