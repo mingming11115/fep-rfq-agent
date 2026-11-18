@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,6 +45,7 @@ public final class AnnotatedOriginal {
     private static final Pattern WORD_BODY = Pattern.compile("body/(\\d+)(?:/r(\\d+)/c(\\d+)(/table/0)?)?(?:/image-\\d+)?");
     private static final Pattern IMPORTED_PARAGRAPH = Pattern.compile("paragraph:(\\d+)");
     private static final List<String> REPLY_HEADERS = List.of("供应商答复", "供应商应答", "供应商回复", "应答", "答复", "回复");
+    private static final List<String> REPLY_EXACT_HEADERS = List.of("rev", "revision");
     private static final Pattern GENERIC_HEADER = Pattern.compile(".*(日期|时间|截止|编号|状态|说明|要求|条款|备注).*");
 
     private AnnotatedOriginal() {}
@@ -90,7 +92,8 @@ public final class AnnotatedOriginal {
         try (var document = new XWPFDocument(new ByteArrayInputStream(original));
              var output = new ByteArrayOutputStream()) {
             // Resolve every anchor before inserting text changes any table row's quote.
-            var paragraphs = notes.stream().map(note -> locateWord(document, note, true)).toList();
+            var paragraphs = notes.stream().map(note -> locateWord(document, note, true))
+                    .map(AnnotatedOriginal::redirectToReplyColumn).toList();
             for (int index = 0; index < notes.size(); index++) {
                 var paragraph = paragraphs.get(index);
                 allowTableRowsToExpand(paragraph);
@@ -224,7 +227,28 @@ public final class AnnotatedOriginal {
                 .flatMap(cell -> cell.getParagraphs().stream()), note));
     }
 
-    /** 表头带「应答/答复」列时写入该列（含空白单元格），否则退回原行为：写入行内最长的原文段落。 */
+    /**
+     * 表头带 Rev/应答/答复列时，正文答复一律写入该列对应行的独立单元格，绝不混入原文所在单元格；
+     * 没有应答列时保持原行为（写入定位到的单元格）。
+     */
+    private static XWPFParagraph redirectToReplyColumn(XWPFParagraph paragraph) {
+        var body = paragraph.getBody();
+        if (!(body instanceof XWPFTableCell cell)) {
+            return paragraph;
+        }
+        var row = cell.getTableRow();
+        int column = replyColumn(row.getTable(), row);
+        int current = row.getTableCells().indexOf(cell);
+        if (column < 0 || column >= row.getTableCells().size() || column == current) {
+            return paragraph;
+        }
+        var target = row.getTableCells().get(column);
+        return target.getParagraphs().stream().filter(candidate -> !candidate.getText().isBlank())
+                .max(java.util.Comparator.comparingInt(candidate -> candidate.getText().length()))
+                .orElseGet(target::addParagraph);
+    }
+
+    /** 表头带「应答/答复/Rev」列时写入该列（含空白单元格），否则退回原行为：写入行内最长的原文段落。 */
     private static XWPFParagraph answerParagraph(XWPFTable table, XWPFTableRow row,
             java.util.function.Supplier<XWPFParagraph> fallback) {
         int column = replyColumn(table, row);
@@ -244,7 +268,8 @@ public final class AnnotatedOriginal {
         }
         var cells = header.getTableCells();
         for (int i = 0; i < cells.size(); i++) {
-            if (REPLY_HEADERS.contains(normalizeHeader(cells.get(i).getText()))) {
+            String text = normalizeHeader(cells.get(i).getText());
+            if (REPLY_HEADERS.contains(text) || REPLY_EXACT_HEADERS.contains(text)) {
                 return i;
             }
         }
@@ -259,7 +284,7 @@ public final class AnnotatedOriginal {
     }
 
     private static String normalizeHeader(String text) {
-        return text.replaceAll("[\\s（）()]", "");
+        return text.replaceAll("[\\s（）()]", "").replaceAll("\\.+$", "").toLowerCase(Locale.ROOT);
     }
 
     private static XWPFParagraph longestParagraph(java.util.stream.Stream<XWPFParagraph> paragraphs, Note note) {
