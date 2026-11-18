@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
 @Component
 @NoArgsConstructor
 @AllArgsConstructor
+@Slf4j
 class MineruPdfReader {
     private static final String PROVENANCE = "mineru";
     private static final String REVIEW = "MinerU 识别内容，需核对原文、数值及单位";
@@ -44,9 +46,12 @@ class MineruPdfReader {
             + "Content-Type: application/pdf\r\n\r\n";
         var upload = BodyPublishers.concat(BodyPublishers.ofString(fields), BodyPublishers.ofFile(file),
             BodyPublishers.ofString("\r\n--" + boundary + "--\r\n"));
-        JsonNode content = http.postMineru(settings, boundary, upload).path("results").path("rfq").path("content_list");
+        JsonNode response = http.postMineru(settings, boundary, upload);
+        JsonNode results = response.path("results");
+        JsonNode content = results.path("rfq").path("content_list");
         if (!content.isTextual()) {
-            throw new DocumentReadException("MinerU 响应缺少内容列表");
+            log.warn("MinerU 响应缺少内容列表 rootKeys={} resultsKeys={}", fieldNames(response), fieldNames(results));
+            throw new DocumentReadException("MinerU 响应缺少内容列表（results 键：" + fieldNames(results) + "）");
         }
         JsonNode entries = json.readTree(content.textValue());
         if (entries == null || !entries.isArray()) {
@@ -89,7 +94,14 @@ class MineruPdfReader {
         if (blocks.stream().noneMatch(block -> !RawBlock.IMAGE.equals(block.type()) && block.hasText())) {
             throw new DocumentReadException("MinerU 未返回可读取的正文或表格");
         }
+        log.info("MinerU 解析完成 entries={} blocks={}", entries.size(), blocks.size());
         return blocks;
+    }
+
+    private static List<String> fieldNames(JsonNode node) {
+        List<String> names = new ArrayList<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 
     private static void addTable(List<RawBlock> blocks, JsonNode entry, String section, int page) throws IOException {

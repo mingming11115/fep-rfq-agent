@@ -123,6 +123,7 @@ public class ParseHttpClient {
             logPayload(call, "response", response.body(), settings.getApiKey());
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            logErrorBody(call, settings, response.body());
             throw new RemoteStatusException(response.statusCode(), isLengthError(response.statusCode(), response.body()));
         }
         try {
@@ -160,6 +161,14 @@ public class ParseHttpClient {
         }
     }
 
+    /** 仅对显式开启的服务（如自建 MinerU）记录错误响应体；报文经 call.payload 截断，不包含鉴权头。 */
+    private static void logErrorBody(ExternalCallLog call, ParseIntegrationProperties.Endpoint settings, byte[] body) {
+        if (!settings.isLogErrorBody() || body == null || body.length == 0) {
+            return;
+        }
+        call.payload("error_response", new String(body, StandardCharsets.UTF_8));
+    }
+
     static boolean requestExceedsLengthLimit(Exception exception) {
         return exception instanceof RemoteStatusException status && status.lengthError;
     }
@@ -184,9 +193,18 @@ public class ParseHttpClient {
             return "请求超时";
         }
         if (reason instanceof RemoteStatusException status) {
-            return "HTTP " + status.status;
+            return "HTTP " + status.status + (status.lengthError ? "，请求内容超过服务长度上限" : "");
         }
-        return "配置、连接或响应校验失败";
+        String message = flatten(reason.getMessage());
+        return "配置、连接或响应校验失败" + (message.isEmpty() ? "" : "：" + message);
+    }
+
+    private static String flatten(String message) {
+        if (message == null) {
+            return "";
+        }
+        String text = message.replaceAll("\\s+", " ").trim();
+        return text.length() > 300 ? text.substring(0, 300) + "…" : text;
     }
 
     static Throwable unwrap(Exception exception) {
@@ -215,7 +233,9 @@ public class ParseHttpClient {
         @Override public void onNext(List<ByteBuffer> buffers) {
             for (ByteBuffer buffer : buffers) {
                 if ((long) bytes.size() + buffer.remaining() > MAX_RESPONSE_BYTES) {
-                    subscription.cancel(); result.completeExceptionally(new IllegalArgumentException("服务响应超过大小上限")); return;
+                    subscription.cancel(); result.completeExceptionally(new IllegalArgumentException(
+                        "服务响应超过大小上限 " + MAX_RESPONSE_BYTES + " 字节，已接收 " + bytes.size() + " 字节"));
+                    return;
                 }
                 byte[] chunk = new byte[buffer.remaining()]; buffer.get(chunk); bytes.writeBytes(chunk);
             }

@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,16 +25,20 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 class MineruPdfReaderTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String NATIVE_TEXT = "The test pressure shall be at least 2 MPa.";
@@ -214,6 +219,30 @@ class MineruPdfReaderTest {
         }));
     }
 
+    @Test
+    void mineruErrorResponseBodyIsLoggedForTroubleshooting(CapturedOutput output) throws Exception {
+        Path file = pdf();
+        withMineru(true, 500, "[]", mineru -> mineru.context().run(context -> {
+            assertThat(context.getBean(PdfBlockReader.class).read(file).get(0).text()).isEqualTo(NATIVE_TEXT);
+            assertThat(output.getAll().lines().toList()).anySatisfy(line -> assertThat(line)
+                .contains("external.call.payload", "service=mineru", "direction=error_response", "content_list"));
+        }));
+    }
+
+    @Test
+    void missingContentListReportsTheReturnedResultKeys(CapturedOutput output) throws Exception {
+        Path file = pdf();
+        withMineru(true, 200, "[]", mineru -> {
+            mineru.results().remove("rfq");
+            mineru.context().run(context -> {
+                // PdfBlockReader 会把 MinerU 失败降级为原生解析，这里只验证警告日志与降级结果。
+                assertThat(context.getBean(PdfBlockReader.class).read(file).get(0).text()).isEqualTo(NATIVE_TEXT);
+                assertThat(output.getAll().lines().toList()).anySatisfy(line -> assertThat(line)
+                    .contains("MinerU 响应缺少内容列表 rootKeys=", "resultsKeys=[]"));
+            });
+        });
+    }
+
     private Path pdf() throws Exception {
         return pdf(false);
     }
@@ -243,10 +272,11 @@ class MineruPdfReaderTest {
     private void withMineru(boolean enabled, int status, String content, Consumer<MineruStub> test) throws Exception {
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         var request = new AtomicReference<String>();
-        byte[] response = JSON.writeValueAsBytes(Map.of("status", "completed", "version", "3.4.2",
-            "results", Map.of("rfq", Map.of("content_list", content))));
+        var results = new LinkedHashMap<String, Object>();
+        results.put("rfq", Map.of("content_list", content));
         server.createContext("/file_parse", exchange -> {
             request.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = JSON.writeValueAsBytes(Map.of("status", "completed", "version", "3.4.2", "results", results));
             respond(exchange, status, response);
         });
         byte[] ocr = JSON.writeValueAsBytes(Map.of("text", "回路应能耐受 1.6 MPa。"));
@@ -262,7 +292,7 @@ class MineruPdfReaderTest {
                 .withBean(ObjectMapper.class, () -> JSON)
                 .withPropertyValues("rfq.parse.integrations.mineru.enabled=" + enabled,
                     "rfq.parse.integrations.mineru.url=" + baseUrl + "/file_parse");
-            test.accept(new MineruStub(context, request, baseUrl));
+            test.accept(new MineruStub(context, request, baseUrl, results));
         } finally {
             server.stop(0);
         }
@@ -275,7 +305,8 @@ class MineruPdfReaderTest {
         }
     }
 
-    private record MineruStub(ApplicationContextRunner context, AtomicReference<String> request, String baseUrl) { }
+    private record MineruStub(ApplicationContextRunner context, AtomicReference<String> request, String baseUrl,
+            Map<String, Object> results) { }
 
     @Configuration(proxyBeanMethods = false)
     @ComponentScan(basePackageClasses = DocumentBlockReader.class)

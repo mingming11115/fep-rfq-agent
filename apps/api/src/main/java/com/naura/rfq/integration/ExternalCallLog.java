@@ -39,8 +39,12 @@ public final class ExternalCallLog {
         if (exception instanceof ExecutionException && exception.getCause() != null) {
             cause = exception.getCause();
         }
-        log.error("external.call.failed 外部调用失败 callId={} service={} operation={} errorType={} durationMs={}",
-            callId, service, operation, cause.getClass().getSimpleName(), durationMs());
+        String message = cause.getMessage() == null ? "" : cause.getMessage().replaceAll("\\s+", " ").trim();
+        if (message.length() > 300) {
+            message = message.substring(0, 300) + "…";
+        }
+        log.error("external.call.failed 外部调用失败 callId={} service={} operation={} errorType={} message={} durationMs={}",
+            callId, service, operation, cause.getClass().getSimpleName(), message, durationMs());
     }
 
     /** Opt-in body logging: only called when the caller enables it, payloads hold customer content. */

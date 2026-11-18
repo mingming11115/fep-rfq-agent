@@ -113,6 +113,8 @@ rfq:
         backend: ${RFQ_MINERU_BACKEND:pipeline}
         connect-timeout: ${RFQ_MINERU_CONNECT_TIMEOUT:3s}
         timeout: ${RFQ_MINERU_TIMEOUT:120s}
+        # Self-hosted service: error response bodies are safe to log and are the main troubleshooting clue.
+        log-error-body: ${RFQ_MINERU_LOG_ERROR_BODY:true}
 
 office:
   public-url: ${ONLYOFFICE_PUBLIC_URL:http://127.0.0.1:8082}

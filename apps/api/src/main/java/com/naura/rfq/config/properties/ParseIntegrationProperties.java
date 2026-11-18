@@ -49,6 +49,8 @@ public class ParseIntegrationProperties {
         private String apiKey = "";
         private Duration connectTimeout = Duration.ofSeconds(3);
         private Duration timeout = Duration.ofSeconds(30);
+        /** 非 2xx 时把远端错误响应体（截断后）记入 external.call.payload，便于排查自建服务；外部 LLM 默认关闭。 */
+        private boolean logErrorBody;
     }
     @Getter @Setter
     public static class Llm extends Endpoint {
@@ -77,6 +79,8 @@ public class ParseIntegrationProperties {
 
         public Mineru() {
             setTimeout(Duration.ofMinutes(2));
+            // MinerU 为自建服务，错误响应体可安全落日志，是排查解析失败的主要线索。
+            setLogErrorBody(true);
         }
     }
 }
