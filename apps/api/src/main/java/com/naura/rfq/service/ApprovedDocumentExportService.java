@@ -18,6 +18,7 @@ import com.naura.rfq.model.entity.AppUser;
 import com.naura.rfq.model.entity.CustomerDocument;
 import com.naura.rfq.model.entity.DocumentBlock;
 import com.naura.rfq.model.entity.Project;
+import com.naura.rfq.model.entity.ProjectStage;
 import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.model.parse.SourceRef;
 import com.naura.rfq.security.AccessGuard;
@@ -79,7 +80,7 @@ public class ApprovedDocumentExportService {
 
     public record ExportFile(String name, String contentType, byte[] bytes) {}
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ExportFile download(CurrentUser user, String projectId, String snapshotId, boolean wordInBody) throws IOException {
         var project = projects.findById(projectId).orElseThrow(() -> new BusinessException(404, "项目不存在"));
         access.requireProject(user, project);
@@ -99,10 +100,18 @@ public class ApprovedDocumentExportService {
             notes = inlineAnswers(notes);
         }
 
+        ExportFile result;
         if (notes.size() == 1) {
             var entry = notes.entrySet().iterator().next();
-            return exportDocument(user, entry.getKey(), entry.getValue(), wordInBody);
+            result = exportDocument(user, entry.getKey(), entry.getValue(), wordInBody);
+        } else {
+            result = exportZip(user, project, notes, wordInBody);
         }
+        markExported(project);
+        return result;
+    }
+
+    private ExportFile exportZip(CurrentUser user, Project project, Map<String, List<Note>> notes, boolean wordInBody) throws IOException {
         try (var bytes = new ByteArrayOutputStream(); var zip = new ZipOutputStream(bytes)) {
             Set<String> filenames = new HashSet<>();
             for (var entry : notes.entrySet()) {
@@ -118,6 +127,22 @@ public class ApprovedDocumentExportService {
             zip.finish();
             return new ExportFile(safeName(project.getName()) + "-正式应答.zip", "application/zip", bytes.toByteArray());
         }
+    }
+
+    /**
+     * 正式导出成功后推进项目阶段：→ 已导出（EXPORTED）。
+     * 已导出或已归档（CANCELLED）的项目保持原阶段；本方法在文件成功生成后调用，与导出同事务提交。
+     */
+    private void markExported(Project project) {
+        String stage = project.getStage();
+        if (ProjectStage.EXPORTED.name().equals(stage) || !ProjectStage.isActive(stage)) {
+            return;
+        }
+        project.setStage(ProjectStage.EXPORTED.name());
+        project.setUpdatedAt(Instant.now());
+        projects.update(project);
+        log.info("project.stage.advanced 正式应答导出完成，项目进入已导出 projectId={} from={} to={}",
+                project.getId(), stage, ProjectStage.EXPORTED);
     }
 
     Map<String, List<Note>> validateContents(Project project, JsonNode snapshot) {

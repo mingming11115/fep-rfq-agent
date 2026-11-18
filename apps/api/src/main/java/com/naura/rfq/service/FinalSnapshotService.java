@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.mapper.ProjectMapper;
 import com.naura.rfq.model.entity.Project;
+import com.naura.rfq.model.entity.ProjectStage;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.time.Instant;
@@ -178,12 +179,29 @@ public class FinalSnapshotService {
         }
         responseRecords.updateSnapshot(projectId, id, snapshot.toString());
         if ("已批准".equals(snapshot.path("status").asText())) {
+            advanceToApproved(project);
             var candidate = history.fromSnapshot(user, projectId, id, false);
             snapshot.put("historyCandidateCount", candidate.clauses().size());
             responseRecords.updateSnapshot(projectId, id, snapshot.toString());
         }
         audit.successInBu(user.id(), project.getBuId(), "记录定稿审批", "snapshot", id, snapshot.path("status").asText());
         return snapshot;
+    }
+
+    /**
+     * 最终评审通过后推进项目阶段：→ 审批完成（APPROVED）。
+     * 已导出（EXPORTED）的项目保持原阶段；project 由 locked() 以行锁读出，本方法仅在已批准分支调用。
+     */
+    private void advanceToApproved(Project project) {
+        String stage = project.getStage();
+        if (ProjectStage.APPROVED.name().equals(stage) || ProjectStage.EXPORTED.name().equals(stage)) {
+            return;
+        }
+        project.setStage(ProjectStage.APPROVED.name());
+        project.setUpdatedAt(Instant.now());
+        projects.update(project);
+        log.info("project.stage.advanced 最终评审通过，项目进入审批完成 projectId={} from={} to={}",
+                project.getId(), stage, ProjectStage.APPROVED);
     }
 
     private Project locked(CurrentUser user, String id) {

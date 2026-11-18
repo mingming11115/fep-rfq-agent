@@ -61,7 +61,7 @@ const PREVIEW_PAGE_SIZE = 50;
 const defaultMapping = Object.fromEntries(exportColumns.map(({key}) => [key, key]));
 const defaultTemplate = { id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' };
 
-export function ExportPage({ project, requirements: projectRequirements = [], reviews: projectReviews = [], snapshots = [], appState, permissionContext, onSnapshot, onExportScope,route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, launchOnly = false, onClose, onSubmitted, logEvent = () => {} }) {
+export function ExportPage({ project, requirements: projectRequirements = [], reviews: projectReviews = [], snapshots = [], appState, permissionContext, onSnapshot, onExportScope, onExported, route,canBusinessAction,taskContextError,toast, navigate, actorRole,actorId, launchOnly = false, onClose, onSubmitted, logEvent = () => {} }) {
   const databaseBacked=appState?.dataSource==='mysql';
   const canDownload=canPerform(actorRole,'export:download',permissionContext);
   const requirements=projectRequirements.filter(row=>row.activeForApproval!==false);
@@ -161,6 +161,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
       const path = `/projects/${encodeURIComponent(project.id)}/snapshots/${encodeURIComponent(latest.id)}/annotated-export?wordInBody=true`;
       const { blob, filename } = await api.download(path);
       downloadCraftBlob(blob, filename);
+      onExported?.();
       toast('已生成正式应答文档');
     } catch (err) {
       console.error('下载正式导出文件失败', err);
