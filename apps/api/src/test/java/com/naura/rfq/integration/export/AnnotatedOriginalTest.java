@@ -85,6 +85,27 @@ class AnnotatedOriginalTest {
         }
     }
 
+    @Test void wordWithAnswersSurvivesAnInvalidRowHeightRule() throws Exception {
+        var original = new ByteArrayOutputStream();
+        try (var document = new XWPFDocument()) {
+            var table = document.createTable(1, 2);
+            table.getRow(0).getCell(0).setText("额定负载");
+            table.getRow(0).getCell(1).setText("5 kg");
+            var height = table.getRow(0).getCtRow().addNewTrPr().addNewTrHeight();
+            try (var cursor = height.newCursor()) {
+                cursor.setAttributeText(new javax.xml.namespace.QName(
+                        "http://schemas.openxmlformats.org/wordprocessingml/2006/main", "hRule"), "exactly");
+            }
+            document.write(original);
+        }
+        var result = AnnotatedOriginal.wordWithAnswers(original.toByteArray(), List.of(
+                new AnnotatedOriginal.Note("body/0/r0", "额定负载 5 kg", "答复：满足", true)));
+        try (var copy = new XWPFDocument(new ByteArrayInputStream(result))) {
+            assertThat(copy.getTables().get(0).getRow(0).getCell(0).getText()).isEqualTo("额定负载\n答复：满足");
+            assertThat(copy.getTables().get(0).getRow(0).getHeightRule()).isEqualTo(TableRowHeightRule.AT_LEAST);
+        }
+    }
+
     @Test void indexedWordSourceKeepsAnAnswerOnTheReferencedIdenticalRow() throws Exception {
         var original = new ByteArrayOutputStream();
         try (var document = new XWPFDocument()) {
