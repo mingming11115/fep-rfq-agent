@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.naura.rfq.mapper.ProjectPurgeMapper">
+
+    <!-- 清理顺序：先删派生数据（块/批次/解析轮/比对），再删主数据，最后删项目自身。 -->
+
+    <delete id="deleteDocumentBlocks">
+        delete from document_block
+        where document_id in (select id from customer_document where project_id = #{projectId})
+    </delete>
+
+    <delete id="deleteParseBatches">
+        delete from parse_batch
+        where parse_run_id in (
+            select pr.id from parse_run pr
+            join customer_document cd on cd.id = pr.document_id
+            where cd.project_id = #{projectId})
+    </delete>
+
+    <delete id="deleteParseRuns">
+        delete from parse_run
+        where document_id in (select id from customer_document where project_id = #{projectId})
+    </delete>
+
+    <delete id="deleteDocumentReplacements">
+        delete from rfq_document_replacement
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteDocuments">
+        delete from customer_document
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteMatchResults">
+        delete from requirement_match_result
+        where run_id in (select id from requirement_match_run where project_id = #{projectId})
+    </delete>
+
+    <delete id="deleteMatchRuns">
+        delete from requirement_match_run
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteMatchInputs">
+        delete from requirement_match_input
+        where requirement_id in (select id from requirement where project_id = #{projectId})
+    </delete>
+
+    <delete id="deleteRequirements">
+        delete from requirement
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteResponses">
+        delete from requirement_response
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteReviews">
+        delete from response_review
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteSnapshots">
+        delete from response_snapshot
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteResponseConfig">
+        delete from project_response_config
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteMembers">
+        delete from project_member
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteWorkVersions">
+        delete from project_work_version
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteMatchPolicies">
+        delete from project_match_policy
+        where project_id = #{projectId}
+    </delete>
+
+    <!-- 仅清理绑定到该项目的知识资料（含「仅当前项目」范围）；project_id 为空的 BU 级资料不受影响。 -->
+
+    <delete id="deleteHistoryDocuments">
+        delete from history_document
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteHistoryClauses">
+        delete from `history-rfq-record`
+        where project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteStandardReplies">
+        delete from `standard-reply-record`
+        where project_id = #{projectId}
+    </delete>
+</mapper>

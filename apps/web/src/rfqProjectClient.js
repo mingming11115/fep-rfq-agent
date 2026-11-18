@@ -23,6 +23,11 @@ export function restoreBackendProject(project,reason,api=defaultApi){
  return api.post(`/projects/${id}/restorations`,{version:project.version,reason:reason.trim()});
 }
 
+export function purgeBackendProject(project,api=defaultApi){
+ const id=encodeURIComponent(project.backendProjectId||project.id);
+ return api.post(`/projects/${id}/purgations`,{});
+}
+
 export async function ensureBackendProject(project,api=defaultApi,user=readSession()?.user){
  try{return await api.get(`/projects/${encodeURIComponent(project.backendProjectId||project.id)}`);}
  catch(error){ console.error('查询后端项目失败', error); if(error.status!==404||project.backendProjectId) { throw error; }}

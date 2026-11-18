@@ -120,4 +120,15 @@
         update project set <include refid="assignments"/>
         where id = #{id} and version = #{version}
     </update>
+
+    <select id="findExpiredArchived" resultType="com.naura.rfq.model.entity.Project">
+        select <include refid="columns"/>
+        from project
+        where stage = 'CANCELLED' and archived_at is not null and archived_at &lt; #{before}
+        order by archived_at
+    </select>
+
+    <delete id="deleteById">
+        delete from project where id = #{id}
+    </delete>
 </mapper>

@@ -3,6 +3,7 @@ package com.naura.rfq.mapper;
 import com.naura.rfq.model.entity.Project;
 import com.naura.rfq.model.query.PageQuery;
 import com.naura.rfq.model.query.ProjectFilter;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -33,4 +34,9 @@ public interface ProjectMapper {
 
     int update(Project project);
     int updateWithVersion(Project project);
+
+    /** 已删除（CANCELLED）且删除时间早于 before 的项目，用于保留期到期自动彻底清除。 */
+    List<Project> findExpiredArchived(@Param("before") Instant before);
+
+    int deleteById(@Param("id") String id);
 }

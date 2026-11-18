@@ -11,7 +11,7 @@ import { api, consumeLoginIdentity, readSession, logout } from './authClient';
 import { mapDatabaseRequirement } from './databaseWorkspace.js';
 import {loadLibraryResources} from './knowledgeLibraryClient';
 import { hydrateSessionPersonnel, mergeMemberDirectory } from './sessionPersonnel';
-import {createBackendProject,deleteBackendProject,restoreBackendProject} from './rfqProjectClient';
+import {createBackendProject,deleteBackendProject,restoreBackendProject,purgeBackendProject} from './rfqProjectClient';
 import BuAdminPage,{ProjectPersonnelPanel,PlatformAdminPage} from './pages/BuAdminPage';
 import {canAccessProject,getPersonnelContext,personName,getProjectFinalReview,getRequiredFinalReviewers,configureProjectFinalReviewers,assignProjectDuty} from './personnelDomain';
 import {applyFinalReviewDecision,isFinalReviewApproved} from './finalReviewDomain';
@@ -150,7 +150,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
  async function persistProjectAction(action,successMessage){
   try{await action();}
   catch(error){ console.error('保存项目操作失败', error); toast(error.message,'error');return false;}
-  toast(successMessage);
+  if(successMessage) { toast(successMessage); }
   const {actorId,actorRole,activeBuId}=stateRef.current;
   onReload?.({actorId,actorRole,activeBuId});
   return true;
@@ -160,10 +160,14 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
   const {id}=project;
   try{update(s=>event(removeProject(s,id),'删除项目',id,'项目及相关待办已移出，可撤销删除'));toast('项目已删除，可在列表中撤销');return true;}catch(error){ console.error('删除项目失败', error); toast(error.message,'error');return false;}
  }
- function undoDeleteProject(project,reason){
-  if(databaseBacked) { return persistProjectAction(()=>restoreBackendProject(project,reason),'项目已恢复'); }
+ function undoDeleteProject(project,reason,silent){
+  if(databaseBacked) { return persistProjectAction(()=>restoreBackendProject(project,reason),silent?null:'项目已恢复'); }
   const {id}=project;
   try{update(s=>event(restoreProject(s,id),'撤销删除项目',id,'项目及相关工作记录已恢复'));toast('项目已恢复');return true;}catch(error){ console.error('撤销项目删除失败', error); toast(error.message,'error');return false;}
+ }
+ function purgeProject(project,silent){
+  if(databaseBacked) { return persistProjectAction(()=>purgeBackendProject(project),silent?null:'项目已彻底删除'); }
+  return unavailable();
  }
  function uploadFromDetail(incoming){
   if(!allow('source:manage')) { return false; }
@@ -289,6 +293,7 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
    }else { saved=await client.submit(pid,incoming); }
    update(st=>({...st,snapshotsByProject:{...st.snapshotsByProject,[pid]:[saved,...(st.snapshotsByProject[pid]||[]).filter(row=>row.id!==saved.id)]}}));
    if(saved.historyCandidateCount) { void refreshLibrary(current.projects.find(row=>row.id===pid)?.buId); }
+   if(databaseBacked&&saved.status==='已批准') { update(st=>({...st,projects:st.projects.map(row=>row.id===pid?{...row,backendStage:'APPROVED',stage:'APPROVED'}:row)})); }
    return saved;
   }catch(error){ console.error('保存项目快照失败', error); toast(error.message,'error');return false;}
  }
@@ -374,8 +379,8 @@ export default function App({initialState,onReload,quickAccounts=[],onSwitchAcco
    return {...current,reviewsByProject:{...current.reviewsByProject,[projectId]:[item,...rows.filter(row=>row.id!==item.id)]}};
   });
  }
- const common={sourceReparse,onConfigureFinalReview:configureFinalReview,onReload,onDeviation:receiveDeviation,onLibraryRefresh:refreshLibrary,onSelectBu:buId=>update(st=>({...st,activeBuId:buId})),permissionContext,onPersonnelAction,onAssignConfirmation,route,canBusinessAction,taskContextError,onExportScope:scope=>{if(!canPerform(stateRef.current.actorRole,'export:configure',{state:stateRef.current,actorId:stateRef.current.actorId,projectId:project.id})) { return; } if(JSON.stringify(stateRef.current.exportScopesByProject?.[project.id])!==JSON.stringify(scope)) { update(s=>({...s,exportScopesByProject:{...s.exportScopesByProject,[project.id]:scope}})); }},onAdoptReview:adoptReview,onSubmitRequirement:submitRequirement,onAnalysisRun:analysisRun,actorId:state.actorId,appState:['BU管理员','后台管理'].includes(state.actorRole)?state:viewState,onAppUpdate:databaseBacked?unavailable:update,onTransferProject:transferProject,project,requirements,reviews,snapshots,audit:scopedAudit,members:state.membersByProject?.[project.id]??state.members??[],actorRole:state.actorRole,toast,navigate,logEvent};
- const pages={'bu-admin':<BuAdminPage {...common}/>,projects:<ProjectsPage {...common} onCreateProject={createProject} onOpenProject={openProject} onDeleteProject={deleteProject} onRestoreProject={undoDeleteProject}/>,tasks:<TasksPage {...common} onOpenTask={openTask} onTaskAction={taskAction}/>,dashboard:state.actorRole==='BU管理员'?<BuDashboardPage {...common}/>:<DashboardPage {...common} onOpenTask={openTask} onOpenProject={openProject}/>,response:<ResponsePage {...common} focusedRequirementId={focusedRequirementId} onUpdateRequirement={updateRequirement} onDeleteExtractedRequirement={databaseBacked?deleteExtractedRequirement:undefined} onAddSelection={databaseBacked?addSelectionRequirements:undefined} onConfirm={confirm} onCreateReview={createReview} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>,reviews:<ReviewsPage {...common} initialReviewId={route.reviewId} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>,export:<ExportPage {...common} onSnapshot={onSnapshot}/>,knowledge:<KnowledgePage {...common} knowledgeType="standard"/>,history:<HistoryKnowledgePage {...common} seedKnowledge={databaseBacked?[]:KNOWLEDGE}/>,capabilities:<CapabilitiesPage key={activeBuId} {...common}/>,settings:<SettingsPage {...common} embedded={DETAIL_PAGES.includes(page)} onProjectChange={changeProject} onInvalidateRequirements={invalidate} onMembersChange={changeMembers}/>,audit:<AuditPage {...common}/>,admin:<PlatformAdminPage {...common}/>};
+ const common={sourceReparse,onConfigureFinalReview:configureFinalReview,onReload,onExported:databaseBacked?()=>update(st=>({...st,projects:st.projects.map(row=>row.id===project.id?{...row,backendStage:'EXPORTED',stage:'EXPORTED'}:row)})):undefined,onDeviation:receiveDeviation,onLibraryRefresh:refreshLibrary,onSelectBu:buId=>update(st=>({...st,activeBuId:buId})),permissionContext,onPersonnelAction,onAssignConfirmation,route,canBusinessAction,taskContextError,onExportScope:scope=>{if(!canPerform(stateRef.current.actorRole,'export:configure',{state:stateRef.current,actorId:stateRef.current.actorId,projectId:project.id})) { return; } if(JSON.stringify(stateRef.current.exportScopesByProject?.[project.id])!==JSON.stringify(scope)) { update(s=>({...s,exportScopesByProject:{...s.exportScopesByProject,[project.id]:scope}})); }},onAdoptReview:adoptReview,onSubmitRequirement:submitRequirement,onAnalysisRun:analysisRun,actorId:state.actorId,appState:['BU管理员','后台管理'].includes(state.actorRole)?state:viewState,onAppUpdate:databaseBacked?unavailable:update,onTransferProject:transferProject,project,requirements,reviews,snapshots,audit:scopedAudit,members:state.membersByProject?.[project.id]??state.members??[],actorRole:state.actorRole,toast,navigate,logEvent};
+ const pages={'bu-admin':<BuAdminPage {...common}/>,projects:<ProjectsPage {...common} onCreateProject={createProject} onOpenProject={openProject} onDeleteProject={deleteProject} onRestoreProject={undoDeleteProject} onPurgeProject={purgeProject}/>,tasks:<TasksPage {...common} onOpenTask={openTask} onTaskAction={taskAction}/>,dashboard:state.actorRole==='BU管理员'?<BuDashboardPage {...common}/>:<DashboardPage {...common} onOpenTask={openTask} onOpenProject={openProject}/>,response:<ResponsePage {...common} focusedRequirementId={focusedRequirementId} onUpdateRequirement={updateRequirement} onDeleteExtractedRequirement={databaseBacked?deleteExtractedRequirement:undefined} onAddSelection={databaseBacked?addSelectionRequirements:undefined} onConfirm={confirm} onCreateReview={createReview} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>,reviews:<ReviewsPage {...common} initialReviewId={route.reviewId} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>,export:<ExportPage {...common} onSnapshot={onSnapshot}/>,knowledge:<KnowledgePage {...common} knowledgeType="standard"/>,history:<HistoryKnowledgePage {...common} seedKnowledge={databaseBacked?[]:KNOWLEDGE}/>,capabilities:<CapabilitiesPage key={activeBuId} {...common}/>,settings:<SettingsPage {...common} embedded={DETAIL_PAGES.includes(page)} onProjectChange={changeProject} onInvalidateRequirements={invalidate} onMembersChange={changeMembers}/>,audit:<AuditPage {...common}/>,admin:<PlatformAdminPage {...common}/>};
  const pending=selectMyTasks(state,{actorId:state.actorId,tab:'pending'}).length;
  const summary=getProjectSummary(state,project.id,state.actorId),activeNav=roleNavigation.find(n=>n.page===page||page==='history'&&n.page==='knowledge')?.key||(ADMIN_PAGES.includes(page)?'admin':PROJECT_PAGES.includes(page)?'projects':page);
  const content=DETAIL_PAGES.includes(page)?<ResponsePage {...common} focusedRequirementId={focusedRequirementId} onUpdateRequirement={updateRequirement} onDeleteExtractedRequirement={databaseBacked?deleteExtractedRequirement:undefined} onAddSelection={databaseBacked?addSelectionRequirements:undefined} onConfirm={confirm} onCreateReview={createReview} onUpdateReview={updateReview} onConfirmReviewed={confirmReviewed}/>:pages[page]||<div className="panel panel-body">页面正在接入统一任务数据。</div>;

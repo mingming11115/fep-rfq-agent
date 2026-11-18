@@ -7,6 +7,7 @@ import com.naura.rfq.common.api.ApiResponse;
 import com.naura.rfq.model.vo.ProjectView;
 import com.naura.rfq.security.CurrentUserHolder;
 import com.naura.rfq.service.ProjectMaintenanceService;
+import com.naura.rfq.service.ProjectPurgeService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
@@ -22,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 public class ProjectMaintenanceController {
     @Autowired
     private ProjectMaintenanceService service;
+    @Autowired
+    private ProjectPurgeService purgeService;
 
     @Getter
     public static class ActionRequest {
@@ -112,6 +115,15 @@ public class ProjectMaintenanceController {
             return ApiResponse.success(ProjectView.of(service.restore(CurrentUserHolder.require(),id,request.getVersion(),request.getReason())));
         } catch (Exception exception) {
             log.error("Request failed in restore", exception);
+            throw exception;
+        }
+    }
+    @PostMapping("/{id}/purgations")
+    public ApiResponse<ProjectView> purge(@PathVariable String id) {
+        try {
+            return ApiResponse.success(ProjectView.of(purgeService.purgeByUser(CurrentUserHolder.require(),id)));
+        } catch (Exception exception) {
+            log.error("Request failed in purge", exception);
             throw exception;
         }
     }
