@@ -156,6 +156,13 @@ class ApprovedDocumentExportServiceTest {
             }
             when(responseRecords.listResponses(projectId))
                     .thenReturn(currentResponses);
+            when(responseRecords.listSnapshots(projectId)).thenReturn(List.of(snapshot.toString()));
+            var body = exporter.download(actor, projectId, snapshotId, true);
+            try (var copy = new XWPFDocument(new ByteArrayInputStream(body.bytes()))) {
+                String source = sourceRows.get(0).getCustomerClauseNo() + " " + sourceRows.get(0).getOriginalText();
+                assertThat(copy.getParagraphs().get(1).getText()).isEqualTo(source + "\n条款 "
+                        + comply.path("clause").asText() + "\n=> Comply");
+            }
             var notes = exporter.validateContents(project, snapshot, true);
             assertThat(notes.get(documentId).get(0).text())
                     .isEqualTo("条款 " + comply.path("clause").asText() + "\n结论：Comply");

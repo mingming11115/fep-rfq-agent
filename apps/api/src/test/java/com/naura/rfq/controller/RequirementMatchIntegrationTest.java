@@ -402,7 +402,7 @@ class RequirementMatchIntegrationTest {
         try (var word = new XWPFDocument(new ByteArrayInputStream(exported))) {
             assertThat(word.getParagraphs()).singleElement().satisfies(paragraph -> assertThat(paragraph.getText())
                     .startsWith("1.1 设备应支持自动上料并具备安全联锁。\n")
-                    .contains("结论：不满足\n答复：当前设备无法满足双工位要求")
+                    .contains("=> 不满足\n答复：当前设备无法满足双工位要求")
                     .doesNotContain("测试报告 V1"));
             assertThat(word.getDocComments()).isNull();
         }

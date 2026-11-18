@@ -43,6 +43,8 @@ public final class AnnotatedOriginal {
     private static final Pattern WORD_SELECTION = Pattern.compile("selection:word:([0-9/]+):(\\d+)-([0-9/]+):(\\d+)");
     private static final Pattern WORD_BODY = Pattern.compile("body/(\\d+)(?:/r(\\d+)/c(\\d+)(/table/0)?)?(?:/image-\\d+)?");
     private static final Pattern IMPORTED_PARAGRAPH = Pattern.compile("paragraph:(\\d+)");
+    private static final List<String> REPLY_HEADERS = List.of("供应商答复", "供应商应答", "供应商回复", "应答", "答复", "回复");
+    private static final Pattern GENERIC_HEADER = Pattern.compile(".*(日期|时间|截止|编号|状态|说明|要求|条款|备注).*");
 
     private AnnotatedOriginal() {}
 
@@ -92,10 +94,14 @@ public final class AnnotatedOriginal {
             for (int index = 0; index < notes.size(); index++) {
                 var paragraph = paragraphs.get(index);
                 allowTableRowsToExpand(paragraph);
+                boolean appendToText = !paragraph.getText().isBlank();
                 var run = paragraph.createRun();
-                for (String line : notes.get(index).text().split("\\R", -1)) {
-                    run.addBreak();
-                    run.setText(line);
+                String[] lines = notes.get(index).text().split("\\R", -1);
+                for (int line = 0; line < lines.length; line++) {
+                    if (appendToText || line > 0) {
+                        run.addBreak();
+                    }
+                    run.setText(lines[line]);
                 }
             }
             document.write(output);
@@ -214,8 +220,50 @@ public final class AnnotatedOriginal {
         if (matching.size() != 1) {
             throw missingAnchor(note);
         }
-        return matching.get(0).getTableCells().stream().flatMap(cell -> cell.getParagraphs().stream())
-                .filter(paragraph -> !paragraph.getText().isBlank())
+        return answerParagraph(table, matching.get(0), () -> longestParagraph(matching.get(0).getTableCells().stream()
+                .flatMap(cell -> cell.getParagraphs().stream()), note));
+    }
+
+    /** 表头带「应答/答复」列时写入该列（含空白单元格），否则退回原行为：写入行内最长的原文段落。 */
+    private static XWPFParagraph answerParagraph(XWPFTable table, XWPFTableRow row,
+            java.util.function.Supplier<XWPFParagraph> fallback) {
+        int column = replyColumn(table, row);
+        if (column < 0 || column >= row.getTableCells().size()) {
+            return fallback.get();
+        }
+        var cell = row.getTableCells().get(column);
+        return cell.getParagraphs().stream().filter(paragraph -> !paragraph.getText().isBlank())
+                .max(java.util.Comparator.comparingInt(paragraph -> paragraph.getText().length()))
+                .orElse(cell.getParagraphs().get(0));
+    }
+
+    private static int replyColumn(XWPFTable table, XWPFTableRow row) {
+        var header = table.getRow(0);
+        if (header == null || row == header) {
+            return -1;
+        }
+        var cells = header.getTableCells();
+        for (int i = 0; i < cells.size(); i++) {
+            if (REPLY_HEADERS.contains(normalizeHeader(cells.get(i).getText()))) {
+                return i;
+            }
+        }
+        for (int i = 0; i < cells.size(); i++) {
+            String text = normalizeHeader(cells.get(i).getText());
+            if (!text.isBlank() && !GENERIC_HEADER.matcher(text).matches()
+                    && REPLY_HEADERS.stream().anyMatch(text::contains)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String normalizeHeader(String text) {
+        return text.replaceAll("[\\s（）()]", "");
+    }
+
+    private static XWPFParagraph longestParagraph(java.util.stream.Stream<XWPFParagraph> paragraphs, Note note) {
+        return paragraphs.filter(paragraph -> !paragraph.getText().isBlank())
                 .max(java.util.Comparator.comparingInt(paragraph -> paragraph.getText().length()))
                 .orElseThrow(() -> missingAnchor(note));
     }
@@ -309,9 +357,7 @@ public final class AnnotatedOriginal {
                     var quote = paragraphs.stream().map(DocxBlockReader::nativeParagraphText)
                             .collect(Collectors.joining(" "));
                     if (contains(quote, note.quote())) {
-                        return paragraphs.stream().filter(p -> !p.getParagraphText().isBlank())
-                                .max(java.util.Comparator.comparingInt(p -> p.getParagraphText().length()))
-                                .orElseThrow(() -> missingAnchor(note));
+                        return answerParagraph(table, row, () -> longestParagraph(paragraphs.stream(), note));
                     }
                 } else {
                     elements = WordSourceBody.elements(at(row.getTableCells(), sourceIndex(parts[index++], "c", note), note));

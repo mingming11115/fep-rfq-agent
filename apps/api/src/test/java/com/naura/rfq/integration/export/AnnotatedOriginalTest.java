@@ -106,6 +106,26 @@ class AnnotatedOriginalTest {
         }
     }
 
+    @Test void wordWithAnswersWritesIntoTheHeaderReplyColumn() throws Exception {
+        var original = new ByteArrayOutputStream();
+        try (var document = new XWPFDocument()) {
+            var table = document.createTable(2, 3);
+            table.getRow(0).getCell(0).setText("编号");
+            table.getRow(0).getCell(1).setText("客户要求");
+            table.getRow(0).getCell(2).setText("供应商应答");
+            table.getRow(1).getCell(0).setText("2.1");
+            table.getRow(1).getCell(1).setText("设备须支持安全联锁");
+            document.write(original);
+        }
+        var result = AnnotatedOriginal.wordWithAnswers(original.toByteArray(), List.of(
+                new AnnotatedOriginal.Note("body/0", "2.1：设备须支持安全联锁", "答复：支持安全联锁")));
+        try (var copy = new XWPFDocument(new ByteArrayInputStream(result))) {
+            var table = copy.getTables().get(0);
+            assertThat(table.getRow(1).getCell(1).getText()).isEqualTo("设备须支持安全联锁");
+            assertThat(table.getRow(1).getCell(2).getText()).isEqualTo("答复：支持安全联锁");
+        }
+    }
+
     @Test void indexedWordSourceKeepsAnAnswerOnTheReferencedIdenticalRow() throws Exception {
         var original = new ByteArrayOutputStream();
         try (var document = new XWPFDocument()) {

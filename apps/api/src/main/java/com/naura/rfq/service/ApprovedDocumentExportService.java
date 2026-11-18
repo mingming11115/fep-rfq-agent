@@ -95,6 +95,9 @@ public class ApprovedDocumentExportService {
         }
         validateReviewers(project, snapshot.path("finalReview").path("reviewers"));
         var notes = validateContents(project, snapshot);
+        if (wordInBody) {
+            notes = inlineAnswers(notes);
+        }
 
         if (notes.size() == 1) {
             var entry = notes.entrySet().iterator().next();
@@ -338,6 +341,18 @@ public class ApprovedDocumentExportService {
         String draft = ResponseService.answerDraft(row);
         return (clause.isBlank() ? "" : "条款 " + clause + "\n") + "结论：" + row.path("conclusion").asText()
                 + (draft.isBlank() ? "" : "\n答复：" + draft);
+    }
+
+    private static Map<String, List<Note>> inlineAnswers(Map<String, List<Note>> notes) {
+        var inline = new LinkedHashMap<String, List<Note>>();
+        notes.forEach((key, list) -> inline.put(key, list.stream().map(ApprovedDocumentExportService::inlineAnswer).toList()));
+        return inline;
+    }
+
+    /** 正文写入版的段落答复沿用历史 RFQ 文件「=> 结论」的前缀书写习惯；批注版仍用「结论：」。 */
+    private static Note inlineAnswer(Note note) {
+        String text = note.text().replaceFirst("(?m)^结论：", "=> ");
+        return text.equals(note.text()) ? note : new Note(note.anchor(), note.quote(), text, note.indexedWordSource());
     }
 
     private ExportFile exportDocument(CurrentUser user, String sourceId, List<Note> notes, boolean wordInBody) throws IOException {
