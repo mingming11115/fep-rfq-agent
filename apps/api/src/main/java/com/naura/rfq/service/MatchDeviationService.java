@@ -11,6 +11,7 @@ import com.naura.rfq.security.CurrentUser;
 import com.naura.rfq.mapper.UserBuRoleMapper;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -67,7 +68,9 @@ class MatchDeviationService {
         }
         item.put("description", reason);
         save(project, item);
-        setStatus(project, requirement.getId(), ResponseService.REVIEWING, "条款已进入评审，请重新确认本条应答");
+        if (requiresReview(item)) {
+            markReviewing(project, requirement.getId(), "条款已进入评审，请重新确认本条应答");
+        }
         return item;
     }
 
@@ -131,6 +134,7 @@ class MatchDeviationService {
         item.put("status", "待处理").put("deadline", deadline).put("technicalReviewRequired", technical)
                 .put("answerFingerprint", fingerprint).put("reviewRequestReason", reason);
         save(project, item);
+        markReviewing(project, requirement.getId(), "应答评审已发起，请等待评审完成");
         audit.successInBu(user.id(), project.getBuId(), "发起应答评审", "requirement", requirement.getId(), reason);
         return item;
     }
@@ -171,9 +175,33 @@ class MatchDeviationService {
             old.put("status", "已取消").put("supersededByWorkVersion", version);
             save(project, old);
             save(project, next);
-            setStatus(project, old.path("requirementId").asText(), ResponseService.REVIEWING,
-                    "工作版本已切换，评审事项结转，请重新确认本条应答");
+            if (requiresReview(next)) {
+                markReviewing(project, old.path("requirementId").asText(), "工作版本已切换，评审事项结转，请重新确认本条应答");
+            }
         }
+    }
+
+    /** 是否存在实际评审动作（已分派评审人或需要技术评审）；纯登记型偏离只展示、不阻断确认。 */
+    static boolean requiresReview(JsonNode item) {
+        return !item.path("reviewerIds").isEmpty() || item.path("technicalReviewRequired").asBoolean();
+    }
+
+    /** 确认应答时自动收口纯登记型偏离：这类偏离没有生命周期，不需要人工关闭。 */
+    void closeInformational(Project project, String requirementId) {
+        for (var item : responseRecords.lockReviews(project.getId()).stream().map(this::parse).toList()) {
+            if (!requirementId.equals(item.path("requirementId").asText())
+                    || Set.of("已关闭", "已取消").contains(item.path("status").asText())
+                    || requiresReview(item)) {
+                continue;
+            }
+            item.put("status", "已关闭").put("resolution", "确认应答时自动关闭")
+                    .put("closedAt", Instant.now().toString());
+            save(project, item);
+        }
+    }
+
+    private void markReviewing(Project project, String requirementId, String reason) {
+        setStatus(project, requirementId, ResponseService.REVIEWING, reason);
     }
 
     /** 关闭评审事项后重算应答状态：投过票的评审未指定确认人即视为通过并自动确认，其余回落待处理。 */

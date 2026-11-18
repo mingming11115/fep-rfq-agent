@@ -7,6 +7,7 @@ import path from 'node:path';
 import {Window} from 'happy-dom';
 import React,{act} from 'react';
 import {writeResponse} from './responseClient.js';
+import {assertBusinessAction} from './taskDomain.js';
 
 async function harness(name){
   const window=new Window({url:'http://127.0.0.1:5174',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,handleDisabledFileLoadingAsSuccess:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
@@ -202,7 +203,7 @@ test('MySQL batch confirms every selected clause as Comply',async t=>{
     assert.equal(field('对外答复')?.tagName, 'INPUT');
     for (const label of ['适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="应答结论"] input[value="有条件 Comply"]'));
-    const wording = node.querySelector('section[aria-label="AI 推荐话术"]');
+    const wording = node.querySelector('section[aria-label="应答"]');
     assert.ok(wording, 'conditional Comply shows editable recommended wording');
     assert.equal(field('对外答复')?.tagName, 'INPUT');
     assert.equal(node.querySelector('.response-current-card [aria-label="应答依据"]'), null,
@@ -223,7 +224,12 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     { ...row, id: 'R2', conclusion: '不适用', draft: '范围外\n客户已确认', remark: '原内部备注' },
     { ...row, id: 'R3' },
   ];
-  t.mock.method(globalThis, 'fetch', async url => {
+  const matchRetries = [];
+  t.mock.method(globalThis, 'fetch', async (url, options = {}) => {
+    if (String(url).includes('/match-runs') && options.method === 'POST') {
+      matchRetries.push(JSON.parse(options.body));
+      return Response.json({ code: 0, data: { runId: 'RUN-NEW', status: 'queued' } }, { status: 202 });
+    }
     if (url.endsWith('/match-result')) {
       const pending = url.includes('/R3/');
       if (pending) {
@@ -260,10 +266,10 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     assert.equal(selected(), '有条件 Comply');
     assert.equal(h.node.querySelectorAll('[aria-label="应答结论"]').length, 1);
     assert.match(h.node.querySelector('.response-reference-details summary').textContent, /AI 建议.*有条件/);
-    assert.match(h.node.querySelector('textarea[aria-label="推荐话术"]').value, /选配 X/);
-    const wording = h.node.querySelector('[aria-label="AI 推荐话术"]');
-    assert.equal(wording.querySelector('h4')?.textContent, 'AI 推荐话术');
-    assert.equal(Boolean(wording.querySelector('[aria-label="推荐话术依据"]')), false);
+    assert.match(h.node.querySelector('textarea[aria-label="应答内容"]').value, /选配 X/);
+    const wording = h.node.querySelector('[aria-label="应答"]');
+    assert.equal(wording.querySelector('h4')?.textContent, '应答');
+    assert.equal(Boolean(wording.querySelector('[aria-label="应答依据"]')), false);
     await h.click(h.node.querySelector('.response-reference-details summary'));
     assert.match(h.node.querySelector('[aria-label="本条关联证据"]').textContent, /能力比对 RUN-1/);
     assert.equal(h.node.querySelector('.response-answer-fields [aria-label="证据"]'), null);
@@ -272,6 +278,17 @@ test('the single response conclusion prefills a clear AI recommendation and subm
       '重新比对 is available in the match panel for an editor');
     assert.ok(![...matchPanel().querySelectorAll('button')].some(button =>
       button.textContent === '设置比对条件'));
+    // mysql 模式下「重新比对」必须真正向后端再发起一轮，而不是走演示模拟。
+    assert.ok(!matchPanel().textContent.includes('原型场景'));
+    await h.click([...matchPanel().querySelectorAll('button')].find(button => button.textContent.includes('重新比对')));
+    const rematchDialog = () => document.querySelector('.ant-modal');
+    assert.equal(rematchDialog().querySelector('.ant-modal-title').textContent, '重新比对');
+    assert.ok(rematchDialog().textContent.includes('保留人工答复、确认状态与已采纳依据'));
+    assert.ok(!rematchDialog().textContent.includes('原型场景'), 'mysql 模式不提供原型场景选择');
+    await h.click([...rematchDialog().querySelectorAll('button')].find(button => button.textContent === '重新发起比对'));
+    assert.equal(matchRetries.length, 1, '重新比对会调用后端重新发起一轮');
+    assert.equal(matchRetries[0].sourceRequirementVersion, 0, '按当前条款版本发起比对');
+    assert.ok(matchRetries[0].requestId, '每次重新比对都带新的幂等键');
     assert.equal(confirmations.length, 0);
 
     const reply = () => h.node.querySelector('[aria-label="对外答复"]');
@@ -298,7 +315,7 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     await next();
     assert.equal(selected(), undefined, 'a blocked match leaves the field empty');
     assert.equal(reply(), null);
-    assert.equal(h.node.querySelector('[aria-label="推荐话术依据"]'), null);
+    assert.equal(h.node.querySelector('[aria-label="应答依据"]'), null);
     assert.equal(h.node.querySelector('[aria-label="本条关联证据"]'), null);
     const tags = [...matchPanel().querySelectorAll('.ant-tag')];
     assert.ok(tags.some(tag => tag.textContent === '等待处理' && tag.classList.contains('ant-tag-warning')));
@@ -306,6 +323,50 @@ test('the single response conclusion prefills a clear AI recommendation and subm
   } finally {
     await h.close();
   }
+});
+
+test('比对未产出结论时知识比对偏离不置灰应答结论与草稿', async t => {
+  const h = await harness('deviation-unlock');
+  const { ResponsePage, node, settle, click } = h;
+  const row = { id: 'R1', projectId: 'P', sourceFileId: 'F', source: 'Customer.docx', sourceVersion: '1',
+    clause: '1.1', title: 'Knowledge gap', original: 'Gap source', conclusion: '待处理', status: '评审中',
+    version: 1, backendVersion: 0, confirmationAssigneeId: 'sr', confirmationAssignmentSource: 'explicit' };
+  const deviation = { id: 'MATCH-DEV:1:R1', projectId: 'P', requirementId: 'R1', kind: 'deviation',
+    status: '待处理', title: 'Knowledge gap · 知识比对偏离', version: 1, reviewerIds: [],
+    triggers: [{ type: 'knowledge_gap', runId: 'RUN-1' }] };
+  const route = { page: 'response', projectId: 'P', requirementId: 'R1', fileId: 'F', sourceVersion: '1' };
+  const appState = { dataSource: 'mysql', actorId: 'sr', actorRole: 'SR', accountsById: { sr: { enabled: true } },
+    businessUnits: [{ id: 'BU' }],
+    buPersonnelByBuId: { BU: [{ userId: 'sr', roles: ['SR'], enabled: true, canConfirm: true }] },
+    projects: [{ id: 'P', name: 'Project', buId: 'BU', participantIds: ['sr'], defaultConfirmationAssigneeId: 'sr' }],
+    requirementsByProject: { P: [row] }, reviewsByProject: { P: [deviation] },
+    commentsByProject: {}, membersByProject: {}, audit: [] };
+  const writes = [];
+  const props = { project: appState.projects[0], requirements: [row], reviews: [deviation], route, appState,
+    actorRole: 'SR', actorId: 'sr',
+    canBusinessAction: (objectType, objectId, action = 'save') => {
+      try { assertBusinessAction(appState, { projectId: 'P', objectType, objectId, action, route }); return true; }
+      catch { return false; }
+    },
+    onUpdateRequirement: (id, patch) => { writes.push([id, patch]); return true; },
+    onConfirm: () => true, onAppUpdate: () => {}, navigate: () => {}, toast: () => {}, logEvent: () => {} };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ code: 0, data: { runId: 'RUN-1', status: 'completed',
+    sourceRequirementVersion: 0, result: { matchedLibrary: 'capability', conclusion: '待确认', knowledgeGap: true,
+      stages: { capability: { status: 'miss' } } } } });
+  const button = text => [...node.querySelectorAll('button')].find(item => item.textContent.includes(text));
+  try {
+    await act(async () => { h.root.render(React.createElement(ResponsePage, props)); await settle(); });
+    const radios = [...node.querySelectorAll('[aria-label="应答结论"] input')];
+    assert.equal(radios.length, 4);
+    assert.ok(radios.every(radio => !radio.disabled), '偏离未关闭时应答结论仍可选择');
+    assert.equal(node.querySelector('[aria-label="应答结论"] input:checked'), null, '未产出结论时没有默认选中项');
+    assert.equal(button('确认本条')?.disabled, false, '登记型偏离只展示，不应禁用确认按钮');
+    await click(node.querySelector('[aria-label="应答结论"] input[value="Comply"]'));
+    assert.equal(node.querySelector('[aria-label="应答结论"] input:checked')?.value, 'Comply');
+    assert.equal(button('保存草稿')?.disabled, false, '偏离未关闭时仍可保存草稿');
+    assert.equal(writes.length, 0, '未点击保存时不写入');
+  } finally { globalThis.fetch = originalFetch; await h.close(); }
 });
 
 test('folded references do not reveal denied or failed candidate evidence',async()=>{

@@ -115,7 +115,7 @@ public class ResponseService {
         }
         var reviews=projectReviews.stream()
             .filter(r->id.equals(r.path("requirementId").asText())&&!Set.of("已关闭","已取消").contains(r.path("status").asText()))
-            .filter(r->confirm||!"deviation".equals(r.path("kind").asText())).toList();
+            .filter(r->confirm?blocksConfirmation(r):!"deviation".equals(r.path("kind").asText())).toList();
         if(!reviews.isEmpty()) {
             throw new BusinessException(409,"本条存在未关闭评审或澄清，请先完成处理");
         }
@@ -186,12 +186,15 @@ public class ResponseService {
         }else{
             boolean hasOpenReview=projectReviews.stream()
                 .filter(r->id.equals(r.path("requirementId").asText()))
-                .anyMatch(ResponseService::openReview);
+                .anyMatch(r->openReview(r)&&blocksConfirmation(r));
             row.put("status",hasOpenReview?REVIEWING:PENDING);
             row.remove(List.of("confirmedAt","confirmedBy","confirmedById"));
         }
         row.put("version",version+1).put("sourceRequirementVersion",sourceVersion);
         responseRecords.upsertResponse(id, project.getId(), row.toString());
+        if(confirm){
+            deviations.closeInformational(project, id);
+        }
         String detail = confirm ? "应答版本 V" + (version + 1) : "草稿修订 R" + (version + 1);
         audit.successInBu(user.id(), project.getBuId(), confirm ? "确认要求" : "保存应答草稿", "requirement", id, detail);
         return row.hasNonNull("matchReference") ? matches.readableResponse(project, row) : row;
@@ -228,6 +231,14 @@ public class ResponseService {
     /** 评审事项是否仍未关闭。 */
     static boolean openReview(JsonNode review) {
         return !CLOSED_REVIEW_STATUSES.contains(review.path("status").asText());
+    }
+
+    /** 仅登记型偏离（未分派评审人且不需要技术评审）只作展示，不阻断确认；其余评审事项仍阻断。 */
+    static boolean blocksConfirmation(JsonNode review) {
+        if (!"deviation".equals(review.path("kind").asText())) {
+            return true;
+        }
+        return !review.path("reviewerIds").isEmpty() || review.path("technicalReviewRequired").asBoolean();
     }
 
     /** 把存量字面值归一为新取值。 */

@@ -1,5 +1,5 @@
 import {getPersonnelContext,canAccessProject,getEligiblePersonnel,canManageBu} from './personnelDomain.js';
-import {getConfirmationActorIds,getResponseReview,getReviewActorIds,hasAssignedConfirmer} from './confirmationPolicy.js';
+import {getConfirmationActorIds,getResponseReview,getReviewActorIds,hasAssignedConfirmer,blocksConfirmation} from './confirmationPolicy.js';
 const modernRoles=['后台管理','BU管理员','SR','技术'];
 const modernPermissions={
  'project:create':['SR'],'project:manage':['SR'],'project:handover':['SR'],'source:manage':['SR'],'source:reparse':['SR','BU管理员'],
@@ -34,7 +34,10 @@ function modernCan(role,action,context){
   const project=state.projects.find(p=>p.id===projectId);
   if(project?.archived||row?.pendingReviewProposal) { return false; }
   if(responseReview&&!hasAssignedConfirmer(row)) { return false; }
-  if((state.reviewsByProject?.[projectId]||[]).some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status))) { return false; }
+  // 与后端 ResponseService 保持一致：登记型偏离（无评审人且无需技术评审）只展示，
+  // 既不锁定草稿编辑也不阻断确认；分派过评审人的偏离、评审与澄清仍照常阻断。
+  if((state.reviewsByProject?.[projectId]||[]).some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status)
+    &&(action==='response:confirm'?blocksConfirmation(r):r.kind!=='deviation'))) { return false; }
   if(action==='response:confirm'||role==='技术') { return !!row&&getConfirmationActorIds(state,projectId,row).includes(actorId)&&(role==='SR'||c.member.canConfirm); }
  }
 

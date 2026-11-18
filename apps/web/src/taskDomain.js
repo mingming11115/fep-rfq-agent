@@ -1,4 +1,4 @@
-import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError,hasAssignedConfirmer} from './confirmationPolicy.js';
+import {getConfirmationActorIds,getReviewActorIds,hasReviewConfirmation,getResponseReview,getSourceContextError,hasAssignedConfirmer,blocksConfirmation} from './confirmationPolicy.js';
 import {updateResponseReview} from './reviewDomain.js';
 import {confirmRequirement} from './domain.js';
 import {canReviewWithoutManualConfirmation} from './responseRecommendation.js';
@@ -127,7 +127,7 @@ export function reconcileTasks(state,{at=new Date().toISOString()}={}) {
     for(const row of state.requirementsByProject?.[project.id]||[]) {
       if(databaseBacked&&row.pendingReviewProposal) { continue; }
       if(row.status==='已确认'||canReviewWithoutManualConfirmation(row,project.id)) { continue; }
-      if(reviews.some(r=>r.requirementId===row.id&&!['已关闭','已取消'].includes(r.status))) { continue; }
+      if(reviews.some(r=>r.requirementId===row.id&&!['已关闭','已取消'].includes(r.status)&&blocksConfirmation(r))) { continue; }
       const kind=row.needsReview||row.status==='待复核'?'recheck':state.accountsById||row.readyForConfirmation?'confirm':'draft';
       const assignees=state.accountsById?getConfirmationActorIds(state,project.id,row):[kind==='draft'?'demo-sales':'demo-technical'];
       for(const assignee of assignees)ensure(project,row,'requirement',kind,assignee,{requirementId:row.id});
@@ -211,7 +211,7 @@ export function confirmProjectRequirement(state,{projectId,requirementId,expecte
   return updateResponseReview(state,{projectId,reviewId:review.id,expectedVersion:review.version||1,expectedRound:review.round||1,patch:{action:'confirm'}});
  }
  if(row.pendingReviewProposal) { throw new Error('请先核对评审建议'); }
- if(state.reviewsByProject?.[projectId]?.some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status))) { throw new Error('请先关闭关联事项'); }
+ if(state.reviewsByProject?.[projectId]?.some(r=>r.requirementId===requirementId&&!['已关闭','已取消'].includes(r.status)&&blocksConfirmation(r))) { throw new Error('请先关闭关联事项'); }
  const updated={...confirmRequirement(row),confirmedBy:personName(state,state.actorId),confirmedById:state.actorId,...(hasAssignedConfirmer(row)?{confirmedByIds:[state.actorId]}:{})};
  return {...state,requirementsByProject:{...state.requirementsByProject,[projectId]:state.requirementsByProject[projectId].map(r=>r.id===requirementId?updated:r)}};
 }

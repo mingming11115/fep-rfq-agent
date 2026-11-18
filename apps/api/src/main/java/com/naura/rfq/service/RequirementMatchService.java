@@ -408,7 +408,7 @@ public class RequirementMatchService {
         if (!(response instanceof ObjectNode row) || !reference.isObject() || referenceReadable(project, reference)) {
             return response;
         }
-        var safe = row.deepCopy().put("status", "待复核").put("confirmationReason", "采纳依据已不可访问，请重新核对")
+        var safe = row.deepCopy().put("status", ResponseService.PENDING).put("confirmationReason", "采纳依据已不可访问，请重新核对")
                 .put("restrictedMatchReference", true);
         safe.put("draft", "").put("evidence", "").remove("conditions");
         safe.remove(List.of("matchReference", "confirmedAt", "confirmedBy", "confirmedById"));
@@ -486,7 +486,7 @@ public class RequirementMatchService {
             return;
         }
         String reason = "已采纳的比对依据失效，请重新核对";
-        row.put("status", "待复核").put("version", row.path("version").asLong(1) + 1).put("confirmationReason", reason)
+        row.put("status", ResponseService.PENDING).put("version", row.path("version").asLong(1) + 1).put("confirmationReason", reason)
                 .put("matchReferenceInvalidatedAt", java.time.Instant.now().toString());
         row.remove(List.of("confirmedAt", "confirmedBy", "confirmedById"));
         responseRecords.updateResponse(id, row.toString());

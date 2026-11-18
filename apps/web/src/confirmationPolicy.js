@@ -2,6 +2,8 @@
 import {canAccessProject,getPersonnelContext} from './personnelDomain.js';
 
 export const getReviewActorIds = review => [...new Set((review?.reviewerIds ?? (review?.ownerId ? [review.ownerId] : [])).filter(Boolean))];
+// 与后端 ResponseService.blocksConfirmation 一致：登记型偏离（未分派评审人且无需技术评审）只展示，不阻断确认。
+export const blocksConfirmation = review => !(review?.kind==='deviation'&&!review?.reviewerIds?.length&&!review?.technicalReviewRequired);
 export const hasAssignedConfirmer = row => row?.confirmationAssignmentSource === 'explicit' && !!row?.confirmationAssigneeId;
 export function getResponseReview(state,projectId,requirementId){
  return (state.reviewsByProject?.[projectId]||[]).find(r=>r.requirementId===requirementId&&!['clarification','deviation'].includes(r.kind)&&r.status!=='已取消'&&Array.isArray(r.reviewerIds));

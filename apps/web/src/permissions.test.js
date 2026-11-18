@@ -107,3 +107,25 @@ test('technical drafting cannot change customer source text through an answer pa
   assert.doesNotThrow(()=>policy.assertRequirementPatch(tech,row,{original:'客户原文',draft:'技术核对答复'}));
   assert.doesNotThrow(()=>policy.assertRequirementPatch(sales,row,{original:'客户修正的原文'}));
 });
+
+test('登记型偏离只展示不阻断确认，分派评审人的偏离仍阻断', () => {
+  const row={id:'R',version:1,conclusion:'待处理',confirmationAssigneeId:'sr',confirmationAssignmentSource:'explicit'};
+  const base={dataSource:'mysql',actorId:'sr',accountsById:{sr:{enabled:true}},businessUnits:[{id:'BU'}],
+    buPersonnelByBuId:{BU:[{userId:'sr',roles:['SR'],enabled:true,canConfirm:true}]},
+    projects:[{id:'P',buId:'BU',participantIds:['sr']}],requirementsByProject:{P:[row]},
+    reviewsByProject:{P:[]}};
+  const context=state=>({state,actorId:'sr',projectId:'P',requirementId:'R'});
+  const deviation={id:'MATCH-DEV:1:R',requirementId:'R',kind:'deviation',status:'待处理',reviewerIds:[]};
+  const deviating={...base,reviewsByProject:{P:[deviation]}};
+  assert.equal(policy.canPerform('SR','response:edit',context(deviating)),true,'比对偏离不应置灰应答结论');
+  assert.equal(policy.canPerform('SR','response:confirm',context(deviating)),true,'登记型偏离只展示，不应阻止确认');
+  const assigned={...base,reviewsByProject:{P:[{...deviation,reviewerIds:['tech']},]}};
+  assert.equal(policy.canPerform('SR','response:confirm',context(assigned)),false,'已分派评审人的偏离仍阻止确认');
+  const technical={...base,reviewsByProject:{P:[{...deviation,technicalReviewRequired:true}]}};
+  assert.equal(policy.canPerform('SR','response:confirm',context(technical)),false,'需要技术评审的能力矛盾偏离仍阻止确认');
+  const reviewing={...base,reviewsByProject:{P:[{...deviation,id:'RV',kind:'review'}]}};
+  assert.equal(policy.canPerform('SR','response:edit',context(reviewing)),false,'真正的评审仍锁定编辑');
+  const clarified={...base,reviewsByProject:{P:[{...deviation,id:'CL',kind:'clarification'}]}};
+  assert.equal(policy.canPerform('SR','response:edit',context(clarified)),false,'客户澄清仍锁定编辑');
+  assert.equal(policy.canPerform('SR','response:edit',context(base)),true,'无未关闭事项时正常编辑');
+});
