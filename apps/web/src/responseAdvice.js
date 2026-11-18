@@ -18,7 +18,7 @@ export function buildSourceResponseAnnotation(row = {}, response = row) {
   if (conclusion === '待确认') { return { kind: 'pending', label: '待确认', conclusion, wording: '' }; }
   const draft = String(response?.draft ?? '');
   if (draft.trim()) {
-    return { kind: 'response', label: '对外答复', conclusion, wording: mergeAnswerConditions(draft, response?.conditions) };
+    return { kind: 'response', label: '备注', conclusion, wording: mergeAnswerConditions(draft, response?.conditions) };
   }
   if (conclusion === 'Comply') { return { kind: 'comply', label: 'Comply', conclusion, wording: '' }; }
   return {

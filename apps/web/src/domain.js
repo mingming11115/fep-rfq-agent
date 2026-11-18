@@ -46,7 +46,6 @@ export function confirmationValidation(row) {
 export function requirementValidation(row) {
   const issues = confirmationValidation(row);
   if (row.conclusion === 'Comply') { return issues; }
-  if (!hasText(mergeAnswerConditions(row.draft, row.conditions))) { issues.push('请填写对外答复'); }
   if (row.conclusion === '有条件 Comply') {
     if (!hasText(row.evidence)) { issues.push('有条件 Comply 必须关联有效证据'); }
   }
@@ -113,7 +112,7 @@ function csvCell(value) {
 }
 
 export function toCsv(rows) {
-  const header = '条款,客户要求,应答结论,对外答复,确认状态';
+  const header = '条款,客户要求,应答结论,备注,确认状态';
   return [header, ...rows.map((row) => [row.clause, row.original, row.conclusion,
     mergeAnswerConditions(row.draft, row.conditions), row.status].map(csvCell).join(','))].join('\r\n');
 }

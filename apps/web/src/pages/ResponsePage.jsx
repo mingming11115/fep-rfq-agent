@@ -730,8 +730,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
         <AssessmentPanel key={active.id} sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}
           conclusion={form.conclusion} onConclusionChange={value => edit('conclusion', value)}
           responseAnswer={replyHints[form.conclusion] && <div className="response-form response-answer-fields">
-            <Field label="对外答复">
-              <UiInput aria-label="对外答复" value={singleLineReply(form.draft)} readOnly={!canEdit}
+            <Field label="备注">
+              <UiInput aria-label="备注" value={singleLineReply(form.draft)} readOnly={!canEdit}
                 onChange={event => edit('draft', event.target.value)} placeholder={replyHints[form.conclusion]}/>
             </Field>
           </div>}
@@ -802,7 +802,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     {modal==='review-proposal'&&active.pendingReviewProposal&&<Modal title="核对评审建议与人工答复" width={800} onClose={()=>setModal(null)} footer={<><UiButton className="btn" onClick={()=>setModal(null)}>暂不采用</UiButton><UiButton className="btn" disabled={dirty||!canConfirm||!proposalReason.trim()} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal,proposalReason)) { setModal(null); }}}>保留人工答复并记录理由</UiButton><UiButton className="btn btn-primary" disabled={dirty||!canConfirm} onClick={()=>{if(onAdoptReview(active.id,active.pendingReviewProposal)) { setModal(null); }}}>采用建议并保存待处理</UiButton></>}><Notice>建议基于条款 V{active.pendingReviewProposal.baseVersion}；采用后仍需单独确认。{dirty?'当前有未保存编辑，请先完成当前条目的提交或确认。':''}</Notice><div className="response-diff-grid"><div><h4>当前人工答复 · V{active.version}</h4><p>{active.draft}</p><p>{active.evidence}</p></div><div><h4>建议 · {active.pendingReviewProposal.reviewId}</h4><p>{mergeAnswerConditions(active.pendingReviewProposal.proposal.draft, active.pendingReviewProposal.proposal.conditions)}</p><p>{active.pendingReviewProposal.proposal.evidence}</p></div></div><label className="field"><span>保留人工答复的理由</span><UiTextArea className="input" value={proposalReason} onChange={e=>setProposalReason(e.target.value)}/></label></Modal>}
     {modal === 'confirm' && <Modal title={dirty ? '修改后确认当前条目' : '确认当前条目应答'} onClose={() => setModal(null)} footer={<><UiButton className="btn" onClick={() => setModal(null)}>取消</UiButton><UiButton className="btn btn-primary" disabled={!canConfirm || !!pendingConfirmation} onClick={confirmOne}>{pendingConfirmation ? '保存后确认中…' : '确认本条'}</UiButton></>}>
       <div className="response-modal-title"><span>条款 {active.clause}{!databaseBacked && ` · V${active.version || 1}`}</span><h3>{active.title}</h3></div>
-      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['备注', form.remark]] : []), ...(form.draft.trim() ? [['对外答复', form.draft]] : []), ...(String(form.evidence || '').trim() ? [['证据', form.evidence]] : [])]}/>
+      <Description rows={[["最终结论", form.conclusion], ...(form.conclusion === '不适用' ? [['不适用依据', form.remark]] : []), ...(form.draft.trim() ? [['备注', form.draft]] : []), ...(String(form.evidence || '').trim() ? [['证据', form.evidence]] : [])]}/>
       <Notice>确认会记录当前应答和来源。请先完成未关闭的评审，并填写明确结论。</Notice>
       <label className="response-checkbox"><UiCheckbox type="checkbox" checked={confirmNext} onChange={(e) => setConfirmNext(e.target.checked)} />确认后跳转下一未完成条目</label>{error && <p className="response-error" role="alert">{error}</p>}
     </Modal>}

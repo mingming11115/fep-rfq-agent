@@ -200,12 +200,12 @@ test('MySQL batch confirms every selected clause as Comply',async t=>{
     props={...props,route:{...props.route,requirementId:'R8'}};
     await act(async()=>{paint();await settle();});
     await click(node.querySelector('[aria-label="应答结论"] input[value="Comply"]'));
-    assert.equal(field('对外答复')?.tagName, 'INPUT');
+    assert.equal(field('备注')?.tagName, 'INPUT');
     for (const label of ['适用条件','应答依据']) { assert.ok(!field(label),`${label} is hidden for Comply`); }
     await click(node.querySelector('[aria-label="应答结论"] input[value="有条件 Comply"]'));
     const wording = node.querySelector('section[aria-label="应答话术"]');
     assert.ok(wording, 'conditional Comply shows editable recommended wording');
-    assert.equal(field('对外答复')?.tagName, 'INPUT');
+    assert.equal(field('备注')?.tagName, 'INPUT');
     assert.equal(node.querySelector('.response-current-card [aria-label="应答依据"]'), null,
       'the response card has no manual evidence input');
     assert.equal(field('适用条件'), null, 'conditions belong in the answer text');
@@ -291,7 +291,7 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     assert.ok(matchRetries[0].requestId, '每次重新比对都带新的幂等键');
     assert.equal(confirmations.length, 0);
 
-    const reply = () => h.node.querySelector('[aria-label="对外答复"]');
+    const reply = () => h.node.querySelector('[aria-label="备注"]');
     assert.equal(reply()?.tagName, 'INPUT', 'the selected conclusion has a single-line reply field');
     assert.match(reply().placeholder, /前提/);
     assert.equal(reply().value, '适用条件：选配 X');

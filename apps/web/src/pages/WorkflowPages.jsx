@@ -54,7 +54,7 @@ export function ReviewsPage({project,requirements=[],reviews=[],onUpdateReview,o
 
 const exportColumns = [
   { key: 'clause', label: '条款编号' }, { key: 'original', label: '客户要求' },
-  { key: 'conclusion', label: '应答结论' }, { key: 'draft', label: '对外答复' },
+  { key: 'conclusion', label: '应答结论' }, { key: 'draft', label: '备注' },
   { key: 'status', label: '确认状态' },
 ];
 const PREVIEW_PAGE_SIZE = 50;

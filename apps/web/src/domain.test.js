@@ -115,11 +115,11 @@ test('clause confirmation does not require removed response fields and preserves
   assert.equal(confirmed.evidence, '安全方案 V2');
 });
 
-test('formal export still checks response completeness after clause confirmation', () => {
+test('formal export still checks evidence after clause confirmation while the reply stays optional', () => {
   const confirmed = call('confirmRequirement', validRow({ conclusion: '有条件 Comply', draft: '', conditions: '', evidence: '' }));
   const issues = call('getExportIssues', [confirmed], []);
-  assert.ok(issues.some(issue => /对外答复/.test(issue.message)));
   assert.ok(issues.some(issue => /证据/.test(issue.message)));
+  assert.ok(!issues.some(issue => /备注|答复/.test(issue.message)));
 });
 
 test('confirmed Comply can proceed to final review and export with only the conclusion', () => {
@@ -195,7 +195,7 @@ test('a snapshot starts in approval and remains unchanged when source data is ed
 
 test('CSV preserves commas, quotes and line breaks and excludes internal evidence', () => {
   const csv = call('toCsv', [validRow({ original: '材料 A, 材料 B', draft: '答复 "A"\n第二行' })]);
-  assert.equal(csv, '条款,客户要求,应答结论,对外答复,确认状态\r\n2.1,"材料 A, 材料 B",Comply,"答复 ""A""\n第二行",待处理');
+  assert.equal(csv, '条款,客户要求,应答结论,备注,确认状态\r\n2.1,"材料 A, 材料 B",Comply,"答复 ""A""\n第二行",待处理');
   assert.ok(!csv.includes('模拟测试方案'));
 });
 
@@ -206,7 +206,7 @@ test('CSV neutralizes formula-leading values without changing ordinary content',
   })]);
   const line = csv.split('\r\n')[1];
   assert.equal(line, "'=1+1,'+SUM(A1:A2),'-1+2,\"'@SUM(A1:A2)\n适用条件：=HYPERLINK(\"\"x\"\")\",普通文本");
-  assert.equal(call('toCsv', []), '条款,客户要求,应答结论,对外答复,确认状态');
+  assert.equal(call('toCsv', []), '条款,客户要求,应答结论,备注,确认状态');
 });
 
 test('CSV preserves ordinary leading whitespace and line breaks', () => {

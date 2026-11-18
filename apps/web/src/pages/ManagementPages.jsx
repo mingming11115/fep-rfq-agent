@@ -178,7 +178,7 @@ const INITIAL_RULES = [
   { id: 'CFG-PILOT', title: '试点设备范围', value: 'DEMO-CUT 300 / DEMO-CUT 200 / DEMO-LAB 100', scope: '模拟设备范围', version: 1, impact: true, description: '仅用于本交互，非真实设备能力' },
 ];
 const INITIAL_TEMPLATES = [
-  { id: 'TPL-MATRIX', title: 'RFQ 应答矩阵', value: '条款 → 客户条款；客户要求 → 原文；应答结论 → 最终结论；对外答复 → 最终答复；适用条件 → 条件', scope: '技术 / 商务应答', version: 2, description: '固定模板 · 字段映射默认值' },
+  { id: 'TPL-MATRIX', title: 'RFQ 应答矩阵', value: '条款 → 客户条款；客户要求 → 原文；应答结论 → 最终结论；备注 → 最终答复；适用条件 → 条件', scope: '技术 / 商务应答', version: 2, description: '固定模板 · 字段映射默认值' },
   { id: 'TPL-DEVIATION', title: '偏离与澄清清单', value: '条款 → 客户条款；偏离说明 → 差距；处理方案 → 方案；适用条件 → 条件', scope: '已批准偏离及客户澄清', version: 1, description: '固定模板 · 不含内部成本与批注' },
 ];
 const HEALTH = [

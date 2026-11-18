@@ -112,7 +112,7 @@ test('source margin shows the reply that will be written to the document',()=>{
  const before=structuredClone(input);
  const annotation=model.buildSourceResponseAnnotation?.(input);
  assert.equal(annotation?.kind,'response');
- assert.equal(annotation?.label,'对外答复');
+ assert.equal(annotation?.label,'备注');
  assert.equal(annotation?.wording,'Comply，使用客户提供的校准件');
  assert.deepEqual(input,before);
 });
