@@ -2,6 +2,7 @@ package com.naura.rfq.service;
 
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
+import com.naura.rfq.common.log.StageLog;
 import com.naura.rfq.config.properties.ParseProperties;
 import com.naura.rfq.integration.parse.DocxBlockReader;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
@@ -198,6 +199,7 @@ public class ParseService {
 
         document.setStatus(CustomerDocument.STATUS_PARSING);
         documents.update(document);
+        StageLog.begin(log, "文档解析 documentName=" + document.getName() + " parseRunId=" + run.getId());
         log.info("document.parse.start 文档开始解析 documentName={} documentId={} 版本={} 项目={} parseRunId={}"
                         + " 类型={} 大小={}B 重解析={} 旧条款={} 历史召回={} 操作人={}",
                 document.getName(), documentId, document.getVersion(), project.getId(), run.getId(),
@@ -235,6 +237,8 @@ public class ParseService {
             if (rawBlocks.isEmpty()) {
                 throw new DocumentReadException("文档没有可读取内容");
             }
+            StageLog.end(log, "文档解析·读取阶段 documentName=" + ctx.document().getName()
+                    + " parseRunId=" + ctx.run().getId() + " 内容块=" + rawBlocks.size());
             log.info("document.parse.read 文档读取完成 documentName={} documentId={} parseRunId={} 通道={} 内容块={} 字符数={}",
                     ctx.document().getName(), ctx.document().getId(), ctx.run().getId(), channel(reader, wordMarkdown),
                     rawBlocks.size(), chars(rawBlocks));
@@ -250,6 +254,8 @@ public class ParseService {
                 }
             }
             phase = ParsePhase.EXTRACT;
+            StageLog.begin(log, "文档解析·条款抽取 documentName=" + ctx.document().getName()
+                    + " parseRunId=" + ctx.run().getId());
             ExtractionResult result = wordMarkdown != null
                     ? wordMarkdownExtractor.extract(wordMarkdown, ctx.run().getId(), ctx.document().getName())
                     : reader instanceof DocxBlockReader
@@ -257,6 +263,9 @@ public class ParseService {
                     : extractor.extractWithReport(rawBlocks, ctx.run().getId(), ctx.document().getName());
             ctx.run().setExtractor(truncate(result.extractor(), 250));
             issues.addAll(result.issues());
+            StageLog.end(log, "文档解析·条款抽取 documentName=" + ctx.document().getName()
+                    + " parseRunId=" + ctx.run().getId() + " 条款=" + result.requirements().size()
+                    + " 模型批次=" + result.batches().size());
             log.info("document.parse.extract 条款抽取完成 documentName={} parseRunId={} 抽取器={} 条款={} 模型批次={} 提示={}",
                     ctx.document().getName(), ctx.run().getId(), result.extractor(), result.requirements().size(),
                     result.batches().size(), result.issues().size());
@@ -293,6 +302,8 @@ public class ParseService {
      * 用户可见的运行记录与审计日志；原始异常只保留在本方法输出的日志里。
      */
     private void recordFailure(ParseContext ctx, ParsePhase phase, Exception exception) {
+        StageLog.failed(log, "文档解析 documentName=" + ctx.document().getName() + " parseRunId=" + ctx.run().getId()
+                + " 阶段=" + phase.label() + " errorType=" + exception.getClass().getSimpleName());
         log.error("document.parse.failed 文档解析失败 documentName={} parseRunId={} documentId={} projectId={} phase={}"
                         + " errorType={} durationMs={}",
                 ctx.document().getName(), ctx.run().getId(), ctx.document().getId(), ctx.project().getId(), phase.label(),
@@ -385,6 +396,9 @@ public class ParseService {
                 ctx.document().getName(), run.getId(), documentId, ctx.project().getId(), run.getStatus(),
                 outcome.rawBlocks().size(), saved.size(), outcome.batches().size(), failedBatches, issueCount,
                 run.getExtractor(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()));
+        StageLog.end(log, "文档解析 documentName=" + ctx.document().getName() + " parseRunId=" + run.getId()
+                + " 状态=" + run.getStatus() + " 条款=" + saved.size() + " 提示=" + issueCount
+                + " 耗时=" + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - ctx.started()) + "ms");
         return view(run);
     }
 

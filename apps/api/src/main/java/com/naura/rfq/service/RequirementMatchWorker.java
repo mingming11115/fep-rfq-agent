@@ -1,6 +1,7 @@
 package com.naura.rfq.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.naura.rfq.common.log.StageLog;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +51,7 @@ public class RequirementMatchWorker {
     public void runOnce() {
         var due = runs.due();
         if (!due.isEmpty()) {
+            StageLog.begin(log, "比对工作轮询 待比对条款=" + due.size());
             log.info("requirement.match.worker.tick 本轮开始处理待比对条款 条数={}", due.size());
         }
         int processed = 0;
@@ -83,6 +85,7 @@ public class RequirementMatchWorker {
         }
         if (!due.isEmpty()) {
             log.info("requirement.match.worker.tick.done 本轮待比对条款处理结束 待处理={} 已完成={}", due.size(), processed);
+            StageLog.end(log, "比对工作轮询 待处理=" + due.size() + " 已完成=" + processed);
         }
     }
 

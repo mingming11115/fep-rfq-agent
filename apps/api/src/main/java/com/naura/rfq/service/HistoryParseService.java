@@ -2,6 +2,7 @@ package com.naura.rfq.service;
 
 import com.naura.rfq.common.exception.BusinessException;
 import com.naura.rfq.common.id.Ids;
+import com.naura.rfq.common.log.StageLog;
 import com.naura.rfq.config.properties.ParseProperties;
 import com.naura.rfq.integration.history.HistoryExtractor;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
@@ -62,11 +63,15 @@ public class HistoryParseService {
     HistoryParseView extract(List<HistorySource> sources) {
         HistorySource main = sources.get(0);
         HistorySource companion = sources.size() > 1 ? sources.get(1) : null;
+        StageLog.begin(log, "历史RFQ解析 fileName=" + main.name()
+                + (companion == null ? "" : " 配套答复=" + companion.name()));
         log.info("history.parse.start 历史RFQ文档开始解析 fileName={} 配套答复={} 主文件内容块={}",
                 main.name(), companion == null ? "-" : companion.name(), main.blocks().size());
         var result = extractor.extract(main.blocks(), companion == null ? List.of() : companion.blocks(), main.name());
         log.info("history.parse.result 历史RFQ文档解析完成 fileName={} 条款={} 提示={}",
                 main.name(), result.clauses().size(), result.issues().size());
+        StageLog.end(log, "历史RFQ解析 fileName=" + main.name() + " 条款=" + result.clauses().size()
+                + " 提示=" + result.issues().size());
         return new HistoryParseView(result.metadata(), result.clauses(), sources, result.issues());
     }
 
