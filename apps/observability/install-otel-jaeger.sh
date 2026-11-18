@@ -6,8 +6,8 @@ set -euo pipefail
 OTEL_HOME="/opt/otel"
 AGENT_VERSION="2.11.0"
 JAEGER_VERSION="1.62.0"
-AGENT_URL="https://github.com/open-telemetry/opentelemetry-java/releases/download/v${AGENT_VERSION}/opentelemetry-javaagent.jar"
-JAEGER_URL="https://github.com/jaegertracing/jaeger/releases/download/v${JAEGER_VERSION}/jaeger-all-in-one-linux-amd64.tar.gz"
+AGENT_URL="https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${AGENT_VERSION}/opentelemetry-javaagent.jar"
+JAEGER_URL="https://github.com/jaegertracing/jaeger/releases/download/v${JAEGER_VERSION}/jaeger-${JAEGER_VERSION}-linux-amd64.tar.gz"
 
 mkdir -p "${OTEL_HOME}"
 
