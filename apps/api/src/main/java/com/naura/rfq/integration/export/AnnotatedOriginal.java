@@ -26,13 +26,14 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
-import org.apache.poi.xwpf.usermodel.TableRowHeightRule;
 import org.apache.poi.xwpf.usermodel.XWPFComment;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTHeight;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STHeightRule;
 
 /** Writes answers into a copy of the original, using the parser's source anchors. */
 @Slf4j
@@ -105,11 +106,27 @@ public final class AnnotatedOriginal {
     private static void allowTableRowsToExpand(XWPFParagraph paragraph) {
         var body = paragraph.getBody();
         while (body instanceof XWPFTableCell cell) {
-            var row = cell.getTableRow();
-            if (row.getHeightRule() == TableRowHeightRule.EXACT) {
-                row.setHeightRule(TableRowHeightRule.AT_LEAST);
-            }
-            body = row.getTable().getBody();
+            relaxRowHeight(cell.getTableRow());
+            body = cell.getTableRow().getTable().getBody();
+        }
+    }
+
+    /** EXACT 行高会把写入的答复裁掉；WPS 等工具会写出非法 hRule 值，POI 读取时直接抛枚举异常，这里一并放宽。 */
+    private static void relaxRowHeight(XWPFTableRow row) {
+        var properties = row.getCtRow().getTrPr();
+        if (properties == null) { return; }
+        for (var height : properties.getTrHeightArray()) {
+            if (!height.isSetHRule() || !isFixedHeight(height)) { continue; }
+            height.setHRule(STHeightRule.AT_LEAST);
+        }
+    }
+
+    private static boolean isFixedHeight(CTHeight height) {
+        try {
+            return height.getHRule() == STHeightRule.EXACT;
+        } catch (IllegalArgumentException invalidValue) {
+            log.warn("表格行高规则无法识别，按固定高度放宽：{}", height.xmlText());
+            return true;
         }
     }
 
