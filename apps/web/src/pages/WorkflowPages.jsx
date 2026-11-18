@@ -57,6 +57,7 @@ const exportColumns = [
   { key: 'conclusion', label: '应答结论' }, { key: 'draft', label: '对外答复' },
   { key: 'status', label: '确认状态' },
 ];
+const PREVIEW_PAGE_SIZE = 50;
 const defaultMapping = Object.fromEntries(exportColumns.map(({key}) => [key, key]));
 const defaultTemplate = { id: 'standard', title: '标准 RFQ 应答矩阵', version: 'V2.1', description: '逐条列出客户要求、结论与最终答复，适合技术应答。' };
 
@@ -225,7 +226,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
       {previewRows.length ? <>
         <div className="table-wrap"><BusinessTable className="data-table">
           <thead><tr>{exportColumns.map(({key,label}) => <th key={key}>{label}</th>)}</tr></thead>
-          <tbody>{previewRows.slice((page - 1) * 6, page * 6).map(row => <tr key={row.id}>
+          <tbody>{previewRows.slice((page - 1) * PREVIEW_PAGE_SIZE, page * PREVIEW_PAGE_SIZE).map(row => <tr key={row.id}>
             <td>{row.clause || '—'}</td>
             <td className="flow-preview-requirement">{row.original}</td>
             <td><Badge value={row.conclusion}/></td>
@@ -233,7 +234,7 @@ export function ExportPage({ project, requirements: projectRequirements = [], re
             <td>{row.status && <Badge value={exportCheck.valid && latest.unconfirmedComplyIds?.includes(row.id) ? '最终评审已通过（未逐条人工确认）' : row.status}/>}</td>
           </tr>)}</tbody>
         </BusinessTable></div>
-        <Pager count={previewRows.length} page={page} onChange={setPage}/>
+        <Pager count={previewRows.length} page={Math.min(page, Math.max(1, Math.ceil(previewRows.length / PREVIEW_PAGE_SIZE)))} pageSize={PREVIEW_PAGE_SIZE} onChange={setPage}/>
       </> : <NoRows title="暂无可预览条款">解析客户要求后可在这里查看条款结果。</NoRows>}
     </section>
     {detail && <Drawer title="应答快照 · 只读审批" width={1000} onClose={() => setDetailId(null)} footer={<><UiButton className="btn" onClick={() => setDetailId(null)}>关闭</UiButton>{detail.status === '审批中' && <><UiButton className="btn btn-danger" disabled={!canBusinessAction('snapshot',detail.id,'approve')} onClick={() => startAction('reject', detail.id)}>退回</UiButton><UiButton className="btn btn-primary" disabled={!canBusinessAction('snapshot',detail.id,'approve')} onClick={() => startAction('approve', detail.id)}>通过本方评审</UiButton></>}</>}><UnconfirmedComplyList frozen rows={(detail.rows||[]).filter(row=>detail.unconfirmedComplyIds?.includes(row.id))}/><div className="flow-detail-top"><div><span className="muted flow-small">固定快照编号</span><h3 className="flow-snapshot-id">{detail.id}</h3></div><Badge value={detail.status} /></div><dl className="flow-description"><dt>提交人 / 时间</dt><dd>{detail.createdBy} / {new Date(detail.createdAt).toLocaleString('zh-CN', { hour12: false })}</dd><dt>批准人</dt><dd>{detail.reviewedBy || '查看下方逐人评审记录'}</dd><dt>处理意见</dt><dd>{detail.reviewReason || detail.submissionReason || '—'}</dd><dt>外发附件</dt><dd>0 个；内部证据不自动作为对外附件</dd></dl><Notice type={detail.status === '已批准' && !validity(detail).valid ? 'warning' : 'info'}>{detail.stale ? '本轮快照已失效，请按当前人员与规则重新提交。' : detail.status === '已批准' ? validity(detail).message : '此处展示冻结快照，不随当前工作内容修改。当前身份：' + actorRole + '；SR与技术组均须通过。'}</Notice><FinalReviewProgress snapshot={detail} appState={appState}/><h4 className="flow-spaced">冻结应答内容（{detail.rows?.length || 0} 条）</h4>{snapshotTable(detail)}<h4 className="flow-spaced">审批与导出记录</h4><div className="flow-timeline">{(detail.history || []).map((entry, index) => <div className="flow-timeline-item" key={entry.id || index}><i /><strong>{entry.action}</strong><small>{entry.time} · {entry.actor}</small><p>{entry.reason}</p></div>)}{(detail.exports || []).map((record) => <div className="flow-timeline-item" key={record.id}><i /><strong>正式导出 CSV</strong><small>{record.createdAt} · {record.actor}</small><p>{record.filename}</p></div>)}</div></Drawer>}
