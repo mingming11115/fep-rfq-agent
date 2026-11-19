@@ -33,7 +33,17 @@ AGENT="/opt/otel/opentelemetry-javaagent.jar"
 
 # ================= 基础探测 =================
 find_java() {
-  if command -v java >/dev/null 2>&1; then command -v java; return; fi
+  # 优先 JDK17（路径含 17），其次 PATH；启动运行时也必须用 17
+  local d java_bin=""
+  for d in /usr/lib/jvm/*17*/bin/java /usr/java/*17*/bin/java /opt/*17*/bin/java; do
+    [ -x "$d" ] && { echo "$d"; return; }
+  done
+  if command -v java >/dev/null 2>&1; then
+    local major
+    major=$(java -version 2>&1 | head -1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')
+    [ "${major}" = "1" ] && major="8"
+    [ "${major}" -ge 17 ] 2>/dev/null && command -v java && return
+  fi
   for d in /usr/lib/jvm/*/bin/java /usr/java/*/bin/java /opt/jdk*/bin/java; do
     [ -x "$d" ] && { echo "$d"; return; }
   done
@@ -209,7 +219,13 @@ do_start() {
 
   local java_bin; java_bin=$(find_java)
   local jar; jar=$(find_jar)
-  if [ -z "${java_bin}" ]; then echo "[error] 无 java"; exit 1; fi
+  if [ -z "${java_bin}" ]; then
+    echo "[error] 未找到 JDK17（class 版本 52.0 错误 = 用了 Java 8 在跑 17 编译的 jar）。装好后重试:"
+    echo "  curl -fL -o /tmp/jdk17.tgz \"https://repo.huaweicloud.com/openjdk/17.0.2/openjdk-17.0.2_linux-x64_bin.tar.gz\""
+    echo "  mkdir -p /usr/lib/jvm && tar -xzf /tmp/jdk17.tgz -C /usr/lib/jvm"
+    exit 1
+  fi
+  echo "[info] 运行时 JDK: ${java_bin} ($("${java_bin}" -version 2>&1 | head -1))"
   if [ -z "${jar}" ]; then
     echo "[error] 无 jar。先构建: bash $0 build"
     echo "        或指定: JAR_PATH=/路径/xx.jar bash $0 start"
