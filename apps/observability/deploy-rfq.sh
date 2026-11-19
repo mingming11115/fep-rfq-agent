@@ -26,7 +26,7 @@ DB_USER="${DB_USER:-}"
 DB_PASS="${DB_PASS:-}"
 
 BASE="$(cd "$(dirname "$0")" && pwd)"
-GIT_ROOT="$(cd "${BASE}/../.." 2>/dev/null && pwd)"
+GIT_ROOT="$(git -C "${BASE}" rev-parse --show-toplevel 2>/dev/null || echo "")"
 LOG_FILE="${BASE}/${APP_NAME}.log"
 PID_FILE="${BASE}/${APP_NAME}.pid"
 AGENT="/opt/otel/opentelemetry-javaagent.jar"
@@ -42,9 +42,18 @@ find_java() {
 
 find_jar() {
   [ -n "${JAR_PATH}" ] && { echo "${JAR_PATH}"; return; }
-  find "${BASE}" "${GIT_ROOT:-/nonexistent}" /opt/rfq /srv /data /home /root -maxdepth 4 \
-    -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null \
-    | grep -iE "rfq|api|service" | head -1
+  # 只搜索真实存在的目录，放宽深度到 6 层
+  local dirs=" /opt/rfq /srv /data /home /root"
+  [ -n "${GIT_ROOT}" ] && dirs="${dirs} ${GIT_ROOT}"
+  local found
+  found=$(find ${dirs} -maxdepth 6 -type f -name "*.jar" \
+    ! -name "*sources*" ! -name "*javadoc*" ! -path "*/node_modules/*" 2>/dev/null)
+  # 优先级: target 下的 rfq jar > 名字带 rfq 的 > 第一个 jar
+  {
+    echo "${found}" | grep "target/" | grep -i "rfq"
+    echo "${found}" | grep -i "rfq"
+    echo "${found}"
+  } | grep -v "^$" | head -1
 }
 
 port_in_use() { ss -tln 2>/dev/null | grep -q ":${1} "; }
