@@ -135,12 +135,26 @@ do_check() {
 MAVEN_DIR="${BASE}/.maven"
 
 ensure_java() {
-  local java_bin; java_bin=$(find_java)
-  if [ -n "${java_bin}" ]; then echo "${java_bin}"; return 0; fi
-  echo "[build] 未找到 java，尝试 yum 安装 OpenJDK 17（需要 root/网络）..."
+  # 优先找 JDK17（路径特征），再用 PATH 里的，最后校验版本必须 >=17
+  local java_bin=""
+  for d in /usr/lib/jvm/java-17*/bin/java /usr/java/jdk-17*/bin/java /opt/jdk-17*/bin/java; do
+    [ -x "$d" ] && { java_bin="$d"; break; }
+  done
+  [ -z "${java_bin}" ] && java_bin=$(command -v java 2>/dev/null || echo "")
+  # 校验大版本
+  if [ -n "${java_bin}" ]; then
+    local major
+    major=$("${java_bin}" -version 2>&1 | head -1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')
+    [ "${major}" = "1" ] && major="8"
+    if [ "${major}" -ge 17 ] 2>/dev/null; then echo "${java_bin}"; return 0; fi
+  fi
+  echo "[build] 未找到 JDK17，尝试 yum 安装（需要 root/网络）..."
   yum install -y java-17-openjdk java-17-openjdk-devel >/dev/null 2>&1 \
-    && find_java && return 0
-  echo "[fail] java 安装失败，请手动安装后重跑（CentOS7 无 java17 源时需先装 EPEL 或用二进制 JDK）"
+    && { [ -x /usr/lib/jvm/java-17*/bin/java ] 2>/dev/null; java_bin=$(ls /usr/lib/jvm/java-17*/bin/java 2>/dev/null | head -1); \
+         [ -n "${java_bin}" ] && echo "${java_bin}" && return 0; }
+  echo "[fail] 需要 JDK17。当前: $(java -version 2>&1 | head -1)"
+  echo "       请安装: yum install -y java-17-openjdk java-17-openjdk-devel"
+  echo "       或用二进制 JDK 放到 /usr/lib/jvm/java-17-openjdk/"
   return 1
 }
 
