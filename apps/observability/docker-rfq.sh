@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # RFQ Docker 一键管理脚本（不依赖 docker compose / plugin）
-# 用法: bash docker-rfq.sh {build|start|stop|restart|status|logs}
+# 用法: bash docker-rfq.sh {pull|build|start|stop|restart|status|logs}
 # 可选环境变量:
 #   RFQ_DB_URL / RFQ_DB_USER / RFQ_DB_PASSWORD   覆盖数据库配置
 #   OTEL_AGENT   javaagent jar 路径（默认 /opt/otel/opentelemetry-javaagent.jar）
 #   HOST_PORT    对外端口（默认 48081，仅绑定 127.0.0.1）
+#   JAEGER_IMAGE jaeger 镜像名（默认 jaegertracing/all-in-one:1.62）
+#   SKIP_JAEGER=1 只起 rfq-service，不拉/不起 jaeger
 set -u
 
 IMAGE="rfq-service:onlyoffice"
-JAEGER_IMAGE="jaegertracing/all-in-one:1.62"
+JAEGER_IMAGE="${JAEGER_IMAGE:-jaegertracing/all-in-one:1.62}"
+# Docker Hub 直连不通时依次尝试的加速源（自动加前缀）
+JAEGER_MIRRORS="${JAEGER_MIRRORS:-docker.1ms.run docker.m.daocloud.io docker.xuanyuan.me hub.rat.dev}"
 NET="rfq-net"
 HOST_PORT="${HOST_PORT:-48081}"
 OTEL_AGENT="${OTEL_AGENT:-/opt/otel/opentelemetry-javaagent.jar}"
@@ -28,9 +32,54 @@ rm_if_exists() {
   fi
 }
 
+image_ok() { docker image inspect "$1" >/dev/null 2>&1; }
+
+# 拉镜像：先直连，失败依次换加速源，成功后统一打回原名字
+ensure_image() {
+  local img="$1"
+  if image_ok "$img"; then
+    echo "[info] 本地已有镜像 $img"
+    return 0
+  fi
+
+  echo "[info] 本地无镜像 $img，尝试直连拉取..."
+  if docker pull "$img"; then return 0; fi
+
+  local m ref
+  for m in $JAEGER_MIRRORS; do
+    ref="${m}/${img}"
+    echo "[info] 直连失败，尝试加速源: $ref"
+    if docker pull "$ref"; then
+      docker tag "$ref" "$img"
+      echo "[ok] 已通过 $m 拉取并重命名为 $img"
+      return 0
+    fi
+  done
+
+  cat <<EOF
+[fail] 所有源都拉不到 $img
+       可手动试（任一条成功后重跑 start）:
+         docker pull docker.1ms.run/$img && docker tag docker.1ms.run/$img $img
+         docker pull docker.m.daocloud.io/$img && docker tag docker.m.daocloud.io/$img $img
+         docker pull swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/$img
+       或在 /etc/docker/daemon.json 的 registry-mirrors 里加加速地址后 systemctl restart docker
+EOF
+  return 1
+}
+
+do_pull() {
+  echo "[pull] 检查 jaeger 镜像..."
+  ensure_image "$JAEGER_IMAGE" || exit 1
+  echo "[ok] jaeger 镜像就绪: $JAEGER_IMAGE"
+}
+
 do_jaeger() {
   if docker ps --format '{{.Names}}' | grep -qx jaeger; then
     echo "[info] jaeger 已在运行"; return
+  fi
+  if ! ensure_image "$JAEGER_IMAGE"; then
+    echo "[warn] jaeger 镜像不可用，本次跳过 jaeger（服务仍可启动，但没有 trace）"
+    return 0
   fi
   rm_if_exists jaeger
   run_or_fail docker run -d --name jaeger --restart unless-stopped \
@@ -39,13 +88,6 @@ do_jaeger() {
     -e MEMORY_MAX_TRACES=50000 \
     "$JAEGER_IMAGE"
   echo "[ok] jaeger 已启动 UI:http://<本机IP>:16686"
-}
-
-build_args() {
-  # 数据库等环境变量（默认值已内置 application-prod.yml，仅覆盖时传入）
-  [ -n "${RFQ_DB_URL:-}" ]      && printf ' -e RFQ_DB_URL=%s' "$RFQ_DB_URL"
-  [ -n "${RFQ_DB_USER:-}" ]     && printf ' -e RFQ_DB_USER=%s' "$RFQ_DB_USER"
-  [ -n "${RFQ_DB_PASSWORD:-}" ] && printf ' -e RFQ_DB_PASSWORD=%s' "$RFQ_DB_PASSWORD"
 }
 
 do_build() {
@@ -57,7 +99,11 @@ do_build() {
 
 do_start() {
   net_ok
-  do_jaeger
+  if [ "${SKIP_JAEGER:-0}" = "1" ]; then
+    echo "[info] SKIP_JAEGER=1，跳过 jaeger"
+  else
+    do_jaeger
+  fi
   rm_if_exists rfq-service
 
   local -a args=(--network "$NET"
@@ -80,7 +126,6 @@ do_start() {
 
   echo "[info] 启动 rfq-service 端口 $HOST_PORT ..."
   run_or_fail docker run -d --name rfq-service --restart unless-stopped \
-    --network "$NET" \
     --log-driver local --log-opt max-size=20m --log-opt max-file=5 \
     "${args[@]}" "$IMAGE"
 
@@ -97,6 +142,7 @@ do_start() {
 }
 
 case "${1:-start}" in
+  pull)    do_pull ;;
   build)   do_build ;;
   start)   do_start ;;
   stop)    docker rm -f rfq-service jaeger 2>/dev/null; echo "[ok] 已停止" ;;
@@ -107,5 +153,5 @@ case "${1:-start}" in
       && echo "[ok] 应用健康检查通过" || echo "[warn] 应用健康检查未通过（可能还在启动）"
     ;;
   logs)    docker logs -f --tail 100 rfq-service ;;
-  *) echo "用法: bash $0 {build|start|stop|restart|status|logs}"; exit 1 ;;
+  *) echo "用法: bash $0 {pull|build|start|stop|restart|status|logs}"; exit 1 ;;
 esac
