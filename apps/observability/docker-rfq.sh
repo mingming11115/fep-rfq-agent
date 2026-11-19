@@ -50,8 +50,8 @@ build_args() {
 
 do_build() {
   [ -d "$API_DIR" ] || { echo "[fail] 未找到 apps/api 目录: $API_DIR"; exit 1; }
-  echo "[build] 开始构建镜像（首次约 5~15 分钟）..."
-  run_or_fail env DOCKER_BUILDKIT=1 docker build -t "$IMAGE" "$API_DIR"
+  echo "[build] 开始构建镜像（首次约 5~15 分钟，构建期借用宿主机网络）..."
+  run_or_fail env DOCKER_BUILDKIT=1 docker build --network host -t "$IMAGE" "$API_DIR"
   echo "[ok] 镜像构建完成: $IMAGE"
 }
 
