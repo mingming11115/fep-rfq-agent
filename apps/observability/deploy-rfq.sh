@@ -32,20 +32,19 @@ PID_FILE="${BASE}/${APP_NAME}.pid"
 AGENT="/opt/otel/opentelemetry-javaagent.jar"
 
 # ================= 基础探测 =================
+java_major() {  # 输出某 java 可执行的大版本号
+  "$1" -version 2>&1 | head -1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | sed 's/^1$/8/'
+}
+
 find_java() {
-  # 优先 JDK17（路径含 17），其次 PATH；启动运行时也必须用 17
-  local d java_bin=""
+  # 任何候选都必须是 JDK17+，否则返回空（由调用方报错）
+  local d c
   for d in /usr/lib/jvm/*17*/bin/java /usr/java/*17*/bin/java /opt/*17*/bin/java; do
-    [ -x "$d" ] && { echo "$d"; return; }
+    [ -x "$d" ] && [ "$(java_major "$d")" -ge 17 ] 2>/dev/null && { echo "$d"; return; }
   done
-  if command -v java >/dev/null 2>&1; then
-    local major
-    major=$(java -version 2>&1 | head -1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')
-    [ "${major}" = "1" ] && major="8"
-    [ "${major}" -ge 17 ] 2>/dev/null && command -v java && return
-  fi
+  command -v java >/dev/null 2>&1 && [ "$(java_major "$(command -v java)")" -ge 17 ] 2>/dev/null && { command -v java; return; }
   for d in /usr/lib/jvm/*/bin/java /usr/java/*/bin/java /opt/jdk*/bin/java; do
-    [ -x "$d" ] && { echo "$d"; return; }
+    [ -x "$d" ] && [ "$(java_major "$d")" -ge 17 ] 2>/dev/null && { echo "$d"; return; }
   done
   echo ""
 }
