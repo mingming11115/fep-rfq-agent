@@ -163,6 +163,8 @@ do_build() {
   mvn=$(ensure_maven)     || { echo "[fail] maven 下载失败，检查网络或手动安装"; exit 1; }
   echo "[build] java=$(basename $(dirname $(dirname ${java_bin})))  mvn=${mvn}"
 
+  mkdir -p "${MAVEN_DIR}"
+
   # 阿里云 Maven 镜像 settings（加速依赖下载）
   cat > "${MAVEN_DIR}/settings.xml" <<'SETTINGS'
 <?xml version="1.0" encoding="UTF-8"?>
