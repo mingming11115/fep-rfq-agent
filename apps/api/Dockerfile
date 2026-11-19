@@ -9,8 +9,8 @@ RUN mvn -B -ntp -s /workspace/docker-settings.xml package -DskipTests
 # 只作为 JRE 来源，不参与运行（避免在 Debian 上 apt 装 openjdk 的源问题）
 FROM eclipse-temurin:17-jre AS jre
 
-# 运行时镜像：Python 官方镜像 + 直接拷贝 Temurin 的 JRE 目录
-FROM python:3.12-slim AS runtime
+# 运行时镜像：固定 Debian bookworm 版 Python 镜像（避免 trixie 上缺包），JRE 从 temurin 拷贝
+FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 ENV LANG=C.UTF-8 \
@@ -23,8 +23,12 @@ ENV LANG=C.UTF-8 \
 
 COPY --from=jre /opt/java/openjdk /opt/java/openjdk
 
-# 仅装少量基础包（时区 + onnxruntime 依赖的 libgomp1），各发行版 main 源内均有
-RUN apt-get update \
+# 仅装少量基础包（时区 + onnxruntime 依赖的 libgomp1），apt 源换阿里云避免 404/超时
+RUN set -eux; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do \
+      [ -f "$f" ] && sed -i 's|deb.debian.org|mirrors.aliyun.com|g' "$f" || true; \
+    done; \
+    apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tzdata libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
