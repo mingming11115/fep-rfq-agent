@@ -6,16 +6,25 @@
 #   OTEL_AGENT   javaagent jar 路径（默认 /opt/otel/opentelemetry-javaagent.jar）
 #   HOST_PORT    对外端口（默认 48081，仅绑定 127.0.0.1）
 #   JAEGER_MODE  auto|docker|native（默认 auto：有镜像用容器，没有就装宿主机二进制）
-#   JAEGER_VERSION / JAEGER_HOME  native 模式的版本号与安装目录
-#   JAEGER_IMAGE jaeger 镜像名（docker 模式用，默认 jaegertracing/all-in-one:1.62）
+#   JAEGER_VERSION  jaeger 版本（默认 2.23.0；v1 与 v2 的镜像名/启动参数/配置自动适配）
+#   JAEGER_HOME   native 模式的安装目录（默认 /opt/jaeger）
+#   JAEGER_IMAGE  docker 模式镜像名（默认 jaegertracing/jaeger:<版本>，v1 为 all-in-one）
 #   SKIP_JAEGER=1 只起 rfq-service，不拉/不起 jaeger
 set -u
 
 IMAGE="rfq-service:onlyoffice"
-JAEGER_IMAGE="${JAEGER_IMAGE:-jaegertracing/all-in-one:1.62}"
-JAEGER_MIRRORS="${JAEGER_MIRRORS:-docker.1ms.run docker.m.daocloud.io docker.xuanyuan.me hub.rat.dev}"
 JAEGER_MODE="${JAEGER_MODE:-auto}"
-JAEGER_VERSION="${JAEGER_VERSION:-1.62.0}"
+JAEGER_VERSION="${JAEGER_VERSION:-2.23.0}"
+JAEGER_MAJOR="${JAEGER_VERSION%%.*}"
+if [ "$JAEGER_MAJOR" = "1" ]; then
+  JAEGER_BIN="jaeger-all-in-one"
+  DEFAULT_IMAGE="jaegertracing/all-in-one:$JAEGER_VERSION"
+else
+  JAEGER_BIN="jaeger"
+  DEFAULT_IMAGE="jaegertracing/jaeger:$JAEGER_VERSION"
+fi
+JAEGER_IMAGE="${JAEGER_IMAGE:-$DEFAULT_IMAGE}"
+JAEGER_MIRRORS="${JAEGER_MIRRORS:-docker.1ms.run docker.m.daocloud.io docker.xuanyuan.me hub.rat.dev}"
 JAEGER_HOME="${JAEGER_HOME:-/opt/jaeger}"
 GH_PROXIES="${GH_PROXIES:-https://ghfast.top https://ghproxy.net https://gh-proxy.com}"
 NET="rfq-net"
@@ -94,6 +103,45 @@ download_jaeger() {
   return 1
 }
 
+write_jaeger_config_v2() {
+  local cfg="$JAEGER_DIR/config.yaml"
+  [ -f "$cfg" ] && return 0
+  cat > "$cfg" <<EOF
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+  jaeger_query:
+    storage:
+      traces: some_store
+  jaeger_storage:
+    backends:
+      some_store:
+        memory:
+          max_traces: 50000
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+processors:
+  batch:
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: some_store
+EOF
+  echo "[info] 已生成 jaeger v2 配置: $cfg"
+}
+
 jaeger_native_up() {
   local i
   if [ -f "$JAEGER_PID" ] && kill -0 "$(cat "$JAEGER_PID" 2>/dev/null)" 2>/dev/null; then
@@ -101,7 +149,7 @@ jaeger_native_up() {
     return 0
   fi
 
-  if [ ! -x "$JAEGER_DIR/jaeger-all-in-one" ]; then
+  if [ ! -x "$JAEGER_DIR/$JAEGER_BIN" ]; then
     download_jaeger || return 1
     tar -xzf "$JAEGER_HOME/$JAEGER_TAR" -C "$JAEGER_HOME" || {
       echo "[fail] 解压失败，文件可能下载不完整: $JAEGER_HOME/$JAEGER_TAR"
@@ -109,9 +157,17 @@ jaeger_native_up() {
     }
   fi
 
-  echo "[info] 启动 jaeger(宿主机进程) 4318/16686 ..."
-  ( cd "$JAEGER_DIR" && nohup ./jaeger-all-in-one --memory.max-traces=50000 >"$JAEGER_LOG" 2>&1 & echo $! >"$JAEGER_PID" )
-  for i in $(seq 1 20); do
+  local -a cmd
+  if [ "$JAEGER_MAJOR" = "1" ]; then
+    cmd=(./"$JAEGER_BIN" --memory.max-traces=50000)
+  else
+    write_jaeger_config_v2
+    cmd=(./"$JAEGER_BIN" --config "$JAEGER_DIR/config.yaml")
+  fi
+
+  echo "[info] 启动 jaeger $JAEGER_VERSION(宿主机进程) 4317/4318/16686 ..."
+  ( cd "$JAEGER_DIR" && nohup "${cmd[@]}" >"$JAEGER_LOG" 2>&1 & echo $! >"$JAEGER_PID" )
+  for i in $(seq 1 25); do
     sleep 1
     if port_listen 16686; then
       echo "[ok] jaeger 已启动(宿主机进程) UI:http://<本机IP>:16686  日志:$JAEGER_LOG"
@@ -139,12 +195,12 @@ do_jaeger() {
       mode="native"
     else
       rm_if_exists jaeger
-      run_or_fail docker run -d --name jaeger --restart unless-stopped \
-        --network "$NET" \
-        -p 16686:16686 -p 4318:4318 -p 4317:4317 \
-        -e MEMORY_MAX_TRACES=50000 \
-        "$JAEGER_IMAGE"
-      echo "[ok] jaeger 容器已启动 UI:http://<本机IP>:16686"
+      local -a jargs=(-d --name jaeger --restart unless-stopped
+        --network "$NET"
+        -p 16686:16686 -p 4318:4318 -p 4317:4317)
+      [ "$JAEGER_MAJOR" = "1" ] && jargs+=(-e MEMORY_MAX_TRACES=50000)
+      run_or_fail docker run "${jargs[@]}" "$JAEGER_IMAGE"
+      echo "[ok] jaeger 容器已启动($JAEGER_IMAGE) UI:http://<本机IP>:16686"
       OTEL_ENDPOINT="http://jaeger:4318"
       return 0
     fi
