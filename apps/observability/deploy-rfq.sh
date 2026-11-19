@@ -26,6 +26,7 @@ DB_USER="${DB_USER:-}"
 DB_PASS="${DB_PASS:-}"
 
 BASE="$(cd "$(dirname "$0")" && pwd)"
+GIT_ROOT="$(cd "${BASE}/../.." 2>/dev/null && pwd)"
 LOG_FILE="${BASE}/${APP_NAME}.log"
 PID_FILE="${BASE}/${APP_NAME}.pid"
 AGENT="/opt/otel/opentelemetry-javaagent.jar"
@@ -41,7 +42,7 @@ find_java() {
 
 find_jar() {
   [ -n "${JAR_PATH}" ] && { echo "${JAR_PATH}"; return; }
-  find "${BASE}" /opt/rfq /srv /data /home /root -maxdepth 4 \
+  find "${BASE}" "${GIT_ROOT:-/nonexistent}" /opt/rfq /srv /data /home /root -maxdepth 4 \
     -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null \
     | grep -iE "rfq|api|service" | head -1
 }
