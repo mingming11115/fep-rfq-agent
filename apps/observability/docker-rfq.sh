@@ -76,6 +76,7 @@ do_start() {
   [ -n "${RFQ_DB_URL:-}" ]      && args+=(-e "RFQ_DB_URL=$RFQ_DB_URL")
   [ -n "${RFQ_DB_USER:-}" ]     && args+=(-e "RFQ_DB_USER=$RFQ_DB_USER")
   [ -n "${RFQ_DB_PASSWORD:-}" ] && args+=(-e "RFQ_DB_PASSWORD=$RFQ_DB_PASSWORD")
+  args+=(-e "RFQ_LOG_DIR=/app/data/logs")
 
   echo "[info] 启动 rfq-service 端口 $HOST_PORT ..."
   run_or_fail docker run -d --name rfq-service --restart unless-stopped \

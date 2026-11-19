@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <!-- 日志目录：默认 ./logs（本机 IDE 开发用）；容器内通过 RFQ_LOG_DIR=/app/data/logs 持久化 -->
+  <springProperty name="RFQ_LOG_DIR" source="rfq.log-dir" defaultValue="./logs"/>
+  <!-- 与 application.yml 的 logging.pattern.level 保持一致（requestId 链路追踪） -->
+  <springProperty name="RFQ_LEVEL_PATTERN" source="logging.pattern.level" defaultValue="%5p requestId=%X{requestId:--}"/>
+
+  <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} ${RFQ_LEVEL_PATTERN} [%thread] %logger{40} - %msg%n"/>
+
+  <!-- 控制台：docker logs / IDE 控制台仍然可见 -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
+  <!-- 文件：按小时滚动，单个文件 20MB 上限，保留 72 小时，总量 1GB 封顶 -->
+  <appender name="ROLLING" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${RFQ_LOG_DIR}/rfq-service.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>${RFQ_LOG_DIR}/rfq-service.%d{yyyy-MM-dd_HH}.%i.log.gz</fileNamePattern>
+      <maxFileSize>20MB</maxFileSize>
+      <maxHistory>72</maxHistory>
+      <totalSizeCap>1GB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="ROLLING"/>
+  </root>
+</configuration>
