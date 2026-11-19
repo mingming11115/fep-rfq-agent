@@ -78,7 +78,10 @@ do_start() {
   [ -n "${RFQ_DB_PASSWORD:-}" ] && args+=(-e "RFQ_DB_PASSWORD=$RFQ_DB_PASSWORD")
 
   echo "[info] 启动 rfq-service 端口 $HOST_PORT ..."
-  run_or_fail docker run -d --name rfq-service --restart unless-stopped "${args[@]}" "$IMAGE"
+  run_or_fail docker run -d --name rfq-service --restart unless-stopped \
+    --network "$NET" \
+    --log-driver local --log-opt max-size=20m --log-opt max-file=5 \
+    "${args[@]}" "$IMAGE"
 
   sleep 3
   if docker ps --format '{{.Names}}' | grep -qx rfq-service; then
