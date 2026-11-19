@@ -137,7 +137,7 @@ MAVEN_DIR="${BASE}/.maven"
 ensure_java() {
   # 优先找 JDK17（路径特征），再用 PATH 里的，最后校验版本必须 >=17
   local java_bin=""
-  for d in /usr/lib/jvm/java-17*/bin/java /usr/java/jdk-17*/bin/java /opt/jdk-17*/bin/java; do
+  for d in /usr/lib/jvm/*17*/bin/java /usr/java/*17*/bin/java /opt/*17*/bin/java; do
     [ -x "$d" ] && { java_bin="$d"; break; }
   done
   [ -z "${java_bin}" ] && java_bin=$(command -v java 2>/dev/null || echo "")
