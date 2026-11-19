@@ -6,8 +6,10 @@ COPY pom.xml ./
 COPY src ./src
 RUN mvn -B -ntp -s /workspace/docker-settings.xml package -DskipTests
 
-# 运行时镜像：Python 官方镜像 + JRE17。Debian bookworm 标准源自带 openjdk-17，
-# 避免原 eclipse-temurin(Ubuntu) 镜像 apt 源缺 python3-venv 的问题。
+# 只作为 JRE 来源，不参与运行（避免在 Debian 上 apt 装 openjdk 的源问题）
+FROM eclipse-temurin:17-jre AS jre
+
+# 运行时镜像：Python 官方镜像 + 直接拷贝 Temurin 的 JRE 目录
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
@@ -15,10 +17,15 @@ ENV LANG=C.UTF-8 \
     TZ=Asia/Shanghai \
     SERVER_PORT=48081 \
     SPRING_PROFILES_ACTIVE=prod \
-    RFQ_MARKITDOWN_PYTHON=/usr/local/bin/python
+    RFQ_MARKITDOWN_PYTHON=/usr/local/bin/python \
+    JAVA_HOME=/opt/java/openjdk \
+    PATH=/opt/java/openjdk/bin:$PATH
 
+COPY --from=jre /opt/java/openjdk /opt/java/openjdk
+
+# 仅装少量基础包（时区 + onnxruntime 依赖的 libgomp1），各发行版 main 源内均有
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-17-jre-headless tzdata \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-markitdown.txt .
