@@ -1,6 +1,12 @@
 spring:
   main:
     banner-mode: "off"
+  datasource:
+    # 生产默认值：容器内访问宿主机 MySQL（compose 已配 host.docker.internal -> host-gateway）。
+    # 仍可被环境变量覆盖（RFQ_DB_URL / RFQ_DB_USER / RFQ_DB_PASSWORD），但不再是必需。
+    url: ${RFQ_DB_URL:jdbc:mysql://host.docker.internal:3306/rfq?useUnicode=true&characterEncoding=utf8&connectionTimeZone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true}
+    username: ${RFQ_DB_USER:mysql_sr}
+    password: ${RFQ_DB_PASSWORD:Rfq@2026}
 
 logging:
   level:
@@ -8,6 +14,11 @@ logging:
     com.naura.rfq: INFO
 
 rfq:
+  auth:
+    # 生产 JWT 密钥：上线前请替换（或用 RFQ_JWT_SECRET 环境变量覆盖）
+    jwt-secret: ${RFQ_JWT_SECRET:rfq-prod-2026-naura-please-rotate-this-secret-0123456789abcdef}
+  demo-data:
+    enabled: ${RFQ_DEMO_DATA_ENABLED:false}
   http-log:
     # Production keeps the requestId plumbing but not one log line per request.
     enabled: ${RFQ_HTTP_LOG_ENABLED:false}
