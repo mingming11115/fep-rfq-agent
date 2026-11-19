@@ -54,6 +54,8 @@ services:
       - office-documents:/app/data
     ports:
       - "127.0.0.1:${RFQ_HOST_PORT:-48081}:48081"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     stop_grace_period: 35s
     logging:
