@@ -131,6 +131,62 @@ do_check() {
   return ${ok}
 }
 
+# ================= 服务器本地构建 =================
+MAVEN_DIR="${BASE}/.maven"
+
+ensure_java() {
+  local java_bin; java_bin=$(find_java)
+  if [ -n "${java_bin}" ]; then echo "${java_bin}"; return 0; fi
+  echo "[build] 未找到 java，尝试 yum 安装 OpenJDK 17（需要 root/网络）..."
+  yum install -y java-17-openjdk java-17-openjdk-devel >/dev/null 2>&1 \
+    && find_java && return 0
+  echo "[fail] java 安装失败，请手动安装后重跑（CentOS7 无 java17 源时需先装 EPEL 或用二进制 JDK）"
+  return 1
+}
+
+ensure_maven() {
+  if command -v mvn >/dev/null 2>&1; then command -v mvn; return 0; fi
+  if [ -x "${MAVEN_DIR}/apache-maven-*/bin/mvn" ] 2>/dev/null || ls "${MAVEN_DIR}"/apache-maven-*/bin/mvn >/dev/null 2>&1; then
+    echo "$(ls "${MAVEN_DIR}"/apache-maven-*/bin/mvn | head -1)"; return 0
+  fi
+  echo "[build] 未找到 mvn，下载便携版（阿里云镜像）..."
+  mkdir -p "${MAVEN_DIR}"
+  local url="https://mirrors.aliyun.com/apache/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz"
+  curl -fL --retry 3 --connect-timeout 15 -o /tmp/maven.tgz "${url}" || return 1
+  tar -xzf /tmp/maven.tgz -C "${MAVEN_DIR}" && echo "$(ls "${MAVEN_DIR}"/apache-maven-*/bin/mvn | head -1)" && return 0
+  return 1
+}
+
+do_build() {
+  local java_bin mvn
+  java_bin=$(ensure_java) || exit 1
+  mvn=$(ensure_maven)     || { echo "[fail] maven 下载失败，检查网络或手动安装"; exit 1; }
+  echo "[build] java=$(basename $(dirname $(dirname ${java_bin})))  mvn=${mvn}"
+
+  # 阿里云 Maven 镜像 settings（加速依赖下载）
+  cat > "${MAVEN_DIR}/settings.xml" <<'SETTINGS'
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+  <mirrors>
+    <mirror>
+      <id>aliyun</id>
+      <name>Aliyun Maven</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>
+SETTINGS
+
+  [ -d "${GIT_ROOT}/apps/api" ] || { echo "[fail] 找不到 ${GIT_ROOT}/apps/api"; exit 1; }
+  echo "[build] 开始打包（首次会下载依赖，耐心等）..."
+  ( cd "${GIT_ROOT}/apps/api" && JAVA_HOME=$(dirname $(dirname "${java_bin}")) \
+      "${mvn}" -s "${MAVEN_DIR}/settings.xml" -Dmaven.repo.local="${HOME}/.rfq-m2-repo" \
+      clean package -DskipTests -q ) || { echo "[fail] 打包失败，看上方报错"; exit 1; }
+  echo "[ok] 打包完成，继续: bash $0 start"
+}
+
+
 # ================= 启动 =================
 do_start() {
   is_run && { echo "已在运行 pid=$(cat "${PID_FILE}")"; exit 0; }
@@ -138,7 +194,11 @@ do_start() {
   local java_bin; java_bin=$(find_java)
   local jar; jar=$(find_jar)
   if [ -z "${java_bin}" ]; then echo "[error] 无 java"; exit 1; fi
-  if [ -z "${jar}" ];      then echo "[error] 无 jar（bash $0 check 看详情）"; exit 1; fi
+  if [ -z "${jar}" ]; then
+    echo "[error] 无 jar。先构建: bash $0 build"
+    echo "        或指定: JAR_PATH=/路径/xx.jar bash $0 start"
+    exit 1
+  fi
   if port_in_use "${PORT}"; then echo "[error] 端口 ${PORT} 被占用"; exit 1; fi
 
   local db_env=""
@@ -223,6 +283,7 @@ UNIT
 
 case "${1:-}" in
   check)           do_check ;;
+  build)           do_build ;;
   start)           do_check >/dev/null 2>&1; do_start ;;
   stop)            do_stop ;;
   restart)         do_stop; sleep 2; do_start ;;
