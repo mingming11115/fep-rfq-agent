@@ -5,18 +5,29 @@
 #   RFQ_DB_URL / RFQ_DB_USER / RFQ_DB_PASSWORD   覆盖数据库配置
 #   OTEL_AGENT   javaagent jar 路径（默认 /opt/otel/opentelemetry-javaagent.jar）
 #   HOST_PORT    对外端口（默认 48081，仅绑定 127.0.0.1）
-#   JAEGER_IMAGE jaeger 镜像名（默认 jaegertracing/all-in-one:1.62）
+#   JAEGER_MODE  auto|docker|native（默认 auto：有镜像用容器，没有就装宿主机二进制）
+#   JAEGER_VERSION / JAEGER_HOME  native 模式的版本号与安装目录
+#   JAEGER_IMAGE jaeger 镜像名（docker 模式用，默认 jaegertracing/all-in-one:1.62）
 #   SKIP_JAEGER=1 只起 rfq-service，不拉/不起 jaeger
 set -u
 
 IMAGE="rfq-service:onlyoffice"
 JAEGER_IMAGE="${JAEGER_IMAGE:-jaegertracing/all-in-one:1.62}"
-# Docker Hub 直连不通时依次尝试的加速源（自动加前缀）
 JAEGER_MIRRORS="${JAEGER_MIRRORS:-docker.1ms.run docker.m.daocloud.io docker.xuanyuan.me hub.rat.dev}"
+JAEGER_MODE="${JAEGER_MODE:-auto}"
+JAEGER_VERSION="${JAEGER_VERSION:-1.62.0}"
+JAEGER_HOME="${JAEGER_HOME:-/opt/jaeger}"
+GH_PROXIES="${GH_PROXIES:-https://ghfast.top https://ghproxy.net https://gh-proxy.com}"
 NET="rfq-net"
 HOST_PORT="${HOST_PORT:-48081}"
 OTEL_AGENT="${OTEL_AGENT:-/opt/otel/opentelemetry-javaagent.jar}"
 API_DIR="$(cd "$(dirname "$0")/../api" 2>/dev/null && pwd)"
+JAEGER_PID="$JAEGER_HOME/jaeger.pid"
+JAEGER_LOG="$JAEGER_HOME/jaeger.log"
+JAEGER_DIR="$JAEGER_HOME/jaeger-$JAEGER_VERSION"
+JAEGER_TAR="jaeger-$JAEGER_VERSION-linux-amd64.tar.gz"
+JAEGER_URL="https://github.com/jaegertracing/jaeger/releases/download/v$JAEGER_VERSION/$JAEGER_TAR"
+OTEL_ENDPOINT="http://jaeger:4318"
 
 docker() { command docker "$@"; }
 
@@ -34,7 +45,8 @@ rm_if_exists() {
 
 image_ok() { docker image inspect "$1" >/dev/null 2>&1; }
 
-# 拉镜像：先直连，失败依次换加速源，成功后统一打回原名字
+port_listen() { ss -ltn 2>/dev/null | grep -q ":$1 "; }
+
 ensure_image() {
   local img="$1"
   if image_ok "$img"; then
@@ -42,28 +54,20 @@ ensure_image() {
     return 0
   fi
 
-  echo "[info] 本地无镜像 $img，尝试直连拉取..."
-  if docker pull "$img"; then return 0; fi
+  echo "[info] 本地无镜像 $img，尝试直连拉取（约 60 秒超时）..."
+  if timeout 60 docker pull "$img"; then return 0; fi
 
   local m ref
   for m in $JAEGER_MIRRORS; do
     ref="${m}/${img}"
     echo "[info] 直连失败，尝试加速源: $ref"
-    if docker pull "$ref"; then
+    if timeout 90 docker pull "$ref"; then
       docker tag "$ref" "$img"
       echo "[ok] 已通过 $m 拉取并重命名为 $img"
       return 0
     fi
   done
-
-  cat <<EOF
-[fail] 所有源都拉不到 $img
-       可手动试（任一条成功后重跑 start）:
-         docker pull docker.1ms.run/$img && docker tag docker.1ms.run/$img $img
-         docker pull docker.m.daocloud.io/$img && docker tag docker.m.daocloud.io/$img $img
-         docker pull swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/$img
-       或在 /etc/docker/daemon.json 的 registry-mirrors 里加加速地址后 systemctl restart docker
-EOF
+  echo "[fail] 所有镜像源都拉不到 $img"
   return 1
 }
 
@@ -73,21 +77,85 @@ do_pull() {
   echo "[ok] jaeger 镜像就绪: $JAEGER_IMAGE"
 }
 
-do_jaeger() {
-  if docker ps --format '{{.Names}}' | grep -qx jaeger; then
-    echo "[info] jaeger 已在运行"; return
-  fi
-  if ! ensure_image "$JAEGER_IMAGE"; then
-    echo "[warn] jaeger 镜像不可用，本次跳过 jaeger（服务仍可启动，但没有 trace）"
+download_jaeger() {
+  mkdir -p "$JAEGER_HOME" || return 1
+  local p
+  echo "[info] 下载 jaeger $JAEGER_VERSION 二进制（走 GitHub 加速）..."
+  if curl -fL --connect-timeout 15 -m 300 -o "$JAEGER_HOME/$JAEGER_TAR" "$JAEGER_URL"; then
     return 0
   fi
-  rm_if_exists jaeger
-  run_or_fail docker run -d --name jaeger --restart unless-stopped \
-    --network "$NET" \
-    -p 16686:16686 -p 4318:4318 -p 4317:4317 \
-    -e MEMORY_MAX_TRACES=50000 \
-    "$JAEGER_IMAGE"
-  echo "[ok] jaeger 已启动 UI:http://<本机IP>:16686"
+  for p in $GH_PROXIES; do
+    echo "[info] 直连失败，尝试加速: $p"
+    if curl -fL --connect-timeout 15 -m 300 -o "$JAEGER_HOME/$JAEGER_TAR" "$p/$JAEGER_URL"; then
+      return 0
+    fi
+  done
+  echo "[fail] jaeger 二进制下载失败，可手动下载后放到 $JAEGER_HOME/$JAEGER_TAR"
+  return 1
+}
+
+jaeger_native_up() {
+  local i
+  if [ -f "$JAEGER_PID" ] && kill -0 "$(cat "$JAEGER_PID" 2>/dev/null)" 2>/dev/null; then
+    echo "[info] jaeger(宿主机进程) 已在运行 pid=$(cat "$JAEGER_PID")"
+    return 0
+  fi
+
+  if [ ! -x "$JAEGER_DIR/jaeger-all-in-one" ]; then
+    download_jaeger || return 1
+    tar -xzf "$JAEGER_HOME/$JAEGER_TAR" -C "$JAEGER_HOME" || {
+      echo "[fail] 解压失败，文件可能下载不完整: $JAEGER_HOME/$JAEGER_TAR"
+      return 1
+    }
+  fi
+
+  echo "[info] 启动 jaeger(宿主机进程) 4318/16686 ..."
+  ( cd "$JAEGER_DIR" && nohup ./jaeger-all-in-one --memory.max-traces=50000 >"$JAEGER_LOG" 2>&1 & echo $! >"$JAEGER_PID" )
+  for i in $(seq 1 20); do
+    sleep 1
+    if port_listen 16686; then
+      echo "[ok] jaeger 已启动(宿主机进程) UI:http://<本机IP>:16686  日志:$JAEGER_LOG"
+      return 0
+    fi
+  done
+  echo "[fail] jaeger 未起来，最后日志:"
+  tail -20 "$JAEGER_LOG" 2>/dev/null || true
+  return 1
+}
+
+do_jaeger() {
+  local mode="$JAEGER_MODE"
+
+  if [ "$mode" = "auto" ]; then
+    if image_ok "$JAEGER_IMAGE"; then mode="docker"; else mode="native"; fi
+  fi
+
+  if [ "$mode" = "docker" ]; then
+    if docker ps --format '{{.Names}}' | grep -qx jaeger; then
+      echo "[info] jaeger 容器已在运行"; OTEL_ENDPOINT="http://jaeger:4318"; return 0
+    fi
+    if ! ensure_image "$JAEGER_IMAGE"; then
+      echo "[warn] 镜像拉不到，改为宿主机二进制方式"
+      mode="native"
+    else
+      rm_if_exists jaeger
+      run_or_fail docker run -d --name jaeger --restart unless-stopped \
+        --network "$NET" \
+        -p 16686:16686 -p 4318:4318 -p 4317:4317 \
+        -e MEMORY_MAX_TRACES=50000 \
+        "$JAEGER_IMAGE"
+      echo "[ok] jaeger 容器已启动 UI:http://<本机IP>:16686"
+      OTEL_ENDPOINT="http://jaeger:4318"
+      return 0
+    fi
+  fi
+
+  if jaeger_native_up; then
+    OTEL_ENDPOINT="http://host.docker.internal:4318"
+  else
+    echo "[warn] jaeger 不可用，本次启动不带 trace（接口不影响）"
+    OTEL_ENDPOINT=""
+  fi
 }
 
 do_build() {
@@ -101,6 +169,7 @@ do_start() {
   net_ok
   if [ "${SKIP_JAEGER:-0}" = "1" ]; then
     echo "[info] SKIP_JAEGER=1，跳过 jaeger"
+    OTEL_ENDPOINT=""
   else
     do_jaeger
   fi
@@ -111,12 +180,12 @@ do_start() {
     --add-host=host.docker.internal:host-gateway
     -v rfq-office-documents:/app/data)
 
-  if [ -f "$OTEL_AGENT" ]; then
+  if [ -n "$OTEL_ENDPOINT" ] && [ -f "$OTEL_AGENT" ]; then
     args+=(-v "${OTEL_AGENT}:/otel/agent.jar:ro"
-      -e "JAVA_TOOL_OPTIONS=-javaagent:/otel/agent.jar -Dotel.service.name=rfq-api -Dotel.exporter.otlp.endpoint=http://jaeger:4318 -Dotel.traces.exporter=otlp -Dotel.metrics.exporter=none -Dotel.logs.exporter=none")
-    echo "[info] 链路追踪已启用 (agent: $OTEL_AGENT)"
+      -e "JAVA_TOOL_OPTIONS=-javaagent:/otel/agent.jar -Dotel.service.name=rfq-api -Dotel.exporter.otlp.endpoint=$OTEL_ENDPOINT -Dotel.traces.exporter=otlp -Dotel.metrics.exporter=none -Dotel.logs.exporter=none")
+    echo "[info] 链路追踪已启用 上报地址: $OTEL_ENDPOINT"
   else
-    echo "[warn] 未找到 javaagent($OTEL_AGENT)，本次启动不带链路追踪"
+    echo "[warn] 本次启动不带链路追踪"
   fi
 
   [ -n "${RFQ_DB_URL:-}" ]      && args+=(-e "RFQ_DB_URL=$RFQ_DB_URL")
@@ -141,17 +210,37 @@ do_start() {
   fi
 }
 
+do_stop() {
+  docker rm -f rfq-service jaeger >/dev/null 2>&1
+  if [ -f "$JAEGER_PID" ]; then
+    kill "$(cat "$JAEGER_PID" 2>/dev/null)" >/dev/null 2>&1
+    rm -f "$JAEGER_PID"
+    echo "[info] 已停止宿主机 jaeger 进程"
+  fi
+  echo "[ok] 已停止"
+}
+
+do_status() {
+  docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'rfq-service|jaeger' \
+    || echo "[info] 无相关容器"
+  if [ -f "$JAEGER_PID" ] && kill -0 "$(cat "$JAEGER_PID" 2>/dev/null)" 2>/dev/null; then
+    echo "[ok] jaeger 宿主机进程运行中 pid=$(cat "$JAEGER_PID") UI:http://<本机IP>:16686"
+  elif port_listen 16686; then
+    echo "[ok] 16686 端口已在监听（jaeger 就绪）"
+  else
+    echo "[warn] jaeger 未运行"
+  fi
+  curl -s -m 3 "http://127.0.0.1:${HOST_PORT}/actuator/health" >/dev/null 2>&1 \
+    && echo "[ok] 应用健康检查通过" || echo "[warn] 应用健康检查未通过（可能还在启动）"
+}
+
 case "${1:-start}" in
   pull)    do_pull ;;
   build)   do_build ;;
   start)   do_start ;;
-  stop)    docker rm -f rfq-service jaeger 2>/dev/null; echo "[ok] 已停止" ;;
-  restart) "$0" stop; "$0" start ;;
-  status)
-    docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'rfq-service|jaeger' || echo "[info] 无相关容器"
-    curl -s -m 3 "http://127.0.0.1:${HOST_PORT}/actuator/health" >/dev/null 2>&1 \
-      && echo "[ok] 应用健康检查通过" || echo "[warn] 应用健康检查未通过（可能还在启动）"
-    ;;
+  stop)    do_stop ;;
+  restart) do_stop; do_start ;;
+  status)  do_status ;;
   logs)    docker logs -f --tail 100 rfq-service ;;
   *) echo "用法: bash $0 {pull|build|start|stop|restart|status|logs}"; exit 1 ;;
 esac
