@@ -1,9 +1,10 @@
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 
 WORKDIR /workspace
+COPY docker-settings.xml /workspace/docker-settings.xml
 COPY pom.xml ./
 COPY src ./src
-RUN mvn -B -ntp package -DskipTests
+RUN mvn -B -ntp -s /workspace/docker-settings.xml package -DskipTests
 
 FROM eclipse-temurin:17-jre
 
