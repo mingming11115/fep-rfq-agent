@@ -77,8 +77,9 @@ fi
 
 echo "==> 走 nginx 实测：浏览器拿到的 wasm 是否真的是二进制"
 if command -v curl >/dev/null 2>&1; then
+  check_url="${WEB_CHECK_URL:-https://127.0.0.1}/craft-editors/pdfcraft-classic/pdfcraft-classic_bg.wasm"
   probe=$(mktemp)
-  code=$(curl -sk -o "$probe" -w '%{http_code}' "https://127.0.0.1/craft-editors/pdfcraft-classic/pdfcraft-classic_bg.wasm" || echo 000)
+  code=$(curl -sk -o "$probe" -w '%{http_code}' "$check_url" || echo 000)
   magic=$(head -c 4 "$probe" | od -An -tx1 | tr -d ' \n')
   rm -f "$probe"
   if [ "$code" = "200" ] && [ "$magic" = "0061736d" ]; then
