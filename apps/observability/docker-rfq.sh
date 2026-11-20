@@ -4,6 +4,7 @@
 # 可选环境变量:
 #   RFQ_DB_URL / RFQ_DB_USER / RFQ_DB_PASSWORD   覆盖数据库配置
 #   OTEL_AGENT   javaagent jar 路径（默认 /opt/otel/opentelemetry-javaagent.jar）
+#   OTEL_ENABLE=1 开启链路追踪（默认 0 = 不挂 javaagent）
 #   HOST_PORT    对外端口（默认 48081，仅绑定 127.0.0.1）
 #   JAEGER_MODE  auto|docker|native（默认 auto：有镜像用容器，没有就装宿主机二进制）
 #   JAEGER_VERSION  jaeger 版本（默认 2.23.0；v1 与 v2 的镜像名/启动参数/配置自动适配）
@@ -236,12 +237,12 @@ do_start() {
     --add-host=host.docker.internal:host-gateway
     -v rfq-office-documents:/app/data)
 
-  if [ -n "$OTEL_ENDPOINT" ] && [ -f "$OTEL_AGENT" ]; then
+  if [ "${OTEL_ENABLE:-0}" = "1" ] && [ -n "$OTEL_ENDPOINT" ] && [ -f "$OTEL_AGENT" ]; then
     args+=(-v "${OTEL_AGENT}:/otel/agent.jar:ro"
       -e "JAVA_TOOL_OPTIONS=-javaagent:/otel/agent.jar -Dotel.service.name=rfq-api -Dotel.exporter.otlp.endpoint=$OTEL_ENDPOINT -Dotel.traces.exporter=otlp -Dotel.metrics.exporter=none -Dotel.logs.exporter=none")
     echo "[info] 链路追踪已启用 上报地址: $OTEL_ENDPOINT"
   else
-    echo "[warn] 本次启动不带链路追踪"
+    echo "[info] 链路追踪未启用（要开启: OTEL_ENABLE=1 bash $0 start）"
   fi
 
   [ -n "${RFQ_DB_URL:-}" ]      && args+=(-e "RFQ_DB_URL=$RFQ_DB_URL")
