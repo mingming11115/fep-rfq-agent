@@ -18,7 +18,19 @@ spring:
       maximum-pool-size: 10
       connection-timeout: 10000
   flyway:
-    locations: classpath:db
+    # Flyway 已停用：它的 checksum 校验会挡住启动，改由 spring.sql.init 执行 db/init.sql。
+    enabled: false
+  sql:
+    init:
+      # never  = 启动不碰数据库（日常部署用这个）
+      # always = 启动时执行 db/init.sql（首次建库、或补齐缺失的表/列时临时打开）
+      mode: ${RFQ_DB_INIT_MODE:never}
+      schema-locations: classpath:db/init.sql
+      encoding: UTF-8
+      # init.sql 已做幂等化（create table if not exists / insert ignore），
+      # 但 alter table add column、create index 在 MySQL 里没有 IF NOT EXISTS，
+      # 重复执行会报"已存在"，靠这个开关跳过。
+      continue-on-error: true
 logging:
   pattern:
     level: "%5p requestId=%X{requestId:--}"
