@@ -3,8 +3,8 @@
 #
 # 前提：服务器上已有本仓库的 git 克隆，且 nginx 站点已由 setup-https.sh 装好。
 # 用法：
-#   bash apps/observability/update-web.sh            # 先 git pull 再同步
-#   WEB_ROOT=/srv/rfq/web bash apps/observability/update-web.sh
+#   bash apps/observability/update-web.sh            # 自动从 nginx 配置探测前端目录，再 git pull + 同步
+#   WEB_ROOT=/srv/rfq/web bash apps/observability/update-web.sh   # 手动指定前端目录
 #
 # 做两件事：
 #   1) deploy/frontend-dist/  → WEB_ROOT/            （index.html + assets 构建产物）
@@ -14,8 +14,36 @@
 # 同步后浏览器需强制刷新（Ctrl+F5）：wasm 按 nginx 规则缓存 7 天，普通刷新可能仍是旧版。
 set -euo pipefail
 
-WEB_ROOT="${WEB_ROOT:-/opt/rfq/web}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# 未指定 WEB_ROOT 时，从 nginx 配置的 root 指令探测前端目录（跳过 ACME 校验目录）
+detect_web_root() {
+  local conf p
+  for conf in /etc/nginx/conf.d/rfq.conf /usr/local/nginx/conf/conf.d/rfq.conf \
+              /etc/nginx/conf.d/*.conf /usr/local/nginx/conf/conf.d/*.conf; do
+    [ -f "$conf" ] || continue
+    p=$(grep -E '^\s*root\s+/.*;' "$conf" 2>/dev/null \
+        | grep -v '/var/www/acme' | head -1 | awk '{print $2}' | tr -d ';')
+    [ -n "$p" ] && { echo "$p"; return 0; }
+  done
+  if command -v nginx >/dev/null 2>&1; then
+    p=$(nginx -T 2>/dev/null | grep -E '^\s*root\s+/.*;' \
+        | grep -v '/var/www/acme' | head -1 | awk '{print $2}' | tr -d ';')
+    [ -n "$p" ] && { echo "$p"; return 0; }
+  fi
+  return 1
+}
+
+WEB_ROOT="${WEB_ROOT:-}"
+if [ -z "$WEB_ROOT" ]; then
+  if WEB_ROOT=$(detect_web_root); then
+    echo "==> 从 nginx 配置探测到前端目录：$WEB_ROOT"
+  else
+    echo "错误：无法自动定位前端目录（nginx 配置里没找到 root 指令）。" >&2
+    echo "请手动指定后重跑，例如：WEB_ROOT=/opt/rfq/web bash apps/observability/update-web.sh" >&2
+    exit 1
+  fi
+fi
 
 cd "$REPO"
 echo "==> git pull（仓库：$REPO）"
