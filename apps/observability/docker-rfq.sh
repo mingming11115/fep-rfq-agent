@@ -32,6 +32,14 @@ NET="rfq-net"
 HOST_PORT="${HOST_PORT:-48081}"
 OTEL_AGENT="${OTEL_AGENT:-/opt/otel/opentelemetry-javaagent.jar}"
 API_DIR="$(cd "$(dirname "$0")/../api" 2>/dev/null && pwd)"
+
+# 数据库：默认连宿主机 MySQL。可用 /opt/rfq/db.env（内容形如 RFQ_DB_USER=xx）或环境变量覆盖
+DB_ENV_FILE="${DB_ENV_FILE:-/opt/rfq/db.env}"
+if [ -f "$DB_ENV_FILE" ]; then
+  . "$DB_ENV_FILE"
+  echo "[info] 已加载数据库配置: $DB_ENV_FILE"
+fi
+RFQ_DB_URL="${RFQ_DB_URL:-jdbc:mysql://host.docker.internal:3306/rfq?useUnicode=true&characterEncoding=utf8&connectionTimeZone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true}"
 JAEGER_PID="$JAEGER_HOME/jaeger.pid"
 JAEGER_LOG="$JAEGER_HOME/jaeger.log"
 JAEGER_DIR="$JAEGER_HOME/jaeger-$JAEGER_VERSION-linux-amd64"
@@ -259,6 +267,8 @@ do_start() {
   [ -n "${RFQ_DB_USER:-}" ]     && args+=(-e "RFQ_DB_USER=$RFQ_DB_USER")
   [ -n "${RFQ_DB_PASSWORD:-}" ] && args+=(-e "RFQ_DB_PASSWORD=$RFQ_DB_PASSWORD")
   args+=(-e "RFQ_LOG_DIR=/app/data/logs")
+  echo "[info] 数据库地址: $RFQ_DB_URL"
+  echo "[info] 数据库用户: ${RFQ_DB_USER:-<镜像内置默认值>}"
 
   echo "[info] 启动 rfq-service 端口 $HOST_PORT ..."
   run_or_fail docker run -d --name rfq-service --restart unless-stopped \
