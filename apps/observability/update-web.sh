@@ -17,20 +17,16 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # 未指定 WEB_ROOT 时，从 nginx 配置的 root 指令探测前端目录（跳过 ACME 校验目录）
+# 只信名字带 rfq 的站点配置，避免抓到 default 站点的 /usr/share/nginx/html
 detect_web_root() {
   local conf p
   for conf in /etc/nginx/conf.d/rfq.conf /usr/local/nginx/conf/conf.d/rfq.conf \
-              /etc/nginx/conf.d/*.conf /usr/local/nginx/conf/conf.d/*.conf; do
+              /etc/nginx/conf.d/*rfq*.conf /usr/local/nginx/conf/conf.d/*rfq*.conf; do
     [ -f "$conf" ] || continue
     p=$(grep -E '^\s*root\s+/.*;' "$conf" 2>/dev/null \
         | grep -v '/var/www/acme' | head -1 | awk '{print $2}' | tr -d ';')
     [ -n "$p" ] && { echo "$p"; return 0; }
   done
-  if command -v nginx >/dev/null 2>&1; then
-    p=$(nginx -T 2>/dev/null | grep -E '^\s*root\s+/.*;' \
-        | grep -v '/var/www/acme' | head -1 | awk '{print $2}' | tr -d ';')
-    [ -n "$p" ] && { echo "$p"; return 0; }
-  fi
   return 1
 }
 
@@ -68,6 +64,35 @@ echo
 echo "==> 校验（pdfcraft wasm 应为 74749063 字节；66971623 说明 git 没拉到最新）"
 ls -l "$WEB_ROOT/craft-editors/pdfcraft-classic/pdfcraft-classic_bg.wasm"
 ls -l "$WEB_ROOT/assets"/index-*.js
+
+echo "==> 完整性校验：本地副本 sha256 是否与 build.json 一致"
+expected=$(python3 -c "import json;print(json.load(open('packages/craft-editors/site/pdfcraft-classic/build.json'))['files']['pdfcraft-classic_bg.wasm'])" 2>/dev/null || true)
+actual=$(sha256sum "$WEB_ROOT/craft-editors/pdfcraft-classic/pdfcraft-classic_bg.wasm" | awk '{print $1}')
+if [ -n "$expected" ] && [ "$actual" = "$expected" ]; then
+  echo "  sha256 一致：$actual"
+else
+  echo "  !! sha256 不一致（expected=$expected actual=$actual），副本已损坏，请重跑本脚本" >&2
+  exit 1
+fi
+
+echo "==> 走 nginx 实测：浏览器拿到的 wasm 是否真的是二进制"
+if command -v curl >/dev/null 2>&1; then
+  probe=$(mktemp)
+  code=$(curl -sk -o "$probe" -w '%{http_code}' "https://127.0.0.1/craft-editors/pdfcraft-classic/pdfcraft-classic_bg.wasm" || echo 000)
+  magic=$(head -c 4 "$probe" | od -An -tx1 | tr -d ' \n')
+  rm -f "$probe"
+  if [ "$code" = "200" ] && [ "$magic" = "0061736d" ]; then
+    echo "  nginx 返回 200，wasm 魔数 00 61 73 6d 正确"
+  else
+    echo "  !! nginx 实测异常（HTTP=$code 魔数=$magic）" >&2
+    echo "     说明 nginx 实际服务的目录不是 $WEB_ROOT。请核对站点配置：" >&2
+    echo "       grep -rE 'root\s+/' /etc/nginx/ /usr/local/nginx/conf/ 2>/dev/null | grep -v acme" >&2
+    echo "     然后用真实目录重跑：WEB_ROOT=<查到的目录> bash apps/observability/update-web.sh" >&2
+    exit 1
+  fi
+else
+  echo "  （服务器无 curl，跳过 nginx 实测）"
+fi
 
 echo
 echo "完成。浏览器 Ctrl+F5 强刷即可，nginx 与后端容器都不用动。"
