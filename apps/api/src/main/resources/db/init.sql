@@ -538,3 +538,14 @@ set payload = json_remove(
     '$.conditions');
 -- RFQ_DEMO_INSERTS_END
 COMMIT;
+
+-- RFQ_AUTO_GRANT
+-- 所有账号自动获得确认资格（幂等，每次启动执行，insert ignore 不覆盖已有配置）：
+--   1) 每个账号在每个 BU 补齐成员档案：启用 + 可确认 + 可终审；
+--   2) 每个账号在每个 BU 补齐 SR 角色。
+-- 新账号、新 BU 建好后无需再到界面配置；要恢复严格的 BU 权限模型时删除本段即可。
+insert ignore into bu_member_profile (user_id, bu_id, can_confirm, can_final_review, resource_qualifications, enabled)
+select u.id, b.id, 1, 1, '', 1 from app_user u cross join business_unit b;
+
+insert ignore into user_bu_role (user_id, bu_id, role, status)
+select u.id, b.id, 'SR', 'ACTIVE' from app_user u cross join business_unit b;
