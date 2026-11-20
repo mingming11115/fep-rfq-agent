@@ -22,8 +22,8 @@ docker logs "$C" 2>&1 | grep -ai "flyway" | tail -25
 echo
 echo "############ 4. 真正的异常链 / SQL 错误 ############"
 docker logs "$C" 2>&1 \
-  | grep -aE "Caused by:|SQL State|Error Code|Message *:|Migration .*(failed|checksum)|checksum mismatch|already exists|Unknown database|Access denied|Table .* doesn't exist|Syntax error" \
-  | tail -25
+  | grep -aE "Caused by:|SQL State|Error Code|Message *:|failed validation|checksum mismatch|Applied to database|Resolved locally|applied migration not resolved|Detected (failed|resolved)|already exists|Unknown database|Access denied|doesn't exist|Syntax error|WeakKey|not secure enough|Unsatisfied dependency" \
+  | tail -30
 
 echo
 echo "############ 5. 容器里连的库和账号 ############"

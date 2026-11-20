@@ -11,6 +11,7 @@
 #   JAEGER_HOME   native 模式的安装目录（默认 /opt/jaeger）
 #   JAEGER_IMAGE  docker 模式镜像名（默认 jaegertracing/jaeger:<版本>，v1 为 all-in-one）
 #   SKIP_JAEGER=1 只起 rfq-service，不拉/不起 jaeger
+#   RFQ_FLYWAY_VALIDATE=0  跳过 Flyway 启动校验（历史表 checksum 对不上时用，慎用）
 set -u
 
 IMAGE="rfq-service:onlyoffice"
@@ -267,6 +268,10 @@ do_start() {
   [ -n "${RFQ_DB_USER:-}" ]     && args+=(-e "RFQ_DB_USER=$RFQ_DB_USER")
   [ -n "${RFQ_DB_PASSWORD:-}" ] && args+=(-e "RFQ_DB_PASSWORD=$RFQ_DB_PASSWORD")
   args+=(-e "RFQ_LOG_DIR=/app/data/logs")
+  if [ "${RFQ_FLYWAY_VALIDATE:-1}" = "0" ]; then
+    args+=(-e "SPRING_FLYWAY_VALIDATE_ON_MIGRATE=false")
+    echo "[warn] 已跳过 Flyway 启动校验（RFQ_FLYWAY_VALIDATE=0），仅绕过 checksum 校验，不改库"
+  fi
   echo "[info] 数据库地址: $RFQ_DB_URL"
   echo "[info] 数据库用户: ${RFQ_DB_USER:-<镜像内置默认值>}"
 
