@@ -11,8 +11,8 @@
 #   JAEGER_HOME   native 模式的安装目录（默认 /opt/jaeger）
 #   JAEGER_IMAGE  docker 模式镜像名（默认 jaegertracing/jaeger:<版本>，v1 为 all-in-one）
 #   SKIP_JAEGER=1 只起 rfq-service，不拉/不起 jaeger
-#   RFQ_DB_INIT_MODE=always  启动时执行 db/init.sql（首次建库或补齐缺失表/列）；
-#                            默认 never，日常部署不会碰数据库结构
+#   RFQ_DB_INIT_MODE=never  关闭启动时的 db/init.sql 执行；
+#                           默认 always：每次启动都执行一次（幂等，缺表缺列自动补齐）
 set -u
 
 IMAGE="rfq-service:onlyoffice"
@@ -271,11 +271,11 @@ do_start() {
   args+=(-e "RFQ_LOG_DIR=/app/data/logs")
   if [ -n "${RFQ_DB_INIT_MODE:-}" ]; then
     args+=(-e "RFQ_DB_INIT_MODE=$RFQ_DB_INIT_MODE")
-    echo "[info] 数据库初始化模式: $RFQ_DB_INIT_MODE（always 会执行 db/init.sql）"
+    echo "[info] 数据库初始化模式: $RFQ_DB_INIT_MODE（always=执行 db/init.sql，never=不执行）"
   else
-    echo "[info] 数据库初始化模式: never（不执行 db/init.sql，仅连接现有库）"
+    echo "[info] 数据库初始化模式: always（默认，执行 db/init.sql 补齐表/列）"
   fi
-  echo "[info] 数据库地址: $RFQ_DB_URL"
+  echo "[info] 数据库地址: ${RFQ_DB_URL:-<镜像内置默认值: host.docker.internal:3306/rfq>}"
   echo "[info] 数据库用户: ${RFQ_DB_USER:-<镜像内置默认值>}"
 
   echo "[info] 启动 rfq-service 端口 $HOST_PORT ..."

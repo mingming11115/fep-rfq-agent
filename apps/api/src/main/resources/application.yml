@@ -22,14 +22,14 @@ spring:
     enabled: false
   sql:
     init:
-      # never  = 启动不碰数据库（日常部署用这个）
-      # always = 启动时执行 db/init.sql（首次建库、或补齐缺失的表/列时临时打开）
-      mode: ${RFQ_DB_INIT_MODE:never}
+      # always = 每次启动都执行 db/init.sql（默认；幂等，缺表缺列自动补齐）
+      # never  = 启动不碰数据库（需要时可临时 RFQ_DB_INIT_MODE=never 关掉）
+      mode: ${RFQ_DB_INIT_MODE:always}
       schema-locations: classpath:db/init.sql
       encoding: UTF-8
-      # init.sql 已做幂等化（create table if not exists / insert ignore），
+      # init.sql 已做幂等化（create table if not exists），
       # 但 alter table add column、create index 在 MySQL 里没有 IF NOT EXISTS，
-      # 重复执行会报"已存在"，靠这个开关跳过。
+      # 重复执行会报"已存在"，靠这个开关跳过，不影响启动。
       continue-on-error: true
 logging:
   pattern:
