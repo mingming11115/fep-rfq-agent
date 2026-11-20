@@ -34,7 +34,7 @@ OTEL_AGENT="${OTEL_AGENT:-/opt/otel/opentelemetry-javaagent.jar}"
 API_DIR="$(cd "$(dirname "$0")/../api" 2>/dev/null && pwd)"
 JAEGER_PID="$JAEGER_HOME/jaeger.pid"
 JAEGER_LOG="$JAEGER_HOME/jaeger.log"
-JAEGER_DIR="$JAEGER_HOME/jaeger-$JAEGER_VERSION"
+JAEGER_DIR="$JAEGER_HOME/jaeger-$JAEGER_VERSION-linux-amd64"
 JAEGER_TAR="jaeger-$JAEGER_VERSION-linux-amd64.tar.gz"
 JAEGER_URL="https://github.com/jaegertracing/jaeger/releases/download/v$JAEGER_VERSION/$JAEGER_TAR"
 OTEL_ENDPOINT="http://jaeger:4318"
@@ -151,10 +151,20 @@ jaeger_native_up() {
   fi
 
   if [ ! -x "$JAEGER_DIR/$JAEGER_BIN" ]; then
-    download_jaeger || return 1
+    if [ -s "$JAEGER_HOME/$JAEGER_TAR" ] && tar -tzf "$JAEGER_HOME/$JAEGER_TAR" >/dev/null 2>&1; then
+      echo "[info] 安装包已存在且完整，直接解压（不重新下载）"
+    else
+      download_jaeger || return 1
+    fi
+    rm -rf "$JAEGER_DIR"
     tar -xzf "$JAEGER_HOME/$JAEGER_TAR" -C "$JAEGER_HOME" || {
-      echo "[fail] 解压失败，文件可能下载不完整: $JAEGER_HOME/$JAEGER_TAR"
-      return 1
+      echo "[warn] 解压失败，安装包可能不完整，重新下载一次"
+      rm -f "$JAEGER_HOME/$JAEGER_TAR"
+      download_jaeger || return 1
+      tar -xzf "$JAEGER_HOME/$JAEGER_TAR" -C "$JAEGER_HOME" || {
+        echo "[fail] 解压仍失败，请手动检查 $JAEGER_HOME"
+        return 1
+      }
     }
   fi
 
@@ -224,11 +234,11 @@ do_build() {
 
 do_start() {
   net_ok
-  if [ "${SKIP_JAEGER:-0}" = "1" ]; then
-    echo "[info] SKIP_JAEGER=1，跳过 jaeger"
-    OTEL_ENDPOINT=""
-  else
+  if [ "${OTEL_ENABLE:-0}" = "1" ] && [ "${SKIP_JAEGER:-0}" != "1" ]; then
     do_jaeger
+  else
+    echo "[info] 链路追踪未启用，跳过 jaeger（开启: OTEL_ENABLE=1 bash $0 start）"
+    OTEL_ENDPOINT=""
   fi
   rm_if_exists rfq-service
 
