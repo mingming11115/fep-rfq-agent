@@ -342,14 +342,19 @@ class MatchEvaluator {
 
     private List<Candidate> scoreCandidates(Input input, String library, Scope scope, List<String> ids, Diagnostics diag) {
         String requirement = text(input.snapshot(), "text");
+        String customer = text(input.snapshot(), "customer");
+        var models = models(input.snapshot());
         double threshold = input.threshold(library);
         var candidates = new ArrayList<Candidate>();
         for (String id : ids) {
             Source source = scope.sources().get(id);
             double similarity = scorer.score(requirement, text(source.payload(), "requirement"));
-            String reason = similarity == 0 ? "ZERO_SIMILARITY"
-                    : similarity <= threshold ? "BELOW_THRESHOLD"
-                    : text(source.payload(), "answer").isBlank() ? "BLANK_ANSWER" : "";
+            String reason = contextReason(customer, models, source.payload());
+            if (reason.isEmpty()) {
+                reason = similarity == 0 ? "ZERO_SIMILARITY"
+                        : similarity <= threshold ? "BELOW_THRESHOLD"
+                        : text(source.payload(), "answer").isBlank() ? "BLANK_ANSWER" : "";
+            }
             diag.score(id, source.version(), similarity, reason);
             if (reason.isEmpty()) {
                 candidates.add(new Candidate(source, similarity));
@@ -358,6 +363,43 @@ class MatchEvaluator {
         candidates.sort(Comparator.comparingDouble(Candidate::similarity).reversed()
                 .thenComparing(candidate -> candidate.source().id()));
         return candidates;
+    }
+
+    /**
+     * 按客户/机型宽松裁剪召回：资料未维护客户或机型时不过滤（兼容存量数据），
+     * 两侧都有值且明确不符才排除；机型按互含判定以兼容简称与全称。
+     */
+    private String contextReason(String customer, List<String> models, JsonNode payload) {
+        String sourceCustomer = text(payload, "customer");
+        if (!customer.isBlank() && !sourceCustomer.isBlank() && !sameText(customer, sourceCustomer)) {
+            return "CUSTOMER_MISMATCH";
+        }
+        String sourceModel = text(payload, "model");
+        if (!models.isEmpty() && !sourceModel.isBlank()
+                && models.stream().noneMatch(model -> related(model, sourceModel))) {
+            return "MODEL_MISMATCH";
+        }
+        return "";
+    }
+
+    private static boolean sameText(String left, String right) {
+        return left.strip().equalsIgnoreCase(right.strip());
+    }
+
+    private static boolean related(String model, String sourceModel) {
+        String left = model.strip().toLowerCase(Locale.ROOT), right = sourceModel.strip().toLowerCase(Locale.ROOT);
+        return left.contains(right) || right.contains(left);
+    }
+
+    private List<String> models(JsonNode snapshot) {
+        var models = new ArrayList<String>();
+        snapshot.path("models").forEach(item -> {
+            String value = item.asText("").strip();
+            if (!value.isBlank()) {
+                models.add(value);
+            }
+        });
+        return models;
     }
 
     private void writeCandidates(ObjectNode stage, List<Candidate> candidates, String verified, String library, Diagnostics diag) {
@@ -374,7 +416,7 @@ class MatchEvaluator {
             var row = rows.addObject().put("id", source.id()).put("version", source.version())
                     .put("businessSimilarity", candidate.similarity());
             for (String field : List.of("title", "requirement", "answer", "conditions", "source", "documentId",
-                    "requirementAnchor", "answerAnchor", "clauseNo")) {
+                    "requirementAnchor", "answerAnchor", "clauseNo", "customer", "model")) {
                 if (source.payload().hasNonNull(field)) {
                     row.put(field, text(source.payload(), field));
                 }
@@ -486,9 +528,23 @@ class MatchEvaluator {
                 (System.nanoTime() - started) / 1_000_000L);
     }
 
+    /** 查询文本附带客户/机型上下文，与索引侧投影的前缀对称，使语义排序偏向同客户、同机型的资料。 */
     private String query(JsonNode snapshot) {
-        String title = text(snapshot, "title"), body = text(snapshot, "text");
-        return String.join("\n", List.of(title, body).stream().filter(value -> !value.isBlank()).distinct().toList());
+        var lines = new ArrayList<String>();
+        for (String value : List.of(text(snapshot, "title"), text(snapshot, "text"))) {
+            if (!value.isBlank() && !lines.contains(value)) {
+                lines.add(value);
+            }
+        }
+        String customer = text(snapshot, "customer");
+        if (!customer.isBlank()) {
+            lines.add("客户：" + customer);
+        }
+        var models = models(snapshot);
+        if (!models.isEmpty()) {
+            lines.add("机型：" + String.join("、", models));
+        }
+        return String.join("\n", lines);
     }
 
     private boolean incompatible(String known, String candidate) {

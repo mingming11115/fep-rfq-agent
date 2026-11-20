@@ -59,7 +59,8 @@ public class HistoryRfqService {
     public record Original(String name, String contentType, byte[] bytes) {}
     public record DocumentEdit(long revision, JsonNode metadata, List<String> groupIds) {}
     public record Manual(String id, String title, String clauseNo, String section, String requirement, String answer, String conditions) {}
-    public record ManualDocument(String name, String projectId, boolean shareWithBu, Manual clause) {}
+    public record ManualDocument(String name, String projectId, boolean shareWithBu, String customer, String model,
+            Manual clause) {}
     private record SourceDocument(Scope scope, ObjectNode payload, JsonNode originals) {}
 
     public Intake upload(CurrentUser user, String buId, MultipartFile file, MultipartFile responseFile,
@@ -302,6 +303,12 @@ public class HistoryRfqService {
         String fingerprint = "manual:" + MatchEvaluator.digest(scope.key() + ":" + user.id() + ":" + limited(request.clause().id(), 128, true));
         var doc = document(user, scope, Ids.next("HD"), limited(request.name(), 250, true), "manual")
                 .put("parseStatus", "manual").put("manual", true);
+        var metadata = doc.putObject("metadata");
+        for (String[] field : new String[][]{{"customer", request.customer()}, {"model", request.model()}}) {
+            if (field[1] != null && !field[1].isBlank()) {
+                metadata.put(field[0], limited(field[1], 300, false));
+            }
+        }
         var result = saveIntake(user, scope, fingerprint, doc, List.of(), null);
         if (result.duplicate()) {
             return result;
@@ -383,6 +390,10 @@ public class HistoryRfqService {
         }
         var document = document(user, scope, Ids.next("HD"), project.getName() + " · 已批准定稿", "approved-snapshot")
                 .put("originProjectId", projectId).put("sourceSnapshotId", snapshotId).put("parseStatus", "complete");
+        // 定稿来源没有可解析的原文，客户信息直接取自项目，供条款入库后参与按客户/机型召回。
+        if (project.getCustomer() != null && !project.getCustomer().isBlank()) {
+            document.putObject("metadata").put("customer", project.getCustomer().strip());
+        }
         var clauses = new ArrayList<ObjectNode>();
         for (JsonNode row : snapshot.path("rows")) {
             String answer = row.path("draft").asText();
@@ -485,7 +496,19 @@ public class HistoryRfqService {
         if (scope.projectId() != null) {
             source.put("projectId", scope.projectId());
         }
+        copyRecallContext(document, source);
         return source;
+    }
+
+    /** 文档级客户/机型随条款一起入库：发布后进入语义索引与比对召回，未维护时不写入。 */
+    private void copyRecallContext(ObjectNode document, ObjectNode clause) {
+        var metadata = document.path("metadata");
+        for (String field : List.of("customer", "model")) {
+            String value = metadata.path(field).asText("").strip();
+            if (!value.isBlank()) {
+                clause.put(field, value);
+            }
+        }
     }
 
     private StoredOriginal save(MultipartFile file) throws IOException {

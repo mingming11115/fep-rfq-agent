@@ -22,11 +22,13 @@ import com.naura.rfq.model.entity.Requirement;
 import com.naura.rfq.security.AccessGuard;
 import com.naura.rfq.security.CurrentUser;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -649,7 +651,7 @@ public class RequirementMatchService {
 
     private Accepted enqueue(Scope scope, Policy policy, String reason, String requestKey) {
         var requirement = scope.requirement();
-        var input = runSnapshot(requirement, scope.document(), scope.project().getGroupId());
+        var input = runSnapshot(requirement, scope.document(), scope.project());
         var configured = policy.activeOrder();
         // 指定历史文件或同 Group 检索时只在历史库内比对；库被关闭时整轮不做比对。
         var order = input.has("historyDocumentIds") || input.has("historyGroupId")
@@ -688,7 +690,7 @@ public class RequirementMatchService {
                 && !work.retired(project.getId(), document.getId())
                 && project.getBuId().equals(run.input().bu()) && requirement.getDocumentId().equals(run.document())
                 && document.getVersion() == run.documentVersion() && Objects.equals(requirement.getParseRunId(), run.parseRun())
-                && run.fingerprint().equals(digest(runSnapshot(requirement, document, project.getGroupId()).toString()));
+                && run.fingerprint().equals(digest(runSnapshot(requirement, document, project).toString()));
     }
 
     private Scope lockForUser(CurrentUser user, String id) {
@@ -733,8 +735,9 @@ public class RequirementMatchService {
         return source;
     }
 
-    private ObjectNode runSnapshot(Requirement requirement, CustomerDocument document, String groupId) {
+    private ObjectNode runSnapshot(Requirement requirement, CustomerDocument document, Project project) {
         var input = snapshot(requirement);
+        String groupId = project.getGroupId();
         // 项目绑定分组是三个知识库共同的可比对范围，写入输入快照使分组变更能触发重算。
         if (groupId != null && !groupId.isBlank()) {
             input.put("groupId", groupId);
@@ -745,11 +748,43 @@ public class RequirementMatchService {
         } else if (groupId != null && !groupId.isBlank()) {
             input.put("historyGroupId", groupId);
         }
+        putRecallContext(input, project);
         long workVersion = work.version(requirement.getProjectId());
         if (workVersion > 1) {
             input.put("workVersion", workVersion);
         }
         return input;
+    }
+
+    /**
+     * 比对输入带上项目客户与匹配上下文里的机型名称：语义召回按客户/机型裁剪候选，
+     * 查询文本也附加上下文，使排序偏向同客户、同机型的历史资料。
+     */
+    private void putRecallContext(ObjectNode input, Project project) {
+        if (project.getCustomer() != null && !project.getCustomer().isBlank()) {
+            input.put("customer", project.getCustomer().strip());
+        }
+        var models = new ArrayList<String>();
+        for (var device : input.path("context").path("devices")) {
+            modelName(project.getBuId(), device.path("modelId").asText("")).ifPresent(name -> {
+                if (!models.contains(name)) {
+                    models.add(name);
+                }
+            });
+        }
+        if (!models.isEmpty()) {
+            input.set("models", json.valueToTree(models));
+        }
+    }
+
+    private Optional<String> modelName(String buId, String modelId) {
+        if (modelId.isBlank()) {
+            return Optional.empty();
+        }
+        return knowledgeRecords.findLatest(Table.MODEL, buId, modelId).stream()
+                .map(row -> parse(row.payload()).path("name").asText(""))
+                .filter(name -> !name.isBlank())
+                .findFirst();
     }
 
     private String sourceFingerprint(Requirement requirement) { return digest(baseInput(requirement).toString()); }

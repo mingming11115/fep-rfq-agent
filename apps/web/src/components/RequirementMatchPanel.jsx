@@ -42,6 +42,7 @@ function Candidate({candidate, sourceDocument, action}) {
     {candidate.businessSimilarity != null && ` · 相似度 ${(candidate.businessSimilarity * 100).toFixed(1)}%`}
   </summary>
     {candidate.requirement && <p>原要求　{candidate.requirement}</p>}
+    {(candidate.customer || candidate.model) && <p>客户/机型　{[candidate.customer, candidate.model].filter(Boolean).join(' · ')}</p>}
     {candidate.answer && <p>参考答复　{candidate.answer}</p>}
     {candidate.conditions && <p>适用条件　{candidate.conditions}</p>}
     {candidate.conditionStatus && <p>{conditionLabels[candidate.conditionStatus]}</p>}

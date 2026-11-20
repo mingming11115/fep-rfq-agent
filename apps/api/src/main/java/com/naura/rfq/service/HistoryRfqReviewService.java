@@ -4,6 +4,7 @@ import com.naura.rfq.mapper.HistoryDocumentMapper;
 import com.naura.rfq.mapper.KnowledgeRecordMapper;
 import com.naura.rfq.mapper.Table;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.common.exception.BusinessException;
@@ -159,13 +160,28 @@ public class HistoryRfqReviewService {
         row.payload().put("status", "已发布").put("validity", "有效").put("publishedById", user.id())
                 .put("publishedAt", Instant.now().toString());
         var projection = json.createObjectNode().put("title", row.payload().path("title").asText())
-                .put("requirement_text", row.payload().path("requirement").asText())
+                .put("requirement_text", recallContext(row.payload()) + row.payload().path("requirement").asText())
                 .put("bu_id", buId).put("record_version", row.version())
                 .put("document_title", document.path("name").asText())
                 .put("document_id", row.payload().path("documentId").asText())
                 .put("group_id", KnowledgeGroupService.primaryGroup(document));
         index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
         return save(user, buId, row, directPublish ? "直接发布历史 RFQ" : "批准发布历史 RFQ", reason);
+    }
+
+    /**
+     * 语义索引文本带上客户/机型上下文（仅索引投影使用，条款 payload 的 requirement 保持原文），
+     * 使新 RFQ 比对时语义召回偏向同客户、同机型的历史资料；未维护客户/机型时返回空串。
+     */
+    private String recallContext(JsonNode payload) {
+        var parts = new ArrayList<String>();
+        for (String[] field : new String[][]{{"customer", "客户："}, {"model", "机型："}}) {
+            String value = payload.path(field[0]).asText("").strip();
+            if (!value.isBlank()) {
+                parts.add(field[1] + value);
+            }
+        }
+        return parts.isEmpty() ? "" : String.join("；", parts) + "。\n";
     }
 
     private ObjectNode returnForEdit(CurrentUser user, String buId, Clause row, String reason) {
