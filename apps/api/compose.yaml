@@ -8,6 +8,10 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-prod}"
       SERVER_PORT: "48081"
+      # 比对后台 worker：部署环境必须开启，否则解析后比对轮次永远停在排队中。
+      RFQ_MATCH_WORKER_ENABLED: "${RFQ_MATCH_WORKER_ENABLED:-true}"
+      # 演示种子数据：只对空库生效（已有用户/种子数据时自动跳过）。
+      RFQ_DEMO_DATA_ENABLED: "${RFQ_DEMO_DATA_ENABLED:-true}"
       JAVA_TOOL_OPTIONS: "${JAVA_TOOL_OPTIONS:-}"
       RFQ_STORAGE_DIR: /app/data/rfq-files
       RFQ_STORAGE_TYPE: "${RFQ_STORAGE_TYPE:-local}"

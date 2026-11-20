@@ -13,6 +13,11 @@
 #   SKIP_JAEGER=1 只起 rfq-service，不拉/不起 jaeger
 #   RFQ_DB_INIT_MODE=never  关闭启动时的 db/init.sql 执行；
 #                           默认 always：每次启动都执行一次（幂等，缺表缺列自动补齐）
+#   RFQ_MATCH_WORKER_ENABLED  比对后台 worker 开关；默认 true（不开的话解析后
+#                             比对轮次永远停在排队中，出不了推荐建议）
+#   RFQ_DEMO_DATA_ENABLED     演示种子数据开关；默认 true。只对空库生效（已有
+#                             用户/种子数据时自动跳过），灌演示账号、BU 成员
+#                             资格档案和三个知识库演示记录
 set -u
 
 IMAGE="rfq-service:onlyoffice"
@@ -269,6 +274,10 @@ do_start() {
   [ -n "${RFQ_DB_USER:-}" ]     && args+=(-e "RFQ_DB_USER=$RFQ_DB_USER")
   [ -n "${RFQ_DB_PASSWORD:-}" ] && args+=(-e "RFQ_DB_PASSWORD=$RFQ_DB_PASSWORD")
   args+=(-e "RFQ_LOG_DIR=/app/data/logs")
+  args+=(-e "RFQ_MATCH_WORKER_ENABLED=${RFQ_MATCH_WORKER_ENABLED:-true}")
+  echo "[info] 比对后台 worker: ${RFQ_MATCH_WORKER_ENABLED:-true}（false 时比对轮次只入队不执行）"
+  args+=(-e "RFQ_DEMO_DATA_ENABLED=${RFQ_DEMO_DATA_ENABLED:-true}")
+  echo "[info] 演示种子数据: ${RFQ_DEMO_DATA_ENABLED:-true}（只对空库生效）"
   if [ -n "${RFQ_DB_INIT_MODE:-}" ]; then
     args+=(-e "RFQ_DB_INIT_MODE=$RFQ_DB_INIT_MODE")
     echo "[info] 数据库初始化模式: $RFQ_DB_INIT_MODE（always=执行 db/init.sql，never=不执行）"
