@@ -491,6 +491,10 @@ CREATE TABLE IF NOT EXISTS rfq_demo_document (
 
 START TRANSACTION;
 -- RFQ_DEMO_INSERTS
+-- 注意：账号主键（id）与登录名（username）不是一回事。
+-- 演示 SR 账号：username='mysql_sr'，id='mysql-demo-sales'。
+-- bu_member_profile / user_bu_role 的 user_id 关联的是主键 id，
+-- 所以搜 'mysql_sr' 只会命中下面第一条 app_user 插入，档案和角色用的是 'mysql-demo-sales'。
 insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-approver','appr01','$2a$10$gTmCi/7Rt6DqcjDZYU0tpuI3xWfExxF3XFYv.eqkBK9Iu2afrsWnq','王强',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
 insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-bu-admin','bu01','$2a$10$O8hUbFjv8NOH5OX6uEhl7.PAuipgx7GG/fUDnH/0hWtP0Wh3hJi8G','陈静',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
 insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-sales','sr01','$2a$10$QY2YJVjHQ0Y2sg/H33P3O.fXejWmjTwWTrDQrdq0XecJiBsZEZgSS','张明',NULL,'ACTIVE',0,'2026-11-07 09:15:38');
