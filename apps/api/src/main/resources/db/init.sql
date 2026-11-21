@@ -538,3 +538,15 @@ set payload = json_remove(
     '$.conditions');
 -- RFQ_DEMO_INSERTS_END
 COMMIT;
+
+-- RFQ_PROFILE_BACKFILL
+-- 角色已授予、成员档案却缺行时补一条启用档案（每次启动执行，insert ignore 幂等）。
+-- 只补「已有 ACTIVE 业务角色」的账号，不凭空授予角色，因此不改变权限模型；
+-- 已有档案（包括被管理员停用的）不受影响，仍可在 BU 成员管理中调整。
+-- 解决的问题：种子只在空库执行，非空库升级上来的账号有角色却没有档案，
+-- 前端判定为「无本条确认权限」，确认按钮灰掉。
+insert ignore into bu_member_profile
+    (user_id, bu_id, can_confirm, can_final_review, resource_qualifications, enabled)
+select role.user_id, role.bu_id, 1, 0, '', 1
+from user_bu_role role
+where role.status = 'ACTIVE' and role.role in ('SR', 'TECH', 'APPROVER');

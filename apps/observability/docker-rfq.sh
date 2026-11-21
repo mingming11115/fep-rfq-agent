@@ -15,9 +15,9 @@
 #                           默认 always：每次启动都执行一次（幂等，缺表缺列自动补齐）
 #   RFQ_MATCH_WORKER_ENABLED  比对后台 worker 开关；默认 true（不开的话解析后
 #                             比对轮次永远停在排队中，出不了推荐建议）
-#   RFQ_DEMO_DATA_ENABLED     演示种子数据开关；默认 true。只对空库生效（已有
-#                             用户/种子数据时自动跳过），灌演示账号、BU 成员
-#                             资格档案和三个知识库演示记录
+#   RFQ_DEMO_DATA_ENABLED     演示种子开关；默认 true。db/init.sql 由
+#                             spring.sql.init 每次启动全量执行（语句幂等），
+#                             该变量只影响 DatabaseInit 的 Flyway 分支
 set -u
 
 IMAGE="rfq-service:onlyoffice"
@@ -277,7 +277,7 @@ do_start() {
   args+=(-e "RFQ_MATCH_WORKER_ENABLED=${RFQ_MATCH_WORKER_ENABLED:-true}")
   echo "[info] 比对后台 worker: ${RFQ_MATCH_WORKER_ENABLED:-true}（false 时比对轮次只入队不执行）"
   args+=(-e "RFQ_DEMO_DATA_ENABLED=${RFQ_DEMO_DATA_ENABLED:-true}")
-  echo "[info] 演示种子数据: ${RFQ_DEMO_DATA_ENABLED:-true}（只对空库生效）"
+  echo "[info] 演示种子数据: ${RFQ_DEMO_DATA_ENABLED:-true}（db/init.sql 每次启动幂等执行）"
   if [ -n "${RFQ_DB_INIT_MODE:-}" ]; then
     args+=(-e "RFQ_DB_INIT_MODE=$RFQ_DB_INIT_MODE")
     echo "[info] 数据库初始化模式: $RFQ_DB_INIT_MODE（always=执行 db/init.sql，never=不执行）"
