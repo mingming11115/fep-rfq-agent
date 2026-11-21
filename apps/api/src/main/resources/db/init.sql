@@ -491,20 +491,15 @@ CREATE TABLE IF NOT EXISTS rfq_demo_document (
 
 START TRANSACTION;
 -- RFQ_DEMO_INSERTS
--- 只保留权限体系：事业部、账号、BU 角色、成员资格档案；不含任何项目/文档/知识库业务数据。
+-- 只保留 MySQL 数据演示事业部及其账号、BU 角色、成员资格档案和系统管理员；不含任何项目/文档/知识库业务数据。
 -- 规则与界面保持一致：
 --   1) 账号 id 用 USR- 前缀 + 10 位十六进制（AdminService 新建账号同规则）；
 --   2) 角色与档案按 username 关联 app_user 的真实 id，账号若由界面创建（id 不同）也能对上；
 --   3) 全部 insert ignore，已存在的账号/角色/档案不会被覆盖，重跑无副作用。
 insert ignore into `business_unit` (`id`, `code`, `name`, `created_at`) VALUES
-    ('BU-FEP','FEP','FEP 事业部',CURRENT_TIMESTAMP),
     ('BU-MYSQL-DEMO','MYSQL-DEMO','MySQL 数据演示事业部',CURRENT_TIMESTAMP);
 
 insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES
-    ('USR-9c1a7b2e40','sr01','$2a$10$QY2YJVjHQ0Y2sg/H33P3O.fXejWmjTwWTrDQrdq0XecJiBsZEZgSS','张明',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
-    ('USR-4d8f2a6b13','tech01','$2a$10$EHxEfXAnvYhlly67zBY2rugpSGcXnuIgGU6oIP9fHj7pM4Lk3Ogd2','李工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
-    ('USR-7e3c5d9a21','appr01','$2a$10$gTmCi/7Rt6DqcjDZYU0tpuI3xWfExxF3XFYv.eqkBK9Iu2afrsWnq','王强',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
-    ('USR-1b6e9f0c32','bu01','$2a$10$O8hUbFjv8NOH5OX6uEhl7.PAuipgx7GG/fUDnH/0hWtP0Wh3hJi8G','陈静',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
     ('USR-5a2d8c4e73','admin','$2a$10$dxhzJKXQ4a7Nx/fd934o5ucMpQoM2VB5Fm2KZ8Gu8TYOfpD.ozw6S','系统管理员',NULL,'ACTIVE',1,CURRENT_TIMESTAMP),
     ('USR-e4c17a9b06','mysql_sr','$2a$10$KTHrNd3YP5DIn2Sf7yTbZOHenS50//ZHVYEotS2HXDvv7d0BFlJcC','张明',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
     ('USR-2f8b3d5c94','mysql_tech','$2a$10$xNSyOXBMFKW9Z87BUIbqtO2gPtZ/deQXN7RARrjkAjDEVVwTMyqPe','李工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
@@ -513,15 +508,6 @@ insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`
     ('USR-3e7c5a1d84','mysql_view','$2a$10$gJetO.5FSOFZg3Nx2vTnhuswXhFQb4cj.5odNS2O8URHWIamEmFB2','未授权对照账号',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
     ('USR-b1f4d8c2a7','mysql_tech2','$2a$10$pJZ.uK2DvtBivrYPcK13qezfsFJGGRyRyvX9wygfdyWfMu1bjgNXu','王工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
     ('USR-c5a3e9b746','mysql_tech3','$2a$10$g2i2eubtuL/ImAl1c7kYFOhz3EQiJ4IkYpwsT02oeL5U5mBmRbOW6','陈工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP);
-
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
-select account.id, 'BU-FEP', 'SR', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'sr01';
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
-select account.id, 'BU-FEP', 'TECH', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'tech01';
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
-select account.id, 'BU-FEP', 'APPROVER', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'appr01';
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
-select account.id, 'BU-FEP', 'BU_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'bu01';
 
 insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
 select account.id, 'BU-MYSQL-DEMO', 'SR', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_sr';
