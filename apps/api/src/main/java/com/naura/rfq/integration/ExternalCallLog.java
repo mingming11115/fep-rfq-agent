@@ -19,13 +19,16 @@ public final class ExternalCallLog {
         this.service = service;
         this.operation = operation;
         long requestBytes = request.bodyPublisher().map(HttpRequest.BodyPublisher::contentLength).orElse(0L);
-        log.info("external.call.request 外部调用开始 callId={} service={} operation={} method={} host={} path={} requestBytes={} parseRunId={}",
-            callId, service, operation, request.method(), request.uri().getHost(),
-            request.uri().getRawPath(), requestBytes, parseRunId);
+        log.info("external.call.request 外部调用开始 callId={} service={} operation={} method={} url={} requestBytes={} parseRunId={}",
+            callId, service, operation, request.method(), request.uri(), requestBytes, parseRunId);
     }
 
     public String callId() {
         return callId;
+    }
+
+    public String service() {
+        return service;
     }
 
     public void response(int status, int responseBytes) {

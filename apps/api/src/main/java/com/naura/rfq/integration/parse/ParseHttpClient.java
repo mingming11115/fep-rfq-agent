@@ -179,7 +179,7 @@ public class ParseHttpClient {
             body = body.replace(apiKey, "[REDACTED]");
         }
         String quoted = new String(JsonStringEncoder.getInstance().quoteAsString(body));
-        log.info("external.call.payload callId={} service=llm direction={} body=\"{}\"", call.callId(), direction, quoted);
+        log.info("external.call.payload callId={} service={} direction={} body=\"{}\"", call.callId(), call.service(), direction, quoted);
     }
     private Duration positive(Duration value) {
         if (value == null || value.isNegative() || value.isZero()) {

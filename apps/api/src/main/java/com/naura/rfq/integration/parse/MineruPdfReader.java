@@ -6,6 +6,7 @@ import com.naura.rfq.config.properties.ParseIntegrationProperties;
 import com.naura.rfq.model.parse.RawBlock;
 import java.io.IOException;
 import java.net.http.HttpRequest.BodyPublishers;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,9 @@ class MineruPdfReader {
             + field(boundary, "table_enable", "true")
             + "--" + boundary + "\r\nContent-Disposition: form-data; name=\"files\"; filename=\"rfq.pdf\"\r\n"
             + "Content-Type: application/pdf\r\n\r\n";
+        long fileBytes = Files.size(file);
+        log.info("MinerU 请求准备 boundary={} url={} file={} fileBytes={} 表头={}",
+            boundary, settings.getUrl(), file.getFileName(), fileBytes, fields.replace("\r\n", "\\r\\n"));
         var upload = BodyPublishers.concat(BodyPublishers.ofString(fields), BodyPublishers.ofFile(file),
             BodyPublishers.ofString("\r\n--" + boundary + "--\r\n"));
         JsonNode response = http.postMineru(settings, boundary, upload);
