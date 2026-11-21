@@ -13,6 +13,9 @@ services:
       # 演示种子数据：只对空库生效（已有用户/种子数据时自动跳过）。
       RFQ_DEMO_DATA_ENABLED: "${RFQ_DEMO_DATA_ENABLED:-true}"
       JAVA_TOOL_OPTIONS: "${JAVA_TOOL_OPTIONS:-}"
+      # 文件日志目录：与 docker-rfq.sh 保持一致，随 office-documents 卷持久化。
+      # 不设置时默认 ./logs 即 /app/logs，不在卷内且容器用户无写权限，文件日志实际会写失败。
+      RFQ_LOG_DIR: /app/data/logs
       RFQ_STORAGE_DIR: /app/data/rfq-files
       RFQ_STORAGE_TYPE: "${RFQ_STORAGE_TYPE:-local}"
       RFQ_MINIO_ENDPOINT: "${RFQ_MINIO_ENDPOINT:-}"

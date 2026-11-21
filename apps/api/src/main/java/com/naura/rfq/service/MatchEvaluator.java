@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.naura.rfq.integration.standardreply.StandardReplyIndexClient;
 import com.naura.rfq.integration.standardreply.StandardReplyIndexClient.SearchFailure;
-import com.naura.rfq.common.log.StageLog;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -176,8 +175,6 @@ class MatchEvaluator {
         input.order().forEach(stage -> stages.putObject(stage).put("status", "not_run"));
         log.info("requirement.match.evaluate.start runId={} requirementId={} projectId={} order={} thresholds={}",
                 input.runId(), input.requirementId(), input.project(), input.order(), input.thresholds());
-        StageLog.begin(log, "条款比对 runId=" + input.runId() + " requirementId=" + input.requirementId()
-                + " order=" + input.order());
         if (input.order().isEmpty()) {
             // 三个知识库全部关闭时不做任何比对，结论直接标记为无需比对。
             return new Evaluation("completed", result.put("skipped", true).put("conclusion", "无需比对"), stamp, 0);
@@ -198,12 +195,13 @@ class MatchEvaluator {
                 try {
                     stage = textStage(input, library, scope, diag);
                 } catch (SearchFailure failure) {
-                    log.error("查询比对资料失败", failure);
+                    log.error("requirement.match.search_failed 查询比对资料失败 runId={} requirementId={} library={}"
+                                    + " code={} retryable={} errorType={}",
+                            input.runId(), input.requirementId(), library, failure.getMessage(), failure.retryable(),
+                            failure.getClass().getSimpleName(), failure);
                     stage = json.createObjectNode().put("status", "failed").put("reason", failure.getMessage());
                     stages.set(library, stage);
                     logStage(input, library, stage, diag, started);
-                    StageLog.failed(log, "条款比对 runId=" + input.runId() + " requirementId=" + input.requirementId()
-                            + " library=" + library + " errorType=" + failure.getClass().getSimpleName());
                     return new Evaluation(failure.retryable() ? "retry_wait" : "failed", result, stamp, failure.retryable() ? 5 : 0);
                 }
                 logStage(input, library, stage, diag, started);
@@ -220,9 +218,6 @@ class MatchEvaluator {
                     }
                     log.info("requirement.match.match_decision runId={} requirementId={} library={} decision=short_circuit",
                             input.runId(), input.requirementId(), library);
-                    StageLog.end(log, "条款比对·命中短路 runId=" + input.runId() + " requirementId="
-                            + input.requirementId() + " library=" + library + " 结论="
-                            + result.path("conclusion").asText("待确认"));
                     return new Evaluation("completed", result, stamp, 0);
                 }
                 case "blocked" -> {
@@ -241,9 +236,6 @@ class MatchEvaluator {
                 .allMatch(library -> "miss".equals(stages.path(library).path("status").asText())));
         log.info("requirement.match.match_decision runId={} requirementId={} decision=no_hit knowledgeGap={}",
                 input.runId(), input.requirementId(), result.path("knowledgeGap").asBoolean());
-        StageLog.end(log, "条款比对 runId=" + input.runId() + " requirementId=" + input.requirementId()
-                + " 结论=" + result.path("conclusion").asText("待确认") + " knowledgeGap="
-                + result.path("knowledgeGap").asBoolean());
         return new Evaluation(missingCapability ? "blocked" : "completed", result, stamp, 0);
     }
 

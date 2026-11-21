@@ -32,8 +32,27 @@
     </encoder>
   </appender>
 
+  <!-- ERROR 单独一份：只收 ERROR 及以上，按天滚动，便于快速定位故障（全量日志仍保留在 rfq-service.log） -->
+  <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${RFQ_LOG_DIR}/rfq-service-error.log</file>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>ERROR</level>
+    </filter>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>${RFQ_LOG_DIR}/rfq-service-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+      <maxFileSize>20MB</maxFileSize>
+      <maxHistory>168</maxHistory>
+      <totalSizeCap>200MB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
   <root level="INFO">
     <appender-ref ref="CONSOLE"/>
     <appender-ref ref="ROLLING"/>
+    <appender-ref ref="ERROR_FILE"/>
   </root>
 </configuration>

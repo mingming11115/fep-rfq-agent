@@ -22,6 +22,7 @@
 !**/.env.example
 /data/
 /apps/api/data/
+/apps/api/logs/
 
 # Temporary Office lock files and browser artifacts
 ~$*
