@@ -491,55 +491,67 @@ CREATE TABLE IF NOT EXISTS rfq_demo_document (
 
 START TRANSACTION;
 -- RFQ_DEMO_INSERTS
--- 注意：账号主键（id）与登录名（username）不是一回事。
--- 演示 SR 账号：username='mysql_sr'，id='mysql-demo-sales'。
--- bu_member_profile / user_bu_role 的 user_id 关联的是主键 id，
--- 所以搜 'mysql_sr' 只会命中下面第一条 app_user 插入，档案和角色用的是 'mysql-demo-sales'。
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-approver','appr01','$2a$10$gTmCi/7Rt6DqcjDZYU0tpuI3xWfExxF3XFYv.eqkBK9Iu2afrsWnq','王强',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-bu-admin','bu01','$2a$10$O8hUbFjv8NOH5OX6uEhl7.PAuipgx7GG/fUDnH/0hWtP0Wh3hJi8G','陈静',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-sales','sr01','$2a$10$QY2YJVjHQ0Y2sg/H33P3O.fXejWmjTwWTrDQrdq0XecJiBsZEZgSS','张明',NULL,'ACTIVE',0,'2026-11-07 09:15:38');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-system-admin','admin','$2a$10$dxhzJKXQ4a7Nx/fd934o5ucMpQoM2VB5Fm2KZ8Gu8TYOfpD.ozw6S','系统管理员',NULL,'ACTIVE',1,'2026-11-07 09:15:39');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('demo-technical','tech01','$2a$10$EHxEfXAnvYhlly67zBY2rugpSGcXnuIgGU6oIP9fHj7pM4Lk3Ogd2','李工',NULL,'ACTIVE',0,'2026-11-07 09:15:38');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-approver','mysql_appr','$2a$10$YRI5Y6ekejqR3b2f38/gFez2LNWZvDeSr89IdOxnZG6sCNDG7i46.','王强',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-bu-admin','mysql_bu','$2a$10$pFBtoOfpWqnylxTvSdh.K..GbJmd6w.ANR03fb1R9JRy1wblDmrBa','陈静',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-observer','mysql_view','$2a$10$gJetO.5FSOFZg3Nx2vTnhuswXhFQb4cj.5odNS2O8URHWIamEmFB2','未授权对照账号',NULL,'ACTIVE',0,'2026-11-07 09:15:39');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-sales','mysql_sr','$2a$10$KTHrNd3YP5DIn2Sf7yTbZOHenS50//ZHVYEotS2HXDvv7d0BFlJcC','张明',NULL,'ACTIVE',0,'2026-11-07 09:15:38');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-technical','mysql_tech','$2a$10$xNSyOXBMFKW9Z87BUIbqtO2gPtZ/deQXN7RARrjkAjDEVVwTMyqPe','李工',NULL,'ACTIVE',0,'2026-11-07 09:15:38');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-technical-2','mysql_tech2','$2a$10$pJZ.uK2DvtBivrYPcK13qezfsFJGGRyRyvX9wygfdyWfMu1bjgNXu','王工',NULL,'ACTIVE',0,'2026-11-07 09:15:40');
-insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES ('mysql-demo-technical-3','mysql_tech3','$2a$10$g2i2eubtuL/ImAl1c7kYFOhz3EQiJ4IkYpwsT02oeL5U5mBmRbOW6','陈工',NULL,'ACTIVE',0,'2026-11-07 09:15:40');
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-sales','BU-MYSQL-DEMO',1,1,'','2026-11-07 09:15:38','2026-11-07 09:15:38',1);
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-technical','BU-MYSQL-DEMO',1,1,'','2026-11-07 09:15:38','2026-11-07 09:15:38',1);
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-approver','BU-MYSQL-DEMO',1,1,'','2026-11-07 09:15:39','2026-11-07 09:15:39',1);
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-bu-admin','BU-MYSQL-DEMO',0,0,'knowledge-publish,capability-publish','2026-11-07 09:15:39','2026-11-07 09:15:39',1);
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-observer','BU-MYSQL-DEMO',1,1,'','2026-11-07 09:15:39','2026-11-07 09:15:39',1);
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-technical-2','BU-MYSQL-DEMO',1,1,'','2026-11-07 09:15:40','2026-11-07 09:15:40',1);
-insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`) VALUES ('mysql-demo-technical-3','BU-MYSQL-DEMO',1,1,'','2026-11-07 09:15:40','2026-11-07 09:15:40',1);
-insert ignore into `business_unit` (`id`, `code`, `name`, `created_at`) VALUES ('BU-FEP','FEP','FEP 事业部','2026-11-07 09:15:38');
-insert ignore into `business_unit` (`id`, `code`, `name`, `created_at`) VALUES ('BU-MYSQL-DEMO','MYSQL-DEMO','MySQL 数据演示事业部','2026-11-07 09:15:38');
-insert ignore into `rfq_demo_seed` (`id`, `initialized_at`) VALUES ('mysql-approval-scope-v3','2026-11-07 09:15:40');
-insert ignore into `rfq_demo_seed` (`id`, `initialized_at`) VALUES ('mysql-business-demo-v1','2026-11-07 09:15:40');
-insert ignore into `rfq_demo_seed` (`id`, `initialized_at`) VALUES ('mysql-business-demo-v2','2026-11-07 09:15:40');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('demo-sales','BU-FEP','SR','ACTIVE','2026-11-07 09:15:38');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('demo-technical','BU-FEP','TECH','ACTIVE','2026-11-07 09:15:39');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('demo-approver','BU-FEP','APPROVER','ACTIVE','2026-11-07 09:15:39');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('demo-bu-admin','BU-FEP','BU_ADMIN','ACTIVE','2026-11-07 09:15:39');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-sales','BU-MYSQL-DEMO','SR','ACTIVE','2026-11-07 09:15:38');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-technical','BU-MYSQL-DEMO','TECH','ACTIVE','2026-11-07 09:15:38');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-approver','BU-MYSQL-DEMO','APPROVER','ACTIVE','2026-11-07 09:15:39');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-bu-admin','BU-MYSQL-DEMO','BU_ADMIN','ACTIVE','2026-11-07 09:15:39');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-observer','BU-MYSQL-DEMO','TECH','ACTIVE','2026-11-07 09:15:39');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-technical-2','BU-MYSQL-DEMO','TECH','ACTIVE','2026-11-07 09:15:40');
-insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`) VALUES ('mysql-demo-technical-3','BU-MYSQL-DEMO','TECH','ACTIVE','2026-11-07 09:15:40');
-insert ignore into rfq_demo_seed (id, initialized_at) VALUES ('init-sql-v1', CURRENT_TIMESTAMP);
-update requirement_response
-set payload = json_remove(
-    case when json_type(json_extract(payload, '$.conditions')) = 'STRING'
-        and nullif(trim(payload->>'$.conditions'), '') is not null
-        and locate(concat('适用条件：', trim(payload->>'$.conditions')), coalesce(payload->>'$.draft', '')) = 0
-      then json_set(payload, '$.draft', concat_ws(char(10), nullif(payload->>'$.draft', ''),
-        concat('适用条件：', trim(payload->>'$.conditions'))))
-      else payload end,
-    '$.conditions');
+-- 只保留权限体系：事业部、账号、BU 角色、成员资格档案；不含任何项目/文档/知识库业务数据。
+-- 规则与界面保持一致：
+--   1) 账号 id 用 USR- 前缀 + 10 位十六进制（AdminService 新建账号同规则）；
+--   2) 角色与档案按 username 关联 app_user 的真实 id，账号若由界面创建（id 不同）也能对上；
+--   3) 全部 insert ignore，已存在的账号/角色/档案不会被覆盖，重跑无副作用。
+insert ignore into `business_unit` (`id`, `code`, `name`, `created_at`) VALUES
+    ('BU-FEP','FEP','FEP 事业部',CURRENT_TIMESTAMP),
+    ('BU-MYSQL-DEMO','MYSQL-DEMO','MySQL 数据演示事业部',CURRENT_TIMESTAMP);
+
+insert ignore into `app_user` (`id`, `username`, `password_hash`, `display_name`, `email`, `status`, `system_admin`, `created_at`) VALUES
+    ('USR-9c1a7b2e40','sr01','$2a$10$QY2YJVjHQ0Y2sg/H33P3O.fXejWmjTwWTrDQrdq0XecJiBsZEZgSS','张明',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-4d8f2a6b13','tech01','$2a$10$EHxEfXAnvYhlly67zBY2rugpSGcXnuIgGU6oIP9fHj7pM4Lk3Ogd2','李工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-7e3c5d9a21','appr01','$2a$10$gTmCi/7Rt6DqcjDZYU0tpuI3xWfExxF3XFYv.eqkBK9Iu2afrsWnq','王强',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-1b6e9f0c32','bu01','$2a$10$O8hUbFjv8NOH5OX6uEhl7.PAuipgx7GG/fUDnH/0hWtP0Wh3hJi8G','陈静',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-5a2d8c4e73','admin','$2a$10$dxhzJKXQ4a7Nx/fd934o5ucMpQoM2VB5Fm2KZ8Gu8TYOfpD.ozw6S','系统管理员',NULL,'ACTIVE',1,CURRENT_TIMESTAMP),
+    ('USR-e4c17a9b06','mysql_sr','$2a$10$KTHrNd3YP5DIn2Sf7yTbZOHenS50//ZHVYEotS2HXDvv7d0BFlJcC','张明',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-2f8b3d5c94','mysql_tech','$2a$10$xNSyOXBMFKW9Z87BUIbqtO2gPtZ/deQXN7RARrjkAjDEVVwTMyqPe','李工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-6c9e1f7a25','mysql_appr','$2a$10$YRI5Y6ekejqR3b2f38/gFez2LNWZvDeSr89IdOxnZG6sCNDG7i46.','王强',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-8d4a2b6f01','mysql_bu','$2a$10$pFBtoOfpWqnylxTvSdh.K..GbJmd6w.ANR03fb1R9JRy1wblDmrBa','陈静',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-3e7c5a1d84','mysql_view','$2a$10$gJetO.5FSOFZg3Nx2vTnhuswXhFQb4cj.5odNS2O8URHWIamEmFB2','未授权对照账号',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-b1f4d8c2a7','mysql_tech2','$2a$10$pJZ.uK2DvtBivrYPcK13qezfsFJGGRyRyvX9wygfdyWfMu1bjgNXu','王工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP),
+    ('USR-c5a3e9b746','mysql_tech3','$2a$10$g2i2eubtuL/ImAl1c7kYFOhz3EQiJ4IkYpwsT02oeL5U5mBmRbOW6','陈工',NULL,'ACTIVE',0,CURRENT_TIMESTAMP);
+
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-FEP', 'SR', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'sr01';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-FEP', 'TECH', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'tech01';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-FEP', 'APPROVER', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'appr01';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-FEP', 'BU_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'bu01';
+
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'SR', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_sr';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'TECH', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_tech';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'APPROVER', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_appr';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'BU_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_bu';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'TECH', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_view';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'TECH', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_tech2';
+insert ignore into `user_bu_role` (`user_id`, `bu_id`, `role`, `status`, `created_at`)
+select account.id, 'BU-MYSQL-DEMO', 'TECH', 'ACTIVE', CURRENT_TIMESTAMP from app_user account where account.username = 'mysql_tech3';
+
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_sr';
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_tech';
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_appr';
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 0, 0, 'knowledge-publish,capability-publish', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_bu';
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_view';
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_tech2';
+insert ignore into `bu_member_profile` (`user_id`, `bu_id`, `can_confirm`, `can_final_review`, `resource_qualifications`, `created_at`, `updated_at`, `enabled`)
+select account.id, 'BU-MYSQL-DEMO', 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 from app_user account where account.username = 'mysql_tech3';
 -- RFQ_DEMO_INSERTS_END
 COMMIT;
 
