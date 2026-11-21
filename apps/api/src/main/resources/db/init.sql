@@ -539,14 +539,32 @@ set payload = json_remove(
 -- RFQ_DEMO_INSERTS_END
 COMMIT;
 
--- RFQ_PROFILE_BACKFILL
--- 角色已授予、成员档案却缺行时补一条启用档案（每次启动执行，insert ignore 幂等）。
--- 只补「已有 ACTIVE 业务角色」的账号，不凭空授予角色，因此不改变权限模型；
--- 已有档案（包括被管理员停用的）不受影响，仍可在 BU 成员管理中调整。
--- 解决的问题：种子只在空库执行，非空库升级上来的账号有角色却没有档案，
--- 前端判定为「无本条确认权限」，确认按钮灰掉。
+-- RFQ_PERMISSION_BACKFILL
+-- 每次启动执行的权限兜底修复（全部幂等：重跑无副作用）。修的是三类断链，
+-- 任一类都会让前端判定「当前账号无本条确认权限」、确认按钮灰掉：
+--   1) 有 ACTIVE 业务角色却没有成员档案        → 补一条启用档案
+--   2) 项目负责人的角色被停用                  → 恢复为 ACTIVE
+--   3) 项目负责人的档案缺失或被停用            → 建/re 启用并给确认资格
+-- 只修「已有业务角色」和「项目负责人」，不凭空把所有人变成 SR，
+-- 因此不影响 BU 权限边界；要回到严格托管时删除本段即可。
+-- 1) 缺档案的存量账号
 insert ignore into bu_member_profile
     (user_id, bu_id, can_confirm, can_final_review, resource_qualifications, enabled)
 select role.user_id, role.bu_id, 1, 0, '', 1
 from user_bu_role role
 where role.status = 'ACTIVE' and role.role in ('SR', 'TECH', 'APPROVER');
+
+-- 2) 项目负责人必须有 ACTIVE 的 SR 角色（否则连项目都进不去）
+insert into user_bu_role (user_id, bu_id, role, status)
+select distinct project.owner_id, project.bu_id, 'SR', 'ACTIVE'
+from project
+where project.stage <> 'CANCELLED' and project.owner_id is not null and project.owner_id <> ''
+on duplicate key update status = 'ACTIVE';
+
+-- 3) 项目负责人必须有启用且可确认的档案
+insert into bu_member_profile
+    (user_id, bu_id, can_confirm, can_final_review, resource_qualifications, enabled)
+select distinct project.owner_id, project.bu_id, 1, 0, '', 1
+from project
+where project.stage <> 'CANCELLED' and project.owner_id is not null and project.owner_id <> ''
+on duplicate key update enabled = 1, can_confirm = 1;
