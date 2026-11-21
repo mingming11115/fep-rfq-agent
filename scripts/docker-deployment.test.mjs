@@ -14,6 +14,12 @@ async function run(action,scenario='ok'){
   const dir=await mkdtemp(path.join(os.tmpdir(),'rfq-deploy-'));
   const bin=path.join(dir,'bin'),log=path.join(dir,'calls');
   await mkdir(bin);
+  const conf=path.join(dir,'rfq.conf');await writeFile(conf,'server { listen 80; server_name rfq.example; root /srv/rfq; }');
+  await writeFile(path.join(bin,'nginx'),`#!/usr/bin/env bash
+printf 'nginx\\t%s\\n' "$*" >> "$RFQ_TEST_LOG"
+if [[ "$1" == -T ]]; then printf '# configuration file %s:\\n' "$RFQ_TEST_CONF"; cat "$RFQ_TEST_CONF"; fi
+if [[ "$1" == -t && "$RFQ_TEST_SCENARIO" == bad-nginx ]] && grep -q proxy_pass "$RFQ_TEST_CONF"; then exit 1; fi
+`,{mode:0o755});
   await writeFile(path.join(bin,'docker'),`#!/usr/bin/env bash
 printf 'docker' >> "$RFQ_TEST_LOG"; printf '\\t%s' "$@" >> "$RFQ_TEST_LOG"; printf '\\n' >> "$RFQ_TEST_LOG"
 case "$1 $2" in
@@ -24,6 +30,7 @@ case "$1 $2" in
     fi ;;
   'ps -a'|'ps --format') printf 'rfq-service\\nrfq-web\\n' ;;
   'container inspect') echo true ;;
+  'exec -i') printf '%s\\0%s\\0' "$RFQ_TEST_CONF" 'server { listen 80; server_name rfq.example; location / { proxy_pass http://127.0.0.1:48080; } }' ;;
   'exec rfq-web') [[ "$RFQ_TEST_SCENARIO" != bad-web ]] ;;
 esac
 `,{mode:0o755});
@@ -37,12 +44,12 @@ echo '{"status":"UP"}'
     const child=spawnSync(bash,['-c','export PATH="$RFQ_TEST_BIN:$PATH"; bash "$RFQ_TEST_SCRIPT" "$1"', 'rfq-test',action],{
       cwd:repo,encoding:'utf8',timeout:15000,
       env:{...process.env,RFQ_TEST_BIN:posix(bin),RFQ_TEST_LOG:posix(log),RFQ_TEST_SCRIPT:posix(path.join(repo,'apps/observability/docker-rfq.sh')),
-        RFQ_TEST_SCENARIO:scenario,RFQ_STARTUP_TIMEOUT:'2',DB_ENV_FILE:posix(path.join(dir,'absent.env')),SKIP_JAEGER:'1',OTEL_ENABLE:'0'},
+        RFQ_NGINX_BACKUP_DIR:posix(path.join(dir,'backups')),RFQ_TEST_CONF:posix(conf),RFQ_TEST_SCENARIO:scenario,RFQ_STARTUP_TIMEOUT:'2',DB_ENV_FILE:posix(path.join(dir,'absent.env')),SKIP_JAEGER:'1',OTEL_ENABLE:'0'},
     });
     const calls=await readFile(log,'utf8').catch(()=> '');
     assert.ifError(child.error);
     assert.ok(calls.length,'test shell did not reach fake Docker: '+child.stderr);
-    return {...child,calls};
+    return {...child,calls,config:await readFile(conf,'utf8')};
   }finally{await rm(dir,{recursive:true,force:true});}
 }
 
@@ -83,6 +90,11 @@ test('stop removes both application containers while retaining document volumes'
   const r=await run('stop');assert.equal(r.status,0,r.stdout+r.stderr);
   assert.match(r.calls,/docker\trm\t-f\t[^\n]*rfq-web[^\n]*rfq-service/);
   assert.doesNotMatch(r.calls,/docker\tvolume\t|docker\trm\t[^\n]*\t-v(?:\t|$)/);
+});
+
+test('invalid nginx migration restores the original HTTP configuration',async()=>{
+ const r=await run('start','bad-nginx');assert.notEqual(r.status,0);
+ assert.match(r.config,/root \/srv\/rfq/);assert.doesNotMatch(r.config,/proxy_pass/);
 });
 
 test('HTTPS setup can explicitly route all browser requests to the web container',()=>{

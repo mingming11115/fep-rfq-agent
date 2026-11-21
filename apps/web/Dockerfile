@@ -12,12 +12,14 @@ RUN npm --prefix apps/web run build \
     && node apps/web/scripts/compress-static.mjs apps/web/dist
 
 FROM nginx:1.28-alpine
+RUN apk add --no-cache nodejs
 ENV RFQ_API_UPSTREAM=rfq-service:48081 \
     RFQ_OFFICE_UPSTREAM=rfq-service:48081 \
     NGINX_ENVSUBST_FILTER=^RFQ_
 COPY deploy/web/default.conf.template /etc/nginx/templates/default.conf.template
 COPY deploy/web/proxy.conf /etc/nginx/rfq-proxy.conf
 COPY deploy/web/check-rfq-web.sh /usr/local/bin/check-rfq-web.sh
+COPY deploy/web/migrate-nginx.mjs /usr/local/lib/rfq/migrate-nginx.mjs
 COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
 RUN chmod +x /usr/local/bin/check-rfq-web.sh
 EXPOSE 8080

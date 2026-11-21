@@ -76,7 +76,7 @@ bash apps/observability/docker-rfq.sh build
 bash apps/observability/docker-rfq.sh start
 ```
 
-已有宿主机 nginx 静态站点首次需切换为转发到前端容器 `127.0.0.1:48080`；原数据库和文件卷继续使用。完整步骤见 [Docker 部署与 HTTPS 迁移](docs/development/docker-deployment.md)。
+启动脚本自动将现有 nginx 的 RFQ HTTP 80 入口转发到前端容器 `127.0.0.1:48080`，备份并校验配置，失败恢复；原域名、对外端口、数据库和文件卷继续使用。完整步骤见 [Docker 部署与 HTTPS 迁移](docs/development/docker-deployment.md)。
 
 ## 文档与清理
 

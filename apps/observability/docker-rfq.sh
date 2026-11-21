@@ -366,10 +366,11 @@ do_start() {
     -e RFQ_API_UPSTREAM=rfq-service:48081 \
     -e "RFQ_OFFICE_UPSTREAM=${RFQ_OFFICE_UPSTREAM:-rfq-service:48081}" "$WEB_IMAGE"
   wait_web || startup_failed "前端接口转发或编辑器 JS/WASM 校验失败"
+  WEB_HOST_PORT="$WEB_HOST_PORT" bash "$REPO_DIR/apps/observability/migrate-nginx.sh" || startup_failed "HTTP 入口迁移失败，nginx 已恢复；请查看上方原因"
   echo "[ok] 前后端已就绪，Word/PDF 编辑器 HTTP 完整性校验通过"
   echo "     前端: http://127.0.0.1:${WEB_HOST_PORT}（绑定地址 $WEB_BIND）"
   echo "     日志: bash $0 logs api / bash $0 logs web"
-  echo "     首次迁移: 宿主机 nginx 的网页入口须改为转发到 127.0.0.1:${WEB_HOST_PORT}，见 docs/development/docker-deployment.md"
+  echo "     继续使用原来的 HTTP 80 域名入口，无需另行申请端口或配置 HTTPS"
 }
 
 do_stop() {
