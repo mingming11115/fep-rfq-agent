@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# RFQ Docker 一键管理脚本（不依赖 docker compose / plugin）
+# RFQ 前后端 Docker 一键管理脚本（不依赖 docker compose / plugin）
 # 用法: bash docker-rfq.sh {pull|build|start|stop|restart|status|logs}
 # 可选环境变量:
 #   RFQ_DB_URL / RFQ_DB_USER / RFQ_DB_PASSWORD   覆盖数据库配置
 #   OTEL_AGENT   javaagent jar 路径（默认 /opt/otel/opentelemetry-javaagent.jar）
 #   OTEL_ENABLE=1 开启链路追踪（默认 0 = 不挂 javaagent）
 #   HOST_PORT    对外端口（默认 48081，仅绑定 127.0.0.1）
+#   WEB_HOST_PORT  前端端口（默认 48080），WEB_BIND 默认 127.0.0.1，供宿主机 HTTPS 转发
+#   RFQ_IMAGE_TAG  前后端镜像版本（默认 onlyoffice），构建与启动时保持一致
+#   RFQ_STARTUP_TIMEOUT  等待应用就绪的秒数（默认 180）
 #   JAEGER_MODE  auto|docker|native（默认 auto：有镜像用容器，没有就装宿主机二进制）
 #   JAEGER_VERSION  jaeger 版本（默认 2.23.0；v1 与 v2 的镜像名/启动参数/配置自动适配）
 #   JAEGER_HOME   native 模式的安装目录（默认 /opt/jaeger）
@@ -20,7 +23,8 @@
 #                             该变量只影响 DatabaseInit 的 Flyway 分支
 set -u
 
-IMAGE="rfq-service:onlyoffice"
+IMAGE="${RFQ_API_IMAGE:-rfq-service:${RFQ_IMAGE_TAG:-onlyoffice}}"
+WEB_IMAGE="${RFQ_WEB_IMAGE:-rfq-web:${RFQ_IMAGE_TAG:-onlyoffice}}"
 JAEGER_MODE="${JAEGER_MODE:-auto}"
 JAEGER_VERSION="${JAEGER_VERSION:-2.23.0}"
 JAEGER_MAJOR="${JAEGER_VERSION%%.*}"
@@ -37,8 +41,12 @@ JAEGER_HOME="${JAEGER_HOME:-/opt/jaeger}"
 GH_PROXIES="${GH_PROXIES:-https://ghfast.top https://ghproxy.net https://gh-proxy.com}"
 NET="rfq-net"
 HOST_PORT="${HOST_PORT:-48081}"
+WEB_HOST_PORT="${WEB_HOST_PORT:-48080}"
+WEB_BIND="${WEB_BIND:-127.0.0.1}"
+STARTUP_TIMEOUT="${RFQ_STARTUP_TIMEOUT:-180}"
 OTEL_AGENT="${OTEL_AGENT:-/opt/otel/opentelemetry-javaagent.jar}"
 API_DIR="$(cd "$(dirname "$0")/../api" 2>/dev/null && pwd)"
+REPO_DIR="$(cd "$API_DIR/../.." && pwd)"
 
 # 数据库：默认连宿主机 MySQL。可用 /opt/rfq/db.env（内容形如 RFQ_DB_USER=xx）或环境变量覆盖
 DB_ENV_FILE="${DB_ENV_FILE:-/opt/rfq/db.env}"
@@ -242,19 +250,76 @@ do_jaeger() {
 
 do_build() {
   [ -d "$API_DIR" ] || { echo "[fail] 未找到 apps/api 目录: $API_DIR"; exit 1; }
-  echo "[build] 开始构建镜像（首次约 5~15 分钟，构建期借用宿主机网络）..."
-  run_or_fail env DOCKER_BUILDKIT=1 docker build --network host -t "$IMAGE" "$API_DIR"
-  echo "[ok] 镜像构建完成: $IMAGE"
+  local release
+  release="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  echo "[build] 构建前后端镜像，发布编号 $release（首次构建需要下载依赖）..."
+  run_or_fail env DOCKER_BUILDKIT=1 docker build --network host \
+    --label "com.naura.rfq.release=$release" -t "$IMAGE" "$API_DIR"
+  run_or_fail env DOCKER_BUILDKIT=1 docker build --network host \
+    --label "com.naura.rfq.release=$release" \
+    --build-arg "NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}" \
+    -f "$REPO_DIR/apps/web/Dockerfile" -t "$WEB_IMAGE" "$REPO_DIR"
+  echo "[ok] 前后端镜像构建完成: $IMAGE / $WEB_IMAGE"
+}
+
+check_release() {
+  local api_release web_release img
+  for img in "$IMAGE" "$WEB_IMAGE"; do
+    image_ok "$img" || { echo "[fail] 缺少镜像 $img，请先执行 bash $0 build"; return 1; }
+  done
+  api_release=$(docker image inspect --format '{{ index .Config.Labels "com.naura.rfq.release" }}' "$IMAGE") || return 1
+  web_release=$(docker image inspect --format '{{ index .Config.Labels "com.naura.rfq.release" }}' "$WEB_IMAGE") || return 1
+  if [ -z "$api_release" ] || [ "$api_release" = '<no value>' ] || [ "$api_release" != "$web_release" ]; then
+    echo "[fail] 前后端镜像发布编号不一致或仍是旧镜像，请重新执行 bash $0 build"
+    return 1
+  fi
+}
+
+startup_failed() {
+  echo "[fail] $1，最近的前后端日志："
+  docker logs --tail 40 rfq-service 2>&1 || true
+  docker logs --tail 40 rfq-web 2>&1 || true
+  exit 1
+}
+
+wait_api() {
+  local deadline=$((SECONDS+STARTUP_TIMEOUT))
+  while ((SECONDS<deadline)); do
+    if curl --fail --silent --show-error --connect-timeout 2 --max-time 3 \
+      "http://127.0.0.1:${HOST_PORT}/actuator/health" 2>/dev/null \
+      | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
+
+wait_web() {
+  local deadline=$((SECONDS+STARTUP_TIMEOUT))
+  while ((SECONDS<deadline)); do
+    if timeout 10 docker exec rfq-web /bin/sh /usr/local/bin/check-rfq-web.sh >/dev/null 2>&1; then
+      # Hash the complete HTTP payload once, not on every periodic health check.
+      timeout 120 docker exec rfq-web /bin/sh /usr/local/bin/check-rfq-web.sh --full && return 0
+      return 1
+    fi
+    sleep 2
+  done
+  return 1
 }
 
 do_start() {
-  net_ok
+  # Complete preflight before removing either running application container.
+  check_release || exit 1
+  command -v curl >/dev/null 2>&1 || { echo "[fail] 请先安装 curl，用于就绪检查"; exit 1; }
+  command -v timeout >/dev/null 2>&1 || { echo "[fail] 请先安装 coreutils（需要 timeout 命令）"; exit 1; }
+  [[ "$STARTUP_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "[fail] RFQ_STARTUP_TIMEOUT 必须为正整数"; exit 1; }
+  net_ok || exit 1
   if [ "${OTEL_ENABLE:-0}" = "1" ] && [ "${SKIP_JAEGER:-0}" != "1" ]; then
     do_jaeger
   else
     echo "[info] 链路追踪未启用，跳过 jaeger（开启: OTEL_ENABLE=1 bash $0 start）"
     OTEL_ENDPOINT=""
   fi
+  rm_if_exists rfq-web
   rm_if_exists rfq-service
 
   local -a args=(--network "$NET"
@@ -292,20 +357,23 @@ do_start() {
     --log-driver local --log-opt max-size=20m --log-opt max-file=5 \
     "${args[@]}" "$IMAGE"
 
-  sleep 3
-  if docker ps --format '{{.Names}}' | grep -qx rfq-service; then
-    echo "[ok] rfq-service 已启动"
-    echo "     日志: bash $0 logs"
-    echo "     验证: curl http://127.0.0.1:${HOST_PORT}/actuator/health"
-  else
-    echo "[fail] 启动失败，最后日志:"
-    docker logs --tail 30 rfq-service 2>&1 || true
-    exit 1
-  fi
+  echo "[info] 等待后端健康检查（最多 $STARTUP_TIMEOUT 秒）..."
+  wait_api || startup_failed "后端未就绪"
+  echo "[info] 启动前端与编辑器，端口 $WEB_HOST_PORT ..."
+  run_or_fail docker run -d --name rfq-web --restart unless-stopped \
+    --network "$NET" -p "${WEB_BIND}:${WEB_HOST_PORT}:8080" \
+    --log-driver local --log-opt max-size=20m --log-opt max-file=5 \
+    -e RFQ_API_UPSTREAM=rfq-service:48081 \
+    -e "RFQ_OFFICE_UPSTREAM=${RFQ_OFFICE_UPSTREAM:-rfq-service:48081}" "$WEB_IMAGE"
+  wait_web || startup_failed "前端接口转发或编辑器 JS/WASM 校验失败"
+  echo "[ok] 前后端已就绪，Word/PDF 编辑器 HTTP 完整性校验通过"
+  echo "     前端: http://127.0.0.1:${WEB_HOST_PORT}（绑定地址 $WEB_BIND）"
+  echo "     日志: bash $0 logs api / bash $0 logs web"
+  echo "     首次迁移: 宿主机 nginx 的网页入口须改为转发到 127.0.0.1:${WEB_HOST_PORT}，见 docs/development/docker-deployment.md"
 }
 
 do_stop() {
-  docker rm -f rfq-service jaeger >/dev/null 2>&1
+  docker rm -f rfq-web rfq-service jaeger >/dev/null 2>&1
   if [ -f "$JAEGER_PID" ]; then
     kill "$(cat "$JAEGER_PID" 2>/dev/null)" >/dev/null 2>&1
     rm -f "$JAEGER_PID"
@@ -315,7 +383,7 @@ do_stop() {
 }
 
 do_status() {
-  docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'rfq-service|jaeger' \
+  docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'rfq-service|rfq-web|jaeger' \
     || echo "[info] 无相关容器"
   if [ -f "$JAEGER_PID" ] && kill -0 "$(cat "$JAEGER_PID" 2>/dev/null)" 2>/dev/null; then
     echo "[ok] jaeger 宿主机进程运行中 pid=$(cat "$JAEGER_PID") UI:http://<本机IP>:16686"
@@ -324,8 +392,10 @@ do_status() {
   else
     echo "[warn] jaeger 未运行"
   fi
-  curl -s -m 3 "http://127.0.0.1:${HOST_PORT}/actuator/health" >/dev/null 2>&1 \
+  curl --fail -s -m 3 "http://127.0.0.1:${HOST_PORT}/actuator/health" 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' \
     && echo "[ok] 应用健康检查通过" || echo "[warn] 应用健康检查未通过（可能还在启动）"
+  docker exec rfq-web /bin/sh /usr/local/bin/check-rfq-web.sh >/dev/null 2>&1 \
+    && echo "[ok] 前端、接口转发及编辑器资源检查通过" || echo "[warn] 前端、接口转发或编辑器资源检查未通过"
 }
 
 case "${1:-start}" in
@@ -333,8 +403,12 @@ case "${1:-start}" in
   build)   do_build ;;
   start)   do_start ;;
   stop)    do_stop ;;
-  restart) do_stop; do_start ;;
+  restart) do_start ;;
   status)  do_status ;;
-  logs)    docker logs -f --tail 100 rfq-service ;;
+  logs)    case "${2:-api}" in
+             api) docker logs -f --tail 100 rfq-service ;;
+             web) docker logs -f --tail 100 rfq-web ;;
+             *) echo "用法: bash $0 logs {api|web}"; exit 1 ;;
+           esac ;;
   *) echo "用法: bash $0 {pull|build|start|stop|restart|status|logs}"; exit 1 ;;
 esac

@@ -2,19 +2,21 @@
 # 在部署服务器上执行：安装 nginx 配置、生成证书、校验并热加载。
 #
 # 用法：
-#   sudo ./setup-https.sh                       # 自动探测本机 IP 作访问地址，自签证书
+#   sudo ./setup-https.sh --container           # 转发到前端容器，默认 48080
 #   sudo ./setup-https.sh -n rfq.intra.net      # 用域名，自签证书
 #   sudo ./setup-https.sh -n rfq.intra.net \
 #        --cert /etc/pki/rfq.crt --key /etc/pki/rfq.key \
 #        --chain /etc/pki/rfq-chain.crt          # 用企业 CA 签发的证书
-#   sudo ./setup-https.sh -w /srv/rfq/web --dry-run   # 只打印将执行的动作
+#   sudo ./setup-https.sh --static -w /srv/rfq/web --dry-run # 旧静态目录模式
 #
-# 前置：本机已安装 nginx，前端产物已同步到 -w 指定目录。
+# 前置：本机已安装 nginx，前后端容器已启动。默认复用已有的 rfq.crt/rfq.key。
 
 set -euo pipefail
 
 SERVER_NAME="${SERVER_NAME:-}"
 WEB_ROOT="${WEB_ROOT:-/opt/rfq/web}"
+WEB_MODE="container"
+WEB_PORT="${WEB_HOST_PORT:-48080}"
 API_PORT="${API_PORT:-48084}"
 OFFICE_PORT="${OFFICE_PORT:-48081}"
 CERT_DIR="${CERT_DIR:-/etc/nginx/ssl}"
@@ -26,7 +28,6 @@ EXTRA_SAN="${EXTRA_SAN:-}"
 DRY_RUN=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMPLATE="$SCRIPT_DIR/nginx-rfq.conf"
 PROXY_SRC="$SCRIPT_DIR/rfq-proxy.conf"
 PROXY_DST="/etc/nginx/rfq-proxy.conf"
 
@@ -42,7 +43,10 @@ usage() {
 while [ $# -gt 0 ]; do
     case "$1" in
         -n|--server-name) SERVER_NAME="$2"; shift 2 ;;
-        -w|--web-root)    WEB_ROOT="$2";    shift 2 ;;
+        -w|--web-root)    WEB_ROOT="$2"; WEB_MODE=static; shift 2 ;;
+        --container)     WEB_MODE=container; shift ;;
+        --static)        WEB_MODE=static; shift ;;
+        --web-port)      WEB_PORT="$2"; shift 2 ;;
         --api-port)       API_PORT="$2";    shift 2 ;;
         --office-port)    OFFICE_PORT="$2"; shift 2 ;;
         --cert)           CERT="$2";        shift 2 ;;
@@ -57,9 +61,20 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+TEMPLATE="$SCRIPT_DIR/nginx-rfq.conf"
+if [ "$WEB_MODE" = container ]; then
+    TEMPLATE="$SCRIPT_DIR/nginx-rfq-container.conf"
+    [[ "$WEB_PORT" =~ ^[0-9]+$ ]] && [ "$WEB_PORT" -ge 1 ] && [ "$WEB_PORT" -le 65535 ] || fail "--web-port 必须是 1 到 65535 的端口"
+    say "==> 前端容器模式：全部网页、编辑器与 API 转发到 127.0.0.1:$WEB_PORT"
+else
+    say "==> 旧静态目录模式：$WEB_ROOT"
+fi
+
 [ "$(id -u)" -eq 0 ] || [ "$DRY_RUN" -eq 1 ] || fail "需要 root 权限，请用 sudo 执行"
+NGX="$(command -v nginx || true)"
+[ -n "$NGX" ] || NGX=/usr/local/nginx/sbin/nginx
 if [ "$DRY_RUN" -eq 0 ]; then
-    command -v nginx >/dev/null 2>&1 || fail "未检测到 nginx，请先安装（apt install nginx / yum install nginx）"
+    [ -x "$NGX" ] || fail "未检测到 nginx，请先安装（apt install nginx / yum install nginx）"
 fi
 [ -f "$TEMPLATE" ] || fail "找不到模板 $TEMPLATE，请把整个 deploy/https 目录一起上传"
 [ -f "$PROXY_SRC" ] || fail "找不到 $PROXY_SRC"
@@ -84,6 +99,11 @@ if { [ -n "$CERT" ] && [ -z "$KEY" ]; } || { [ -z "$CERT" ] && [ -n "$KEY" ]; };
     fail "--cert 与 --key 必须同时提供"
 fi
 
+if [ -z "$CERT" ] && [ -z "$KEY" ] && [ -s "$CERT_DIR/rfq.crt" ] && [ -s "$CERT_DIR/rfq.key" ]; then
+    CERT="$CERT_DIR/rfq.crt"
+    KEY="$CERT_DIR/rfq.key"
+fi
+
 if [ -z "$CERT" ] || [ -z "$KEY" ]; then
     CERT="$CERT_DIR/rfq.crt"
     KEY="$CERT_DIR/rfq.key"
@@ -105,13 +125,18 @@ else
 fi
 
 say "==> 安装反代公共配置：$PROXY_DST"
+run "mkdir -p /etc/nginx"
 run "install -m 644 '$PROXY_SRC' '$PROXY_DST'"
 
 # 兼容不同发行版：优先 conf.d，其次 sites-enabled
-if [ -d /etc/nginx/conf.d ]; then
+if [ -d /etc/nginx/conf.d ] || [ "$DRY_RUN" -eq 1 ]; then
     CONF_DST="/etc/nginx/conf.d/rfq.conf"
-else
+elif [ -d /etc/nginx/sites-enabled ]; then
     CONF_DST="/etc/nginx/sites-enabled/rfq.conf"
+elif [ -d /usr/local/nginx/conf/conf.d ]; then
+    CONF_DST="/usr/local/nginx/conf/conf.d/rfq.conf"
+else
+    fail "未找到 nginx 的站点 include 目录；请在现有 HTTPS 站点将 location / 转发到 http://127.0.0.1:$WEB_PORT，参见 docs/development/docker-deployment.md"
 fi
 say "==> 生成站点配置：$CONF_DST（server_name=$SERVER_NAME）"
 
@@ -123,6 +148,7 @@ sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
     -e "s|__CHAIN__|$CHAIN|g" \
     -e "s|__API_PORT__|$API_PORT|g" \
     -e "s|__OFFICE_PORT__|$OFFICE_PORT|g" \
+    -e "s|__WEB_PORT__|$WEB_PORT|g" \
     "$TEMPLATE" > "$TMP_CONF"
 
 # 自签场景没有证书链，删掉 ssl_trusted_certificate 整行
@@ -130,7 +156,7 @@ if [ -z "$CHAIN" ]; then
     sed -i '/ssl_trusted_certificate/d' "$TMP_CONF"
 fi
 
-if [ ! -d "$WEB_ROOT" ]; then
+if [ "$WEB_MODE" = static ] && [ ! -d "$WEB_ROOT" ]; then
     say "警告：前端目录 $WEB_ROOT 不存在，请先把 apps/web/dist 同步上去，否则访问会 404"
 fi
 
@@ -146,7 +172,7 @@ run "install -m 644 '$TMP_CONF' '$CONF_DST'"
 rm -f "$TMP_CONF"
 
 if [ "$DRY_RUN" -eq 0 ]; then
-    if ! nginx -t; then
+    if ! "$NGX" -t; then
         if [ -n "$BACKUP" ]; then
             install -m 644 "$BACKUP" "$CONF_DST"
             fail "新配置未通过校验，已回滚到 $BACKUP"
@@ -154,21 +180,29 @@ if [ "$DRY_RUN" -eq 0 ]; then
         fail "新配置未通过校验，请检查 $CONF_DST"
     fi
 else
-    say "[dry-run] nginx -t"
+    say "[dry-run] $NGX -t"
 fi
 
 say "==> 热加载 nginx"
-run "nginx -s reload || systemctl reload nginx"
+run "'$NGX' -s reload || systemctl reload nginx"
 
 cat <<EOF
 
 完成。访问地址：https://$SERVER_NAME
 
 后续检查：
-  1. curl -kI https://$SERVER_NAME/                       静态站是否 200
-  2. curl -k  https://$SERVER_NAME/api/rfq/actuator/health  反代是否通
-  3. 若后端端口不是 $API_PORT / $OFFICE_PORT，重跑时用 --api-port / --office-port 指定
+  curl -kI https://$SERVER_NAME/                         网页入口是否 200
 EOF
+
+if [ "$WEB_MODE" = container ]; then
+    say "  curl -k https://$SERVER_NAME/backend-health          容器接口转发是否通"
+    say "  若前端映射不是 $WEB_PORT，重跑时用 --web-port 指定。"
+    say "请通过实际访问地址验证：/craft-editors/pdfcraft-classic/pdfcraft-classic_bg.wasm 应返回 200 和 application/wasm。"
+    say "若此前另有站点文件使用相同 server_name，请合并或停用该旧站点，避免请求仍落到旧静态目录。"
+else
+    say "  curl http://127.0.0.1:$API_PORT/actuator/health       后端是否健康"
+    say "  若后端端口不是 $API_PORT / $OFFICE_PORT，重跑时用 --api-port / --office-port 指定。"
+fi
 
 if [ "$SELF_SIGNED" -eq 1 ]; then
     cat <<EOF

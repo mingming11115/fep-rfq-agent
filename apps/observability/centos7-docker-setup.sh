@@ -59,4 +59,4 @@ docker compose version
 docker run --rm hello-world >/dev/null 2>&1 \
   && log "OK hello-world 拉取运行成功，可以部署 RFQ 了" \
   || log "WARN hello-world 拉取失败，镜像加速器可能不可用，但不影响继续尝试"
-log "下一步: cd 仓库路径 && git pull && cd apps/api && docker compose build rfq-service && docker compose up -d rfq-service"
+log "下一步: cd 仓库路径，更新代码后执行 bash apps/observability/docker-rfq.sh build，再执行 bash apps/observability/docker-rfq.sh start（统一部署前后端，无需 Compose）"

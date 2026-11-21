@@ -7,3 +7,5 @@
 - [历史资料](archive/)：历史文档、测试样例与工作区整理记录。
 
 项目运行命令以 [根 README](../README.md) 为入口。
+
+堡垒机部署见 [前后端 Docker 部署与 HTTPS 迁移](development/docker-deployment.md)。

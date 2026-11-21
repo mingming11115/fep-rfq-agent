@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 旧静态部署专用。新版前后端容器部署使用 docker-rfq.sh build/start，
+# 不需要探测宿主机网页目录；见 docs/development/docker-deployment.md。
 # 在服务器上更新前端静态产物（nginx 直接读磁盘，无需重启任何服务）。
 #
 # 前提：服务器上已有本仓库的 git 克隆，且 nginx 站点已由 setup-https.sh 装好。
@@ -37,6 +39,7 @@ if [ -z "$WEB_ROOT" ]; then
   else
     echo "错误：无法自动定位前端目录（nginx 配置里没找到 root 指令）。" >&2
     echo "请手动指定后重跑，例如：WEB_ROOT=/opt/rfq/web bash apps/observability/update-web.sh" >&2
+    echo "若已使用前后端容器部署，请改用 bash apps/observability/docker-rfq.sh build 和 start，不需要此脚本。" >&2
     exit 1
   fi
 fi

@@ -5,18 +5,42 @@ import {Window} from 'happy-dom';
 import {makeSourceAnchor} from './documentAnchors.js';
 import {createCraftProjectEditor} from './craftEditorBridge.js';
 
-test('Word bootstrap reports module and WASM failures to its host',async()=>{
-  const html=await readFile(new URL('../../../packages/craft-editors/site/wordcraft-classic/index.html',import.meta.url),'utf8');
+for(const engine of ['wordcraft','pdfcraft'])test(`${engine} bootstrap reports module and WASM failures to its host`,async()=>{
+  const html=await readFile(new URL(`../../../packages/craft-editors/site/${engine}-classic/index.html`,import.meta.url),'utf8');
   const script=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   const messages=[],loading={textContent:''};
   const parent={postMessage:(...args)=>messages.push(args)};
   const win={parent,location:{origin:'https://rfq.example',search:'?host=parent'}};
-  const run=new Function('window','document',`return (async()=>{${script.replace("import('./wordcraft-classic.js')","Promise.reject(new Error('WASM download failed'))")}})()`);
+  const failed=script.replace(`import('./${engine}-classic.js')`,"Promise.reject(new Error('WASM download failed'))")
+    .replace(`import init from './${engine}-classic.js';`,"const init=()=>Promise.reject(new Error('WASM download failed'));");
+  const run=new Function('window','document',`return (async()=>{${failed}})()`);
   await run(win,{getElementById:()=>loading});
-  assert.equal(messages[0]?.[0].type,'wordcraft:failed');
+  assert.equal(messages[0]?.[0].type,engine+':failed');
   assert.match(messages[0][0].error,/WASM download failed/);
   assert.equal(messages[0][1],win.location.origin);
   assert.match(loading.textContent,/WASM download failed/);
+});
+
+test('document opening gets a fresh deadline after slow resource loading and explicit failures cancel it',async t=>{
+  const window=new Window({url:'https://rfq.example',settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true,disableIframePageLoading:true}});
+  const document=window.document;document.write(await readFile(new URL('../../../packages/craft-editors/site/classic.html',import.meta.url),'utf8'));
+  Object.assign(globalThis,{window,document,location:window.location,ResizeObserver:class{observe(){}disconnect(){}},requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}});
+  const frame=document.getElementById('word-frame'),calls=[],errors=[];
+  const native={postMessage:value=>calls.push(value)};Object.defineProperty(frame,'contentWindow',{value:native});
+  const bridge=createCraftProjectEditor({frame,root:document.getElementById('original-comments'),tools:document.getElementById('review-tools'),source:{projectId:'P',fileId:'F',sourceVersion:'V1'},reference:{id:'file'},user:{id:'U',name:'User'},engine:'wordcraft',getContext:()=>({rows:[],comments:[],people:[]}),onError:value=>errors.push(value)});
+  const send=(type,data={})=>window.dispatchEvent(new window.MessageEvent('message',{origin:location.origin,source:native,data:{type:'wordcraft:'+type,...data}}));
+  t.mock.timers.enable({apis:['setTimeout']});
+  try{
+    bridge.open('real.docx',new ArrayBuffer(2));
+    t.mock.timers.tick(170000);assert.deepEqual(errors,[]);
+    send('ready');assert.equal(calls[0].type,'wordcraft:open');
+    t.mock.timers.tick(59999);assert.deepEqual(errors,[]);
+    t.mock.timers.tick(1);assert.match(errors.pop(),/文档打开超时/);
+    bridge.open('real.docx',new ArrayBuffer(2));
+    send('failed',{error:'WebGL unavailable'});
+    assert.match(errors.pop(),/WebGL unavailable/);
+    t.mock.timers.tick(240000);assert.deepEqual(errors,[]);
+  }finally{bridge.destroy();t.mock.timers.reset();await window.happyDOM.close();}
 });
 
 test('project editor coordinates native and collaboration comments within one source session',async t=>{
@@ -76,7 +100,9 @@ test('project editor coordinates native and collaboration comments within one so
     t.mock.timers.enable({apis:['setTimeout']});
     bridge.open('real.docx',new Uint8Array([1,2,3]).buffer);
     t.mock.timers.tick(60000);
-    assert.match(errors.pop(),/编辑器启动超时/);
+    assert.equal(errors.length,0,'a cold JS/WASM load gets more than 60 seconds');
+    t.mock.timers.tick(120000);
+    assert.match(errors.pop(),/编辑器资源加载超时/);
     t.mock.timers.reset();
     send('ready',{}, {source:{}});send('ready',{}, {origin:'https://foreign.invalid'});await tick();assert.equal(calls.length,0);
     send('ready');await tick();assert.equal(calls[0].type,'wordcraft:open');

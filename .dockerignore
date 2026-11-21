@@ -1,0 +1,27 @@
+# Root build context is for the web image only. Send only its sources and
+# verified editor runtimes, not host data, credentials or development archives.
+**
+!apps/
+!apps/web/
+!apps/web/**
+!packages/
+!packages/craft-editors/
+!packages/craft-editors/site/
+!packages/craft-editors/site/**
+!packages/craft-editors/*-classic-comments.patch
+!deploy/
+!deploy/web/
+!deploy/web/**
+**/node_modules
+**/.cache
+**/target
+**/dist
+**/data
+**/logs
+**/.env
+**/.env.*
+**/*.log
+**/.git
+apps/web/.generated-public
+apps/web/.test-build
+apps/web/public/craft-editors

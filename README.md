@@ -69,7 +69,14 @@ npm run build:api        # 后端 verify，需要测试数据库
 
 各模块依赖分别安装；根工程没有额外 Node 依赖。浏览器诊断工具按 [浏览器测试说明](tests/browser/README.md) 单独安装和运行。
 
-Docker 从 `apps/api` 执行 `docker compose up --build -d`，详见后端说明。
+堡垒机 Docker 部署在仓库根目录执行，统一构建、启动前后端及 Word/PDF 编辑器，无需 Docker Compose：
+
+```sh
+bash apps/observability/docker-rfq.sh build
+bash apps/observability/docker-rfq.sh start
+```
+
+已有宿主机 nginx 静态站点首次需切换为转发到前端容器 `127.0.0.1:48080`；原数据库和文件卷继续使用。完整步骤见 [Docker 部署与 HTTPS 迁移](docs/development/docker-deployment.md)。
 
 ## 文档与清理
 

@@ -79,10 +79,21 @@ def main():
     html = '\n'.join(line for line in html.splitlines() if 'data-trunk' not in line)
     html = html.replace('</head>', '''<link rel="icon" href="data:,">
 <script type="module">
-import init from './pdfcraft-classic.js';
-await init({module_or_path:'./pdfcraft-classic_bg.wasm'});
+try {
+  const {default:init}=await import('./pdfcraft-classic.js');
+  await init({module_or_path:'./pdfcraft-classic_bg.wasm'});
+} catch(cause) {
+  console.error('启动 PDF 编辑器失败', cause);
+  const error=cause instanceof Error?cause.message:String(cause);
+  const loading=document.getElementById('pdfcraft_error');
+  if(loading) { loading.textContent='PDF 编辑器启动失败：'+error; loading.hidden=false; }
+  if(window.parent!==window&&new URLSearchParams(window.location.search).get('host')==='parent') {
+    window.parent.postMessage({type:'pdfcraft:failed',error},window.location.origin);
+  }
+}
 </script>
 </head>''')
+    html = html.replace('<canvas id="pdfcraft"></canvas>', '<canvas id="pdfcraft"></canvas>\n    <div id="pdfcraft_error" hidden style="position:absolute;top:20px;left:20px;right:20px;padding:16px;background:white;color:#a00;font:14px system-ui"></div>')
     (args.out / 'index.html').write_text(html)
     for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md'):
         shutil.copy2(source / name, args.out / name)
