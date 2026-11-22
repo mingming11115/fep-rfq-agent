@@ -43,24 +43,11 @@ public class PdfBlockReader implements DocumentBlockReader {
 
     @Override
     public List<RawBlock> read(Path file) throws DocumentReadException {
-        return readWithMineru(file, false);
-    }
-
-    /** Native fallback retains line boundaries for historical clauses and replies. */
-    public List<RawBlock> readForHistory(Path file) throws DocumentReadException {
-        return readWithMineru(file, true);
-    }
-
-    private List<RawBlock> readWithMineru(Path file, boolean historyLines) throws DocumentReadException {
         if (!mineru.enabled()) {
-            return read(file, historyLines);
+            return nativeRead(file);
         }
         try {
-            var blocks = mineru.read(file);
-            if (historyLines && blocks.stream().noneMatch(block -> block.mineruTable() != null)) {
-                throw new DocumentReadException("MinerU 未返回可读取的历史表格");
-            }
-            return recoverMineruImages(file, blocks);
+            return recoverMineruImages(file, mineru.read(file));
         } catch (InterruptedException exception) {
             log.error("MinerU 解析 PDF 被中断", exception);
             Thread.currentThread().interrupt();
@@ -69,8 +56,8 @@ public class PdfBlockReader implements DocumentBlockReader {
             log.error("MinerU 解析 PDF 失败", exception);
             String reason = exception instanceof DocumentReadException ? exception.getMessage() : ParseHttpClient.reason(exception);
             log.warn("document.parse.mineru.fallback MinerU 解析失败，降级现有 PDF 解析 reason={}", reason);
-            var blocks = read(file, historyLines);
-            if (!historyLines && !blocks.isEmpty()) {
+            var blocks = nativeRead(file);
+            if (!blocks.isEmpty()) {
                 var first = blocks.get(0);
                 String issue = "MinerU 解析失败，已使用现有 PDF 解析：" + reason;
                 if (first.issue() != null) {
@@ -110,7 +97,7 @@ public class PdfBlockReader implements DocumentBlockReader {
         }
     }
 
-    private List<RawBlock> read(Path file, boolean historyLines) throws DocumentReadException {
+    private List<RawBlock> nativeRead(Path file) throws DocumentReadException {
         try (PDDocument document = Loader.loadPDF(file.toFile())) {
             PDFTextStripper stripper = new PDFTextStripper();
             stripper.setSortByPosition(true);
@@ -121,9 +108,7 @@ public class PdfBlockReader implements DocumentBlockReader {
                 stripper.setEndPage(page);
                 String pageText = stripper.getText(document);
                 String anchor = "page-" + page;
-                List<String> paragraphs = historyLines
-                    ? pageText.lines().map(String::trim).filter(line -> !line.isBlank()).toList()
-                    : splitParagraphs(pageText);
+                List<String> paragraphs = splitParagraphs(pageText);
                 if (paragraphs.isEmpty()) {
                     if (++images[0] > ocr.maxImages() || !ocr.enabled()) {
                         blocks.add(ocr.pending(blocks.size(), "", anchor, "扫描页 OCR 未启用或超过数量上限，待人工核对"));
@@ -145,8 +130,7 @@ public class PdfBlockReader implements DocumentBlockReader {
                         }
                     }
                 } else {
-                    for (int index = 0; index < paragraphs.size(); index++) blocks.add(RawBlock.paragraph(blocks.size(), paragraphs.get(index), "", null,
-                        historyLines ? anchor + "/line-" + index : anchor));
+                    for (int index = 0; index < paragraphs.size(); index++) blocks.add(RawBlock.paragraph(blocks.size(), paragraphs.get(index), "", null, anchor));
                     readImages(document.getPage(page - 1), blocks, images, anchor);
                 }
             }

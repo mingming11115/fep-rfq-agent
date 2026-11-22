@@ -98,7 +98,7 @@ class MineruPdfReaderTest {
             var history = historyWithModel(requests, """
                 {"answers":[{"id":"main:page-1/mineru-0/r1","candidateId":0}]}
                 """);
-            var blocks = context.getBean(PdfBlockReader.class).readForHistory(file);
+            var blocks = context.getBean(PdfBlockReader.class).read(file);
             var result = history.extract(blocks, List.of());
 
             assertThat(result.clauses()).hasSize(2);
@@ -128,13 +128,13 @@ class MineruPdfReaderTest {
             var history = historyWithModel(requests, """
                 {"requirements":[],"ignoredBlockIndexes":[0]}
                 """);
-            var blocks = context.getBean(PdfBlockReader.class).readForHistory(file);
+            var blocks = context.getBean(PdfBlockReader.class).read(file);
             var result = history.extract(blocks, List.of());
 
             assertThat(mineru.request().get()).isNotNull();
             assertThat(result.clauses()).singleElement().satisfies(clause -> {
                 assertThat(clause.requirement()).isEqualTo(NATIVE_TEXT);
-                assertThat(clause.requirementAnchor()).isEqualTo("main:page-1/line-0");
+                assertThat(clause.requirementAnchor()).isEqualTo("main:page-1");
                 assertThat(clause.answer()).isEmpty();
             });
             assertThat(requests).singleElement().satisfies(request -> {
@@ -204,8 +204,7 @@ class MineruPdfReaderTest {
             var first = context.getBean(PdfBlockReader.class).read(file).get(0);
             assertThat(first.text()).isEqualTo(NATIVE_TEXT);
             assertThat(first.issue()).contains("MinerU 解析失败");
-            assertThat(context.getBean(PdfBlockReader.class).readForHistory(file).get(0).anchor())
-                .isEqualTo("page-1/line-0");
+            assertThat(first.anchor()).isEqualTo("page-1");
             assertThat(mineru.request().get()).isNotNull();
         }));
     }

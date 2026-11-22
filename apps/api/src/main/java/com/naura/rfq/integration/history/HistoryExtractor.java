@@ -272,7 +272,7 @@ public class HistoryExtractor {
             String anchor = prefix + block.anchor(), section = value(block.sectionPath());
             if (RawBlock.IMAGE.equals(block.type()) || block.issue() != null) {
                 issues.add(anchor + "：" + (block.issue() == null ? "图片待识别／核对" : block.issue()));
-                if (RawBlock.IMAGE.equals(block.type()) || !"mineru".equals(block.provenance())) {
+                if (RawBlock.IMAGE.equals(block.type())) {
                     continue;
                 }
             }

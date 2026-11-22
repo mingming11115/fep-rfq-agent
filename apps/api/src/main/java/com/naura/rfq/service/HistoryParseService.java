@@ -8,7 +8,6 @@ import com.naura.rfq.integration.history.HistoryExtractor;
 import com.naura.rfq.integration.parse.DocumentBlockReader;
 import com.naura.rfq.integration.parse.DocumentReadException;
 import com.naura.rfq.integration.parse.DocxBlockReader;
-import com.naura.rfq.integration.parse.PdfBlockReader;
 import com.naura.rfq.integration.parse.WordMarkdownReader;
 import com.naura.rfq.model.parse.RawBlock;
 import com.naura.rfq.model.vo.HistoryParseView;
@@ -118,7 +117,7 @@ public class HistoryParseService {
                 saveMarkdownQuietly(path, payloadTarget != null ? payloadTarget
                         : lease.temporary() ? null : path.resolveSibling("source.md"));
             }
-            List<RawBlock> blocks = reader instanceof PdfBlockReader pdf ? pdf.readForHistory(path) : reader.read(path);
+            List<RawBlock> blocks = reader.read(path);
             if (blocks.stream().mapToLong(block -> block.text() == null ? 0 : block.text().length()).sum() > 2_000_000) {
                 throw new BusinessException(413, "文档内容过多，请拆分后上传");
             }
