@@ -10,10 +10,10 @@ import tarfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent
-SOURCE_URL = 'https://github.com/storytold/wordcraft/archive/refs/tags/v0.13.2.tar.gz'
-SOURCE_SHA256 = 'f5b36f6f57eac8d2f6a2f8fd0be97d8ae46520b3bda796d4ddbfd663140af3f7'
-I18N_URL = 'https://github.com/storytold/craft-i18n/archive/9205108cfdced5177706264038848b68b2422d2b.tar.gz'
-I18N_SHA256 = 'd080b3ddc63e8d20d78a0c4ba41b975d89490df45431e49ac5b101c869df11b7'
+SOURCE_URL = 'https://github.com/storytold/wordcraft/archive/refs/tags/v0.18.1.tar.gz'
+SOURCE_SHA256 = '55e6e6ca0e988a7ba320bef506e3910d2e2e5c1d1599a79571e144947438ab92'
+I18N_URL = 'https://github.com/storytold/craft-i18n/archive/1e515422afdda2f317af430c1f9d68a5f83935b4.tar.gz'
+I18N_SHA256 = 'f80b9e41011f55963cb3cdb06f0e613996b0593a8f6236cd7d09a52f8b10a2e6'
 
 
 def run(args, **kwargs):
@@ -75,7 +75,7 @@ def prepare_fonts(cache):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, help='Existing WordCraft v0.13.2 source checkout')
+    parser.add_argument('--source', type=Path, help='Existing WordCraft v0.18.1 source checkout')
     parser.add_argument('--already-patched', action='store_true', help='The supplied checkout already contains this patch')
     parser.add_argument('--cargo', default=shutil.which('cargo') or 'cargo')
     parser.add_argument('--wasm-bindgen', default=shutil.which('wasm-bindgen') or 'wasm-bindgen')
@@ -89,9 +89,9 @@ def main():
     local_bindgen = cache / 'wasm-bindgen-0.2.129-aarch64-apple-darwin' / 'wasm-bindgen'
     if args.wasm_bindgen == 'wasm-bindgen' and local_bindgen.is_file():
         args.wasm_bindgen = str(local_bindgen)
-    source = (args.source or cache / 'wordcraft-0.13.2').resolve()
+    source = (args.source or cache / 'wordcraft-0.18.1').resolve()
     if not args.source:
-        archive = cache / 'wordcraft-0.13.2.tar.gz'
+        archive = cache / 'wordcraft-0.18.1.tar.gz'
         download(SOURCE_URL, archive, SOURCE_SHA256)
         if not (source / 'Cargo.toml').exists():
             unpack(archive, source)
@@ -153,7 +153,7 @@ try {
         shutil.copy2(notice, args.out / ('OFL-' + notice.parent.name + '.txt'))
     shutil.copy2(fonts / 'ATTRIBUTION.md', args.out / 'ATTRIBUTION-craft-fonts.md')
     names = sorted(str(path.relative_to(args.out)) for path in args.out.rglob('*') if path.is_file() and path.name != 'build.json')
-    (args.out / 'build.json').write_text(json.dumps({'editor':'wordcraft','version':'0.13.2','patchSha256':digest,
+    (args.out / 'build.json').write_text(json.dumps({'editor':'wordcraft','version':'0.18.1','patchSha256':digest,
         'files':{name:hashlib.sha256((args.out / name).read_bytes()).hexdigest() for name in names}}, indent=2))
     print('Built Word-style comments:', args.out, flush=True)
 

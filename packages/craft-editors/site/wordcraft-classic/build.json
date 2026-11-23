@@ -1,17 +1,17 @@
 {
   "editor": "wordcraft",
-  "version": "0.13.2",
-  "patchSha256": "838faca4312755631502e08273558820628c85220e426e688b613e4a41b18279",
+  "version": "0.18.1",
+  "patchSha256": "f5a523959add3c39355a706af3396569b770f49baa5342367f62cd078a03414c",
   "files": {
     "ATTRIBUTION-craft-fonts.md": "aa2aa7eec68c32ac2da6ff7162ca9100ab3680e4c7b98365fc7c74ddd4167d07",
     "LICENSE-APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
     "LICENSE-MIT": "fc257de83c44ae49e4aad1cf777b886794be3ac9c8d00c010ef55935d5bbeba5",
-    "NOTICE": "8943b156492b6f0caa7c59a53f97d7cc6a7b79ea3e54147b491e0821538606da",
+    "NOTICE": "8ff59a56c883fd708ed041c7a0ce4e16bb040e03027d94677d324ce711ebba2d",
     "OFL-biz-ud-pgothic.txt": "e753d7155d53c747d037a445e584c8ecfca6dd79846db610417e282a736b28bc",
     "OFL-noto-sans-cjk-sc.txt": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
     "index.html": "cca4cc0b6d29a7d6ad0b8df8baec8c7d320e9a8471301c0469150b19b5fb4e9e",
-    "snippets/eframe-d31a8450ea12dfc1/inline0.js": "22a98f9d0c5a0532d291bdc9a3050439420b3d11143b4568fcfd3c66fff36995",
-    "wordcraft-classic.js": "358c646623030accde69fb97723c855e726959c4692234875189d01d24662980",
-    "wordcraft-classic_bg.wasm": "0183b4add1e011c3207272a6fc65dd3acece0c478716a8b5e484206815bf3fdd"
+    "snippets\\eframe-d31a8450ea12dfc1\\inline0.js": "22a98f9d0c5a0532d291bdc9a3050439420b3d11143b4568fcfd3c66fff36995",
+    "wordcraft-classic.js": "5f769fbdc8750118927612e893529780c71f6d4578d501af9eeff3146cea4aff",
+    "wordcraft-classic_bg.wasm": "c2364fe293b1212bf72b688999d0019dd5db8b56c2123ce74284e4b2202c8568"
   }
 }
