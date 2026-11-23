@@ -23,6 +23,16 @@ public class HistoryRecallScope {
 
     public record Choice(String id, String name, String version, String status) {}
 
+    /**
+     * 与历史 RFQ 知识页展示口径一致：没有要求/答复定位信息且非手工补录的条款视为无法定位，
+     * 不在条款列表展示，也不参与知识库召回（发布时不写索引，比对打分时跳过存量）。
+     */
+    static boolean locatable(JsonNode payload) {
+        return payload.path("manual").asBoolean(false)
+                || !payload.path("requirementAnchor").asText("").isBlank()
+                || !payload.path("answerAnchor").asText("").isBlank();
+    }
+
     List<String> validate(Project project, List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();

@@ -126,7 +126,7 @@ test('switching history statistics filters reloads the BU resources and shows up
  const {host,state,click,render,cleanup}=await setupHistoryPage();
  t.after(cleanup);
  const clause={id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'待审核',
-  requirement:'要求支持自动上料',answer:'需配置上料模块 S'};
+  requirement:'要求支持自动上料',answer:'需配置上料模块 S',requirementAnchor:'main:body/1'};
  const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:[clause]};
  Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
  const resourcePath='/api/rfq/business-units/A/resources';
@@ -161,7 +161,7 @@ test('a BU publisher can publish a draft from the history clause list',async t=>
  const {host,state,settle,click,render,cleanup}=await setupHistoryPage();
  t.after(cleanup);
  const clause={id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:2,status:'草稿',
-  requirement:'要求支持自动上料',answer:'需配置上料模块 S'};
+  requirement:'要求支持自动上料',answer:'需配置上料模块 S',requirementAnchor:'main:body/1'};
  const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:[clause]};
  Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test-token',user:{id:'bu'}}));
@@ -187,10 +187,10 @@ test('全部提交审核 sends every submittable clause in one request',async t=
  const {host,state,click,render,cleanup}=await setupHistoryPage();
  t.after(cleanup);
  const clauses=[
-  {id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'草稿',requirement:'要求一',answer:'答复一'},
-  {id:'K2',type:'history',documentId:'D1',buId:'A',version:1,revision:1,status:'退回',requirement:'要求二',answer:'答复二'},
-  {id:'K3',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'草稿',requirement:'要求三',answer:''},
-  {id:'K4',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'待审核',requirement:'要求四',answer:'答复四'},
+  {id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'草稿',requirement:'要求一',answer:'答复一',requirementAnchor:'main:body/1'},
+  {id:'K2',type:'history',documentId:'D1',buId:'A',version:1,revision:1,status:'退回',requirement:'要求二',answer:'答复二',requirementAnchor:'main:body/2'},
+  {id:'K3',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'草稿',requirement:'要求三',answer:'',requirementAnchor:'main:body/3'},
+  {id:'K4',type:'history',documentId:'D1',buId:'A',version:1,revision:0,status:'待审核',requirement:'要求四',answer:'答复四',requirementAnchor:'main:body/4'},
  ];
  const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:clauses};
  Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
@@ -219,7 +219,7 @@ test('a published history clause can be revoked with the reason left empty',asyn
  const {host,state,settle,click,render,cleanup}=await setupHistoryPage();
  t.after(cleanup);
  const clause={id:'K1',type:'history',documentId:'D1',buId:'A',version:1,revision:2,status:'已发布',validity:'有效',
-  requirement:'要求支持自动上料',answer:'需配置上料模块 S'};
+  requirement:'要求支持自动上料',answer:'需配置上料模块 S',requirementAnchor:'main:body/1'};
  const resources={historyDocuments:[{id:'D1',buId:'A',name:'历史RFQ.docx',parseStatus:'complete'}],historyClauses:[clause]};
  Object.assign(state,{dataSource:'mysql',resourcesByBuId:{A:resources}});
  localStorage.setItem('fep-rfq-auth',JSON.stringify({token:'test-token',user:{id:'bu'}}));

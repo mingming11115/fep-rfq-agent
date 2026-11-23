@@ -340,6 +340,11 @@ class MatchEvaluator {
         var candidates = new ArrayList<Candidate>();
         for (String id : ids) {
             Source source = scope.sources().get(id);
+            // 无法在原件中定位的历史条款（无定位信息且非手工补录）不参与召回，覆盖存量已入索引的数据。
+            if (HISTORY.equals(library) && !HistoryRecallScope.locatable(source.payload())) {
+                diag.reject(id, "NOT_LOCATABLE");
+                continue;
+            }
             double similarity = scorer.score(requirement, text(source.payload(), "requirement"));
             String reason = contextReason(customer, models, source.payload());
             if (reason.isEmpty()) {

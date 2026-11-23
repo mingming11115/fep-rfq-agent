@@ -159,13 +159,16 @@ public class HistoryRfqReviewService {
         }
         row.payload().put("status", "已发布").put("validity", "有效").put("publishedById", user.id())
                 .put("publishedAt", Instant.now().toString());
-        var projection = json.createObjectNode().put("title", row.payload().path("title").asText())
-                .put("requirement_text", recallContext(row.payload()) + row.payload().path("requirement").asText())
-                .put("bu_id", buId).put("record_version", row.version())
-                .put("document_title", document.path("name").asText())
-                .put("document_id", row.payload().path("documentId").asText())
-                .put("group_id", KnowledgeGroupService.primaryGroup(document));
-        index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
+        // 无法在原件中定位的条款（与知识页展示口径一致）不写召回索引。
+        if (HistoryRecallScope.locatable(row.payload())) {
+            var projection = json.createObjectNode().put("title", row.payload().path("title").asText())
+                    .put("requirement_text", recallContext(row.payload()) + row.payload().path("requirement").asText())
+                    .put("bu_id", buId).put("record_version", row.version())
+                    .put("document_title", document.path("name").asText())
+                    .put("document_id", row.payload().path("documentId").asText())
+                    .put("group_id", KnowledgeGroupService.primaryGroup(document));
+            index.enqueue(Library.HISTORY_RFQ, buId, row.id(), row.version(), projection);
+        }
         return save(user, buId, row, directPublish ? "直接发布历史 RFQ" : "批准发布历史 RFQ", reason);
     }
 

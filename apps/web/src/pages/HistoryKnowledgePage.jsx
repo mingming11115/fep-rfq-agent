@@ -25,6 +25,10 @@ const indexDeleteTags=new Map([['queued',['processing','待移除']],['retrying'
 const date=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';
 const token=row=>`${row.id}:${row.version}`;
 const transitionStatuses={submit:HISTORY_DRAFT_STATUSES,approve:[...HISTORY_DRAFT_STATUSES,'待审核'],return:['待审核'],revoke:['已发布']};
+// 「先不展示」：无法在原件中定位的条款（没有要求/答复定位信息，也非手工补录）暂不出现在条款列表；旧历史知识不受影响。
+const canLocateClause=row=>row.manual||row.newManual||Boolean(row.requirementAnchor||row.answerAnchor);
+const listableClauses=(document,clauses)=>latestVersions(clausesForDocument(document,clauses))
+  .filter(row=>document.legacy||canLocateClause(row));
 const containsImportedDocument=(documents,imported)=>documents.some(doc=>doc.id===imported.id&&(doc.revision??0)>=(imported.revision??0));
 const labels={customer:'客户',projectName:'历史项目'};
 const editableFields=['clauseNo','section','requirement','answer','conditions','modelOverride','configOverride','evidence','feedback','requirementAnchor','answerAnchor'];
@@ -90,7 +94,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const uploadParent=allDocuments.find(doc=>doc.id===files.previousDocumentId);
  const uploadProjectId=uploadParent?(uploadParent.projectId||uploadParent.sourceProjectId):files.projectId;
  useEffect(()=>{if(activeId&&!active){setEditing(null);setMetadata(null);setActiveId(null);setSelected([]);}},[activeId,!!active]);
- const rows=active?latestVersions(clausesForDocument(active,readableClauses)):[];
+ const rows=active?listableClauses(active,readableClauses):[];
  const selectedRows=selected.map(id=>rows.find(row=>token(row)===id));
  const canTransition=action=>selectedRows.length>0&&selectedRows.every(row=>
   row&&transitionStatuses[action].includes(row.status)&&row.validity!=='被替代');
@@ -103,7 +107,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const notify=message=>{toast?.(message);logEvent?.(message);};
  const fail=cause=>{setError(cause.message);toast?.(cause.message,'error');};
  const persist=next=>{writeHistorySnapshot(buId,next);setSnapshot(next);};
- const openDoc=doc=>{const match=query&&latestVersions(clausesForDocument(doc,readableClauses)).find(row=>[row.clauseNo,row.requirement,row.answer].join(' ').toLowerCase().includes(query.toLowerCase()));setActiveId(doc.id);setQuery('');setFilter('all');setSelected([]);setError('');if(match) { editClause(match); }};
+ const openDoc=doc=>{const match=query&&listableClauses(doc,readableClauses).find(row=>[row.clauseNo,row.requirement,row.answer].join(' ').toLowerCase().includes(query.toLowerCase()));setActiveId(doc.id);setQuery('');setFilter('all');setSelected([]);setError('');if(match) { editClause(match); }};
  function changePage(){setActiveId(null);setSelected([]);setFilter('all');setQuery('');setDocumentPage(1);}
  async function changeFilter(nextFilter){
   setFilter(nextFilter);
@@ -362,7 +366,7 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
     {doc.parseStatus==='parsing'?'解析中断':parseLabel[doc.parseStatus]}
    </Tag>{doc.parseStatus==='failed'&&doc.error&&<small className="history-missing">{doc.error}</small>}</>;
   }},
-  {title:'条款数',width:90,render:(_,doc)=>doc.importState?'—':latestVersions(clausesForDocument(doc,readableClauses)).length},
+  {title:'条款数',width:90,render:(_,doc)=>doc.importState?'—':listableClauses(doc,readableClauses).length},
   {title:'操作',width:190,render:(_,doc)=>doc.importState
    ? doc.importState==='failed'?<Button type="link" onClick={()=>setHistoryImport(doc.id,null)}>移除记录</Button>:null
    : documentDeleteButton(doc)},
