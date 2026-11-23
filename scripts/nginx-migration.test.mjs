@@ -13,3 +13,11 @@ test('HTTP migration preserves domain, port, unrelated routes and is idempotent'
  const result=migrate(mixed,48080,'/etc/nginx/rfq.conf');
  assert.ok(result.endsWith('server { listen 80; server_name shop.example; root /srv/shop; location / { try_files $uri /index.html; } }'));
 });
+
+test('legacy naura-ai site is migrated even with a generic config filename',async()=>{
+ const {migrate}=await import('../deploy/web/migrate-nginx.mjs');
+ const source='server { listen 80; server_name example.test; root /data/naura-ai; location = /index.html { try_files $uri =404; } location / { try_files $uri /index.html; } }';
+ const output=migrate(source,48080,'/usr/local/nginx/conf/nginx.conf');
+ assert.ok(output,'known old deployment must be recognized');
+ assert.doesNotMatch(output,/try_files/);assert.match(output,/proxy_pass http:\/\/127.0.0.1:48080/);
+});

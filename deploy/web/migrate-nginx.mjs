@@ -18,10 +18,11 @@ export function migrate(source,port,filename){
  function visit(nodes){for(const server of nodes){if(words(server)!=='server'){if(server.children)visit(server.children);continue;}
  const children=server.children||[],body=source.slice(server.start,server.end);
  if(!children.some(n=>/^listen\s+(?:[^\s:]+:)?80(?:\s|$)/.test(words(n))))continue;
- if(!(singleSite&&/rfq/i.test(filename))&&!children.some(n=>/^(?:root .*rfq|location .*\/api\/rfq)/i.test(words(n))))continue;
- const marker=`# rfq-container-port ${port}`;
+ const knownRoot=nodes=>nodes.some(n=>/^(?:root|alias) ["']?\/data\/naura-ai(?:\/|["']?$)/.test(words(n))||(n.children&&knownRoot(n.children)));
+ if(!(singleSite&&/rfq/i.test(filename))&&!knownRoot(children)&&!children.some(n=>/^(?:root .*rfq|location .*\/api\/rfq)/i.test(words(n))))continue;
+ const marker=`# rfq-container-port ${port} v2`;
  if(body.includes(marker))continue;
- const remove=children.filter(n=>/^location (?:= )?\/(?:\s|$|assets(?:\/|\s)|craft-editors(?:\/|\s)|api\/(?:rfq|craft|office)(?:\/|\s))/.test(words(n))||/^location \^~ \/(?:assets|craft-editors|api\/(?:rfq|craft|office))\//.test(words(n))||(/^location ~/.test(words(n))&&/js|css|wasm|pdf|docx/.test(words(n))));
+ const remove=children.filter(n=>/^location (?:= )?\/(?:\s|$|index\.html(?:\s|$)|assets(?:\/|\s)|craft-editors(?:\/|\s)|api\/(?:rfq|craft|office)(?:\/|\s))/.test(words(n))||/^location \^~ \/(?:assets|craft-editors|api\/(?:rfq|craft|office))\//.test(words(n))||(/^location ~/.test(words(n))&&/js|css|wasm|pdf|docx/.test(words(n))));
  for(const n of remove)edits.push({start:n.start,end:n.end,text:''});
  const routes=['/','^~ /assets/','^~ /craft-editors/','^~ /api/rfq/','^~ /api/craft/','^~ /api/office/'];
  edits.push({start:server.end-1,end:server.end-1,text:`\n    ${marker}\n`+routes.map(route=>`    location ${route} {\n        proxy_pass http://127.0.0.1:${port};\n        proxy_set_header Host $http_host;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n    }\n`).join('')});

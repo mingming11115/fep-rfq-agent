@@ -30,13 +30,14 @@ case "$1 $2" in
     fi ;;
   'ps -a'|'ps --format') printf 'rfq-service\\nrfq-web\\n' ;;
   'container inspect') echo true ;;
-  'exec -i') printf '%s\\0%s\\0' "$RFQ_TEST_CONF" 'server { listen 80; server_name rfq.example; location / { proxy_pass http://127.0.0.1:48080; } }' ;;
+  'exec -i') printf '%s\\0%s\\0%s\\0' "$RFQ_TEST_CONF" 'server { listen 80; server_name rfq.example; location / { proxy_pass http://127.0.0.1:48080; } }' 'rfq.example' ;;
   'exec rfq-web') [[ "$RFQ_TEST_SCENARIO" != bad-web ]] ;;
 esac
 `,{mode:0o755});
   await writeFile(path.join(bin,'curl'),`#!/usr/bin/env bash
 printf 'curl' >> "$RFQ_TEST_LOG"; printf '\\t%s' "$@" >> "$RFQ_TEST_LOG"; printf '\\n' >> "$RFQ_TEST_LOG"
 if [[ "$RFQ_TEST_SCENARIO" == bad-api ]]; then echo '{"status":"DOWN"}'; exit 22; fi
+if [[ "$RFQ_TEST_SCENARIO" == bad-entry && "$*" == *127.0.0.1:80/* ]]; then echo 'old cached homepage'; exit 0; fi
 echo '{"status":"UP"}'
 `,{mode:0o755});
   await writeFile(path.join(bin,'sleep'),'#!/usr/bin/env bash\nexit 0\n',{mode:0o755});
@@ -95,6 +96,11 @@ test('stop removes both application containers while retaining document volumes'
 test('invalid nginx migration restores the original HTTP configuration',async()=>{
  const r=await run('start','bad-nginx');assert.notEqual(r.status,0);
  assert.match(r.config,/root \/srv\/rfq/);assert.doesNotMatch(r.config,/proxy_pass/);
+});
+
+test('a host entry still serving old files fails startup and restores nginx',async()=>{
+ const r=await run('start','bad-entry');assert.notEqual(r.status,0);
+ assert.match(r.config,/root \/srv\/rfq/);assert.doesNotMatch(r.stdout,/前后端已就绪/);
 });
 
 test('HTTPS setup can explicitly route all browser requests to the web container',()=>{
