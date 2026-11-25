@@ -37,11 +37,11 @@ function deviationLibraries(run) {
   }));
 }
 
-function Candidate({candidate, sourceDocument, action}) {
+function Candidate({candidate, sourceDocument, compact}) {
   return <details><summary>{candidate.title || candidate.id} · v{candidate.version}
-    {candidate.businessSimilarity != null && ` · 相似度 ${(candidate.businessSimilarity * 100).toFixed(1)}%`}
+    {!compact && candidate.businessSimilarity != null && ` · 相似度 ${(candidate.businessSimilarity * 100).toFixed(1)}%`}
   </summary>
-    {candidate.requirement && <p>原要求　{candidate.requirement}</p>}
+    {!compact && candidate.requirement && <p>原要求　{candidate.requirement}</p>}
     {(candidate.customer || candidate.model) && <p>客户/机型　{[candidate.customer, candidate.model].filter(Boolean).join(' · ')}</p>}
     {candidate.answer && <p>参考答复　{candidate.answer}</p>}
     {candidate.conditions && <p>适用条件　{candidate.conditions}</p>}
@@ -53,7 +53,6 @@ function Candidate({candidate, sourceDocument, action}) {
     {candidate.value && <p>能力指标值　{candidate.value}（{candidate.valueType}）</p>}
     {candidate.limits && <p>范围限制　{candidate.limits}</p>}
     {candidate.evidenceRefs?.map(item => <p key={JSON.stringify(item)}>证据　{item.id} · v{item.version}　{item.location}</p>)}
-    {action}
   </details>;
 }
 
@@ -63,14 +62,15 @@ export default function RequirementMatchPanel({preview, ...props}) {
       <Space wrap><strong>知识库比对</strong><Tag color="blue">模拟召回</Tag><MatchStatus status={preview.status}/></Space>
       <ol>{matchStages(preview).map(stage => <li key={stage.library}>
         <Space><b>{MATCH_LIBRARIES[stage.library]}</b><MatchStatus status={stage.status}/></Space>
-        {stage.candidates?.map(candidate => <Candidate key={candidate.id} candidate={candidate}/>)}
+        {(stage.library === 'history_rfq' ? stage.candidates?.slice(0, 1) : stage.candidates)?.map(candidate => <Candidate key={candidate.id} candidate={candidate}
+          compact={stage.library === 'history_rfq'}/>)}
       </li>)}</ol>
     </section>;
   }
   return <LiveRequirementMatchPanel {...props}/>;
 }
 
-function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onAdopt, onResult, onDetach, onDeviation, onRematch, matching}) {
+function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onResult, onDetach, onDeviation, onRematch, matching}) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -80,8 +80,6 @@ function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, 
   const [actionError, setActionError] = useState('');
   const deviation = (review?.version || 0) > (run?.deviation?.version || 0) ? review : run?.deviation;
   const generation = useRef(0);
-  const capabilityAdopted = draftMatchChoice?.candidateId === 'capability' && draftMatchChoice.matchRunId === run?.runId ||
-    row.matchReference?.library === 'capability' && row.matchReference.runId === run?.runId && !run?.referenceInvalid;
 
   useEffect(() => {
     const current = ++generation.current;
@@ -151,17 +149,14 @@ function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, 
       <Space><b>{MATCH_LIBRARIES[stage.library]}</b><MatchStatus status={stage.status}/></Space>
       {stage.status === 'disabled' && <p>本项目已关闭该知识库，未参与本轮比对</p>}
       {stage.reason && <p>{reasonLabel(stage.reason)}</p>}
-      {stage.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
+      {(stage.library === 'history_rfq' ? stage.candidates?.slice(0, 1) : stage.candidates)?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
         sourceDocument={stage.library === 'history_rfq' ? resources?.historyDocuments?.find(file => file.id === candidate.documentId) : undefined}
-        action={canAdopt && <Button size="small" onClick={() => onAdopt(run, candidate)}>核对并采用</Button>}/>)}
+        compact={stage.library === 'history_rfq'}/>)}
       {stage.checks?.map((check, index) => <div key={index}>
         <p>{check.deviceId} · {check.requirement?.metricCode} · {checkLabels[check.assessment] || '待核对'}</p>
         {check.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}/>)}
       </div>)}
     </li>)}</ol>}
-    {canAdopt && !capabilityAdopted && run?.result?.matchedLibrary === 'capability' && run.result.conclusion !== '待确认' &&
-      <Button size="small" onClick={() => onAdopt(run, {id:'capability', conclusion:run.result.conclusion,
-        conditions:run.result.stages.capability.restrictions?.join('；')})}>核对并采用能力结论</Button>}
     {run?.historyDocumentIds?.length > 0 && run.result?.stages?.history_rfq?.status === 'miss' &&
       <p>指定文件内未找到匹配。</p>}
     {run?.historyGroupId && run.result?.stages?.history_rfq?.status === 'miss' &&

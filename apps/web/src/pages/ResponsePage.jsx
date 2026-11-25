@@ -42,7 +42,7 @@ import './response-page.css';
 import { sectionLabel } from '../documentStructure';
 import AssessmentPanel from '../components/AssessmentPanel';
 import RequirementMatchPanel from '../components/RequirementMatchPanel';
-import { buildResponseAdvice, generateRecommendedWording } from '../responseAdvice';
+import { buildResponseAdvice } from '../responseAdvice';
 import { matchingSuggestion } from '../responseRecommendation';
 import InlineReviewSurface from '../components/InlineReviewSurface';
 import ResponseCardFilters, { EMPTY_CARD_FILTERS, ResponseCardQuery } from '../components/ResponseCardFilters';
@@ -70,8 +70,8 @@ function matchPrefill(result, conclusion, evidence) {
   if (library === 'capability' && conclusion) {
     return { id: 'capability', conclusion, conditions: stage?.restrictions?.join('；'), evidence };
   }
-  // A history hit can contain several plausible candidates without selecting one.
-  if (library === 'standard_reply' || (library === 'history_rfq' && conclusion && stage?.candidates?.length === 1)) {
+  // 历史 RFQ 命中保留第一条候选，参考答复自动带入草稿。
+  if (library === 'standard_reply' || (library === 'history_rfq' && conclusion)) {
     const candidate = stage?.candidates?.[0];
     if (candidate) { return { ...candidate, conclusion }; }
   }
@@ -155,7 +155,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const [adoption, setAdoption] = useState(null);
   const [matchChoice, setMatchChoice] = useState(null);
   const [matchState, setMatchState] = useState(null);
-  const [realAdoption, setRealAdoption] = useState(null);
   const prefilledRun = useRef(null);
   const [reviewForm, setReviewForm] = useState(null);
   const [inlineReviewId, setInlineReviewId] = useState(null), [inlineReviewAction,setInlineReviewAction] = useState(null);
@@ -241,15 +240,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const matchConclusion = RESPONSE_CONCLUSIONS.includes(matchResult?.conclusion) ? matchResult.conclusion : '';
   const matchLibrary = MATCH_LIBRARIES[matchResult?.matchedLibrary];
   const matchEvidence = matchEvidenceText(matchResult);
-  const selectedMatch = matchChoice || active?.matchReference;
-  const selectedRunId = selectedMatch?.matchRunId || selectedMatch?.runId;
-  const matchedConditions = selectedRunId && selectedRunId === matchRun?.runId && selectedMatch.candidateId === 'capability'
-    ? matchResult?.stages?.capability?.restrictions?.join('；') : '';
-  const recommendedWording = generateRecommendedWording({
-    ...active, ...form,
-    conditions: matchedConditions && form.draft.includes(`适用条件：${matchedConditions}`)
-      ? matchedConditions : active?.conditions,
-  });
+  const historyCandidate = matchResult?.matchedLibrary === 'history_rfq'
+    ? matchResult?.stages?.history_rfq?.candidates?.[0] : null;
   const suggestedDemoConclusion = suggestion && RESPONSE_CONCLUSIONS.includes(suggestion.conclusion) &&
     buildResponseAdvice(active, suggestion, { retrieval }).conclusion !== '待确认' ? suggestion.conclusion : '';
   const states = active ? { standard: active.matchLevel === 'standard' && active.score > 80 ? '命中' : '未命中', history: active.matchLevel === 'standard' && active.score > 80 ? '未执行' : active.matchLevel === 'history' ? '命中' : '未命中', capability: (active.matchLevel === 'standard' && active.score > 80) || active.matchLevel === 'history' ? '未执行' : active.matchLevel === 'capability' ? '命中' : '未命中' } : {};
@@ -269,7 +261,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
 
   useEffect(()=>{localStorage.setItem(`rfq.response.filters.${project.id}`,JSON.stringify({query,status,section}));},[query,status,section]);
   function addActivity(action, detail, id = active?.id) { const entry = { id: uid('EVT'), requirementId: id, action, detail, time: timestamp(), actor: actorRole }; setActivities((old) => [entry, ...old]); logEvent(action, id || project.id, detail); }
-  function clearDirty() { dirtyRef.current = false; setDirty(false); setMatchChoice(null); setRealAdoption(null); }
+  function clearDirty() { dirtyRef.current = false; setDirty(false); setMatchChoice(null); }
   function selectDirectoryRows(checked) {
     const ids = new Set(directoryRows.filter(canBatchConfirmRow).map(row => row.id));
     setSelected(previous => checked ? [...new Set([...previous, ...ids])] : previous.filter(id => !ids.has(id)));
@@ -421,7 +413,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     setMatchChoice({matchRunId:run.runId,candidateId:candidate.id});
     dirtyRef.current=true;
     setDirty(true);
-    setRealAdoption(null);
   }
   useEffect(() => {
     if (!active || !canEdit || cardBusy || dirtyRef.current || active.status === '已确认' ||
@@ -722,7 +713,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
         {['待确认','待处理'].includes(active.status)&&active.confirmationReason&&<Notice>{active.confirmationReason}</Notice>}{active.pendingReviewProposal&&<Notice warning>有一份获批评审建议待核对；当前人工答复已保留。<UiButton className="text-link" onClick={()=>{setProposalReason('');setModal('review-proposal');}}>核对差异与采用</UiButton></Notice>}        {databaseBacked && <RequirementMatchPanel key={`${actorId}:${active.id}:${active.backendVersion}:${matchRefresh}`} row={active}
           resources={appState.resourcesByBuId?.[project.buId]} canAdopt={canEdit}
           preview={matchPreview} draftMatchChoice={matchChoice}
-          onResult={run => setMatchState({ scope: matchScope, run })} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))} onAdopt={(run,candidate)=>setRealAdoption({run,candidate})}
+          onResult={run => setMatchState({ scope: matchScope, run })} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))}
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
           onDeviation={item=>onDeviation?.(project.id,item)}
           onRematch={canPerform(actorRole,'analysis:run')&&canEdit?()=>setModal('rematch'):null} matching={matching}/>}
@@ -739,13 +730,11 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
             reference: matchLibrary && matchPreview ? `${matchLibrary}（模拟）` : matchLibrary,
             runId: matchLibrary ? matchRun?.runId : undefined,
             evidence: matchEvidence,
+            original: historyCandidate?.requirement,
+            similarity: historyCandidate?.businessSimilarity,
+            answer: historyCandidate?.answer,
           } : null}
-          recommendation={recommendedWording} evidence={form.evidence} currentDraft={form.draft} canEdit={canEdit} onAdopt={wording => {
-            if (!canEdit) { return; }
-            edit('draft', wording);
-            addActivity('采用推荐话术', `根据${form.conclusion}生成话术并采用为应答草稿`);
-            toast('推荐话术已带入应答草稿，提交或确认后保存');
-          }}/>
+          evidence={form.evidence} currentDraft={form.draft} canEdit={canEdit}/>
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openReviewDetails(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>
         {!!linkedReviews.length && <div className="rfq-linked-reviews"><div className="rfq-section-title"><strong>问题处理记录</strong><span>{linkedReviews.length} 项</span></div>{linkedReviews.map((review) => <button key={review.id} className="rfq-review-link" onClick={() => openReviewDetails(review.id)}><span><b>{review.title}</b><small>{review.owner} · 截止 {review.deadline || '未设置'}</small></span><StatusBadge status={review.status}/><ChevronRight size={14}/></button>)}</div>}
@@ -817,12 +806,6 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     </>}>
       <p><strong>{[deleteTarget.clause, deleteTarget.title].filter(Boolean).join(' · ')}</strong></p>
       <p>此条将从应答、评审和导出范围中移除。客户原件会保留。</p>
-    </Modal>}
-    {realAdoption && <Modal title="核对比对建议" onClose={()=>setRealAdoption(null)}
-      footer={<><UiButton className="btn" onClick={()=>setRealAdoption(null)}>保留当前应答</UiButton>
-        <UiButton className="btn btn-primary" onClick={()=>applyMatch(realAdoption.run,realAdoption.candidate)}>采用到草稿</UiButton></>}>
-      <Description rows={[['当前答复',form.draft],['候选答复',realAdoption.candidate.answer],
-        ['候选结论',realAdoption.candidate.conclusion],['候选条件',realAdoption.candidate.conditions]]}/>
     </Modal>}
     {adoption && <Modal title="采用建议前核对应答差异" onClose={() => setAdoption(null)} width={760} footer={<><UiButton className="btn" onClick={() => setAdoption(null)}>保留当前编辑</UiButton><UiButton className="btn btn-primary" onClick={() => applyAdoption(adoption.proposal, adoption.label)}>采用建议并保留来源条件</UiButton></>}><Notice>当前应答已有内容。采用将替换答复、结论和证据；仍需人工保存与确认。</Notice><div className="response-diff-grid"><div><h4>当前人工答复</h4><p>{form.draft}</p></div><div><h4>{adoption.label}</h4><p>{adoption.proposal.draft}</p></div></div></Modal>}
 

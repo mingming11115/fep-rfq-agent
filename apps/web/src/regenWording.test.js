@@ -17,36 +17,6 @@ async function harness() {
   return {...components,node,root,settle,async close(){await act(async()=>root.unmount());await window.happyDOM.cancelAsync();}};
 }
 
-async function renderPanel(h,{recommendation,canEdit=true}={}) {
-  await act(async()=>{h.root.render(React.createElement(h.AssessmentPanel,{
-    project:{id:'P'},row:{id:'R',clause:'1.1',title:'First clause',original:'Source',conclusion:'Comply',draft:'Human answer',matchLevel:'standard',score:95},
-    conclusion:'Comply',recommendation,currentDraft:'Human answer',evidence:'',canEdit,onAdopt(){},
-  }));await h.settle();});
-}
-
-test('重新生成 gives visible feedback even when the wording was never edited',async()=>{
-  const h=await harness();
-  try{
-    await renderPanel(h,{recommendation:'系统推荐话术'});
-    const regen=[...h.node.querySelectorAll('button')].find(item=>item.textContent.includes('重新生成'));
-    assert.ok(regen,'重新生成 button exists');
-    assert.equal(h.node.querySelector('.response-regen-hint'),null,'no hint before click');
-    await act(async()=>{regen.click();await h.settle();});
-    assert.equal(h.node.querySelector('.response-regen-hint')?.textContent,'已重新生成应答话术','click always shows feedback');
-  } finally { await h.close(); }
-});
-
-test('重新生成 explains when no recommendation is available for the conclusion',async()=>{
-  const h=await harness();
-  try{
-    await renderPanel(h,{recommendation:''});
-    const regen=[...h.node.querySelectorAll('button')].find(item=>item.textContent.includes('重新生成'));
-    assert.ok(regen);
-    await act(async()=>{regen.click();await h.settle();});
-    assert.match(h.node.querySelector('.response-regen-hint')?.textContent||'',/暂无可生成的应答话术/);
-  } finally { await h.close(); }
-});
-
 async function renderMatchPanel(h, { onRematch, matching = false } = {}) {
   await act(async () => {
     h.root.render(React.createElement(h.RequirementMatchPanel, {
