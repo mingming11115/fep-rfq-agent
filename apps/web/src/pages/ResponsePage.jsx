@@ -36,7 +36,7 @@ import { Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, Chevro
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
 import { applyRequirementEdit, confirmationValidation, mergeAnswerConditions, RESPONSE_CONCLUSIONS } from '../domain';
 import { answerRemark, singleLineReply } from '../responseFields';
-import { MATCH_LIBRARIES, matchClient } from '../requirementMatchClient';
+import { matchClient } from '../requirementMatchClient';
 import { demoMatchPreview } from '../demoMatchPreview';
 import './response-page.css';
 import { sectionLabel } from '../documentStructure';
@@ -238,10 +238,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const showingMatchPreview = Boolean(matchPreview);
   const matchResult = matchPreview?.result ?? liveMatchResult;
   const matchConclusion = RESPONSE_CONCLUSIONS.includes(matchResult?.conclusion) ? matchResult.conclusion : '';
-  const matchLibrary = MATCH_LIBRARIES[matchResult?.matchedLibrary];
   const matchEvidence = matchEvidenceText(matchResult);
-  const historyCandidate = matchResult?.matchedLibrary === 'history_rfq'
-    ? matchResult?.stages?.history_rfq?.candidates?.[0] : null;
   const suggestedDemoConclusion = suggestion && RESPONSE_CONCLUSIONS.includes(suggestion.conclusion) &&
     buildResponseAdvice(active, suggestion, { retrieval }).conclusion !== '待确认' ? suggestion.conclusion : '';
   const states = active ? { standard: active.matchLevel === 'standard' && active.score > 80 ? '命中' : '未命中', history: active.matchLevel === 'standard' && active.score > 80 ? '未执行' : active.matchLevel === 'history' ? '命中' : '未命中', capability: (active.matchLevel === 'standard' && active.score > 80) || active.matchLevel === 'history' ? '未执行' : active.matchLevel === 'capability' ? '命中' : '未命中' } : {};
@@ -716,7 +713,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
           onResult={run => setMatchState({ scope: matchScope, run })} review={reviews.find(row=>row.requirementId===active.id&&row.kind==='deviation'&&row.workVersion===(project.workVersion||1))}
           onDetach={reason=>saveDraft(undefined,{detachMatchReason:reason})}
           onDeviation={item=>onDeviation?.(project.id,item)}
-          onRematch={canPerform(actorRole,'analysis:run')&&canEdit?()=>setModal('rematch'):null} matching={matching}/>}
+          onRematch={canPerform(actorRole,'analysis:run')&&canEdit?()=>setModal('rematch'):null} matching={matching}
+          onOpenSource={doc => navigate('history', { buId: project.buId, documentId: doc.id })}/>}
         <AssessmentPanel key={active.id} sourceScope={activeSourceAnchor} row={active} project={project} suggestion={suggestion} retrieval={retrieval}
           conclusion={form.conclusion} onConclusionChange={value => edit('conclusion', value)}
           responseAnswer={replyHints[form.conclusion] && <div className="response-form response-answer-fields">
@@ -725,15 +723,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
                 onChange={event => edit('draft', event.target.value)} placeholder={replyHints[form.conclusion]}/>
             </Field>
           </div>}
-          liveAdvice={databaseBacked ? {
-            conclusion: matchConclusion,
-            reference: matchLibrary && matchPreview ? `${matchLibrary}（模拟）` : matchLibrary,
-            runId: matchLibrary ? matchRun?.runId : undefined,
-            evidence: matchEvidence,
-            original: historyCandidate?.requirement,
-            similarity: historyCandidate?.businessSimilarity,
-            answer: historyCandidate?.answer,
-          } : null}
+          liveAdvice={databaseBacked ? { conclusion: matchConclusion } : null}
           evidence={form.evidence} currentDraft={form.draft} canEdit={canEdit}/>
         {savedCandidate && <Notice>能力候选 <b>{savedCandidate.id}</b> 已保存为草稿。发布前不会改变当前应答。<UiButton className="text-link" onClick={() => goPage('capabilities')}>查看候选</UiButton></Notice>}
         <div className="response-card-issue-tools"><span>{openReview ? '本条有待处理事项' : ''}</span><div><ResponseAssignmentControl key={`${active.id}:${actorId}`} state={appState} project={project} requirementId={active.id} route={route} disabled={!!staleSource || cardBusy} onRequestOpen={guardedDetail} onPersonnelAction={onPersonnelAction} onAssignConfirmation={onAssignConfirmation}/><UiButton type="button" className="btn" aria-expanded={!!reviewForm || !!inlineReviewId} disabled={!canEdit && !linkedReviews.length} onClick={() => { const issue = linkedReviews.find(r => !['已关闭','已取消'].includes(r.status)) || linkedReviews[0]; if (issue) { if (inlineReviewId === issue.id) { guardedDetail(() => setInlineReviewId(null)); } else { openReviewDetails(issue.id); } } else { startAssessment(); } }}>评审<ChevronDown size={13}/></UiButton></div></div>

@@ -37,26 +37,34 @@ function deviationLibraries(run) {
   }));
 }
 
-function Candidate({candidate, sourceDocument, compact}) {
+function Candidate({candidate, sourceDocument, compact, onOpenSource}) {
+  const source = [sourceDocument?.name || candidate.source, sourceDocument?.version, candidate.clauseNo].filter(Boolean).join(' · ');
   return <details><summary>{candidate.title || candidate.id} · v{candidate.version}
-    {!compact && candidate.businessSimilarity != null && ` · 相似度 ${(candidate.businessSimilarity * 100).toFixed(1)}%`}
+    {candidate.businessSimilarity != null && ` · 相似度 ${(candidate.businessSimilarity * 100).toFixed(1)}%`}
   </summary>
-    {!compact && candidate.requirement && <p>原要求　{candidate.requirement}</p>}
-    {(candidate.customer || candidate.model) && <p>客户/机型　{[candidate.customer, candidate.model].filter(Boolean).join(' · ')}</p>}
-    {candidate.answer && <p>参考答复　{candidate.answer}</p>}
-    {candidate.conditions && <p>适用条件　{candidate.conditions}</p>}
-    {candidate.conditionStatus && <p>{conditionLabels[candidate.conditionStatus]}</p>}
-    {(sourceDocument || candidate.source) && <p>来源　{[sourceDocument?.name || candidate.source,
-      sourceDocument?.version, candidate.clauseNo].filter(Boolean).join(' · ')}</p>}
-    {candidate.requirementAnchor && <p>条款位置　{candidate.requirementAnchor}</p>}
-    {candidate.answerAnchor && <p>答复位置　{candidate.answerAnchor}</p>}
-    {candidate.value && <p>能力指标值　{candidate.value}（{candidate.valueType}）</p>}
-    {candidate.limits && <p>范围限制　{candidate.limits}</p>}
-    {candidate.evidenceRefs?.map(item => <p key={JSON.stringify(item)}>证据　{item.id} · v{item.version}　{item.location}</p>)}
+    {compact ? <>
+      {candidate.requirement && <p>具体原文　{candidate.requirement}</p>}
+      {candidate.answer && <p>参考答复　{candidate.answer}</p>}
+      {source && <p>来源　{onOpenSource && sourceDocument
+        ? <Button type="link" size="small" className="history-source-link" onClick={() => onOpenSource(sourceDocument)}>{source} ↗</Button>
+        : source}</p>}
+    </> : <>
+      {candidate.requirement && <p>原要求　{candidate.requirement}</p>}
+      {(candidate.customer || candidate.model) && <p>客户/机型　{[candidate.customer, candidate.model].filter(Boolean).join(' · ')}</p>}
+      {candidate.answer && <p>参考答复　{candidate.answer}</p>}
+      {candidate.conditions && <p>适用条件　{candidate.conditions}</p>}
+      {candidate.conditionStatus && <p>{conditionLabels[candidate.conditionStatus]}</p>}
+      {source && <p>来源　{source}</p>}
+      {candidate.requirementAnchor && <p>条款位置　{candidate.requirementAnchor}</p>}
+      {candidate.answerAnchor && <p>答复位置　{candidate.answerAnchor}</p>}
+      {candidate.value && <p>能力指标值　{candidate.value}（{candidate.valueType}）</p>}
+      {candidate.limits && <p>范围限制　{candidate.limits}</p>}
+      {candidate.evidenceRefs?.map(item => <p key={JSON.stringify(item)}>证据　{item.id} · v{item.version}　{item.location}</p>)}
+    </>}
   </details>;
 }
 
-export default function RequirementMatchPanel({preview, ...props}) {
+export default function RequirementMatchPanel({preview, onOpenSource, ...props}) {
   if (preview) {
     return <section className="response-match-panel" aria-label="知识库比对">
       <Space wrap><strong>知识库比对</strong><Tag color="blue">模拟召回</Tag><MatchStatus status={preview.status}/></Space>
@@ -67,10 +75,10 @@ export default function RequirementMatchPanel({preview, ...props}) {
       </li>)}</ol>
     </section>;
   }
-  return <LiveRequirementMatchPanel {...props}/>;
+  return <LiveRequirementMatchPanel {...props} onOpenSource={onOpenSource}/>;
 }
 
-function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onResult, onDetach, onDeviation, onRematch, matching}) {
+function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, review, onResult, onDetach, onDeviation, onRematch, matching, onOpenSource}) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -151,7 +159,7 @@ function LiveRequirementMatchPanel({row, resources, canAdopt, draftMatchChoice, 
       {stage.reason && <p>{reasonLabel(stage.reason)}</p>}
       {(stage.library === 'history_rfq' ? stage.candidates?.slice(0, 1) : stage.candidates)?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}
         sourceDocument={stage.library === 'history_rfq' ? resources?.historyDocuments?.find(file => file.id === candidate.documentId) : undefined}
-        compact={stage.library === 'history_rfq'}/>)}
+        compact={stage.library === 'history_rfq'} onOpenSource={stage.library === 'history_rfq' ? onOpenSource : undefined}/>)}
       {stage.checks?.map((check, index) => <div key={index}>
         <p>{check.deviceId} · {check.requirement?.metricCode} · {checkLabels[check.assessment] || '待核对'}</p>
         {check.candidates?.map(candidate => <Candidate key={`${candidate.id}:${candidate.version}`} candidate={candidate}/>)}

@@ -328,6 +328,10 @@ class MatchEvaluator {
         writeCandidates(stage, candidates, verified, library, diag);
         if (STANDARD.equals(library)) {
             stage.put("draft", text(candidates.get(0).source().payload(), "answer"));
+        } else {
+            // 历史 RFQ 命中按首条候选的适用条件状态推导结论，供前端自动预填应答结论。
+            String condition = stage.path("candidates").path(0).path("conditionStatus").asText("not_specified");
+            stage.put("conclusion", List.of("different", "unverified").contains(condition) ? "有条件 Comply" : "Comply");
         }
         return stage;
     }

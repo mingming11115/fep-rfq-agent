@@ -41,7 +41,7 @@ function SourceBlocks({sources=[],anchor,onLocate}){
  return <div className="history-source-blocks">{sources.map(source=><section key={source.prefix}><h3>{source.name}</h3>{source.blocks.map(block=>block.type==='table'?<table className="history-source-table" key={block.anchor}><tbody>{block.tableRows.map((cells,index)=>{const id=`${source.prefix}${block.anchor}/r${index}`;return <tr id={`history-source-${id}`} key={id} className={anchor===id?'history-source-selected':''} onClick={()=>onLocate(id)}>{cells.map((cell,i)=><td key={i}>{cell}</td>)}</tr>;})}</tbody></table>:<div key={block.anchor} id={`history-source-${source.prefix}${block.anchor}`} className={`history-source-block ${anchor===source.prefix+block.anchor?'history-source-selected':''}`} onClick={()=>onLocate(source.prefix+block.anchor)}><small>{block.sectionPath||'正文'} · {block.anchor}</small><p>{block.text||block.issue||'图片待识别'}</p></div>)}</section>)}</div>;
 }
 
-export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='SR',permissionContext,seedKnowledge=[],onLibraryRefresh}){
+export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='SR',permissionContext,seedKnowledge=[],onLibraryRefresh,route}){
  const groupScope=useKnowledgeGroup();
  const buId=permissionContext?.buId,legacy=buId==='BU-DEMO'?seedKnowledge:[];
  const databaseBacked=permissionContext?.state?.dataSource==='mysql';
@@ -54,13 +54,14 @@ export default function HistoryKnowledgePage({toast,logEvent,actorId,actorRole='
  const load=()=>readHistorySnapshot(buId,legacy);
  const [localSnapshot,setSnapshot]=useState(()=>{try{return databaseBacked?null:load();}catch (error){ console.error('加载历史知识草稿失败', error); return {documents:[],clauses:[]};}});
  const snapshot=databaseBacked?{documents:resources?.historyDocuments||[],clauses:resources?.historyClauses||[]}:localSnapshot;
- const [error,setError]=useState(''),[query,setQuery]=useState(''),[activeId,setActiveId]=useState(null),[filter,setFilter]=useState('all'),[selected,setSelected]=useState([]),[uploading,setUploading]=useState(false),[files,setFiles]=useState({}),[busy,setBusy]=useState(false),[metadata,setMetadata]=useState(null),[editing,setEditing]=useState(null),[anchor,setAnchor]=useState(''),[review,setReview]=useState(null),[reason,setReason]=useState(''),[submitAllOpen,setSubmitAllOpen]=useState(false);
+ const [error,setError]=useState(''),[query,setQuery]=useState(''),[activeId,setActiveId]=useState(route?.documentId||null),[filter,setFilter]=useState('all'),[selected,setSelected]=useState([]),[uploading,setUploading]=useState(false),[files,setFiles]=useState({}),[busy,setBusy]=useState(false),[metadata,setMetadata]=useState(null),[editing,setEditing]=useState(null),[anchor,setAnchor]=useState(''),[review,setReview]=useState(null),[reason,setReason]=useState(''),[submitAllOpen,setSubmitAllOpen]=useState(false);
  const [deleteTarget,setDeleteTarget]=useState(null);
  const [deleteDocumentTarget,setDeleteDocumentTarget]=useState(null);
  const [viewing,setViewing]=useState(null);
  const [documentPage,setDocumentPage]=useState(1);
  useEffect(()=>{if(databaseBacked) { return; } const refresh=()=>{try{setSnapshot(load());}catch(cause){ console.error('刷新历史知识草稿失败', cause); setError(cause.message);}};refresh();window.addEventListener('rfq-history-change',refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener('rfq-history-change',refresh);window.removeEventListener('storage',refresh);};},[buId,databaseBacked]);
  useEffect(()=>setSelected([]),[query,filter,activeId]);
+ useEffect(()=>{if(route?.documentId) { setActiveId(route.documentId); }},[route?.documentId]);
  useEffect(()=>{setActiveId(null);setEditing(null);setMetadata(null);setSelected([]);setQuery('');setDocumentPage(1);setUploading(false);setDeleteTarget(null);setDeleteDocumentTarget(null);setViewing(null);setSubmitAllOpen(false);setError('');},[actorId,actorRole,buId]);
  const {documents:storedDocuments,clauses:readableClauses}=databaseBacked
   ?{documents:buildHistoryDocuments(snapshot.documents,snapshot.clauses),clauses:snapshot.clauses}

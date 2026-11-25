@@ -42,14 +42,14 @@ for(const role of ['SR','最终审批人'])test(`${role} uses two sections and p
     await render();assert.deepEqual([...node.querySelectorAll('[aria-label="RFQ 详情分区"] [role="tab"]')].map(item=>item.textContent),['应答','操作记录']);
     const responseState=()=>node.querySelector('[aria-label="应答保存状态"]');assert.equal(responseState(),null);
     assert.ok(button('项目信息'));assert.equal(refs().open,false);await click(refs().querySelector('summary'));
-    assert.ok(refs().textContent.includes('Candidate report REF-1'));
+    assert.ok(refs().textContent.includes('模型结论：满足'));
     const originalRoute=props.route;
     for(const override of [{sourceVersion:'0'},{fileId:'HISTORIC-FILE'}]){
       props={...props,route:{...originalRoute,...override}};await render();assert.equal(refs().open,false,'changing the displayed source scope resets the reference disclosure');
       await click(refs().querySelector('summary'));assert.equal(refs().querySelector('textarea'),null);
       props={...props,route:originalRoute};await render();assert.equal(refs().open,false);await click(refs().querySelector('summary'));
     }
-    const evidence=refs().querySelector('[aria-label="本条关联证据"]');assert.equal(evidence.textContent,'Candidate report REF-1');assert.equal(refs().querySelector('textarea'),null);
+    assert.equal(refs().querySelector('[aria-label="本条关联证据"]'),null,'关联证据不再展示在 AI 建议区');assert.equal(refs().querySelector('textarea'),null);
     const frame=node.querySelector('iframe');await click(button('项目信息'));assert.ok(drawer().classList.contains('ant-drawer-open'));
     const projectName=inputByLabel('项目名称',drawer());assert.equal(projectName.disabled,role!=='SR');
     if(role==='SR') { await type(projectName,'Changed project'); }
@@ -269,7 +269,7 @@ test('the single response conclusion prefills a clear AI recommendation and subm
     assert.equal(h.node.querySelector('[aria-label="应答话术"]'), null, '应答话术 section is removed');
     assert.equal(Boolean(h.node.querySelector('[aria-label="应答依据"]')), false);
     await h.click(h.node.querySelector('.response-reference-details summary'));
-    assert.match(h.node.querySelector('[aria-label="本条关联证据"]').textContent, /能力比对 RUN-1/);
+    assert.match(h.node.querySelector('.response-reference-body [role="note"]').textContent, /模型结论：有条件 Comply/);
     assert.equal(h.node.querySelector('.response-answer-fields [aria-label="证据"]'), null);
     const matchPanel = () => h.node.querySelector('[aria-label="知识库比对"]');
     assert.ok([...matchPanel().querySelectorAll('button')].some(button => button.textContent.includes('重新比对')),

@@ -54,3 +54,37 @@ test('重新比对 button is hidden when no onRematch callback is provided', asy
     assert.ok(![...matchPanel().querySelectorAll('button')].some(item => item.textContent.includes('重新比对')));
   } finally { globalThis.fetch = originalFetch; await h.close(); }
 });
+
+test('历史候选下拉展示相似度与具体原文，来源可点击跳转', async () => {
+  const h = await harness();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ code: 0, data: { runId: 'RUN-1', status: 'completed',
+    result: { matchedLibrary: 'history_rfq', conclusion: 'Comply', stages: { history_rfq: { status: 'hit',
+      candidates: [{ id: 'HC-1', version: 2, title: '历史条款', businessSimilarity: 0.923,
+        requirement: '客户要求切割精度 ≤ 50μm', answer: '可满足 ≤50μm', documentId: 'DOC-9' }] } } } } });
+  const opened = [];
+  try {
+    await act(async () => {
+      h.root.render(React.createElement(h.RequirementMatchPanel, {
+        row: { id: 'R', clause: '1.1', title: 'First clause', original: 'Source' },
+        canAdopt: false,
+        resources: { historyDocuments: [{ id: 'DOC-9', name: 'HIST-2024.docx', version: 'v1' }] },
+        onOpenSource: doc => opened.push(doc.id),
+      }));
+      await h.settle();
+    });
+    const details = h.node.querySelector('[aria-label="知识库比对"] details');
+    assert.ok(details, '历史候选渲染为下拉');
+    assert.match(details.querySelector('summary').textContent, /相似度 92\.3%/);
+    await act(async () => { details.open = true; await h.settle(); });
+    assert.match(details.textContent, /具体原文/);
+    assert.match(details.textContent, /参考答复/);
+    assert.equal(details.textContent.includes('客户/机型'), false, '客户机型不再展示');
+    assert.equal(details.textContent.includes('适用条件'), false, '适用条件不再展示');
+    assert.equal(details.textContent.includes('条款位置'), false, '条款位置不再展示');
+    const link = [...details.querySelectorAll('button')].find(item => item.textContent.includes('HIST-2024.docx'));
+    assert.ok(link, '来源渲染为可点击链接');
+    await act(async () => { link.click(); await h.settle(); });
+    assert.deepEqual(opened, ['DOC-9'], '点击来源触发跳转回调');
+  } finally { globalThis.fetch = originalFetch; await h.close(); }
+});
