@@ -30,7 +30,7 @@ import {resourceStorageKey,selectReadableResources} from '../resourceVisibility'
 import {MODELS,PROCESSES,CAPABILITIES} from '../modelProcessSeeds';
 import {assertCapabilityProcess} from '../modelProcessDomain';
 import {getSourceUploadRoute} from '../navigation';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Search, RefreshCw, ArrowRight, Check, ChevronLeft, ChevronRight, ChevronDown, FileText, BookOpen, AlertCircle, LoaderCircle, ExternalLink, Plus, Save, Send, X, Filter, CheckCircle2, MoreHorizontal, Eye, EyeOff, Trash2 } from "../components/icons";
 import { Modal, Drawer, StatusBadge, EmptyState } from '../components/ui';
@@ -95,7 +95,7 @@ function Description({ rows }) { return <dl className="response-description">{ro
 export function ResponsePage({ detailPanels = {}, project, requirements = [], reviews = [], onUpdateRequirement, onDeleteExtractedRequirement, onAddSelection, onConfirm, onDeviation, onCreateReview, onUpdateReview, onConfirmReviewed, toast, navigate, actorRole, focusedRequirementId, route, appState,onAppUpdate,onPersonnelAction,onAssignConfirmation,actorId,canBusinessAction,onAdoptReview,onSubmitRequirement,onAnalysisRun,sourceReparse, logEvent = () => {} }) {
   const screens = Grid.useBreakpoint();
   const narrowWorkbench = !screens.md;
-  const mentionPeople = Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id));
+  const mentionPeople = useMemo(() => Object.values(appState.accountsById || {}).filter(person => person.enabled !== false && canAccessProject(appState, person.id, project.id)), [appState, project.id]);
   const routedSourceRow = route?.fileId && requirements.find(row => row.sourceFileId === route.fileId);
   const initialRow = selectResponseEntry({requirements,reviews,state:appState,projectId:project.id,actorRole,actorId,requirementId:focusedRequirementId||route?.requirementId||(!route?.reviewId&&routedSourceRow?.id),reviewId:route?.reviewId});
   const [activeId, setActiveId] = useState(initialRow?.id || null);
@@ -130,7 +130,8 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     const box=detailLayoutRef.current?.getBoundingClientRect();
     setPaneShare(current=>resizePanelShare(current,event.key,{span:narrowWorkbench?1100:box?.width||1000,minStart:narrowWorkbench?280:320,minEnd:narrowWorkbench?360:380,vertical:narrowWorkbench,defaultShare:narrowWorkbench?55:60}));
   }
-  const allProjectComments = appState.commentsByProject?.[project.id] || [];
+  const emptyCommentsRef = useRef([]); // 稳定空数组，避免评论为空时每次渲染产生新引用
+  const allProjectComments = appState.commentsByProject?.[project.id] || emptyCommentsRef.current;
   const projectComments = allProjectComments.filter(comment => !comment.nativeDeleted);
   function changeProjectComments(update) {
     onAppUpdate(state => {
@@ -216,6 +217,13 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   const timer = useRef(null);
   const candidateDirty = useRef(false);
   const staleSource=route?.requirementId===active?.id&&((route?.sourceVersion&&route.sourceVersion!==String(active?.sourceVersion||'1'))||(route?.fileId&&route.fileId!==(active?.sourceFileId||active?.source)));
+  // 传给 Word 原文面板的 props 必须引用稳定：CraftSourcePane 的 effect 依赖 rows/canEditRow，
+  // 每次渲染都新建会让 wasm 编辑器反复 refresh → documentOutline 新引用 → setDocumentOutline → 死循环（Maximum update depth exceeded）。
+  const canBusinessActionRef=useRef(canBusinessAction);
+  canBusinessActionRef.current=canBusinessAction;
+  const paneRows=useMemo(() => requirements.filter(r => (r.sourceFileId || r.source) === (active?.sourceFileId || active?.source)).map(r => ({ ...r, projectId: project.id })),
+    [requirements, active?.sourceFileId, active?.source, project.id]);
+  const paneEditRow=useCallback(row => actorRole !== '最终审批人' && !staleSource && canBusinessActionRef.current('requirement', row.id), [actorRole, staleSource]);
   const confirmedLocked = active?.status === '已确认';
   const canEdit = !confirmedLocked && actorRole !== '最终审批人'&&!staleSource&&canBusinessAction('requirement',active?.id);
   const canConfirm = ['SR','技术'].includes(actorRole)&&!staleSource&&canBusinessAction('requirement',active?.id,'confirm');
@@ -245,6 +253,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
   if (retrieval === 'failed') { Object.assign(states, { standard: '失败', history: '未执行', capability: '未执行' }); }
   if (retrieval === 'denied') { Object.assign(states, { standard: '无权限', history: '未执行', capability: '未执行' }); }
   const conflicted = active && baseline.current.id === active.id && dirty && (baseline.current.version !== active.version || baseline.current.status !== active.status);
+  const paneResponsePreview=useMemo(() => (!conflicted && !staleSource ? { ...active, ...form, conditions: undefined } : undefined), [conflicted, staleSource, active, form]);
   const filtered = responseRows.filter((r) => `${r.clause} ${r.title} ${r.original}`.toLowerCase().includes(query.toLowerCase()) && (status === '全部状态' || responseStatusLabel(r, reviews) === status) && (section === '全部章节' || JSON.stringify([r.sourceFileId || r.source, sectionLabel(r)]) === section) && (owner === '全部责任人' || r.owner === owner) && (special === '全部要求' || special === '无历史命中' && ['capability', 'none'].includes(r.matchLevel) || special === '条件差异' && r.conclusion === '有条件 Comply' || special === '关键要求' && (r.keyRequirement || /安全|精度|交货|验收/.test(r.title))));
   const directoryRows = filtered.filter(row => (row.sourceFileId || row.source) === (active?.sourceFileId || active?.source));
   const selectedDirectoryCount = directoryRows.filter(row => selected.includes(row.id)).length;
@@ -678,7 +687,7 @@ export function ResponsePage({ detailPanels = {}, project, requirements = [], re
     <div className="response-workbench detail-layout rfq-splitter-layout" ref={detailLayoutRef}><Splitter style={{height:narrowWorkbench?1100:'100%'}} className="rfq-workbench-splitter" layout={narrowWorkbench?'vertical':'horizontal'} onResize={sizes=>{const total=sizes.reduce((sum,size)=>sum+size,0);if(total) { setPaneShare(sizes[0]/total*100); }}}>
       <Splitter.Panel size={paneShare+'%'} min={narrowWorkbench?280:320}><div className="detail-document-column">
 
-        <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={row=>actorRole!=='最终审批人'&&!staleSource&&canBusinessAction('requirement',row.id)} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={activeFile} onExtractSelection={selectionAction(activeFile)} rows={requirements.filter(r => (r.sourceFileId || r.source) === (active.sourceFileId || active.source)).map(r => ({ ...r, projectId: project.id }))} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={!conflicted && !staleSource ? { ...active, ...form, conditions: undefined } : undefined} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
+        <SourceDocumentPane toolbar={sourceToolbar} directory={directoryPanel} onDocumentOutlineChange={setDocumentOutline} allComments={allProjectComments} people={mentionPeople} canEditRow={paneEditRow} onProjectCommentsChange={changeProjectComments} canManageOffice={!staleSource&&canPerform(actorRole,'source:manage',{state:appState,actorId,projectId:project.id})} officeUser={{id:actorId,name:personName(appState,actorId)}} focusOnMount={Boolean(route?.requirementId)} file={activeFile} onExtractSelection={selectionAction(activeFile)} rows={paneRows} selectedAnchor={activeSourceAnchor} showResponses={showResponses} quoteDraft={quoteDraft} responsePreview={paneResponsePreview} comments={projectComments} activeCommentId={activeCommentId} onQuote={canEdit ? (quote, anchor) => focusSource(anchor, { quote }) : null} onSelectAnchor={anchor => focusSource(anchor)} onUnlinkedComment={openUnlinkedComment} onSelectComment={(commentId, anchor, options) => focusSource(anchor, { commentId,editComment:Boolean(options?.edit) })}/>
       </div></Splitter.Panel>
       <Splitter.Panel size={(100-paneShare)+'%'} min={narrowWorkbench?360:380}><div className="response-processing detail-business">{detailTabs}<div className="detail-side-content" ref={detailSideRef}>
 

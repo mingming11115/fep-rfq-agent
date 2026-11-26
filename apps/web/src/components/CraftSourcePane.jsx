@@ -132,7 +132,13 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
     return()=>{abort.abort();queue.dispose();instance.destroy();if(editor.current===instance) { editor.current=null; } if(saveQueue.current===queue) { saveQueue.current=null; }};
   },[bytes,meta?.id,reference?.id,user?.id,frameEpoch]);
   useEffect(()=>{editor.current?.refresh();},[allComments,rows,sourceBlocks,blockScope,selectedAnchor?.requirementId,activeCommentId,canEditRow,canManage]);
+  // 对外发布目录概要前按内容签名去重：编辑器回发的 documentOutline 每次都是新对象，
+  // 直接发布会让父组件每轮渲染都拿到新 state，形成「refresh → onState → 发布 → 重渲染」死循环。
+  const outlineSignature=JSON.stringify([craftSourceKey(source),editorState.documentOutline||null,editorState.ready,loading,Boolean(bytes),meta?.fileType||null]);
+  const publishedOutlineSignature=useRef('');
   useEffect(()=>{
+    if(!alive.current||publishedOutlineSignature.current===outlineSignature) { return; }
+    publishedOutlineSignature.current=outlineSignature;
     onDocumentOutlineChange?.({sourceKey:craftSourceKey(source),...editorState.documentOutline,
       ready:loading?false:!bytes?true:Boolean(editorState.ready),
       supported:meta?.fileType==='docx'&&Boolean(editorState.documentOutline?.supported),
@@ -140,7 +146,7 @@ export default function CraftSourcePane({file,source,canManage=false,user,rows=[
         if(!editor.current) { return Promise.resolve(false); }
         return editor.current.navigateHeading(target).catch(cause=>{ console.error('跳转文档标题失败', cause); if(alive.current) { setError(cause.message); } return false;});
       }});
-  },[editorState.documentOutline,editorState.ready,loading,bytes,meta?.fileType,onDocumentOutlineChange]);
+  },[outlineSignature,onDocumentOutlineChange]);
 
   async function attach(event){
     const original=event.target.files?.[0];event.target.value='';if(!original||!canManage) { return; }
